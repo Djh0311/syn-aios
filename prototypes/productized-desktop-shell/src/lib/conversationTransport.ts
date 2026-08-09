@@ -109,8 +109,11 @@ export type ConversationTransportNewTurn = Readonly<{
 export type ConversationTransportExistingTurn = Readonly<{
   mode: "existing";
   user_text: string;
-  conversation_id: string;
-  thread_id: string;
+  // Legacy identifiers remain display-only compatibility input for generic
+  // callers. M3 Agent/Jiaoban must pass the opaque selector instead.
+  conversation_id?: string;
+  thread_id?: string;
+  continuation_selector?: string;
   turn_id?: string;
 }>;
 
@@ -128,14 +131,29 @@ export type ConversationTransportNewStartRequest = Readonly<{
   user_text: string;
 }>;
 
-export type ConversationTransportExistingStartRequest = Readonly<{
+export type ConversationTransportLegacyExistingStartRequest = Readonly<{
   context: ConversationTransportContext;
   mode: "existing";
   conversation_id: string;
   thread_id: string;
+  continuation_selector?: never;
   turn_id: string;
   user_text: string;
 }>;
+
+export type ConversationTransportOpaqueExistingStartRequest = Readonly<{
+  context: ConversationTransportContext;
+  mode: "existing";
+  conversation_id: null;
+  thread_id: null;
+  continuation_selector: string;
+  turn_id: string;
+  user_text: string;
+}>;
+
+export type ConversationTransportExistingStartRequest =
+  | ConversationTransportLegacyExistingStartRequest
+  | ConversationTransportOpaqueExistingStartRequest;
 
 export type ConversationTransportAttemptRequest = Readonly<{
   attempt_id: string;
@@ -153,7 +171,22 @@ export type ConversationTransportLifecycle = "idle" | "starting" | "running" | "
 export type ConversationTransportSession = Readonly<{
   conversation_id: string | null;
   thread_id: string | null;
+  continuation_selector?: string | null;
 }>;
+
+// M3 RoleSession callers must never seed a transport from a legacy
+// conversation/thread cache.  This deliberately accepts only the opaque
+// selector returned by the current server read DTO.
+export function createOpaqueContinuationTransportSession(
+  continuationSelector: string | null | undefined,
+): ConversationTransportSession {
+  const continuation_selector = continuationSelector?.trim() || null;
+  return Object.freeze({
+    conversation_id: null,
+    thread_id: null,
+    continuation_selector,
+  });
+}
 
 export type ConversationTransportState = Readonly<{
   context: ConversationTransportContext;
@@ -196,7 +229,7 @@ export function createConversationTransportController({
     lifecycle: "idle",
     input_locked: false,
     active_attempt_id: null,
-    session: initial_session ?? { conversation_id: null, thread_id: null },
+    session: initial_session ?? { conversation_id: null, thread_id: null, continuation_selector: null },
     receipt: null,
     transcript_events: [...initial_transcript_events],
     operation_error: null,
@@ -228,6 +261,7 @@ export function createConversationTransportController({
     const session = {
       conversation_id: receipt.conversation_id ?? state.session.conversation_id,
       thread_id: receipt.thread_id ?? state.session.thread_id,
+      continuation_selector: state.session.continuation_selector ?? null,
     };
     const active = lifecycle === "starting" || lifecycle === "running";
     return publish({
@@ -261,8 +295,14 @@ export function createConversationTransportController({
     }
     const userText = turn.user_text.trim();
     if (!userText) return finishWithoutRequest("不能发送空白消息。");
-    if (turn.mode === "existing" && (!turn.conversation_id.trim() || !turn.thread_id.trim())) {
-      return finishWithoutRequest("续聊需要已绑定的会话与 thread。");
+    const continuationSelector = turn.mode === "existing" ? turn.continuation_selector?.trim() : "";
+    const legacyConversationId = turn.mode === "existing" ? turn.conversation_id?.trim() ?? "" : "";
+    const legacyThreadId = turn.mode === "existing" ? turn.thread_id?.trim() ?? "" : "";
+    if (turn.mode === "existing" && continuationSelector && (legacyConversationId || legacyThreadId)) {
+      return finishWithoutRequest("续聊只能使用服务端签发的会话 selector。");
+    }
+    if (turn.mode === "existing" && !continuationSelector && (!legacyConversationId || !legacyThreadId)) {
+      return finishWithoutRequest("续聊需要服务端签发的会话 selector。");
     }
 
     const turnId = turn.turn_id?.trim() || create_turn_id();
@@ -297,16 +337,28 @@ export function createConversationTransportController({
         );
         return adoptReceipt(receipt);
       }
-      const receipt = await client.startExisting(
-        Object.freeze({
-          context,
-          mode: "existing" as const,
-          conversation_id: turn.conversation_id.trim(),
-          thread_id: turn.thread_id.trim(),
-          turn_id: turnId,
-          user_text: userText,
-        }),
-      );
+      const receipt = continuationSelector
+        ? await client.startExisting(
+            Object.freeze({
+              context,
+              mode: "existing" as const,
+              conversation_id: null,
+              thread_id: null,
+              continuation_selector: continuationSelector,
+              turn_id: turnId,
+              user_text: userText,
+            }),
+          )
+        : await client.startExisting(
+            Object.freeze({
+              context,
+              mode: "existing" as const,
+              conversation_id: legacyConversationId,
+              thread_id: legacyThreadId,
+              turn_id: turnId,
+              user_text: userText,
+            }),
+          );
       return adoptReceipt(receipt);
     } catch (error) {
       const startFailure = safeSupervisorStartFailure(error, turnId);
@@ -315,6 +367,12 @@ export function createConversationTransportController({
         lifecycle: "failed",
         input_locked: false,
         active_attempt_id: null,
+        // An opaque M3 selector can become stale between read and start. Do
+        // not leave a local optimistic message that looks delivered when the
+        // server rejected continuation before any adapter dispatch.
+        transcript_events: continuationSelector
+          ? state.transcript_events.filter((event) => event.event_id !== optimisticUserEvent.event_id)
+          : state.transcript_events,
         operation_error: startFailure ? supervisorStartFailureMessage(startFailure.stage) : "对话运输未能启动。",
         start_failure: startFailure,
       });

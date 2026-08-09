@@ -12,6 +12,7 @@ import {
 import { AgentChatComposer } from "../../src/views/agent/AgentChatComposer";
 import {
   AgentManualRelayDeveloperDetails,
+  agentRoleSessionContinuationBlockedReason,
   deriveRelayBindingState,
   manualRelayAttemptTimedOut,
   nextManualRelayPollFailureDecision,
@@ -453,7 +454,11 @@ export function runConversationEngineScenario({
       onRequestAction={captureAction}
     />,
   );
-  assert(composerMarkup.includes("data-send-mode=\"manual_relay_direct\""), "B2 绑定会话撰写区应声明 GUI direct relay 模式");
+  assert(
+    composerMarkup.includes("data-send-mode=\"decision-only\""),
+    "M3C06 未收到服务端角色会话 selector 时，历史会话撰写区必须保持禁用",
+  );
+  assert(composerMarkup.includes("历史会话仅供阅读"), "M3C06 不得把 SessionRecord 变成 existing send 目标");
   const selectedProjectTail = (session.project_root ?? "").split("/").filter(Boolean).at(-1) ?? "";
   assert(!composerMarkup.includes("继续对话"), "信息收口后撰写区不应常驻显示普通对话目标");
   assert(composerMarkup.includes("发送"), "M3 撰写区主按钮应是发送");
@@ -493,11 +498,15 @@ export function runConversationEngineScenario({
     project_root: "/offline-fixture/projects/selected-codex-project",
     thread_source: "codex",
   });
-  assert(relayBinding.enabled === true, "B2 bind-fix 点开 Codex 会话后应立即启用 direct relay 绑定");
+  assert(relayBinding.enabled === true, "B2 bind-fix 可从历史会话取得非权威项目定位提示");
   assert(
     relayBinding.targetProjectRoot !== staleProjectRoot &&
       relayBinding.targetProjectRoot === "/offline-fixture/projects/selected-codex-project",
-    "B2 bind-fix relay target 必须跟随选中会话自己的 project_root，不得沿用旧项目选择",
+    "B2 bind-fix 项目定位提示必须跟随选中会话自己的 project_root，不得沿用旧项目选择",
+  );
+  assert(
+    agentRoleSessionContinuationBlockedReason(undefined, relayBinding.targetProjectRoot)?.includes("仅供阅读"),
+    "M3C06 历史项目定位提示不得自行授权 existing continuation",
   );
   const missingProjectBinding = deriveRelayBindingState({
     ...session,
@@ -555,15 +564,15 @@ export function runConversationEngineScenario({
     directComposer,
     (element) => element.type === "textarea" && element.props?.["aria-label"] === "输入给 Codex 的任务",
   );
-  assert(directTextarea, "B2 直发撰写区应有 textarea");
+  assert(directTextarea, "M3C06 selector 已获确认的撰写区应有 textarea");
   const directKeyDown = directTextarea.props?.onKeyDown;
-  assert(typeof directKeyDown === "function", "B2 直发撰写区应接管 Enter 键");
+  assert(typeof directKeyDown === "function", "M3C06 selector 已获确认的撰写区应接管 Enter 键");
   (directKeyDown as (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => void)({
     key: "Enter",
     shiftKey: false,
     preventDefault() {},
   });
-  assert(directSubmitCount === 1, "B2 绑定会话 Enter 应调用 GUI direct relay 发送 handler");
+  assert(directSubmitCount === 1, "M3C06 仅在宿主已确认 continuation 后才调用受守卫发送 handler");
 
   let newSessionSubmitCount = 0;
   const newSessionComposer = (
@@ -573,8 +582,8 @@ export function runConversationEngineScenario({
       manualRelayBusy={false}
       manualRelayError={null}
       manualRelayReceipt={null}
-      relayDirectSendEnabled={true}
-      relayDirectSendBlockedReason={null}
+      relayDirectSendEnabled={false}
+      relayDirectSendBlockedReason="新建会话需要 M3C07 的已验证运行时；当前不会使用旧 transport 创建会话。"
       selectedProjectRoot="/offline-fixture/projects/new-codex-project"
       selectedSession={null}
       sendMode="new_session"
@@ -588,9 +597,10 @@ export function runConversationEngineScenario({
   );
   const newSessionMarkup = renderToStaticMarkup(newSessionComposer);
   assert(
-    newSessionMarkup.includes('data-send-mode="manual_relay_new_session"'),
-    "P2 新建对话撰写区应声明 manual relay new-session 模式",
+    newSessionMarkup.includes('data-send-mode="decision-only"'),
+    "M3C06 新建对话在 M3C07 运行时注入前必须保持禁用",
   );
+  assert(newSessionMarkup.includes("M3C07"), "M3C06 新建对话禁用原因必须指向后续已验证运行时");
   assert(newSessionMarkup.includes("选择新对话项目"), "P2 新建对话撰写区应提供项目选择器");
   assert(newSessionMarkup.includes("new-codex-project"), "P2 新建对话撰写区应显示项目名");
   assert(!newSessionMarkup.includes("新建对话"), "信息收口后新建对话 composer 不应显示目标说明条");
@@ -607,7 +617,7 @@ export function runConversationEngineScenario({
     shiftKey: false,
     preventDefault() {},
   });
-  assert(newSessionSubmitCount === 1, "P2 新建对话无需 selectedSession，Enter 应调用 new-session 发送 handler");
+  assert(newSessionSubmitCount === 0, "M3C06 新建对话不得回退到旧 transport 发送 handler");
 
   let unboundSubmitCount = 0;
   const unboundComposer = (
@@ -646,12 +656,12 @@ export function runConversationEngineScenario({
   const codexUserSourceSession: SessionRecord = { ...session, thread_source: "user" };
   const codexUserRelayBinding = deriveRelayBindingState(codexUserSourceSession);
   assert(
-    codexUserRelayBinding.enabled,
-    "P1 Codex sqlite thread_source=user 会话必须允许 GUI direct relay",
+    codexUserRelayBinding.targetProjectRoot === session.project_root,
+    "P1 Codex sqlite thread_source=user 会话只可保留项目根目录作为服务端读取提示",
   );
   assert(
-    codexUserRelayBinding.targetProjectRoot === session.project_root,
-    "P1 Codex sqlite thread_source=user 会话必须保留项目根目录作为 relay target",
+    agentRoleSessionContinuationBlockedReason(undefined, codexUserRelayBinding.targetProjectRoot)?.includes("仅供阅读"),
+    "M3C06 thread_source=user 不得充当 selector、角色或权限真源",
   );
 
   let nonCodexSubmitCount = 0;

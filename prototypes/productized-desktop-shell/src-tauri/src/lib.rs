@@ -72,6 +72,7 @@ mod m3_conversation_transport;
 mod m3_handoff;
 mod m3_role_session;
 mod m3_role_session_repository;
+mod m3_role_session_read_model;
 mod m3_role_session_schema;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
@@ -93,6 +94,10 @@ struct AppState {
     index_path: PathBuf,
     tasks_path: PathBuf,
     workflow_state_path: PathBuf,
+    // M3C06 deliberately starts unavailable in production.  M3C07 owns a
+    // separately-approved isolated runtime injection and desktop acceptance;
+    // neither an index/thread cache nor a host profile may populate this.
+    m3_role_session_read_runtime: m3_role_session_read_model::M3RoleSessionReadRuntimeSlot,
 }
 include!("types.rs");
 trait CodexResumeRunner {
@@ -120,6 +125,7 @@ impl AppState {
                 index_path: paths.index_path,
                 tasks_path: paths.tasks_path,
                 workflow_state_path: paths.workflow_state_path,
+                m3_role_session_read_runtime: Default::default(),
             });
         }
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -127,6 +133,7 @@ impl AppState {
             index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
             tasks_path: manifest_dir.join("../../tasks/README.md"),
             workflow_state_path: default_workflow_state_path(),
+            m3_role_session_read_runtime: Default::default(),
         })
     }
 }

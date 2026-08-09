@@ -10,6 +10,7 @@ const testEntries = [
   "tests/frontend-wiring-microbatch.test.tsx",
   "tests/agent-session-row.test.tsx",
   "tests/shared-conversation-transport.test.tsx",
+  "tests/role-session-read-model.test.ts",
   "tests/memory-center-daily-inbox.test.tsx",
   "tests/memory-center-vision-restyle.test.tsx",
   "tests/report-on-face-yellow-flag.test.tsx",

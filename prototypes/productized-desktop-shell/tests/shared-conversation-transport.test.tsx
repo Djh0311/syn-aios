@@ -1,6 +1,7 @@
 import {
   createAgentConversationTransportContext,
   createConversationTransportController,
+  createOpaqueContinuationTransportSession,
   createSupervisorConversationTransportContext,
   conversationEventsForReceipt,
   failedConversationReceiptLayers,
@@ -466,6 +467,64 @@ function receipt({
   assert(
     result.receipt?.transport.binding_failure_family === "binding_rejected_thread_unbound",
     "controller state 必须能读到 family，真机一次归因才有抓手",
+  );
+}
+
+// 6) M3C06 opaque continuation is the only resumable transport seed. A
+// rejection after a selector goes stale must not leave a local message that
+// looks delivered, or fall back to the legacy conversation/thread identifiers.
+{
+  const legacyDisplayCache = {
+    conversation_id: "conversation:legacy-display-only",
+    thread_id: "thread:legacy-display-only",
+  };
+  const opaqueSession = createOpaqueContinuationTransportSession("m3rs:opaque-continuation");
+  assertDeepEqual(
+    opaqueSession,
+    {
+      conversation_id: null,
+      thread_id: null,
+      continuation_selector: "m3rs:opaque-continuation",
+    },
+    "RoleSession transport 初始会话不得注入 legacy conversation/thread 缓存",
+  );
+  assert(
+    JSON.stringify(opaqueSession).indexOf(legacyDisplayCache.thread_id) === -1,
+    "legacy display thread 不得进入 opaque continuation payload",
+  );
+
+  const capturedExistingRequest: { current: Parameters<ConversationTransportClient["startExisting"]>[0] | null } = {
+    current: null,
+  };
+  const controller = createConversationTransportController({
+    context: createAgentConversationTransportContext({ project_root: "/fixture/m3c06-project" }),
+    client: {
+      async startNew() { throw new Error("not used"); },
+      async startExisting(request) {
+        capturedExistingRequest.current = request;
+        throw new Error("M3_BINDING_UNAVAILABLE");
+      },
+      async poll() { throw new Error("not used"); },
+      async stop() { throw new Error("not used"); },
+    },
+    initial_session: opaqueSession,
+    create_turn_id: () => "turn:m3c06-stale-selector",
+  });
+  const result = await controller.start({
+    mode: "existing",
+    user_text: "这条消息必须等待服务端重新验证。",
+    continuation_selector: "m3rs:opaque-continuation",
+  });
+  assert(capturedExistingRequest.current !== null, "opaque selector 应成为唯一 existing transport 请求目标");
+  assert(
+    capturedExistingRequest.current.conversation_id === null
+      && capturedExistingRequest.current.thread_id === null
+      && capturedExistingRequest.current.continuation_selector === "m3rs:opaque-continuation",
+    "existing payload 不得携带 legacy thread/conversation truth",
+  );
+  assert(
+    result.transcript_events.length === 0,
+    "selector 被服务端拒绝后不得用 optimistic cache 冒充已送达消息",
   );
 }
 

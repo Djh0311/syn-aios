@@ -77,7 +77,15 @@ export function AgentView({
   onRequestAction = () => {},
 }: AgentViewProps) {
   const [sessionSearchQuery, setSessionSearchQuery] = useState("");
-  const sessionPage = useAgentSessionPage(sessions, sessionSearchQuery, onLoadSessionPage);
+  const [roleSessionProjectLocator, setRoleSessionProjectLocator] = useState(
+    () => projects[0]?.project_root ?? sessions.find((session) => session.project_root)?.project_root ?? "",
+  );
+  const sessionPage = useAgentSessionPage(
+    sessions,
+    sessionSearchQuery,
+    onLoadSessionPage,
+    roleSessionProjectLocator,
+  );
   const { shellSessions } = sessionPage;
   const softwareCounts = useMemo(() => {
     const map = new Map<string, number>();
@@ -113,6 +121,15 @@ export function AgentView({
   }, [filteredSessions, readableSessions, selectedThreadId]);
 
   const selectedSession = filteredSessions.find((session) => session.thread_id === selectedThreadId) ?? null;
+  useEffect(() => {
+    // A SessionRecord may provide only a non-authoritative project routing
+    // hint. The fixed Agent command still resolves every role/binding fact on
+    // the server; this state never becomes a continuation identity.
+    const nextLocator = selectedSession?.project_root?.trim()
+      || projects[0]?.project_root?.trim()
+      || "";
+    if (nextLocator !== roleSessionProjectLocator) setRoleSessionProjectLocator(nextLocator);
+  }, [projects, roleSessionProjectLocator, selectedSession?.project_root]);
   const { loadingOlderThreadId, loadingThreadId, loadOlderTranscript, loadTranscript, selectedTranscript, transcriptError } = useAgentTranscriptLoader({
     onLoadTranscript,
     onLoadTranscriptPage,
@@ -149,6 +166,7 @@ export function AgentView({
   // 它们的 derive 逻辑(lib/adapterCapabilities.ts 等)也照旧保留，只是不再经 11 面板上脸。
 
   function openSession(session: SessionRecord) {
+    if (session.project_root?.trim()) setRoleSessionProjectLocator(session.project_root.trim());
     if (session.thread_id === selectedThreadId) {
       // Already selected — re-read on demand (used by the reader's reload button).
       if (session.rollout_exists && session.rollout_path) void loadTranscript(session.thread_id);
@@ -197,11 +215,14 @@ export function AgentView({
         sessionPageStatus={sessionPage.sessionPageStatus}
         sessionPageSource={sessionPage.sessionPageSource}
         sessionPageWarnings={sessionPage.sessionPageWarnings}
+        roleSessionRead={sessionPage.roleSessionRead}
+        onSelectRoleSession={sessionPage.selectRoleSession}
+        onLoadMoreRoleSessions={sessionPage.loadMoreRoleSessions}
         sessionHasMore={sessionPage.sessionPageHasMore}
         loadingMoreSessions={sessionPage.loadingMoreSessions}
         eyebrow=""
         title="智能体"
-        description="新对话、搜索和会话分组在左栏；当前对话在中间继续。"
+        description="历史会话仅供阅读；续聊必须由服务端角色会话绑定重新授权。"
         emptyTitle="选择左侧会话开始阅读"
         emptyMessage="点任意会话即可查看你与 Agent 的对话。"
         onOpenSession={(session) => void openSession(session)}

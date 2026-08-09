@@ -49,6 +49,37 @@ impl fmt::Display for M3ConversationTransportError {
 
 impl std::error::Error for M3ConversationTransportError {}
 
+/// Final, server-side continuation gate for the M3C06 read surface.
+///
+/// `M3RoleSessionContinuationGuard` can only be minted after the read runtime
+/// has reloaded the exact RoleSession, verified provider-handle binding,
+/// permission snapshot and rebuildable context.  It never reaches the
+/// renderer.  This leaf deliberately has no production adapter injection, so
+/// a valid guard still ends in the stable unavailable code rather than using
+/// the legacy thread/manual-relay transport.  M3C07 may install a proven
+/// isolated adapter behind this boundary; it must preserve these checks.
+pub(crate) fn dispatch_guarded_existing_continuation(
+    guard: &crate::m3_role_session_read_model::M3RoleSessionContinuationGuard,
+    user_text: &str,
+) -> Result<(), M3ConversationTransportError> {
+    guard.binding.verify_owner_fingerprint()?;
+    if guard.role_session_id.as_str().is_empty()
+        || guard.expected_session_revision == 0
+        || guard.binding_revision == 0
+        || guard.provider_handle_ref.as_str().is_empty()
+        || guard.context_ref.as_str().is_empty()
+        || guard.context_metadata_hash.as_str().is_empty()
+        || user_text.trim().is_empty()
+    {
+        return Err(M3ConversationTransportError::new(
+            "m3_transport_continuation_guard_invalid",
+        ));
+    }
+    Err(M3ConversationTransportError::new(
+        crate::m3_role_session_read_model::M3_BINDING_UNAVAILABLE,
+    ))
+}
+
 impl From<M3RoleSessionRepositoryError> for M3ConversationTransportError {
     fn from(error: M3RoleSessionRepositoryError) -> Self {
         Self::new(error.code)

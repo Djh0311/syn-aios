@@ -6,17 +6,24 @@ import {
   AGENT_CODEX_WORKSPACE_WRITE_PROFILE,
   createAgentConversationTransportContext,
   createConversationTransportController,
+  createOpaqueContinuationTransportSession,
   failedConversationReceiptLayers,
   type ConversationTransportClient,
   type ConversationTransportController,
   type ConversationTransportReceipt,
   type ConversationTransportState,
 } from "../../lib/conversationTransport";
+import {
+  createRoleSessionRequestNonce,
+  roleSessionDetailMatchesDirectoryEntry,
+  roleSessionDirectoryHasSelection,
+  usableCurrentRoleSessionContinuationSelector,
+} from "../../lib/roleSessionReadModel";
 import { pathTail } from "../../lib/format";
 import { normalizeTranscriptError } from "../../lib/humanize";
 import {
   pollCodexConversationTransportAttempt,
-  startAgentCodexConversationTransport,
+  startAgentRoleSessionContinuation,
   stopCodexConversationTransportAttempt,
 } from "../../lib/tauri";
 import type {
@@ -41,6 +48,7 @@ import type {
 } from "../../lib/types";
 import { AgentChatComposer, type AgentConversationSendMode } from "./AgentChatComposer";
 import { manualRelayReasonLabel } from "./agentLabels";
+import type { AgentRoleSessionReadState } from "./useAgentSessionPage";
 import {
   AgentSessionList,
   filterAgentSessions,
@@ -152,24 +160,196 @@ export function deriveRelayBindingState(selectedSession: SessionRecord | null): 
   };
 }
 
+export function agentRoleSessionContinuationBlockedReason(
+  roleSessionRead: AgentRoleSessionReadState | undefined,
+  projectRoot: string,
+): string | null {
+  if (!roleSessionRead) return "角色会话绑定尚未就绪；历史会话仅供阅读。";
+  if (roleSessionRead.status === "loading") return "正在从服务端读取角色会话；暂不发送。";
+  if (roleSessionRead.status === "error") {
+    return roleSessionRead.error?.user_message ?? "角色会话读取失败；没有使用本地缓存续聊。";
+  }
+  if (roleSessionRead.status === "empty") return "当前项目没有可续聊的服务端角色会话。";
+  if (roleSessionRead.status === "selection_required") {
+    return "服务端返回多个角色会话；请先明确选择，历史会话仅供阅读。";
+  }
+  if (roleSessionRead.status !== "ready" || !roleSessionRead.detail) {
+    return "角色会话绑定尚未就绪；历史会话仅供阅读。";
+  }
+  if (!projectRoot || roleSessionRead.project_locator !== projectRoot) {
+    return "当前显示会话与服务端角色会话项目不一致；暂不续聊。";
+  }
+  if (
+    !roleSessionRead.selected_selection
+    || !roleSessionDirectoryHasSelection(roleSessionRead.directory, roleSessionRead.selected_selection)
+    || roleSessionRead.detail.selection !== roleSessionRead.selected_selection
+  ) {
+    return "当前角色会话选择尚未由服务端目录确认；暂不续聊。";
+  }
+  if (!roleSessionDetailMatchesDirectoryEntry(roleSessionRead.detail, roleSessionRead.directory)) {
+    return "服务端角色会话详情与当前目录不一致；已关闭续聊。";
+  }
+  const selector = usableCurrentRoleSessionContinuationSelector(
+    roleSessionRead.detail,
+    roleSessionRead.selected_selection,
+    roleSessionRead.directory,
+  );
+  if (selector) return null;
+  switch (roleSessionRead.detail.continuation.reason) {
+    case "SESSION_QUARANTINED":
+      return "角色会话已隔离，不能续聊。";
+    case "SESSION_CLOSED":
+      return "角色会话已关闭，不能续聊。";
+    case "PERMISSION_REVALIDATION_REQUIRED":
+      return "角色会话权限正在重新验证；暂不续聊。";
+    case "CONTEXT_MISSING":
+      return "续聊所需资料尚未就绪；暂不发送。";
+    case "CONTEXT_GAPS_PRESENT":
+      return "续聊资料存在缺口；暂不发送。";
+    case "CONTEXT_REPROJECTION_REQUIRED":
+      return "角色会话资料需要重新投影；暂不发送。";
+    default:
+      return "服务端没有签发可续聊 selector；历史会话仅供阅读。";
+  }
+}
+
+export function AgentRoleSessionReadBoundary({
+  roleSessionRead,
+  blockedReason,
+  onSelectRoleSession,
+  onLoadMoreRoleSessions,
+}: {
+  roleSessionRead: AgentRoleSessionReadState | undefined;
+  blockedReason: string | null;
+  onSelectRoleSession?: (selection: string) => void;
+  onLoadMoreRoleSessions?: () => void;
+}) {
+  const directory = roleSessionRead?.directory ?? null;
+  const selectedSelection = roleSessionRead?.selected_selection ?? null;
+  const detail = roleSessionRead?.detail ?? null;
+  const detailIsCurrent = Boolean(
+    detail
+      && selectedSelection
+      && detail.selection === selectedSelection
+      && roleSessionDirectoryHasSelection(directory, selectedSelection)
+      && roleSessionDetailMatchesDirectoryEntry(detail, directory),
+  );
+
+  return (
+    <section
+      className="agent-role-session-boundary"
+      data-role-session-status={roleSessionRead?.status ?? "unavailable"}
+      data-legacy-display="legacy_display_only"
+    >
+      <strong>会话身份边界</strong>
+      <span>{blockedReason ?? "服务端角色会话已就绪；续聊仍只使用不透明 selector。"}</span>
+      <small>legacy_display_only：索引会话和回放内容只用于阅读显示。</small>
+
+      <div className="agent-role-session-directory" data-role-session-directory={directory ? "loaded" : "unavailable"}>
+        <strong>服务端角色会话目录</strong>
+        {directory?.entries.length ? (
+          <ul>
+            {directory.entries.map((entry) => {
+              const selected = entry.selection === selectedSelection;
+              return (
+                <li key={entry.selection} data-role-session-selected={selected ? "true" : "false"}>
+                  <button
+                    type="button"
+                    aria-pressed={selected}
+                    disabled={!onSelectRoleSession}
+                    onClick={() => onSelectRoleSession?.(entry.selection)}
+                  >
+                    {entry.labels.role_label} · {entry.labels.project_label} · {entry.labels.object_label}
+                    {selected ? "（当前选择）" : ""}
+                  </button>
+                  <small>{entry.labels.channel_label} · {entry.labels.permission_label}</small>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <small>当前没有可选的服务端角色会话。</small>
+        )}
+        {directory?.next_cursor ? (
+          <button
+            type="button"
+            disabled={!onLoadMoreRoleSessions || roleSessionRead?.loading_more || roleSessionRead?.status === "loading"}
+            onClick={() => onLoadMoreRoleSessions?.()}
+          >
+            {roleSessionRead?.loading_more ? "正在加载更多角色会话…" : "加载更多角色会话"}
+          </button>
+        ) : null}
+      </div>
+
+      {roleSessionRead?.selection_error ? <small>{roleSessionRead.selection_error}</small> : null}
+      {detailIsCurrent && detail ? (
+        <div className="agent-role-session-detail" data-role-session-detail="current">
+          <strong>当前服务端角色会话</strong>
+          <dl>
+            <dt>角色</dt><dd>{detail.labels.role_label}</dd>
+            <dt>项目</dt><dd>{detail.labels.project_label}</dd>
+            <dt>对象</dt><dd>{detail.labels.object_label}</dd>
+            <dt>通道</dt><dd>{detail.labels.channel_label}</dd>
+            <dt>权限</dt><dd>{detail.labels.permission_label}</dd>
+          </dl>
+          <section data-role-session-context="sources">
+            <strong>上下文来源</strong>
+            <ul>{detail.context.context_sources.map((source) => <li key={source}>{source}</li>)}</ul>
+          </section>
+          <section data-role-session-context="knowledge">
+            <strong>知识来源</strong>
+            <ul>{detail.context.knowledge_refs.map((reference) => <li key={reference}>{reference}</li>)}</ul>
+          </section>
+          <section data-role-session-context="gaps">
+            <strong>资料缺口</strong>
+            <ul>{detail.context.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>
+          </section>
+          <section data-role-session-context="links">
+            <strong>来源链接</strong>
+            <ul>{detail.context.source_links.map((link) => (
+              <li key={`${link.source_ref ?? ""}:${link.label}`}>
+                {link.label}{link.source_ref ? ` · ${link.source_ref}` : ""}
+              </li>
+            ))}</ul>
+          </section>
+          <small>
+            续聊状态：{detail.continuation.state === "AVAILABLE" ? "服务端已签发可续聊状态" : "服务端未签发可续聊状态"}
+            {detail.continuation.reason ? `（${detail.continuation.reason}）` : ""}
+          </small>
+        </div>
+      ) : (
+        <small data-role-session-detail="unselected">尚未确认当前服务端角色会话；composer 保持关闭。</small>
+      )}
+    </section>
+  );
+}
+
 const agentConversationTransportClient: ConversationTransportClient = Object.freeze({
-  startNew: (request) => startAgentConversationTransportRequest(request),
-  startExisting: (request) => startAgentConversationTransportRequest(request),
+  startNew: () => Promise.reject(new Error("M3_BINDING_UNAVAILABLE")),
+  startExisting: (request) => startAgentRoleSessionContinuationRequest(request),
   poll: (request) => pollCodexConversationTransportAttempt(request),
   stop: (request) => stopCodexConversationTransportAttempt(request),
 });
 
-function startAgentConversationTransportRequest(
-  request: Parameters<ConversationTransportClient["startNew"]>[0] | Parameters<ConversationTransportClient["startExisting"]>[0],
+async function startAgentRoleSessionContinuationRequest(
+  request: Parameters<ConversationTransportClient["startExisting"]>[0],
 ): Promise<ConversationTransportReceipt> {
   if (request.context.profile_id !== AGENT_CODEX_WORKSPACE_WRITE_PROFILE) {
-    return Promise.reject(new Error("conversation_transport_agent_profile_required"));
+    throw new Error("conversation_transport_agent_profile_required");
   }
-  return startAgentCodexConversationTransport({ ...request, context: request.context });
-}
-
-function agentConversationIdForThread(threadId: string): string {
-  return `agent:${threadId}`;
+  if (!("continuation_selector" in request) || !request.continuation_selector) {
+    throw new Error("m3_role_session_continuation_selector_required");
+  }
+  await startAgentRoleSessionContinuation({
+    project_locator: request.context.project_root,
+    continuation_selector: request.continuation_selector,
+    request_nonce: createRoleSessionRequestNonce("agent-continuation"),
+    user_text: request.user_text,
+  });
+  // M3C06 has no injected production dispatch adapter. A future M3C07
+  // adapter must return its own guarded receipt; this path may not fall back
+  // to a SessionRecord thread or a legacy shared transport command.
+  throw new Error("M3_BINDING_UNAVAILABLE");
 }
 
 function manualRelayStatusForConversationTransport(
@@ -235,6 +415,9 @@ export type AgentSessionCenterProps = {
   sessionPageStatus?: "idle" | "loading" | "error";
   sessionPageSource?: string | null;
   sessionPageWarnings?: string[];
+  roleSessionRead?: AgentRoleSessionReadState;
+  onSelectRoleSession?: (selection: string) => void;
+  onLoadMoreRoleSessions?: () => void;
   sessionHasMore?: boolean;
   loadingMoreSessions?: boolean;
   realExecutionProductCommands?: RealExecutionProductCommandReadModel | null;
@@ -280,6 +463,9 @@ export function AgentSessionCenter({
   sessionPageStatus = "idle",
   sessionPageSource = null,
   sessionPageWarnings = [],
+  roleSessionRead,
+  onSelectRoleSession,
+  onLoadMoreRoleSessions,
   sessionHasMore = false,
   loadingMoreSessions = false,
   realExecutionProductCommands: _realExecutionProductCommands = null,
@@ -400,19 +586,27 @@ export function AgentSessionCenter({
   );
   const relayBindingState = useMemo(() => deriveRelayBindingState(selectedSession), [selectedSession]);
   const relayTargetProjectRoot = relayBindingState.targetProjectRoot;
-  const relayDirectSendEnabled = relayBindingState.enabled;
-  const relayDirectSendBlockedReason = relayBindingState.blockedReason;
   const newSessionTargetProjectRoot = selectedProjectRoot.trim();
   const activeRelayTargetProjectRoot =
     sendMode === "new_session" ? newSessionTargetProjectRoot : relayTargetProjectRoot;
-  const activeRelayDirectSendEnabled =
-    sendMode === "new_session" ? Boolean(newSessionTargetProjectRoot) : relayDirectSendEnabled;
+  const roleSessionContinuationSelector =
+    sendMode === "existing_session" && roleSessionRead?.project_locator === relayTargetProjectRoot
+      ? usableCurrentRoleSessionContinuationSelector(
+          roleSessionRead?.detail,
+          roleSessionRead?.selected_selection,
+          roleSessionRead?.directory,
+        )
+      : null;
   const activeRelayDirectSendBlockedReason =
     sendMode === "new_session"
-      ? newSessionTargetProjectRoot
-        ? null
-        : "请选择项目"
-      : relayDirectSendBlockedReason;
+      ? "新建会话需要 M3C07 的已验证运行时；当前不会使用旧 transport 创建会话。"
+      : relayBindingState.enabled
+        ? agentRoleSessionContinuationBlockedReason(roleSessionRead, relayTargetProjectRoot)
+        : relayBindingState.blockedReason;
+  const activeRelayDirectSendEnabled =
+    sendMode === "existing_session"
+    && Boolean(roleSessionContinuationSelector)
+    && !activeRelayDirectSendBlockedReason;
 
   function disposeConversationTransportController() {
     conversationTransportUnsubscribeRef.current?.();
@@ -438,11 +632,11 @@ export function AgentSessionCenter({
   function createAgentConversationTransport({
     projectRoot,
     newSession,
-    targetSessionId,
+    continuationSelector,
   }: {
     projectRoot: string;
     newSession: boolean;
-    targetSessionId: string | null;
+    continuationSelector: string | null;
   }): ConversationTransportController {
     disposeConversationTransportController();
     conversationTransportNewSessionRef.current = newSession;
@@ -451,15 +645,8 @@ export function AgentSessionCenter({
       context: createAgentConversationTransportContext({ project_root: projectRoot }),
       client: agentConversationTransportClient,
       initial_session: newSession
-        ? { conversation_id: null, thread_id: null }
-        : {
-            // SessionRecord is a read-model record and only exposes thread_id.
-            // This client correlation key never carries authority; the server
-            // derives the fixed agent profile while thread_id remains the
-            // actual session target.
-            conversation_id: agentConversationIdForThread(targetSessionId ?? ""),
-            thread_id: targetSessionId,
-          },
+        ? createOpaqueContinuationTransportSession(null)
+        : createOpaqueContinuationTransportSession(continuationSelector),
     });
     conversationTransportControllerRef.current = controller;
     conversationTransportUnsubscribeRef.current = controller.subscribe(syncConversationTransportState);
@@ -595,8 +782,15 @@ export function AgentSessionCenter({
     if (!prompt.trim()) return;
     const newSession = sendMode === "new_session";
     const targetProjectRoot = newSession ? newSessionTargetProjectRoot : relayTargetProjectRoot;
-    const targetSessionId = newSession ? null : selectedSession?.thread_id ?? null;
-    if (!targetProjectRoot || (!newSession && !targetSessionId)) return;
+    const continuationSelector = newSession ? null : roleSessionContinuationSelector;
+    if (newSession) {
+      setManualRelayError("新建会话需要 M3C07 的已验证运行时；当前不会使用旧 transport 创建会话。");
+      return;
+    }
+    if (!targetProjectRoot || !continuationSelector) {
+      setManualRelayError(activeRelayDirectSendBlockedReason ?? "服务端没有签发可续聊 selector。");
+      return;
+    }
     setManualRelayBusy(true);
     setK2PreviewError(null);
     setManualRelayError(null);
@@ -609,24 +803,15 @@ export function AgentSessionCenter({
     try {
       const controller = createAgentConversationTransport({
         projectRoot: targetProjectRoot,
-        newSession,
-        targetSessionId,
+        newSession: false,
+        continuationSelector,
       });
-      const next = newSession
-        ? await controller.start({ mode: "new", user_text: prompt })
-        : await controller.start({
-            mode: "existing",
-            user_text: prompt,
-            // SessionRecord has no durable conversation key; this local
-            // correlation value is never server-side authority.
-            conversation_id: agentConversationIdForThread(targetSessionId ?? ""),
-            thread_id: targetSessionId ?? "",
-          });
+      const next = await controller.start({
+        mode: "existing",
+        user_text: prompt,
+        continuation_selector: continuationSelector,
+      });
       if (next.lifecycle !== "failed") setDraftPrompt("");
-      if (newSession && !next.input_locked && next.session.thread_id) {
-        handleSearchQueryChange(next.session.thread_id);
-        void onNewSessionThreadStarted?.(next.session.thread_id);
-      }
     } catch {
       setManualRelayBusy(false);
       setManualRelayError("对话运输初始化失败。");
@@ -755,6 +940,12 @@ export function AgentSessionCenter({
 
         <div className="agent-transcript-panel">
           <div className="agent-chat-workspace">
+            <AgentRoleSessionReadBoundary
+              roleSessionRead={roleSessionRead}
+              blockedReason={activeRelayDirectSendBlockedReason}
+              onSelectRoleSession={onSelectRoleSession}
+              onLoadMoreRoleSessions={onLoadMoreRoleSessions}
+            />
             {sendMode === "new_session" ? (
               <NewSessionReader
                 conversationTransportReceipt={conversationTransportReceipt}

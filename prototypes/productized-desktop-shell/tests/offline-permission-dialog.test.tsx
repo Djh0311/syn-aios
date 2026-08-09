@@ -2159,6 +2159,14 @@ function runSessionCenterHardeningScenario() {
     assert(centerMarkup.includes(expectedClass), `会话中心固定布局缺少 class ${expectedClass}`);
   }
   assert(centerMarkup.includes("<button") && centerMarkup.includes("session-card"), "会话卡必须是可键盘聚焦的 button");
+  assert(
+    centerMarkup.includes('data-legacy-display="legacy_display_only"'),
+    "索引 SessionRecord 必须显式标为 legacy_display_only，而非续聊身份",
+  );
+  assert(
+    centerMarkup.includes("角色会话绑定尚未就绪") && centerMarkup.includes("历史会话仅供阅读"),
+    "没有服务端 RoleSession DTO 时，Agent composer 必须关闭而非回退缓存续聊",
+  );
 
   const transcriptText = visibleText(<ChatTranscript transcript={transcript} />);
   for (const expectedText of projectRuntimeTranscriptRoleTextFixtures.transcriptExpectedTexts) {

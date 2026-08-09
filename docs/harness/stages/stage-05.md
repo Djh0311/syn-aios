@@ -26,6 +26,7 @@
 - prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs
 - prototypes/productized-desktop-shell/src-tauri/src/codex_db.rs
 - prototypes/productized-desktop-shell/src-tauri/src/lib.rs
+- prototypes/productized-desktop-shell/src-tauri/src/lib_read_model_boundary_tests.rs
 - prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_schema.rs
 - prototypes/productized-desktop-shell/src-tauri/src/manual_relay/
@@ -34,10 +35,20 @@
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_schema.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_conversation_transport.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_handoff.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_read_model.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_acceptance.rs
 - prototypes/productized-desktop-shell/src/lib/
+- prototypes/productized-desktop-shell/src/views/AgentView.tsx
 - prototypes/productized-desktop-shell/src/views/agent/
+- prototypes/productized-desktop-shell/src/views/projects/ProjectJiaobanPanel.tsx
 - prototypes/productized-desktop-shell/src/views/projects/jiaoban/
+- prototypes/productized-desktop-shell/tests/role-session-read-model.test.ts
+- prototypes/productized-desktop-shell/tests/agent-session-row.test.tsx
+- prototypes/productized-desktop-shell/tests/shared-conversation-transport.test.tsx
+- prototypes/productized-desktop-shell/tests/jiaoban-conversation-center.test.tsx
+- prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx
+- prototypes/productized-desktop-shell/tests/helpers/offlineConversationEngineScenario.tsx
+- prototypes/productized-desktop-shell/scripts/run-offline-interaction-test.mjs
 - refs/heads/main
 - /private/tmp/product-line-syn-m3-
 
@@ -63,6 +74,6 @@
 - [x] M3C03 RoleSession repository、schema 与 shadow import
 - [x] M3C04 ConversationTransportPort 与 fake provider 重启语义
 - [x] M3C05 显式 Handoff 状态机与结果回源
-- [ ] M3C06 会话读模型与前端缓存退位
+- [x] M3C06 会话读模型与前端缓存退位
 - [ ] M3C07 隔离桌面分层验收与迁移回切证据
 - [ ] M3C08 M3 集成回归、现状回写与阶段收口

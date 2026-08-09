@@ -9,11 +9,25 @@ import {
   SUPERVISOR_READ_ONLY_PROFILE,
   type AgentConversationTransportContext,
   type ConversationTransportAttemptRequest,
-  type ConversationTransportExistingStartRequest,
+  type ConversationTransportLegacyExistingStartRequest,
   type ConversationTransportNewStartRequest,
   type ConversationTransportReceipt,
   type SupervisorConversationTransportContext,
 } from "./conversationTransport";
+import {
+  createRoleSessionContinuationStartRequest,
+  createRoleSessionDetailRequest,
+  createRoleSessionDirectoryRequest,
+  parseRoleSessionDetail,
+  parseRoleSessionDirectory,
+  roleSessionDetailMatchesRequest,
+  roleSessionDirectoryMatchesRequest,
+  type RoleSessionContinuationStartRequest,
+  type RoleSessionDetail,
+  type RoleSessionDetailRequest,
+  type RoleSessionDirectory,
+  type RoleSessionDirectoryRequest,
+} from "./roleSessionReadModel";
 import type { PageReadModelQueryInput, PageReadModelQueryResult } from "./pageReadModel";
 import type {
   AdoptMemoryCandidateInput,
@@ -1676,6 +1690,84 @@ export function runManualCodexRelayOnce(
   return invoke<ManualRelayReceipt>("run_manual_codex_relay_once", { request });
 }
 
+// M3 RoleSession read model ---------------------------------------------------
+//
+// These wrappers intentionally have separate fixed-host command names.  They
+// accept only a canonical project locator hint plus opaque selectors/cursors;
+// no renderer path can send actor/role/scope/object/channel/permission,
+// owner, provider, profile, or legacy thread truth.
+export async function loadAgentRoleSessionDirectory(
+  request: RoleSessionDirectoryRequest,
+): Promise<RoleSessionDirectory> {
+  const safeRequest = createRoleSessionDirectoryRequest(request);
+  ensureTauriRuntime();
+  const directory = parseRoleSessionDirectory(
+    await invoke<unknown>("load_agent_role_session_directory", { request: safeRequest }),
+  );
+  if (!roleSessionDirectoryMatchesRequest(directory, safeRequest)) {
+    throw new Error("m3_read_model_stale_directory_response");
+  }
+  return directory;
+}
+
+export async function loadAgentRoleSessionDetail(
+  request: RoleSessionDetailRequest,
+): Promise<RoleSessionDetail> {
+  const safeRequest = createRoleSessionDetailRequest(request);
+  ensureTauriRuntime();
+  const detail = parseRoleSessionDetail(
+    await invoke<unknown>("load_agent_role_session_detail", { request: safeRequest }),
+  );
+  if (!roleSessionDetailMatchesRequest(detail, safeRequest)) {
+    throw new Error("m3_read_model_stale_detail_response");
+  }
+  return detail;
+}
+
+export async function loadJiaobanRoleSessionDirectory(
+  request: RoleSessionDirectoryRequest,
+): Promise<RoleSessionDirectory> {
+  const safeRequest = createRoleSessionDirectoryRequest(request);
+  ensureTauriRuntime();
+  const directory = parseRoleSessionDirectory(
+    await invoke<unknown>("load_jiaoban_role_session_directory", { request: safeRequest }),
+  );
+  if (!roleSessionDirectoryMatchesRequest(directory, safeRequest)) {
+    throw new Error("m3_read_model_stale_directory_response");
+  }
+  return directory;
+}
+
+export async function loadJiaobanRoleSessionDetail(
+  request: RoleSessionDetailRequest,
+): Promise<RoleSessionDetail> {
+  const safeRequest = createRoleSessionDetailRequest(request);
+  ensureTauriRuntime();
+  const detail = parseRoleSessionDetail(
+    await invoke<unknown>("load_jiaoban_role_session_detail", { request: safeRequest }),
+  );
+  if (!roleSessionDetailMatchesRequest(detail, safeRequest)) {
+    throw new Error("m3_read_model_stale_detail_response");
+  }
+  return detail;
+}
+
+export function startAgentRoleSessionContinuation(
+  request: RoleSessionContinuationStartRequest,
+): Promise<void> {
+  const safeRequest = createRoleSessionContinuationStartRequest(request);
+  ensureTauriRuntime();
+  return invoke<void>("start_agent_role_session_continuation", { request: safeRequest });
+}
+
+export function startJiaobanRoleSessionContinuation(
+  request: RoleSessionContinuationStartRequest,
+): Promise<void> {
+  const safeRequest = createRoleSessionContinuationStartRequest(request);
+  ensureTauriRuntime();
+  return invoke<void>("start_jiaoban_role_session_continuation", { request: safeRequest });
+}
+
 // Shared Conversation Transport -------------------------------------------------
 //
 // The profile remains a local controller contract so each page can select only
@@ -1683,7 +1775,7 @@ export function runManualCodexRelayOnce(
 // write roots, approval, MCP endpoint, and capabilities are never Tauri input.
 type ConversationTransportStartRequestForContext<TContext> =
   | (Omit<ConversationTransportNewStartRequest, "context"> & Readonly<{ context: TContext }>)
-  | (Omit<ConversationTransportExistingStartRequest, "context"> & Readonly<{ context: TContext }>);
+  | (Omit<ConversationTransportLegacyExistingStartRequest, "context"> & Readonly<{ context: TContext }>);
 
 export type AgentCodexConversationTransportStartRequest =
   ConversationTransportStartRequestForContext<AgentConversationTransportContext>;

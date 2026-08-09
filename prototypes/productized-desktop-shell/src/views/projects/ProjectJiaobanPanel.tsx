@@ -44,7 +44,12 @@ import {
   type JiaobanConversationPhaseKind,
 } from "./jiaoban/JiaobanConversation";
 import { buildJiaobanArtifactCanvasViews, type JiaobanCanvasViewSpec, type JiaobanPhase } from "./jiaoban/JiaobanArtifactViews";
-import { useConversationAutoScroll, useJiaobanConversationState } from "./jiaoban/useJiaobanConversationState";
+import {
+  jiaobanRoleSessionContinuationBlockedReason,
+  useConversationAutoScroll,
+  useJiaobanConversationState,
+  type JiaobanRoleSessionReadState,
+} from "./jiaoban/useJiaobanConversationState";
 import { useJiaobanRunningReadRefresh } from "./jiaoban/useJiaobanRunningReadRefresh";
 import {
   JiaobanRawSessionLink,
@@ -58,6 +63,10 @@ import {
   humanizeProviderUnavailable,
   isAlreadyConfirmedRejection,
 } from "../../lib/humanize";
+import {
+  roleSessionDetailMatchesDirectoryEntry,
+  roleSessionDirectoryHasSelection,
+} from "../../lib/roleSessionReadModel";
 import { summarizeProjectConsultationProposalStore } from "../../lib/projectConsultationProposal";
 import {
   applyProjectDirectorFailedAction,
@@ -150,6 +159,116 @@ export type ProjectJiaobanPanelProps = {
 };
 
 export type { JiaobanCanvasViewSpec, JiaobanPhase } from "./jiaoban/JiaobanArtifactViews";
+
+export function JiaobanRoleSessionReadBoundary({
+  roleSessionRead,
+  blockedReason,
+  onSelectRoleSession,
+  onLoadMoreRoleSessions,
+}: {
+  roleSessionRead: JiaobanRoleSessionReadState;
+  blockedReason: string | null;
+  onSelectRoleSession: (selection: string) => void;
+  onLoadMoreRoleSessions: () => void;
+}) {
+  const directory = roleSessionRead.directory;
+  const selectedSelection = roleSessionRead.selected_selection;
+  const detail = roleSessionRead.detail;
+  const detailIsCurrent = Boolean(
+    detail
+      && selectedSelection
+      && detail.selection === selectedSelection
+      && roleSessionDirectoryHasSelection(directory, selectedSelection)
+      && roleSessionDetailMatchesDirectoryEntry(detail, directory),
+  );
+
+  return (
+    <section
+      className="jiaoban-role-session-boundary"
+      data-role-session-status={roleSessionRead.status}
+      data-legacy-display="legacy_display_only"
+    >
+      <strong>主管角色会话边界</strong>
+      <span>{blockedReason ?? "服务端主管角色会话已就绪；续聊仍只使用不透明 selector。"}</span>
+      <small>legacy_display_only：历史会话与本地回放只用于阅读显示。</small>
+
+      <div className="jiaoban-role-session-directory" data-role-session-directory={directory ? "loaded" : "unavailable"}>
+        <strong>服务端主管角色会话目录</strong>
+        {directory?.entries.length ? (
+          <ul>
+            {directory.entries.map((entry) => {
+              const selected = entry.selection === selectedSelection;
+              return (
+                <li key={entry.selection} data-role-session-selected={selected ? "true" : "false"}>
+                  <button
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => onSelectRoleSession(entry.selection)}
+                  >
+                    {entry.labels.role_label} · {entry.labels.project_label} · {entry.labels.object_label}
+                    {selected ? "（当前选择）" : ""}
+                  </button>
+                  <small>{entry.labels.channel_label} · {entry.labels.permission_label}</small>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <small>当前没有可选的服务端主管角色会话。</small>
+        )}
+        {directory?.next_cursor ? (
+          <button
+            type="button"
+            disabled={roleSessionRead.loading_more || roleSessionRead.status === "loading"}
+            onClick={onLoadMoreRoleSessions}
+          >
+            {roleSessionRead.loading_more ? "正在加载更多主管角色会话…" : "加载更多主管角色会话"}
+          </button>
+        ) : null}
+      </div>
+
+      {roleSessionRead.selection_error ? <small>{roleSessionRead.selection_error}</small> : null}
+      {detailIsCurrent && detail ? (
+        <div className="jiaoban-role-session-detail" data-role-session-detail="current">
+          <strong>当前服务端主管角色会话</strong>
+          <dl>
+            <dt>角色</dt><dd>{detail.labels.role_label}</dd>
+            <dt>项目</dt><dd>{detail.labels.project_label}</dd>
+            <dt>对象</dt><dd>{detail.labels.object_label}</dd>
+            <dt>通道</dt><dd>{detail.labels.channel_label}</dd>
+            <dt>权限</dt><dd>{detail.labels.permission_label}</dd>
+          </dl>
+          <section data-role-session-context="sources">
+            <strong>上下文来源</strong>
+            <ul>{detail.context.context_sources.map((source) => <li key={source}>{source}</li>)}</ul>
+          </section>
+          <section data-role-session-context="knowledge">
+            <strong>知识来源</strong>
+            <ul>{detail.context.knowledge_refs.map((reference) => <li key={reference}>{reference}</li>)}</ul>
+          </section>
+          <section data-role-session-context="gaps">
+            <strong>资料缺口</strong>
+            <ul>{detail.context.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>
+          </section>
+          <section data-role-session-context="links">
+            <strong>来源链接</strong>
+            <ul>{detail.context.source_links.map((link) => (
+              <li key={`${link.source_ref ?? ""}:${link.label}`}>
+                {link.label}{link.source_ref ? ` · ${link.source_ref}` : ""}
+              </li>
+            ))}</ul>
+          </section>
+          <small>
+            续聊状态：{detail.continuation.state === "AVAILABLE" ? "服务端已签发可续聊状态" : "服务端未签发可续聊状态"}
+            {detail.continuation.reason ? `（${detail.continuation.reason}）` : ""}
+          </small>
+        </div>
+      ) : (
+        <small data-role-session-detail="unselected">尚未确认当前服务端主管角色会话；composer 保持关闭。</small>
+      )}
+    </section>
+  );
+}
 
 export function jiaobanStageFromChainOutcome(chain: DirectorChainOutcome | null): string {
   const reason = chain?.stopped_reason?.trim() ?? "";
@@ -428,6 +547,9 @@ function ProjectJiaobanPanelBrowser({
     messageErrors,
     receiptLayerErrors,
     transportTranscript,
+    roleSessionRead,
+    selectRoleSession,
+    loadMoreRoleSessions,
     makeConversationComposer,
     setComposerDraft: setConversationComposerDraft,
   } = useJiaobanConversationState({
@@ -437,6 +559,7 @@ function ProjectJiaobanPanelBrowser({
     onProposalStoreRefresh,
     onWorkflowStateReadRefresh,
   });
+  const roleSessionBlockedReason = jiaobanRoleSessionContinuationBlockedReason(roleSessionRead, projectRoot.trim());
   const transportMessageBusyKey = messageBusy ? "conversation-transport" : null;
   const consultLoading = messageBusy;
   const consultError = messageErrors["conversation-transport"] ?? null;
@@ -1530,6 +1653,12 @@ function ProjectJiaobanPanelBrowser({
   const mainContent = (
     <div className="project-jiaoban-main">
       <div className="project-jiaoban-col" data-conversation-phase={conversationPhaseKind}>
+        <JiaobanRoleSessionReadBoundary
+          roleSessionRead={roleSessionRead}
+          blockedReason={roleSessionBlockedReason}
+          onSelectRoleSession={selectRoleSession}
+          onLoadMoreRoleSessions={loadMoreRoleSessions}
+        />
         <JiaobanConversationStream
           entries={supervisorConversationEntries}
           userGoal={conversationStarted ? baseConversationGoal : null}

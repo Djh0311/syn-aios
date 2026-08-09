@@ -24,9 +24,12 @@ import {
 } from "../src/views/projects/jiaoban/JiaobanConversation";
 import type { JiaobanPhase } from "../src/views/projects/jiaoban/JiaobanArtifactViews";
 import { JiaobanProposalIndex } from "../src/views/projects/jiaoban/JiaobanHistory";
+import { JiaobanRoleSessionReadBoundary } from "../src/views/projects/ProjectJiaobanPanel";
 import {
+  jiaobanRoleSessionContinuationBlockedReason,
   reconcileResidentMessageSubmission,
   useJiaobanConversationState,
+  type JiaobanRoleSessionReadState,
 } from "../src/views/projects/jiaoban/useJiaobanConversationState";
 import {
   failedConversationReceiptLayers,
@@ -462,7 +465,8 @@ function ComposerRouteProbe({ phase, isTestProject = true }: { phase: JiaobanPha
   return <JiaobanConversationComposer {...composer} />;
 }
 
-// 2) 底1常驻框：唯一 message 路由、受控草稿、Enter 语义不变；所有 test-project 相位均可发。
+// 2) 底1常驻框：组件仍有唯一 message 交互语义；但 M3C06 没有已注入
+// runtime 时，所有宿主相位都必须由服务端绑定门禁关闭，不能借测试项目或缓存发送。
 {
   const draftChanges: string[] = [];
   const submission = { count: 0 };
@@ -501,14 +505,243 @@ function ComposerRouteProbe({ phase, isTestProject = true }: { phase: JiaobanPha
 
   for (const phase of ["say", "authorize", "running", "done", "blocked"] as JiaobanPhase[]) {
     const markup = renderToStaticMarkup(<ComposerRouteProbe phase={phase} />);
-    assert(markup.includes('data-composer-route="message"'), `${phase} 相位必须走唯一 user message 路由`);
-    assert(!markup.includes("disabled"), `${phase} 相位不得因旧状态机锁住常驻框`);
+    assert(markup.includes('data-composer-route="disabled"'), `${phase} 相位在未注入 runtime 时必须关闭续聊`);
+    assert(markup.includes("主管角色会话绑定尚未就绪"), `${phase} 相位必须说明历史内容仅供阅读`);
   }
 
   const nonTestMarkup = renderToStaticMarkup(<ComposerRouteProbe phase="running" isTestProject={false} />);
   assert(
     nonTestMarkup.includes("这个项目还没接执行") && nonTestMarkup.includes("disabled"),
     "P1-E 非测试项目的诚实关门语义仍须保留",
+  );
+
+  const quarantinedRead: JiaobanRoleSessionReadState = {
+    status: "ready",
+    project_locator: projectRoot,
+    directory: {
+      request_nonce: "jiaoban-directory-fixture",
+      projection_revision: "directory:jiaoban-fixture",
+      entries: [{
+        selection: "m3rs:jiaoban-selection",
+        role_session_id: "session:sha256:jiaoban",
+        session_revision: 1,
+        labels: {
+          role_label: "role:fixture",
+          project_label: "project:fixture",
+          object_label: "object:fixture",
+          channel_label: "channel:fixture",
+          permission_label: "permission:fixture",
+        },
+        session_state: "QUARANTINED",
+        permission_state: "CURRENT",
+        resolution_reason: "SESSION_QUARANTINED",
+      }],
+      next_cursor: null,
+    },
+    detail: {
+      request_nonce: "jiaoban-detail-fixture",
+      selection: "m3rs:jiaoban-selection",
+      role_session_id: "session:sha256:jiaoban",
+      session_revision: 1,
+      projection_revision: "1:1:fixture",
+      labels: {
+        role_label: "role:fixture",
+        project_label: "project:fixture",
+        object_label: "object:fixture",
+        channel_label: "channel:fixture",
+        permission_label: "permission:fixture",
+      },
+      session_state: "QUARANTINED",
+      permission_state: "CURRENT",
+      resolution_reason: "SESSION_QUARANTINED",
+      context: {
+        state: "AVAILABLE",
+        retrieval_status: "COMPLETE",
+        context_sources: [],
+        knowledge_refs: [],
+        gaps: [],
+        source_links: [],
+        request_more_material_available: false,
+      },
+      continuation: { state: "DISABLED", selector: null, reason: "SESSION_QUARANTINED" },
+    },
+    selected_selection: "m3rs:jiaoban-selection",
+    loading_more: false,
+    selection_error: null,
+    error: null,
+    legacy_display_only: true,
+  };
+  assert(
+    jiaobanRoleSessionContinuationBlockedReason(quarantinedRead, projectRoot) === "主管角色会话已隔离，不能续聊。",
+    "Jiaoban quarantine DTO 必须关闭续聊",
+  );
+  assert(
+    jiaobanRoleSessionContinuationBlockedReason({ ...quarantinedRead, project_locator: "/fixture/other-project" }, projectRoot)
+      === "当前项目与服务端主管角色会话不一致；暂不续聊。",
+    "Jiaoban 跨项目回包不得用缓存会话续聊",
+  );
+  assert(
+    jiaobanRoleSessionContinuationBlockedReason(
+      {
+        ...quarantinedRead,
+        status: "error",
+        detail: null,
+        error: { code: "M3_BINDING_UNAVAILABLE", user_message: "历史内容仅供阅读，当前不能续聊。" },
+      },
+      projectRoot,
+    ) === "历史内容仅供阅读，当前不能续聊。",
+    "Jiaoban read error 必须拒绝旧 cache continuation",
+  );
+
+  const readableRead: JiaobanRoleSessionReadState = {
+    status: "ready",
+    project_locator: projectRoot,
+    directory: {
+      request_nonce: "jiaoban-directory-readable",
+      projection_revision: "directory:jiaoban-readable",
+      entries: [{
+        selection: "m3rs:jiaoban-readable-selection",
+        role_session_id: "session:sha256:jiaoban-readable",
+        session_revision: 2,
+        labels: {
+          role_label: "主管角色标签",
+          project_label: "主管项目标签",
+          object_label: "主管对象标签",
+          channel_label: "主管通道标签",
+          permission_label: "主管权限标签",
+        },
+        session_state: "ACTIVE",
+        permission_state: "CURRENT",
+        resolution_reason: null,
+      }],
+      next_cursor: null,
+    },
+    detail: {
+      request_nonce: "jiaoban-detail-readable",
+      selection: "m3rs:jiaoban-readable-selection",
+      role_session_id: "session:sha256:jiaoban-readable",
+      session_revision: 2,
+      projection_revision: "2:1:jiaoban",
+      labels: {
+        role_label: "主管角色标签",
+        project_label: "主管项目标签",
+        object_label: "主管对象标签",
+        channel_label: "主管通道标签",
+        permission_label: "主管权限标签",
+      },
+      session_state: "ACTIVE",
+      permission_state: "CURRENT",
+      resolution_reason: null,
+      context: {
+        state: "AVAILABLE",
+        retrieval_status: "COMPLETE",
+        context_sources: ["主管上下文来源 A"],
+        knowledge_refs: ["主管知识来源 A"],
+        gaps: ["主管资料缺口 A"],
+        source_links: [{ source_ref: "source:opaque", label: "主管来源链接 A" }],
+        request_more_material_available: false,
+      },
+      continuation: { state: "AVAILABLE", selector: "m3rs:jiaoban-continuation", reason: null },
+    },
+    selected_selection: "m3rs:jiaoban-readable-selection",
+    loading_more: false,
+    selection_error: null,
+    error: null,
+    legacy_display_only: true,
+  };
+  const readableBoundaryMarkup = renderToStaticMarkup(
+    <JiaobanRoleSessionReadBoundary
+      roleSessionRead={readableRead}
+      blockedReason={null}
+      onSelectRoleSession={noop}
+      onLoadMoreRoleSessions={noop}
+    />,
+  );
+  for (const expected of [
+    "服务端主管角色会话目录",
+    "主管角色标签",
+    "主管项目标签",
+    "主管对象标签",
+    "主管通道标签",
+    "主管权限标签",
+    "主管上下文来源 A",
+    "主管知识来源 A",
+    "主管资料缺口 A",
+    "主管来源链接 A",
+    "source:opaque",
+    "服务端已签发可续聊状态",
+  ]) {
+    assert(readableBoundaryMarkup.includes(expected), `Jiaoban 边界必须渲染当前 DTO 字段：${expected}`);
+  }
+  assert(
+    !readableBoundaryMarkup.includes("m3rs:jiaoban-continuation"),
+    "Jiaoban 边界不得把 opaque continuation selector 渲染到 markup",
+  );
+
+  const selectionRequiredRead: JiaobanRoleSessionReadState = {
+    ...readableRead,
+    status: "selection_required",
+    detail: null,
+    selected_selection: null,
+    directory: {
+      ...readableRead.directory!,
+      next_cursor: "m3rs:jiaoban-more-cursor",
+      entries: [
+        ...readableRead.directory!.entries,
+        {
+          selection: "m3rs:jiaoban-other-selection",
+          role_session_id: "session:sha256:jiaoban-other",
+          session_revision: 3,
+          labels: {
+            role_label: "主管角色标签 B",
+            project_label: "主管项目标签",
+            object_label: "主管对象标签 B",
+            channel_label: "主管通道标签",
+            permission_label: "主管权限标签",
+          },
+          session_state: "ACTIVE",
+          permission_state: "CURRENT",
+          resolution_reason: null,
+        },
+      ],
+    },
+  };
+  assert(
+    jiaobanRoleSessionContinuationBlockedReason(selectionRequiredRead, projectRoot)
+      === "服务端返回多个主管角色会话；请先明确选择，历史内容仅供阅读。",
+    "Jiaoban 多条目录未选择时必须关闭 composer",
+  );
+  const selectionRequiredMarkup = renderToStaticMarkup(
+    <JiaobanRoleSessionReadBoundary
+      roleSessionRead={selectionRequiredRead}
+      blockedReason={jiaobanRoleSessionContinuationBlockedReason(selectionRequiredRead, projectRoot)}
+      onSelectRoleSession={noop}
+      onLoadMoreRoleSessions={noop}
+    />,
+  );
+  assert(
+    selectionRequiredMarkup.includes('data-role-session-detail="unselected"')
+      && selectionRequiredMarkup.includes("composer 保持关闭")
+      && selectionRequiredMarkup.includes("主管角色标签 B"),
+    "Jiaoban 多条服务器目录必须可选择、未选择时不得显示可续聊 detail",
+  );
+  const disabledComposerMarkup = renderToStaticMarkup(
+    <JiaobanConversationComposer
+      route={{
+        kind: "disabled",
+        reason: jiaobanRoleSessionContinuationBlockedReason(selectionRequiredRead, projectRoot) ?? "selection required",
+      }}
+      draft="不应发送"
+      busy={false}
+      onDraftChange={noop}
+      onSubmit={noop}
+    />,
+  );
+  assert(
+    disabledComposerMarkup.includes('data-composer-route="disabled"')
+      && disabledComposerMarkup.includes("disabled=\"\"")
+      && disabledComposerMarkup.includes("服务端返回多个主管角色会话；请先明确选择"),
+    "Jiaoban 多条目录未选择时，真实 composer 必须 disabled",
   );
 
   const streamMarkup = renderToStaticMarkup(stream({ entries: chronologicalEntries }));

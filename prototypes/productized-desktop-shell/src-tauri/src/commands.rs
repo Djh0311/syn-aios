@@ -3811,6 +3811,7 @@ mod conversation_transport_command_tests {
                     index_path,
                     tasks_path,
                     workflow_state_path,
+                    m3_role_session_read_runtime: Default::default(),
                 },
             }
         }
@@ -4382,6 +4383,119 @@ fn load_codex_session_transcript(
     state: tauri::State<'_, AppState>,
 ) -> Result<CodexTranscript, String> {
     load_codex_session_transcript_for_index(&state, &thread_id)
+}
+
+// M3C06 host-fixed RoleSession read-model entry points.  The renderer can
+// provide only a canonical project locator hint, opaque selection/cursor and a
+// request nonce; Agent/Jiaoban identity is fixed by the command name here.
+// Production AppState intentionally has no M3 runtime yet, so each command
+// fails closed with M3_BINDING_UNAVAILABLE rather than consulting a thread,
+// SessionRecord, profile, or frontend cache.
+#[tauri::command]
+fn load_agent_role_session_directory(
+    request: crate::m3_role_session_read_model::M3RoleSessionDirectoryRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m3_role_session_read_model::M3RoleSessionDirectoryDto, String> {
+    load_role_session_directory_for_host(
+        &state,
+        crate::m3_role_session_read_model::M3RoleSessionReadHost::Agent,
+        &request,
+    )
+}
+
+#[tauri::command]
+fn load_agent_role_session_detail(
+    request: crate::m3_role_session_read_model::M3RoleSessionDetailRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m3_role_session_read_model::M3RoleSessionDetailDto, String> {
+    load_role_session_detail_for_host(
+        &state,
+        crate::m3_role_session_read_model::M3RoleSessionReadHost::Agent,
+        &request,
+    )
+}
+
+#[tauri::command]
+fn load_jiaoban_role_session_directory(
+    request: crate::m3_role_session_read_model::M3RoleSessionDirectoryRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m3_role_session_read_model::M3RoleSessionDirectoryDto, String> {
+    load_role_session_directory_for_host(
+        &state,
+        crate::m3_role_session_read_model::M3RoleSessionReadHost::Jiaoban,
+        &request,
+    )
+}
+
+#[tauri::command]
+fn load_jiaoban_role_session_detail(
+    request: crate::m3_role_session_read_model::M3RoleSessionDetailRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m3_role_session_read_model::M3RoleSessionDetailDto, String> {
+    load_role_session_detail_for_host(
+        &state,
+        crate::m3_role_session_read_model::M3RoleSessionReadHost::Jiaoban,
+        &request,
+    )
+}
+
+// Continuation uses the same fixed-host boundary.  The request contains an
+// opaque selector only; the read runtime reloads RoleSession/binding/context
+// before handing an internal guard to the transport adapter.  There is no
+// legacy thread or cache fallback on this route.
+#[tauri::command]
+fn start_agent_role_session_continuation(
+    request: crate::m3_role_session_read_model::M3RoleSessionContinuationStartRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    start_role_session_continuation_for_host(
+        &state,
+        crate::m3_role_session_read_model::M3RoleSessionReadHost::Agent,
+        &request,
+    )
+}
+
+#[tauri::command]
+fn start_jiaoban_role_session_continuation(
+    request: crate::m3_role_session_read_model::M3RoleSessionContinuationStartRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    start_role_session_continuation_for_host(
+        &state,
+        crate::m3_role_session_read_model::M3RoleSessionReadHost::Jiaoban,
+        &request,
+    )
+}
+
+fn load_role_session_directory_for_host(
+    state: &AppState,
+    host: crate::m3_role_session_read_model::M3RoleSessionReadHost,
+    request: &crate::m3_role_session_read_model::M3RoleSessionDirectoryRequest,
+) -> Result<crate::m3_role_session_read_model::M3RoleSessionDirectoryDto, String> {
+    state.m3_role_session_read_runtime.directory(host, request)
+}
+
+fn load_role_session_detail_for_host(
+    state: &AppState,
+    host: crate::m3_role_session_read_model::M3RoleSessionReadHost,
+    request: &crate::m3_role_session_read_model::M3RoleSessionDetailRequest,
+) -> Result<crate::m3_role_session_read_model::M3RoleSessionDetailDto, String> {
+    state.m3_role_session_read_runtime.detail(host, request)
+}
+
+fn start_role_session_continuation_for_host(
+    state: &AppState,
+    host: crate::m3_role_session_read_model::M3RoleSessionReadHost,
+    request: &crate::m3_role_session_read_model::M3RoleSessionContinuationStartRequest,
+) -> Result<(), String> {
+    let guard = state
+        .m3_role_session_read_runtime
+        .authorize_continuation(host, request)?;
+    crate::m3_conversation_transport::dispatch_guarded_existing_continuation(
+        &guard,
+        &request.user_text,
+    )
+    .map_err(|error| error.code)
 }
 
 #[tauri::command]

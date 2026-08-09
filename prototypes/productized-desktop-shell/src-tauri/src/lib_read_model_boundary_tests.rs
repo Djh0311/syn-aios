@@ -29,6 +29,7 @@
             index_path: dir.join("codex-index.json"),
             tasks_path: dir.join("tasks.md"),
             workflow_state_path: dir.join("workflow-state.v0.json"),
+            m3_role_session_read_runtime: Default::default(),
         };
         let index = json!({
           "generated_at": "2026-05-27T10:23:52Z",
@@ -112,6 +113,7 @@
             index_path: dir.join("codex-index.json"),
             tasks_path: dir.join("tasks.md"),
             workflow_state_path,
+            m3_role_session_read_runtime: Default::default(),
         };
         fs::write(&state.tasks_path, "- `g2.md`：G2\n").expect("write tasks");
         let index = json!({
@@ -233,6 +235,7 @@
             index_path: dir.join("codex-index.json"),
             tasks_path: dir.join("tasks.md"),
             workflow_state_path,
+            m3_role_session_read_runtime: Default::default(),
         };
         let index = json!({
           "generated_at": "2026-06-03T00:00:00Z",
@@ -327,6 +330,7 @@
             index_path: dir.join("codex-index.json"),
             tasks_path: dir.join("tasks.md"),
             workflow_state_path: dir.join("missing-workflow-state.v0.json"),
+            m3_role_session_read_runtime: Default::default(),
         };
         let snapshot = build_snapshot_with_session_source(
             &state,
@@ -738,3 +742,98 @@
             .warnings
             .contains(&"provider_availability_not_execution_authorization".to_string()));
     }
+
+// M3C06 command/read-model boundary checks.  The production `AppState` has no
+// approved M3 runtime injection, so fixed-host commands fail closed rather
+// than deriving authority from an index row, thread id, profile, or renderer
+// cache.
+
+use crate::m3_role_session_read_model::{
+    M3RoleSessionContinuationStartRequest, M3RoleSessionDetailRequest,
+    M3RoleSessionDirectoryRequest, M3RoleSessionReadHost, M3_BINDING_UNAVAILABLE,
+};
+use crate::{
+    load_role_session_detail_for_host, load_role_session_directory_for_host,
+    start_role_session_continuation_for_host, AppState,
+};
+use std::path::PathBuf;
+
+fn unavailable_state() -> AppState {
+    AppState {
+        index_path: PathBuf::from("/m3c06/fixture/index.json"),
+        tasks_path: PathBuf::from("/m3c06/fixture/tasks.md"),
+        workflow_state_path: PathBuf::from("/m3c06/fixture/workflow-state.json"),
+        m3_role_session_read_runtime: Default::default(),
+    }
+}
+
+#[test]
+fn m3c06_fixed_host_read_commands_fail_closed_without_runtime_binding() {
+    let state = unavailable_state();
+    let directory = M3RoleSessionDirectoryRequest {
+        project_locator: "/m3c06/fixture/project".to_string(),
+        cursor: None,
+        limit: Some(20),
+        request_nonce: "m3c06-directory-1".to_string(),
+    };
+    let detail = M3RoleSessionDetailRequest {
+        project_locator: directory.project_locator.clone(),
+        selection: "m3rs:1".to_string(),
+        request_nonce: "m3c06-detail-1".to_string(),
+    };
+
+    for host in [M3RoleSessionReadHost::Agent, M3RoleSessionReadHost::Jiaoban] {
+        assert_eq!(
+            load_role_session_directory_for_host(&state, host, &directory)
+                .expect_err("production state must not infer a RoleSession runtime"),
+            M3_BINDING_UNAVAILABLE,
+        );
+        assert_eq!(
+            load_role_session_detail_for_host(&state, host, &detail)
+                .expect_err("production state must not infer a RoleSession runtime"),
+            M3_BINDING_UNAVAILABLE,
+        );
+    }
+}
+
+#[test]
+fn m3c06_existing_continuation_fails_before_any_legacy_thread_route() {
+    let state = unavailable_state();
+    let request = M3RoleSessionContinuationStartRequest {
+        project_locator: "/m3c06/fixture/project".to_string(),
+        continuation_selector: "m3rs:continuation-1".to_string(),
+        request_nonce: "m3c06-continuation-1".to_string(),
+        user_text: "fixture message".to_string(),
+    };
+    assert_eq!(
+        start_role_session_continuation_for_host(&state, M3RoleSessionReadHost::Agent, &request)
+            .expect_err("no runtime binding means no adapter dispatch"),
+        M3_BINDING_UNAVAILABLE,
+    );
+}
+
+#[test]
+fn m3c06_renderer_payloads_deny_authority_and_thread_truth_fields() {
+    let directory = serde_json::json!({
+        "project_locator": "/m3c06/fixture/project",
+        "request_nonce": "m3c06-json-directory",
+        "role": "renderer-supplied-role",
+    });
+    let detail = serde_json::json!({
+        "project_locator": "/m3c06/fixture/project",
+        "selection": "m3rs:selection-1",
+        "request_nonce": "m3c06-json-detail",
+        "thread_id": "legacy-thread",
+    });
+    let continuation = serde_json::json!({
+        "project_locator": "/m3c06/fixture/project",
+        "continuation_selector": "m3rs:continuation-1",
+        "request_nonce": "m3c06-json-continuation",
+        "user_text": "fixture message",
+        "owner_fingerprint": "renderer-owner",
+    });
+
+    assert!(serde_json::from_value::<M3RoleSessionDirectoryRequest>(directory).is_err());
+    assert!(serde_json::from_value::<M3RoleSessionDetailRequest>(detail).is_err());
+    assert!(serde_json::from_value::<M3RoleSessionContinuationStartRequest>(continuation).is_err());
+}
