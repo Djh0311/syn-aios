@@ -9,6 +9,12 @@
 //! transcripts, prompts, provider responses, tool arguments, credentials, and
 //! process output are rejected before they can reach a persistence helper.
 
+use crate::m3_handoff::{
+    handoff_request_fingerprint_for_fields, Handoff, HandoffId, HandoffPermissionRequest,
+    HandoffReceipt, HandoffReceiptKind, HandoffRecipientEvidence, HandoffRequestOperation,
+    HandoffReturnFailureReason, HandoffSourceApplication, HandoffSourceApplicationStatus,
+    HandoffState,
+};
 use crate::m3_role_session::{
     apply_restart_orphan_disposition, compare_permission_scope, decide_restart_recovery,
     idempotency_replay_disposition, owner_fingerprint_for_components,
@@ -33,6 +39,7 @@ use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) const M3_ROLE_SESSION_REPOSITORY_PORT_VERSION: &str = "m3.role-session.repository.v1";
 pub(crate) const M3_ROLE_SESSION_REPOSITORY_SOURCE_ID: &str = "m3_role_session_repository_scratch";
@@ -72,11 +79,52 @@ impl std::error::Error for M3RoleSessionRepositoryError {}
 pub(crate) struct M3RoleSessionSqliteRepository {
     workbench: WorkbenchSqliteRepository,
     scratch_db_path: PathBuf,
+    handoff_clock: M3RepositoryClock,
     /// A REGISTERED effect may be dispatched only by the repository instance
     /// that just committed it. This process-local capability is deliberately
     /// absent after reopen, so restart inventory converges the effect through
     /// orphan/recovery instead of silently sending it for the first time.
     fresh_dispatch_permits: Arc<Mutex<BTreeSet<String>>>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct M3RepositoryClock {
+    #[cfg(test)]
+    fixed_now: Arc<Mutex<Option<String>>>,
+}
+
+impl M3RepositoryClock {
+    fn capture_now(&self) -> Result<String, M3RoleSessionRepositoryError> {
+        #[cfg(test)]
+        if let Some(fixed_now) = self
+            .fixed_now
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+        {
+            validate_rfc3339_utc_timestamp("m3_handoff_test_repository_now", &fixed_now)?;
+            return Ok(fixed_now);
+        }
+
+        let epoch_millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| M3RoleSessionRepositoryError::new("m3_handoff_server_clock_before_epoch"))?
+            .as_millis();
+        let epoch_millis = i64::try_from(epoch_millis).map_err(|_| {
+            M3RoleSessionRepositoryError::new("m3_handoff_server_clock_out_of_range")
+        })?;
+        Ok(m3_handoff_utc_rfc3339_at_epoch_millis(epoch_millis))
+    }
+
+    #[cfg(test)]
+    fn set_fixed_now(&self, fixed_now: &str) -> Result<(), M3RoleSessionRepositoryError> {
+        validate_rfc3339_utc_timestamp("m3_handoff_test_repository_now", fixed_now)?;
+        *self
+            .fixed_now
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(fixed_now.to_string());
+        Ok(())
+    }
 }
 
 /// A narrow port so later transport/read-model callers cannot obtain a raw
@@ -120,6 +168,14 @@ pub(crate) trait M3RoleSessionRepositoryPort {
     fn upsert_conversation_context(
         &self,
         command: &UpsertConversationContextCommand,
+    ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError>;
+    fn upsert_handoff_validation_context(
+        &self,
+        command: &UpsertConversationContextCommand,
+    ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError>;
+    fn upsert_handoff_source_application_context(
+        &self,
+        command: &UpsertHandoffSourceApplicationContextCommand,
     ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError>;
     fn recover_after_restart(
         &self,
@@ -227,6 +283,20 @@ impl M3RoleSessionRepositoryPort for M3RoleSessionSqliteRepository {
         M3RoleSessionSqliteRepository::upsert_conversation_context(self, command)
     }
 
+    fn upsert_handoff_validation_context(
+        &self,
+        command: &UpsertConversationContextCommand,
+    ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError> {
+        M3RoleSessionSqliteRepository::upsert_handoff_validation_context(self, command)
+    }
+
+    fn upsert_handoff_source_application_context(
+        &self,
+        command: &UpsertHandoffSourceApplicationContextCommand,
+    ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError> {
+        M3RoleSessionSqliteRepository::upsert_handoff_source_application_context(self, command)
+    }
+
     fn recover_after_restart(
         &self,
         command: &RestartRecoveryCommand,
@@ -289,6 +359,7 @@ impl M3RoleSessionSqliteRepository {
         let repository = Self {
             workbench,
             scratch_db_path: canonical_path,
+            handoff_clock: M3RepositoryClock::default(),
             fresh_dispatch_permits: Arc::new(Mutex::new(BTreeSet::new())),
         };
 
@@ -337,9 +408,17 @@ impl M3RoleSessionSqliteRepository {
     }
 
     pub(crate) fn verify_schema(&self) -> Result<(), M3RoleSessionRepositoryError> {
-        let connection = self.read_connection()?;
+        let mut connection = self.read_connection()?;
         verify_m3_schema_v1(&connection)
-            .map_err(|_| M3RoleSessionRepositoryError::new("m3_schema_verify_failed"))
+            .map_err(|_| M3RoleSessionRepositoryError::new("m3_schema_verify_failed"))?;
+        let transaction = connection.transaction().map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_rehydration_transaction", error)
+        })?;
+        validate_all_handoff_validation_witnesses_in_transaction(&transaction)?;
+        validate_all_handoff_permission_descriptors_in_transaction(&transaction)?;
+        validate_all_handoff_rehydration_in_transaction(&transaction)?;
+        validate_all_handoff_source_command_fences_in_transaction(&transaction)?;
+        Ok(())
     }
 
     /// M3's only write primitive.  This intentionally calls the ordinary
@@ -550,6 +629,34 @@ impl M3CommandMetadata {
         ])?;
         validate_rfc3339_utc_timestamp("occurred_at", &self.occurred_at)
     }
+}
+
+fn m3_handoff_utc_rfc3339_at_epoch_millis(epoch_millis: i64) -> String {
+    let seconds = epoch_millis.div_euclid(1_000);
+    let millis = epoch_millis.rem_euclid(1_000);
+    let days = seconds.div_euclid(86_400);
+    let seconds_in_day = seconds.rem_euclid(86_400);
+    let (year, month, day) = m3_handoff_civil_from_days(days);
+    let hour = seconds_in_day / 3_600;
+    let minute = (seconds_in_day % 3_600) / 60;
+    let second = seconds_in_day % 60;
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
+}
+
+// Howard Hinnant's public-domain civil-date conversion, kept local so M3
+// does not turn the M2 reference-slice clock into a cross-stage dependency.
+fn m3_handoff_civil_from_days(days_since_unix_epoch: i64) -> (i64, i64, i64) {
+    let z = days_since_unix_epoch + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    year += if month <= 2 { 1 } else { 0 };
+    (year, month, day)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -926,6 +1033,43 @@ pub(crate) struct UpsertConversationContextCommand {
     pub(crate) current_permission: Option<PermissionSnapshotDescriptor>,
     pub(crate) expected_session_revision: u64,
     pub(crate) metadata: M3CommandMetadata,
+}
+
+/// Private repository boundary for a base command that may be consumed by a
+/// later source-application attempt.  The returned Handoff anchor is checked
+/// inside the same IMMEDIATE transaction before the base receipt is minted.
+#[derive(Clone, Debug)]
+pub(crate) struct UpsertHandoffSourceApplicationContextCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) context_command: UpsertConversationContextCommand,
+}
+
+#[derive(Clone, Debug)]
+enum M3ContextEvidenceMode {
+    Generic,
+    HandoffValidation,
+    HandoffSourceApplication {
+        handoff_id: HandoffId,
+        expected_handoff_revision: u64,
+    },
+}
+
+impl M3ContextEvidenceMode {
+    fn mints_handoff_validation_witness(&self) -> bool {
+        !matches!(self, Self::Generic)
+    }
+}
+
+fn handoff_source_application_context_idempotency_scope(
+    role_session_id: &RoleSessionId,
+    handoff_id: &HandoffId,
+) -> String {
+    format!(
+        "m3.handoff-source-application/{}/{}",
+        role_session_id.as_str(),
+        handoff_id.as_str()
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -2402,6 +2546,38 @@ impl M3RoleSessionSqliteRepository {
         &self,
         command: &UpsertConversationContextCommand,
     ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError> {
+        self.upsert_conversation_context_internal(command, M3ContextEvidenceMode::Generic)
+    }
+
+    /// Repository-owned Handoff validation boundary. Unlike the generic
+    /// rebuildable-context projection, this samples the private repository
+    /// clock only after the IMMEDIATE transaction is acquired and atomically
+    /// persists an immutable validation witness.
+    pub(crate) fn upsert_handoff_validation_context(
+        &self,
+        command: &UpsertConversationContextCommand,
+    ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError> {
+        self.upsert_conversation_context_internal(command, M3ContextEvidenceMode::HandoffValidation)
+    }
+
+    pub(crate) fn upsert_handoff_source_application_context(
+        &self,
+        command: &UpsertHandoffSourceApplicationContextCommand,
+    ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError> {
+        self.upsert_conversation_context_internal(
+            &command.context_command,
+            M3ContextEvidenceMode::HandoffSourceApplication {
+                handoff_id: command.handoff_id.clone(),
+                expected_handoff_revision: command.expected_handoff_revision,
+            },
+        )
+    }
+
+    fn upsert_conversation_context_internal(
+        &self,
+        command: &UpsertConversationContextCommand,
+        evidence_mode: M3ContextEvidenceMode,
+    ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError> {
         command.metadata.validate()?;
         validate_server_binding_metadata_only(&command.binding)?;
         command
@@ -2419,33 +2595,116 @@ impl M3RoleSessionSqliteRepository {
             permission_descriptor_digest(command.previous_permission.as_ref())?;
         let current_permission_hash =
             permission_descriptor_digest(command.current_permission.as_ref())?;
-        let request_fingerprint = request_fingerprint_for_fields(
-            M3RequestOperation::UpsertConversationContext,
-            &[
-                command.context.context_ref.as_str(),
-                command.context.role_session_id.as_str(),
-                context_hash.as_str(),
-                revision.as_str(),
-                command.binding.permission_snapshot_ref.as_str(),
-                previous_permission_hash.as_str(),
-                current_permission_hash.as_str(),
-            ],
-        )
+        let handoff_revision = match &evidence_mode {
+            M3ContextEvidenceMode::HandoffSourceApplication {
+                expected_handoff_revision,
+                ..
+            } => Some(expected_handoff_revision.to_string()),
+            _ => None,
+        };
+        let request_fingerprint = match (&evidence_mode, handoff_revision.as_deref()) {
+            (
+                M3ContextEvidenceMode::HandoffSourceApplication { handoff_id, .. },
+                Some(handoff_revision),
+            ) => request_fingerprint_for_fields(
+                M3RequestOperation::UpsertConversationContext,
+                &[
+                    command.context.context_ref.as_str(),
+                    command.context.role_session_id.as_str(),
+                    context_hash.as_str(),
+                    revision.as_str(),
+                    command.binding.permission_snapshot_ref.as_str(),
+                    previous_permission_hash.as_str(),
+                    current_permission_hash.as_str(),
+                    handoff_id.as_str(),
+                    handoff_revision,
+                ],
+            ),
+            _ => request_fingerprint_for_fields(
+                M3RequestOperation::UpsertConversationContext,
+                &[
+                    command.context.context_ref.as_str(),
+                    command.context.role_session_id.as_str(),
+                    context_hash.as_str(),
+                    revision.as_str(),
+                    command.binding.permission_snapshot_ref.as_str(),
+                    previous_permission_hash.as_str(),
+                    current_permission_hash.as_str(),
+                ],
+            ),
+        }
         .map_err(domain_error)?;
+        let idempotency_scope_ref = match &evidence_mode {
+            M3ContextEvidenceMode::HandoffSourceApplication { handoff_id, .. } => {
+                handoff_source_application_context_idempotency_scope(
+                    &command.context.role_session_id,
+                    handoff_id,
+                )
+            }
+            _ => command.context.role_session_id.as_str().to_string(),
+        };
         let identity = generic_idempotency_identity(
             "UPSERT_CONVERSATION_CONTEXT",
-            command.context.role_session_id.as_str(),
+            &idempotency_scope_ref,
             command.metadata.request_idempotency_key.clone(),
             request_fingerprint,
         )?;
         let command = command.clone();
+        let evidence_mode = evidence_mode.clone();
         self.with_immediate_transaction("m3_upsert_conversation_context", |transaction| {
             if let Some(receipt) = find_exact_or_divergent_receipt(transaction, &identity)? {
+                if evidence_mode.mints_handoff_validation_witness()
+                    && load_handoff_validation_witness_in_transaction(
+                        transaction,
+                        &receipt.receipt_id,
+                    )?
+                    .is_none()
+                {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_validation_witness_missing",
+                    ));
+                }
+                if let M3ContextEvidenceMode::HandoffSourceApplication {
+                    handoff_id,
+                    expected_handoff_revision,
+                } = &evidence_mode
+                {
+                    let fence = load_handoff_source_command_fence_in_transaction(
+                        transaction,
+                        &receipt.receipt_id,
+                    )?
+                    .ok_or_else(|| {
+                        M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_missing")
+                    })?;
+                    validate_handoff_source_command_fence_replay_in_transaction(
+                        transaction,
+                        &fence,
+                        handoff_id,
+                        *expected_handoff_revision,
+                        &command,
+                    )?;
+                }
                 return receipt_to_server_authorized_replay_outcome(
                     receipt,
                     transaction,
                     &command.binding,
                 );
+            }
+            let mut command = command.clone();
+            let source_application_anchor = match &evidence_mode {
+                M3ContextEvidenceMode::HandoffSourceApplication {
+                    handoff_id,
+                    expected_handoff_revision,
+                } => Some(load_handoff_source_command_fence_anchor_in_transaction(
+                    transaction,
+                    handoff_id,
+                    *expected_handoff_revision,
+                    &command,
+                )?),
+                _ => None,
+            };
+            if evidence_mode.mints_handoff_validation_witness() {
+                command.metadata.occurred_at = self.handoff_clock.capture_now()?;
             }
             let mut session = load_required_role_session_in_transaction(
                 transaction,
@@ -2519,6 +2778,41 @@ impl M3RoleSessionSqliteRepository {
                 context_hash.as_str(),
                 &command.metadata.occurred_at,
             )?;
+            let validation_context = if evidence_mode.mints_handoff_validation_witness() {
+                let validation_context =
+                    load_context_by_ref_in_transaction(transaction, &command.context.context_ref)?
+                        .ok_or_else(|| {
+                            M3RoleSessionRepositoryError::new(
+                                "m3_handoff_validation_context_revalidation_missing",
+                            )
+                        })?;
+                let context_updated_at = parse_handoff_utc_instant(
+                    "m3_handoff_validation_context_updated_at",
+                    &validation_context.updated_at,
+                )?;
+                let trusted_recorded_at = parse_handoff_utc_instant(
+                    "m3_handoff_validation_trusted_recorded_at",
+                    &command.metadata.occurred_at,
+                )?;
+                if validation_context.context != command.context
+                    || validation_context.permission_snapshot_ref != session.permission_snapshot_ref
+                    || validation_context.permission_snapshot_ref
+                        != current_binding.permission_snapshot_ref
+                    || validation_context.binding_revision != current_binding.binding_revision
+                    || validation_context.context.role_session_id != current_binding.role_session_id
+                    || validation_context.context.current_object_ref
+                        != current_binding.current_object_ref
+                    || validation_context.context_metadata_hash != context_hash
+                    || context_updated_at > trusted_recorded_at
+                {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_validation_context_revalidation_mismatch",
+                    ));
+                }
+                Some(validation_context)
+            } else {
+                None
+            };
             let receipt = new_receipt(
                 &command.metadata,
                 &identity,
@@ -2546,6 +2840,52 @@ impl M3RoleSessionSqliteRepository {
                 "METADATA_ONLY_REBUILDABLE_CONTEXT",
                 Some(&session.owner_fingerprint),
             )?;
+            if evidence_mode.mints_handoff_validation_witness() {
+                let validation_context = validation_context.as_ref().ok_or_else(|| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_validation_context_revalidation_missing",
+                    )
+                })?;
+                let current_permission = command.current_permission.as_ref().ok_or_else(|| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_context_current_permission_descriptor_required",
+                    )
+                })?;
+                seed_handoff_permission_descriptor_from_context_in_transaction(
+                    transaction,
+                    current_permission,
+                    &current_binding,
+                    &command.context.context_ref,
+                    &context_hash,
+                    &receipt,
+                    &command.metadata.occurred_at,
+                )?;
+                let witness = new_handoff_validation_witness(
+                    &receipt,
+                    &command.context,
+                    &current_binding,
+                    command.previous_permission.as_ref(),
+                    current_permission,
+                    session.revision,
+                    &context_hash,
+                    &validation_context.updated_at,
+                    &command.metadata.occurred_at,
+                )?;
+                insert_handoff_validation_witness_in_transaction(transaction, &witness)?;
+                if let Some(anchor) = source_application_anchor.as_ref() {
+                    let fence = new_handoff_source_command_fence(
+                        anchor,
+                        &receipt,
+                        &current_binding,
+                        &witness,
+                    )?;
+                    insert_handoff_source_command_fence_in_transaction(transaction, &fence)?;
+                    validate_handoff_validation_witness_in_transaction(transaction, &witness)?;
+                    validate_handoff_source_command_fence_in_transaction(transaction, &fence)?;
+                } else {
+                    validate_handoff_validation_witness_in_transaction(transaction, &witness)?;
+                }
+            }
             Ok(M3RepositoryCommandOutcome {
                 receipt,
                 replayed: false,
@@ -3930,6 +4270,7757 @@ impl M3RoleSessionSqliteRepository {
         })
         .map(|(outcome, _)| outcome)
     }
+}
+
+pub(crate) const M3_HANDOFF_REPOSITORY_PORT_VERSION: &str = "m3.handoff.repository.v1";
+
+pub(crate) trait M3HandoffRepositoryPort {
+    fn handoff_repository_port_version(&self) -> &'static str;
+    fn create_handoff(
+        &self,
+        command: &CreateHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn accept_handoff(
+        &self,
+        command: &AcceptHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn reject_handoff(
+        &self,
+        command: &RejectHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn cancel_handoff(
+        &self,
+        command: &CancelHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn expire_handoff(
+        &self,
+        command: &ExpireHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn request_handoff_return(
+        &self,
+        command: &RequestHandoffReturnCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn record_handoff_return_result(
+        &self,
+        command: &RecordHandoffReturnResultCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn timeout_handoff_return(
+        &self,
+        command: &TimeoutHandoffReturnCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn retry_failed_handoff_return(
+        &self,
+        command: &RetryFailedHandoffReturnCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn cancel_failed_handoff_by_source(
+        &self,
+        command: &CancelFailedHandoffBySourceCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+    fn record_handoff_source_application(
+        &self,
+        command: &RecordHandoffSourceApplicationCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M3HandoffCommandReceiptStatus {
+    Committed,
+    Stale,
+    Suspended,
+    Rejected,
+}
+
+impl M3HandoffCommandReceiptStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Committed => "COMMITTED",
+            Self::Stale => "STALE",
+            Self::Suspended => "SUSPENDED",
+            Self::Rejected => "REJECTED",
+        }
+    }
+
+    fn parse(value: &str) -> Result<Self, M3RoleSessionRepositoryError> {
+        match value {
+            "COMMITTED" => Ok(Self::Committed),
+            "STALE" => Ok(Self::Stale),
+            "SUSPENDED" => Ok(Self::Suspended),
+            "REJECTED" => Ok(Self::Rejected),
+            _ => Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_command_status_unknown",
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M3HandoffCommandReceiptDto {
+    pub(crate) command_receipt_id: OpaqueRef,
+    pub(crate) operation: HandoffRequestOperation,
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) idempotency_scope_ref: String,
+    pub(crate) base_key: String,
+    pub(crate) request_fingerprint: RequestFingerprint,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) actor_id: OpaqueRef,
+    pub(crate) role_session_id: RoleSessionId,
+    pub(crate) actor_owner_fingerprint: OwnerFingerprint,
+    pub(crate) actor_permission_snapshot_ref: OpaqueRef,
+    pub(crate) actor_permission_descriptor_digest: Sha256Digest,
+    pub(crate) actor_session_revision: u64,
+    pub(crate) actor_binding_revision: u64,
+    pub(crate) actor_binding_proof_digest: Sha256Digest,
+    pub(crate) correlation_id: CorrelationId,
+    pub(crate) result_ref: OpaqueRef,
+    pub(crate) result_hash: Sha256Digest,
+    pub(crate) return_by_at_transition: Option<String>,
+    pub(crate) failure_reason_at_transition: Option<HandoffReturnFailureReason>,
+    pub(crate) handoff_state_digest: Option<Sha256Digest>,
+    pub(crate) status: M3HandoffCommandReceiptStatus,
+    pub(crate) winner_receipt_ref: Option<OpaqueRef>,
+    pub(crate) created_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M3HandoffCommandOutcome {
+    pub(crate) command_receipt: M3HandoffCommandReceiptDto,
+    pub(crate) transition_receipt: Option<HandoffReceipt>,
+    pub(crate) winning_receipt: Option<HandoffReceipt>,
+    pub(crate) handoff: Handoff,
+    pub(crate) source_application: Option<HandoffSourceApplication>,
+    pub(crate) source_session: Option<RoleSession>,
+    pub(crate) recipient_session: Option<RoleSession>,
+    pub(crate) replayed: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct M3HandoffSessionAuthority {
+    pub(crate) role_session_id: RoleSessionId,
+    pub(crate) binding: ServerResolvedBinding,
+    pub(crate) previous_permission: PermissionSnapshotDescriptor,
+    pub(crate) current_permission: PermissionSnapshotDescriptor,
+    pub(crate) expected_session_revision: u64,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct CreateHandoffCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) source_command_receipt_ref: OpaqueRef,
+    pub(crate) to_role_ref: OpaqueRef,
+    pub(crate) to_recipient_ref: OpaqueRef,
+    pub(crate) requested_outcome_ref: OpaqueRef,
+    pub(crate) object_refs: BTreeSet<OpaqueRef>,
+    pub(crate) risk_class: OpaqueRef,
+    pub(crate) permission_request: HandoffPermissionRequest,
+    pub(crate) accept_by: String,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct AcceptHandoffCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) recipient: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RejectHandoffCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) recipient: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct CancelHandoffCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct ExpireHandoffCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RequestHandoffReturnCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) return_by: String,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct HandoffSourceObjectValidationProof {
+    pub(crate) role_session_id: RoleSessionId,
+    pub(crate) binding: ServerResolvedBinding,
+    pub(crate) object_ref: OpaqueRef,
+    pub(crate) validation_receipt_ref: OpaqueRef,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PersistedHandoffSourceValidationProof {
+    returned_receipt_id: OpaqueRef,
+    handoff_id: HandoffId,
+    handoff_revision: u64,
+    source_role_session_id: RoleSessionId,
+    source_actor_id: OpaqueRef,
+    source_owner_fingerprint: OwnerFingerprint,
+    source_binding_revision: u64,
+    source_permission_snapshot_ref: OpaqueRef,
+    source_permission_descriptor_digest: Sha256Digest,
+    source_binding_proof_digest: Sha256Digest,
+    source_object_ref: OpaqueRef,
+    validation_receipt_ref: OpaqueRef,
+    validation_receipt_hash: Sha256Digest,
+    validation_witness_digest: Sha256Digest,
+    validation_recorded_at: String,
+    validation_context_ref: ConversationContextRef,
+    validation_context_hash: Sha256Digest,
+    validation_window_receipt_ref: OpaqueRef,
+    validation_window_handoff_revision: u64,
+    validation_window_receipt_hash: Sha256Digest,
+    validation_window_recorded_at: String,
+    result_ref: OpaqueRef,
+    result_hash: Sha256Digest,
+    returned_recorded_at: String,
+    proof_digest: Sha256Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PersistedHandoffValidationWitness {
+    validation_receipt_ref: OpaqueRef,
+    validation_context_ref: ConversationContextRef,
+    source_role_session_id: RoleSessionId,
+    source_actor_id: OpaqueRef,
+    source_owner_fingerprint: OwnerFingerprint,
+    validation_expected_session_revision: u64,
+    validated_session_revision: u64,
+    source_binding_revision: u64,
+    source_permission_snapshot_ref: OpaqueRef,
+    previous_permission_descriptor_digest: Sha256Digest,
+    source_permission_descriptor_digest: Sha256Digest,
+    source_binding_proof_digest: Sha256Digest,
+    source_object_ref: OpaqueRef,
+    validation_context_hash: Sha256Digest,
+    validation_receipt_hash: Sha256Digest,
+    context_updated_at: String,
+    trusted_recorded_at: String,
+    witness_digest: Sha256Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HandoffSourceCommandFenceAnchor {
+    handoff_id: HandoffId,
+    handoff_revision: u64,
+    returned_receipt_id: OpaqueRef,
+    returned_transition_integrity_hash: Sha256Digest,
+    returned_result_ref: OpaqueRef,
+    returned_result_hash: Sha256Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PersistedHandoffSourceCommandFence {
+    source_command_receipt_ref: OpaqueRef,
+    fence_digest: Sha256Digest,
+    handoff_id: HandoffId,
+    handoff_revision: u64,
+    returned_receipt_id: OpaqueRef,
+    returned_transition_integrity_hash: Sha256Digest,
+    returned_result_ref: OpaqueRef,
+    returned_result_hash: Sha256Digest,
+    source_role_session_id: RoleSessionId,
+    source_actor_id: OpaqueRef,
+    source_owner_fingerprint: OwnerFingerprint,
+    source_session_revision: u64,
+    source_binding_revision: u64,
+    source_permission_snapshot_ref: OpaqueRef,
+    source_binding_proof_digest: Sha256Digest,
+    validation_witness_digest: Sha256Digest,
+    recorded_at: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum HandoffReturnResult {
+    Returned {
+        result_ref: OpaqueRef,
+        result_hash: Sha256Digest,
+        source_object_validation: HandoffSourceObjectValidationProof,
+    },
+    RecipientReturnFailed {
+        failure_ref: OpaqueRef,
+        failure_hash: Sha256Digest,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RecordHandoffReturnResultCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) recipient: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) result: HandoffReturnResult,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct TimeoutHandoffReturnCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RetryFailedHandoffReturnCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) return_by: String,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct CancelFailedHandoffBySourceCommand {
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RecordHandoffSourceApplicationCommand {
+    pub(crate) application_id: OpaqueRef,
+    pub(crate) handoff_id: HandoffId,
+    pub(crate) source: M3HandoffSessionAuthority,
+    pub(crate) expected_handoff_revision: u64,
+    pub(crate) source_command_receipt_ref: OpaqueRef,
+    pub(crate) status: HandoffSourceApplicationStatus,
+    pub(crate) metadata: M3CommandMetadata,
+    #[cfg(test)]
+    pub(crate) test_clock_now: String,
+}
+
+#[derive(Clone, Debug)]
+struct M3HandoffIdempotencyIdentity {
+    operation: HandoffRequestOperation,
+    handoff_id: HandoffId,
+    base_key: RequestIdempotencyKey,
+    request_fingerprint: RequestFingerprint,
+}
+
+#[derive(Clone, Debug)]
+enum PreparedHandoffMutation {
+    Accept,
+    Reject,
+    Cancel,
+    Expire,
+    RequestReturn { return_by: String },
+    ReturnResult { result: HandoffReturnResult },
+    ReturnTimeout,
+    RetryReturn { return_by: String },
+    CancelFailedReturn,
+}
+
+#[derive(Clone, Debug)]
+struct PreparedHandoffTransition {
+    handoff_id: HandoffId,
+    source: M3HandoffSessionAuthority,
+    recipient: Option<M3HandoffSessionAuthority>,
+    expected_handoff_revision: u64,
+    operation: HandoffRequestOperation,
+    mutation: PreparedHandoffMutation,
+    metadata: M3CommandMetadata,
+}
+
+impl M3RoleSessionSqliteRepository {
+    fn prepare_handoff_clock(
+        &self,
+        #[cfg(test)] test_clock_now: &str,
+    ) -> Result<(), M3RoleSessionRepositoryError> {
+        #[cfg(test)]
+        self.handoff_clock.set_fixed_now(test_clock_now)?;
+        Ok(())
+    }
+
+    pub(crate) fn create_handoff(
+        &self,
+        command: &CreateHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        validate_create_handoff_command(command)?;
+        let identity = handoff_create_idempotency_identity(command)?;
+        let command = command.clone();
+        self.with_immediate_transaction("m3_create_handoff", |transaction| {
+            if let Some(receipt) = find_handoff_command_receipt_by_identity(transaction, &identity)?
+            {
+                validate_handoff_replay_authority(
+                    transaction,
+                    &command.source,
+                    None,
+                    &command.handoff_id,
+                )?;
+                return handoff_outcome_from_command_receipt(transaction, receipt, true);
+            }
+            let mut command = command.clone();
+            command.metadata.occurred_at = self.handoff_clock.capture_now()?;
+            if parse_handoff_utc_instant("handoff_accept_by", &command.accept_by)?
+                <= parse_handoff_utc_instant(
+                    "handoff_repository_recorded_at",
+                    &command.metadata.occurred_at,
+                )?
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_accept_deadline_must_be_future",
+                ));
+            }
+            if load_handoff_in_transaction(transaction, &command.handoff_id)?.is_some() {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_id_collision_without_receipt",
+                ));
+            }
+
+            let mut source_session =
+                assess_handoff_authority(transaction, &command.source, true, "source")?;
+            let relation = permission_relation_for_binding(
+                &source_session,
+                &command.source.binding,
+                Some(&command.source.previous_permission),
+                Some(&command.source.current_permission),
+            );
+            if !relation.allows_continue() {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_create_permission_revalidation_required",
+                ));
+            }
+            persist_handoff_permission_continuation(
+                transaction,
+                &mut source_session,
+                &command.source,
+                &command.metadata.occurred_at,
+            )?;
+            validate_source_command_receipt_in_transaction(
+                transaction,
+                &command.source_command_receipt_ref,
+                &source_session,
+            )?;
+
+            let mut handoff = Handoff::new_created(
+                command.handoff_id.clone(),
+                source_session.role_session_id.clone(),
+                source_session.actor_id.clone(),
+                source_session.owner_fingerprint.clone(),
+                source_session.role_ref.clone(),
+                source_session.current_object_ref.clone(),
+                source_session.execution_channel.clone(),
+                source_session.revision,
+                command.source_command_receipt_ref.clone(),
+                command.to_role_ref.clone(),
+                command.to_recipient_ref.clone(),
+                source_session.scope_ref.clone(),
+                command.requested_outcome_ref.clone(),
+                command.object_refs.clone(),
+                command.risk_class.clone(),
+                command.permission_request.clone(),
+                &source_session.permission_snapshot_ref,
+                command.metadata.correlation_id.clone(),
+                command.metadata.occurred_at.clone(),
+                command.accept_by.clone(),
+                command.metadata.receipt_id.clone(),
+            )
+            .map_err(domain_error)?;
+            let policy_approved = handoff_permission_request_allowed(
+                &command.permission_request,
+                &command.source.current_permission,
+            );
+            let (receipt_kind, reason_code) = if policy_approved {
+                (HandoffReceiptKind::Created, "CREATED")
+            } else {
+                handoff.reject_at_creation().map_err(domain_error)?;
+                (HandoffReceiptKind::Rejected, "PERMISSION_REQUEST_REJECTED")
+            };
+            let result_ref = OpaqueRef::try_from_canonical(command.handoff_id.as_str().to_string())
+                .map_err(domain_error)?;
+            let result_hash =
+                handoff_transition_result_hash(receipt_kind, &handoff, &result_ref, reason_code)?;
+            let command_receipt = new_handoff_command_receipt(
+                transaction,
+                &command.metadata,
+                &identity,
+                0,
+                &source_session,
+                &command.source.current_permission,
+                result_ref.clone(),
+                result_hash.clone(),
+                Some(&handoff),
+                M3HandoffCommandReceiptStatus::Committed,
+                None,
+            )?;
+            let transition_receipt = new_handoff_transition_receipt(
+                &command_receipt,
+                &handoff,
+                receipt_kind,
+                result_ref,
+                result_hash,
+                None,
+                reason_code,
+            )?;
+            persist_handoff_transition_in_transaction(
+                transaction,
+                None,
+                &handoff,
+                &command_receipt,
+                &transition_receipt,
+                None,
+                &command.metadata,
+                reason_code,
+            )?;
+            Ok(M3HandoffCommandOutcome {
+                command_receipt,
+                transition_receipt: Some(transition_receipt),
+                winning_receipt: None,
+                handoff,
+                source_application: None,
+                source_session: Some(source_session),
+                recipient_session: None,
+                replayed: false,
+            })
+        })
+        .map(|(outcome, _)| outcome)
+    }
+
+    fn execute_handoff_transition(
+        &self,
+        command: PreparedHandoffTransition,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        validate_prepared_handoff_transition(&command)?;
+        let identity = handoff_transition_idempotency_identity(&command)?;
+        self.with_immediate_transaction("m3_handoff_transition", |transaction| {
+            if let Some(receipt) = find_handoff_command_receipt_by_identity(transaction, &identity)?
+            {
+                validate_handoff_replay_authority(
+                    transaction,
+                    &command.source,
+                    command.recipient.as_ref(),
+                    &command.handoff_id,
+                )?;
+                return handoff_outcome_from_command_receipt(transaction, receipt, true);
+            }
+            let mut command = command.clone();
+            command.metadata.occurred_at = self.handoff_clock.capture_now()?;
+
+            let mut handoff =
+                load_required_handoff_in_transaction(transaction, &command.handoff_id)?;
+            validate_source_authority_for_handoff(&handoff, &command.source)?;
+            validate_handoff_command_correlation(&handoff, &command.metadata)?;
+            if let Some(recipient) = command.recipient.as_ref() {
+                validate_recipient_authority_for_handoff(&handoff, recipient)?;
+            }
+
+            let mut source_session =
+                assess_handoff_authority(transaction, &command.source, true, "source")?;
+            let mut recipient_session = command
+                .recipient
+                .as_ref()
+                .map(|recipient| {
+                    assess_handoff_authority(transaction, recipient, true, "recipient")
+                })
+                .transpose()?;
+            if handoff.revision != command.expected_handoff_revision {
+                return persist_stale_handoff_command(
+                    transaction,
+                    &command,
+                    &identity,
+                    handoff,
+                    source_session,
+                    recipient_session,
+                );
+            }
+            let source_relation = permission_relation_for_binding(
+                &source_session,
+                &command.source.binding,
+                Some(&command.source.previous_permission),
+                Some(&command.source.current_permission),
+            );
+            let recipient_relation = command
+                .recipient
+                .as_ref()
+                .zip(recipient_session.as_ref())
+                .map(|(authority, session)| {
+                    permission_relation_for_binding(
+                        session,
+                        &authority.binding,
+                        Some(&authority.previous_permission),
+                        Some(&authority.current_permission),
+                    )
+                });
+            if !source_relation.allows_continue()
+                || recipient_relation.is_some_and(|relation| !relation.allows_continue())
+            {
+                return persist_handoff_permission_failure(
+                    transaction,
+                    &command,
+                    &identity,
+                    handoff,
+                    source_session,
+                    recipient_session,
+                    source_relation,
+                    recipient_relation,
+                );
+            }
+
+            persist_handoff_permission_continuation(
+                transaction,
+                &mut source_session,
+                &command.source,
+                &command.metadata.occurred_at,
+            )?;
+            if let (Some(authority), Some(session)) =
+                (command.recipient.as_ref(), recipient_session.as_mut())
+            {
+                persist_handoff_permission_continuation(
+                    transaction,
+                    session,
+                    authority,
+                    &command.metadata.occurred_at,
+                )?;
+            }
+
+            validate_handoff_deadline(&handoff, &command)?;
+
+            let previous_revision = handoff.revision;
+            let actor_session =
+                handoff_actor_session(&command, &source_session, recipient_session.as_ref())?;
+            let actor_authority = handoff_actor_authority(&command)?;
+            let actor_permission_descriptor =
+                handoff_permission_descriptor_for_actor(actor_authority, actor_session)?;
+            let (receipt_kind, result_ref, result_hash, validation, reason_code) =
+                apply_prepared_handoff_mutation(
+                    transaction,
+                    &mut handoff,
+                    &command,
+                    &source_session,
+                    recipient_session.as_ref(),
+                )?;
+            let command_receipt = new_handoff_command_receipt(
+                transaction,
+                &command.metadata,
+                &identity,
+                previous_revision,
+                actor_session,
+                actor_permission_descriptor,
+                result_ref.clone(),
+                result_hash.clone(),
+                Some(&handoff),
+                M3HandoffCommandReceiptStatus::Committed,
+                None,
+            )?;
+            let transition_receipt = new_handoff_transition_receipt(
+                &command_receipt,
+                &handoff,
+                receipt_kind,
+                result_ref,
+                result_hash,
+                validation.as_ref(),
+                reason_code,
+            )?;
+            persist_handoff_transition_in_transaction(
+                transaction,
+                Some(previous_revision),
+                &handoff,
+                &command_receipt,
+                &transition_receipt,
+                validation.as_ref(),
+                &command.metadata,
+                reason_code,
+            )?;
+            Ok(M3HandoffCommandOutcome {
+                command_receipt,
+                transition_receipt: Some(transition_receipt),
+                winning_receipt: None,
+                handoff,
+                source_application: None,
+                source_session: Some(source_session),
+                recipient_session,
+                replayed: false,
+            })
+        })
+        .map(|(outcome, _)| outcome)
+    }
+
+    pub(crate) fn record_handoff_source_application(
+        &self,
+        command: &RecordHandoffSourceApplicationCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        validate_source_application_command(command)?;
+        let identity = handoff_source_application_idempotency_identity(command)?;
+        let command = command.clone();
+        self.with_immediate_transaction("m3_record_handoff_source_application", |transaction| {
+            if let Some(receipt) = find_handoff_command_receipt_by_identity(transaction, &identity)?
+            {
+                validate_handoff_replay_authority(
+                    transaction,
+                    &command.source,
+                    None,
+                    &command.handoff_id,
+                )?;
+                let replay_handoff =
+                    load_required_handoff_in_transaction(transaction, &command.handoff_id)?;
+                validate_handoff_rehydration_in_transaction(transaction, &replay_handoff)?;
+                let application =
+                    load_handoff_source_application_by_command_receipt_in_transaction(
+                        transaction,
+                        &receipt.command_receipt_id,
+                    )?
+                    .ok_or_else(|| {
+                        M3RoleSessionRepositoryError::new(
+                            "m3_handoff_source_application_replay_row_missing",
+                        )
+                    })?;
+                validate_handoff_source_application_lineage_in_transaction(
+                    transaction,
+                    &replay_handoff,
+                    &receipt,
+                    &application,
+                )?;
+                return handoff_outcome_from_command_receipt(transaction, receipt, true);
+            }
+            let mut command = command.clone();
+            let handoff = load_required_handoff_in_transaction(transaction, &command.handoff_id)?;
+            validate_handoff_rehydration_in_transaction(transaction, &handoff)?;
+            validate_source_authority_for_handoff(&handoff, &command.source)?;
+            validate_handoff_command_correlation(&handoff, &command.metadata)?;
+            if handoff.status != HandoffState::Returned
+                || handoff.revision != command.expected_handoff_revision
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_requires_returned_revision",
+                ));
+            }
+            let mut source_session =
+                assess_handoff_authority(transaction, &command.source, true, "source")?;
+            let relation = permission_relation_for_binding(
+                &source_session,
+                &command.source.binding,
+                Some(&command.source.previous_permission),
+                Some(&command.source.current_permission),
+            );
+            if !relation.allows_continue() {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_permission_revalidation_required",
+                ));
+            }
+            validate_source_command_receipt_in_transaction(
+                transaction,
+                &command.source_command_receipt_ref,
+                &source_session,
+            )?;
+            if command.source_command_receipt_ref == handoff.source_command_receipt_ref {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_requires_new_source_command",
+                ));
+            }
+            let returned = load_handoff_receipt_by_id_in_transaction(
+                transaction,
+                &handoff.current_receipt_id,
+            )?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_returned_receipt_missing")
+            })?;
+            if returned.receipt_kind != HandoffReceiptKind::Returned {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_returned_receipt_mismatch",
+                ));
+            }
+            let source_fence = load_handoff_source_command_fence_in_transaction(
+                transaction,
+                &command.source_command_receipt_ref,
+            )?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_missing")
+            })?;
+            validate_handoff_source_command_fence_in_transaction(transaction, &source_fence)?;
+            let source_witness = load_handoff_validation_witness_in_transaction(
+                transaction,
+                &source_fence.source_command_receipt_ref,
+            )?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_witness_missing")
+            })?;
+            let current_source_binding =
+                load_session_binding_in_transaction(transaction, &source_session.role_session_id)?
+                    .ok_or_else(|| {
+                        M3RoleSessionRepositoryError::new(
+                            "m3_handoff_source_application_current_binding_required",
+                        )
+                    })?;
+            if source_fence.handoff_id != handoff.handoff_id
+                || source_fence.handoff_revision != handoff.revision
+                || source_fence.returned_receipt_id != returned.receipt_id
+                || source_fence.returned_transition_integrity_hash
+                    != returned.transition_integrity_hash
+                || source_fence.returned_result_ref != returned.result_ref
+                || source_fence.returned_result_hash != returned.result_hash
+                || source_fence.source_role_session_id != source_session.role_session_id
+                || source_fence.source_actor_id != source_session.actor_id
+                || source_fence.source_owner_fingerprint != source_session.owner_fingerprint
+                || source_fence.source_session_revision != source_session.revision
+                || source_fence.source_permission_snapshot_ref
+                    != source_session.permission_snapshot_ref
+                || source_fence.source_binding_revision != current_source_binding.binding_revision
+                || source_fence.source_binding_proof_digest
+                    != handoff_binding_proof_digest(&current_source_binding)?
+                || source_fence.source_permission_snapshot_ref
+                    != command.source.binding.permission_snapshot_ref
+                || source_witness.source_permission_descriptor_digest
+                    != permission_descriptor_digest(Some(&command.source.current_permission))?
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_fence_binding_mismatch",
+                ));
+            }
+            let trusted_recorded_at = self.handoff_clock.capture_now()?;
+            if parse_handoff_utc_instant(
+                "m3_handoff_source_application_recorded_at",
+                &trusted_recorded_at,
+            )? < parse_handoff_utc_instant(
+                "m3_handoff_source_application_fence_recorded_at",
+                &source_fence.recorded_at,
+            )? {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_precedes_source_command_fence",
+                ));
+            }
+            command.metadata.occurred_at = trusted_recorded_at;
+            persist_handoff_permission_continuation(
+                transaction,
+                &mut source_session,
+                &command.source,
+                &command.metadata.occurred_at,
+            )?;
+            if handoff_source_command_receipt_was_consumed(
+                transaction,
+                &command.source_command_receipt_ref,
+            )? {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_fence_already_consumed",
+                ));
+            }
+            if handoff_source_application_is_applied(transaction, &command.handoff_id)? {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_already_applied",
+                ));
+            }
+            let command_receipt = new_handoff_command_receipt(
+                transaction,
+                &command.metadata,
+                &identity,
+                handoff.revision,
+                &source_session,
+                &command.source.current_permission,
+                returned.result_ref.clone(),
+                returned.result_hash.clone(),
+                None,
+                M3HandoffCommandReceiptStatus::Committed,
+                None,
+            )?;
+            let application = HandoffSourceApplication {
+                application_id: command.application_id.clone(),
+                command_receipt_id: command_receipt.command_receipt_id.clone(),
+                handoff_id: handoff.handoff_id.clone(),
+                handoff_revision: handoff.revision,
+                returned_receipt_id: returned.receipt_id.clone(),
+                source_role_session_id: source_session.role_session_id.clone(),
+                source_actor_id: source_session.actor_id.clone(),
+                source_owner_fingerprint: source_session.owner_fingerprint.clone(),
+                source_permission_snapshot_ref: source_session.permission_snapshot_ref.clone(),
+                result_ref: returned.result_ref.clone(),
+                result_hash: returned.result_hash.clone(),
+                source_command_receipt_ref: command.source_command_receipt_ref.clone(),
+                source_command_fence_digest: source_fence.fence_digest,
+                status: command.status,
+                recorded_at: command.metadata.occurred_at.clone(),
+            };
+            persist_handoff_source_application_in_transaction(
+                transaction,
+                &handoff,
+                &command_receipt,
+                &application,
+                &command.metadata,
+            )?;
+            Ok(M3HandoffCommandOutcome {
+                command_receipt,
+                transition_receipt: None,
+                winning_receipt: None,
+                handoff,
+                source_application: Some(application),
+                source_session: Some(source_session),
+                recipient_session: None,
+                replayed: false,
+            })
+        })
+        .map(|(outcome, _)| outcome)
+    }
+}
+
+impl M3HandoffRepositoryPort for M3RoleSessionSqliteRepository {
+    fn handoff_repository_port_version(&self) -> &'static str {
+        M3_HANDOFF_REPOSITORY_PORT_VERSION
+    }
+
+    fn create_handoff(
+        &self,
+        command: &CreateHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        M3RoleSessionSqliteRepository::create_handoff(self, command)
+    }
+
+    fn accept_handoff(
+        &self,
+        command: &AcceptHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: Some(command.recipient.clone()),
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::Accept,
+            mutation: PreparedHandoffMutation::Accept,
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn reject_handoff(
+        &self,
+        command: &RejectHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: Some(command.recipient.clone()),
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::Reject,
+            mutation: PreparedHandoffMutation::Reject,
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn cancel_handoff(
+        &self,
+        command: &CancelHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: None,
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::Cancel,
+            mutation: PreparedHandoffMutation::Cancel,
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn expire_handoff(
+        &self,
+        command: &ExpireHandoffCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: None,
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::Expire,
+            mutation: PreparedHandoffMutation::Expire,
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn request_handoff_return(
+        &self,
+        command: &RequestHandoffReturnCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: None,
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::RequestReturn,
+            mutation: PreparedHandoffMutation::RequestReturn {
+                return_by: command.return_by.clone(),
+            },
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn record_handoff_return_result(
+        &self,
+        command: &RecordHandoffReturnResultCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: Some(command.recipient.clone()),
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::RecordReturnResult,
+            mutation: PreparedHandoffMutation::ReturnResult {
+                result: command.result.clone(),
+            },
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn timeout_handoff_return(
+        &self,
+        command: &TimeoutHandoffReturnCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: None,
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::RecordReturnTimeout,
+            mutation: PreparedHandoffMutation::ReturnTimeout,
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn retry_failed_handoff_return(
+        &self,
+        command: &RetryFailedHandoffReturnCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: None,
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::RetryReturn,
+            mutation: PreparedHandoffMutation::RetryReturn {
+                return_by: command.return_by.clone(),
+            },
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn cancel_failed_handoff_by_source(
+        &self,
+        command: &CancelFailedHandoffBySourceCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        self.prepare_handoff_clock(
+            #[cfg(test)]
+            &command.test_clock_now,
+        )?;
+        self.execute_handoff_transition(PreparedHandoffTransition {
+            handoff_id: command.handoff_id.clone(),
+            source: command.source.clone(),
+            recipient: None,
+            expected_handoff_revision: command.expected_handoff_revision,
+            operation: HandoffRequestOperation::CancelFailedReturn,
+            mutation: PreparedHandoffMutation::CancelFailedReturn,
+            metadata: command.metadata.clone(),
+        })
+    }
+
+    fn record_handoff_source_application(
+        &self,
+        command: &RecordHandoffSourceApplicationCommand,
+    ) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+        M3RoleSessionSqliteRepository::record_handoff_source_application(self, command)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct M3UtcInstant {
+    year: u32,
+    month: u32,
+    day: u32,
+    hour: u32,
+    minute: u32,
+    second: u32,
+    nanosecond: u32,
+}
+
+fn parse_handoff_utc_instant(
+    field: &str,
+    value: &str,
+) -> Result<M3UtcInstant, M3RoleSessionRepositoryError> {
+    validate_rfc3339_utc_timestamp(field, value)?;
+    let component = |start: usize, end: usize| -> Result<u32, M3RoleSessionRepositoryError> {
+        value[start..end]
+            .parse::<u32>()
+            .map_err(|_| M3RoleSessionRepositoryError::new("m3_handoff_timestamp_parse_failed"))
+    };
+    let fractional = if value.len() == 20 {
+        0
+    } else {
+        let digits = &value[20..value.len() - 1];
+        let mut normalized = digits.to_string();
+        while normalized.len() < 9 {
+            normalized.push('0');
+        }
+        normalized.parse::<u32>().map_err(|_| {
+            M3RoleSessionRepositoryError::new("m3_handoff_timestamp_fraction_parse_failed")
+        })?
+    };
+    Ok(M3UtcInstant {
+        year: component(0, 4)?,
+        month: component(5, 7)?,
+        day: component(8, 10)?,
+        hour: component(11, 13)?,
+        minute: component(14, 16)?,
+        second: component(17, 19)?,
+        nanosecond: fractional,
+    })
+}
+
+fn validate_handoff_authority_shape(
+    authority: &M3HandoffSessionAuthority,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    validate_reference_fields(&[(
+        "handoff_role_session_id",
+        authority.role_session_id.as_str(),
+    )])?;
+    validate_server_binding_metadata_only(&authority.binding)?;
+    authority
+        .binding
+        .verify_owner_fingerprint()
+        .map_err(domain_error)?;
+    validate_permission_descriptor_metadata_only(&authority.previous_permission)?;
+    validate_permission_descriptor_metadata_only(&authority.current_permission)?;
+    if !authority
+        .current_permission
+        .matches_binding(&authority.binding)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_current_permission_binding_mismatch",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_create_handoff_command(
+    command: &CreateHandoffCommand,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    command.metadata.validate()?;
+    validate_handoff_authority_shape(&command.source)?;
+    validate_reference_fields(&[
+        ("handoff_id", command.handoff_id.as_str()),
+        (
+            "handoff_source_command_receipt_ref",
+            command.source_command_receipt_ref.as_str(),
+        ),
+        ("handoff_to_role_ref", command.to_role_ref.as_str()),
+        (
+            "handoff_to_recipient_ref",
+            command.to_recipient_ref.as_str(),
+        ),
+        (
+            "handoff_requested_outcome_ref",
+            command.requested_outcome_ref.as_str(),
+        ),
+        ("handoff_risk_class", command.risk_class.as_str()),
+        (
+            "handoff_permission_request_id",
+            command.permission_request.request_id.as_str(),
+        ),
+        (
+            "handoff_permission_scope_ref",
+            command.permission_request.requested_scope_ref.as_str(),
+        ),
+        (
+            "handoff_permission_risk_class",
+            command.permission_request.risk_class.as_str(),
+        ),
+        (
+            "handoff_permission_reason_ref",
+            command.permission_request.reason_ref.as_str(),
+        ),
+        (
+            "handoff_permission_source_snapshot_ref",
+            command
+                .permission_request
+                .source_permission_snapshot_ref
+                .as_str(),
+        ),
+    ])?;
+    if command.object_refs.is_empty()
+        || !command
+            .object_refs
+            .contains(&command.source.binding.current_object_ref)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_object_set_mismatch",
+        ));
+    }
+    for reference in command
+        .object_refs
+        .iter()
+        .chain(command.permission_request.requested_capability_refs.iter())
+        .chain(command.permission_request.requested_object_refs.iter())
+    {
+        validate_opaque_reference_envelope("handoff_reference", reference.as_str())?;
+    }
+    command
+        .permission_request
+        .validate_against(
+            &command.source.binding.scope_ref,
+            &command.object_refs,
+            &command.source.binding.permission_snapshot_ref,
+        )
+        .map_err(domain_error)?;
+    if command.permission_request.risk_class != command.risk_class {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_risk_mismatch",
+        ));
+    }
+    parse_handoff_utc_instant("handoff_accept_by", &command.accept_by)?;
+    Ok(())
+}
+
+fn validate_prepared_handoff_transition(
+    command: &PreparedHandoffTransition,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    command.metadata.validate()?;
+    validate_opaque_reference_envelope("handoff_id", command.handoff_id.as_str())?;
+    validate_handoff_authority_shape(&command.source)?;
+    if let Some(recipient) = command.recipient.as_ref() {
+        validate_handoff_authority_shape(recipient)?;
+    }
+    let recipient_required = matches!(
+        command.operation,
+        HandoffRequestOperation::Accept
+            | HandoffRequestOperation::Reject
+            | HandoffRequestOperation::RecordReturnResult
+    );
+    if recipient_required != command.recipient.is_some() {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_operation_actor_matrix_mismatch",
+        ));
+    }
+    let operation_matches_mutation = matches!(
+        (&command.operation, &command.mutation),
+        (
+            HandoffRequestOperation::Accept,
+            PreparedHandoffMutation::Accept
+        ) | (
+            HandoffRequestOperation::Reject,
+            PreparedHandoffMutation::Reject
+        ) | (
+            HandoffRequestOperation::Cancel,
+            PreparedHandoffMutation::Cancel
+        ) | (
+            HandoffRequestOperation::Expire,
+            PreparedHandoffMutation::Expire
+        ) | (
+            HandoffRequestOperation::RequestReturn,
+            PreparedHandoffMutation::RequestReturn { .. }
+        ) | (
+            HandoffRequestOperation::RecordReturnResult,
+            PreparedHandoffMutation::ReturnResult { .. }
+        ) | (
+            HandoffRequestOperation::RecordReturnTimeout,
+            PreparedHandoffMutation::ReturnTimeout
+        ) | (
+            HandoffRequestOperation::RetryReturn,
+            PreparedHandoffMutation::RetryReturn { .. }
+        ) | (
+            HandoffRequestOperation::CancelFailedReturn,
+            PreparedHandoffMutation::CancelFailedReturn
+        )
+    );
+    if !operation_matches_mutation {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_operation_mutation_mismatch",
+        ));
+    }
+    match &command.mutation {
+        PreparedHandoffMutation::RequestReturn { return_by }
+        | PreparedHandoffMutation::RetryReturn { return_by } => {
+            parse_handoff_utc_instant("handoff_return_by", return_by)?;
+        }
+        PreparedHandoffMutation::ReturnResult { result } => match result {
+            HandoffReturnResult::Returned {
+                result_ref,
+                source_object_validation,
+                ..
+            } => {
+                validate_opaque_reference_envelope("handoff_result_ref", result_ref.as_str())?;
+                validate_reference_fields(&[
+                    (
+                        "handoff_validation_role_session_id",
+                        source_object_validation.role_session_id.as_str(),
+                    ),
+                    (
+                        "handoff_validation_object_ref",
+                        source_object_validation.object_ref.as_str(),
+                    ),
+                    (
+                        "handoff_validation_receipt_ref",
+                        source_object_validation.validation_receipt_ref.as_str(),
+                    ),
+                ])?;
+                validate_server_binding_metadata_only(&source_object_validation.binding)?;
+                source_object_validation
+                    .binding
+                    .verify_owner_fingerprint()
+                    .map_err(domain_error)?;
+            }
+            HandoffReturnResult::RecipientReturnFailed { failure_ref, .. } => {
+                validate_opaque_reference_envelope("handoff_failure_ref", failure_ref.as_str())?;
+            }
+        },
+        _ => {}
+    }
+    Ok(())
+}
+
+fn validate_source_application_command(
+    command: &RecordHandoffSourceApplicationCommand,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    command.metadata.validate()?;
+    validate_handoff_authority_shape(&command.source)?;
+    validate_reference_fields(&[
+        ("handoff_application_id", command.application_id.as_str()),
+        ("handoff_id", command.handoff_id.as_str()),
+        (
+            "handoff_application_source_command_receipt_ref",
+            command.source_command_receipt_ref.as_str(),
+        ),
+    ])
+}
+
+fn append_handoff_authority_fingerprint_fields(
+    fields: &mut Vec<String>,
+    authority: &M3HandoffSessionAuthority,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let previous_permission_digest =
+        permission_descriptor_digest(Some(&authority.previous_permission))?;
+    let current_permission_digest =
+        permission_descriptor_digest(Some(&authority.current_permission))?;
+    fields.extend([
+        authority.role_session_id.as_str().to_string(),
+        authority.binding.actor_id.as_str().to_string(),
+        authority.binding.role_ref.as_str().to_string(),
+        authority.binding.scope_ref.as_str().to_string(),
+        authority.binding.current_object_ref.as_str().to_string(),
+        authority.binding.execution_channel.as_str().to_string(),
+        authority
+            .binding
+            .permission_snapshot_ref
+            .as_str()
+            .to_string(),
+        authority.binding.owner_fingerprint.as_str().to_string(),
+        authority.expected_session_revision.to_string(),
+        previous_permission_digest.as_str().to_string(),
+        current_permission_digest.as_str().to_string(),
+    ]);
+    Ok(())
+}
+
+fn handoff_identity_from_fields(
+    operation: HandoffRequestOperation,
+    handoff_id: &HandoffId,
+    base_key: RequestIdempotencyKey,
+    fields: Vec<String>,
+) -> Result<M3HandoffIdempotencyIdentity, M3RoleSessionRepositoryError> {
+    let field_refs = fields.iter().map(String::as_str).collect::<Vec<_>>();
+    let request_fingerprint =
+        handoff_request_fingerprint_for_fields(operation, &field_refs).map_err(domain_error)?;
+    Ok(M3HandoffIdempotencyIdentity {
+        operation,
+        handoff_id: handoff_id.clone(),
+        base_key,
+        request_fingerprint,
+    })
+}
+
+fn handoff_create_idempotency_identity(
+    command: &CreateHandoffCommand,
+) -> Result<M3HandoffIdempotencyIdentity, M3RoleSessionRepositoryError> {
+    let mut fields = vec![
+        command.handoff_id.as_str().to_string(),
+        command.source_command_receipt_ref.as_str().to_string(),
+        command.to_role_ref.as_str().to_string(),
+        command.to_recipient_ref.as_str().to_string(),
+        command.requested_outcome_ref.as_str().to_string(),
+        command.risk_class.as_str().to_string(),
+        command.accept_by.clone(),
+        command
+            .permission_request
+            .immutable_hash()
+            .map_err(domain_error)?
+            .as_str()
+            .to_string(),
+    ];
+    fields.push(command.object_refs.len().to_string());
+    fields.extend(
+        command
+            .object_refs
+            .iter()
+            .map(|reference| reference.as_str().to_string()),
+    );
+    append_handoff_authority_fingerprint_fields(&mut fields, &command.source)?;
+    handoff_identity_from_fields(
+        HandoffRequestOperation::Create,
+        &command.handoff_id,
+        command.metadata.request_idempotency_key.clone(),
+        fields,
+    )
+}
+
+fn handoff_transition_idempotency_identity(
+    command: &PreparedHandoffTransition,
+) -> Result<M3HandoffIdempotencyIdentity, M3RoleSessionRepositoryError> {
+    let mut fields = vec![
+        command.handoff_id.as_str().to_string(),
+        command.expected_handoff_revision.to_string(),
+    ];
+    append_handoff_authority_fingerprint_fields(&mut fields, &command.source)?;
+    if let Some(recipient) = command.recipient.as_ref() {
+        append_handoff_authority_fingerprint_fields(&mut fields, recipient)?;
+    }
+    match &command.mutation {
+        PreparedHandoffMutation::RequestReturn { return_by }
+        | PreparedHandoffMutation::RetryReturn { return_by } => fields.push(return_by.clone()),
+        PreparedHandoffMutation::ReturnResult { result } => match result {
+            HandoffReturnResult::Returned {
+                result_ref,
+                result_hash,
+                source_object_validation,
+            } => fields.extend([
+                "RETURNED".to_string(),
+                result_ref.as_str().to_string(),
+                result_hash.as_str().to_string(),
+                source_object_validation
+                    .role_session_id
+                    .as_str()
+                    .to_string(),
+                source_object_validation
+                    .binding
+                    .owner_fingerprint
+                    .as_str()
+                    .to_string(),
+                source_object_validation
+                    .binding
+                    .permission_snapshot_ref
+                    .as_str()
+                    .to_string(),
+                source_object_validation.object_ref.as_str().to_string(),
+                source_object_validation
+                    .validation_receipt_ref
+                    .as_str()
+                    .to_string(),
+            ]),
+            HandoffReturnResult::RecipientReturnFailed {
+                failure_ref,
+                failure_hash,
+            } => fields.extend([
+                "RECIPIENT_RETURN_FAILED".to_string(),
+                failure_ref.as_str().to_string(),
+                failure_hash.as_str().to_string(),
+            ]),
+        },
+        _ => {}
+    }
+    handoff_identity_from_fields(
+        command.operation,
+        &command.handoff_id,
+        command.metadata.request_idempotency_key.clone(),
+        fields,
+    )
+}
+
+fn handoff_source_application_idempotency_identity(
+    command: &RecordHandoffSourceApplicationCommand,
+) -> Result<M3HandoffIdempotencyIdentity, M3RoleSessionRepositoryError> {
+    let mut fields = vec![
+        command.handoff_id.as_str().to_string(),
+        command.application_id.as_str().to_string(),
+        command.expected_handoff_revision.to_string(),
+        command.source_command_receipt_ref.as_str().to_string(),
+        command.status.as_str().to_string(),
+    ];
+    append_handoff_authority_fingerprint_fields(&mut fields, &command.source)?;
+    handoff_identity_from_fields(
+        HandoffRequestOperation::RecordSourceApplication,
+        &command.handoff_id,
+        command.metadata.request_idempotency_key.clone(),
+        fields,
+    )
+}
+
+struct RawHandoff {
+    handoff_id: String,
+    from_role_session_id: String,
+    from_actor_id: String,
+    source_role_ref: String,
+    source_current_object_ref: String,
+    source_execution_channel: String,
+    source_session_revision: i64,
+    source_command_receipt_ref: String,
+    from_owner_fingerprint: String,
+    to_role_ref: String,
+    to_recipient_ref: String,
+    scope_ref: String,
+    requested_outcome_ref: String,
+    object_refs_json: String,
+    risk_class: String,
+    permission_request_id: String,
+    requested_capabilities_json: String,
+    requested_scope_ref: String,
+    requested_object_refs_json: String,
+    permission_risk_class: String,
+    permission_reason_ref: String,
+    source_permission_snapshot_ref: String,
+    permission_request_hash: String,
+    immutable_fingerprint: String,
+    status: String,
+    revision: i64,
+    correlation_id: String,
+    created_at: String,
+    accept_by: String,
+    recipient_role_session_id: Option<String>,
+    recipient_actor_id: Option<String>,
+    recipient_role_ref: Option<String>,
+    recipient_scope_ref: Option<String>,
+    recipient_current_object_ref: Option<String>,
+    recipient_execution_channel: Option<String>,
+    recipient_owner_fingerprint: Option<String>,
+    recipient_permission_snapshot_ref: Option<String>,
+    recipient_session_revision: Option<i64>,
+    recipient_binding_revision: Option<i64>,
+    recipient_binding_proof_digest: Option<String>,
+    recipient_evidence_digest: Option<String>,
+    accepted_at: Option<String>,
+    return_by: Option<String>,
+    current_receipt_id: String,
+    last_failure_reason: Option<String>,
+}
+
+fn handoff_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawHandoff> {
+    Ok(RawHandoff {
+        handoff_id: row.get(0)?,
+        from_role_session_id: row.get(1)?,
+        from_actor_id: row.get(2)?,
+        source_role_ref: row.get(3)?,
+        source_current_object_ref: row.get(4)?,
+        source_execution_channel: row.get(5)?,
+        source_session_revision: row.get(6)?,
+        source_command_receipt_ref: row.get(7)?,
+        from_owner_fingerprint: row.get(8)?,
+        to_role_ref: row.get(9)?,
+        to_recipient_ref: row.get(10)?,
+        scope_ref: row.get(11)?,
+        requested_outcome_ref: row.get(12)?,
+        object_refs_json: row.get(13)?,
+        risk_class: row.get(14)?,
+        permission_request_id: row.get(15)?,
+        requested_capabilities_json: row.get(16)?,
+        requested_scope_ref: row.get(17)?,
+        requested_object_refs_json: row.get(18)?,
+        permission_risk_class: row.get(19)?,
+        permission_reason_ref: row.get(20)?,
+        source_permission_snapshot_ref: row.get(21)?,
+        permission_request_hash: row.get(22)?,
+        immutable_fingerprint: row.get(23)?,
+        status: row.get(24)?,
+        revision: row.get(25)?,
+        correlation_id: row.get(26)?,
+        created_at: row.get(27)?,
+        accept_by: row.get(28)?,
+        recipient_role_session_id: row.get(29)?,
+        recipient_actor_id: row.get(30)?,
+        recipient_role_ref: row.get(31)?,
+        recipient_scope_ref: row.get(32)?,
+        recipient_current_object_ref: row.get(33)?,
+        recipient_execution_channel: row.get(34)?,
+        recipient_owner_fingerprint: row.get(35)?,
+        recipient_permission_snapshot_ref: row.get(36)?,
+        recipient_session_revision: row.get(37)?,
+        recipient_binding_revision: row.get(38)?,
+        recipient_binding_proof_digest: row.get(39)?,
+        recipient_evidence_digest: row.get(40)?,
+        accepted_at: row.get(41)?,
+        return_by: row.get(42)?,
+        current_receipt_id: row.get(43)?,
+        last_failure_reason: row.get(44)?,
+    })
+}
+
+fn parse_handoff_ref_set(
+    field: &str,
+    value: &str,
+) -> Result<BTreeSet<OpaqueRef>, M3RoleSessionRepositoryError> {
+    let raw = serde_json::from_str::<Vec<String>>(value).map_err(|_| {
+        M3RoleSessionRepositoryError::new(format!("m3_handoff_{field}_json_invalid"))
+    })?;
+    if serde_json::to_string(&raw).ok().as_deref() != Some(value) {
+        return Err(M3RoleSessionRepositoryError::new(format!(
+            "m3_handoff_{field}_json_not_canonical"
+        )));
+    }
+    let mut parsed = BTreeSet::new();
+    for reference in raw {
+        let reference = OpaqueRef::try_from_canonical(reference).map_err(domain_error)?;
+        validate_opaque_reference_envelope(field, reference.as_str())?;
+        if !parsed.insert(reference) {
+            return Err(M3RoleSessionRepositoryError::new(format!(
+                "m3_handoff_{field}_duplicate"
+            )));
+        }
+    }
+    let canonical = parsed
+        .iter()
+        .map(|reference| reference.as_str())
+        .collect::<Vec<_>>();
+    if serde_json::to_string(&canonical).ok().as_deref() != Some(value) {
+        return Err(M3RoleSessionRepositoryError::new(format!(
+            "m3_handoff_{field}_json_not_sorted"
+        )));
+    }
+    Ok(parsed)
+}
+
+fn parse_handoff(raw: RawHandoff) -> Result<Handoff, M3RoleSessionRepositoryError> {
+    let persisted_recipient_evidence_digest = raw
+        .recipient_evidence_digest
+        .as_ref()
+        .map(|value| Sha256Digest::try_from_canonical(value.clone()))
+        .transpose()
+        .map_err(domain_error)?;
+    let object_refs = parse_handoff_ref_set("object_refs", &raw.object_refs_json)?;
+    let permission_request = HandoffPermissionRequest {
+        request_id: OpaqueRef::try_from_canonical(raw.permission_request_id)
+            .map_err(domain_error)?,
+        requested_capability_refs: parse_handoff_ref_set(
+            "requested_capabilities",
+            &raw.requested_capabilities_json,
+        )?,
+        requested_scope_ref: OpaqueRef::try_from_canonical(raw.requested_scope_ref)
+            .map_err(domain_error)?,
+        requested_object_refs: parse_handoff_ref_set(
+            "requested_object_refs",
+            &raw.requested_object_refs_json,
+        )?,
+        risk_class: OpaqueRef::try_from_canonical(raw.permission_risk_class)
+            .map_err(domain_error)?,
+        reason_ref: OpaqueRef::try_from_canonical(raw.permission_reason_ref)
+            .map_err(domain_error)?,
+        source_permission_snapshot_ref: OpaqueRef::try_from_canonical(
+            raw.source_permission_snapshot_ref,
+        )
+        .map_err(domain_error)?,
+    };
+    let permission_hash = permission_request.immutable_hash().map_err(domain_error)?;
+    if permission_hash.as_str() != raw.permission_request_hash {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_request_hash_mismatch",
+        ));
+    }
+    let recipient_parts_present = [
+        raw.recipient_role_session_id.is_some(),
+        raw.recipient_actor_id.is_some(),
+        raw.recipient_role_ref.is_some(),
+        raw.recipient_scope_ref.is_some(),
+        raw.recipient_current_object_ref.is_some(),
+        raw.recipient_execution_channel.is_some(),
+        raw.recipient_owner_fingerprint.is_some(),
+        raw.recipient_permission_snapshot_ref.is_some(),
+        raw.recipient_session_revision.is_some(),
+        raw.recipient_binding_revision.is_some(),
+        raw.recipient_binding_proof_digest.is_some(),
+        raw.recipient_evidence_digest.is_some(),
+        raw.accepted_at.is_some(),
+    ];
+    if recipient_parts_present.iter().any(|present| *present)
+        && !recipient_parts_present.iter().all(|present| *present)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_recipient_evidence_partial",
+        ));
+    }
+    let recipient = if recipient_parts_present[0] {
+        Some(HandoffRecipientEvidence {
+            role_session_id: RoleSessionId::try_from_canonical(
+                raw.recipient_role_session_id
+                    .expect("checked recipient session"),
+            )
+            .map_err(domain_error)?,
+            actor_id: OpaqueRef::try_from_canonical(
+                raw.recipient_actor_id.expect("checked recipient actor"),
+            )
+            .map_err(domain_error)?,
+            role_ref: OpaqueRef::try_from_canonical(
+                raw.recipient_role_ref.expect("checked recipient role"),
+            )
+            .map_err(domain_error)?,
+            scope_ref: OpaqueRef::try_from_canonical(
+                raw.recipient_scope_ref.expect("checked recipient scope"),
+            )
+            .map_err(domain_error)?,
+            current_object_ref: OpaqueRef::try_from_canonical(
+                raw.recipient_current_object_ref
+                    .expect("checked recipient object"),
+            )
+            .map_err(domain_error)?,
+            execution_channel: OpaqueRef::try_from_canonical(
+                raw.recipient_execution_channel
+                    .expect("checked recipient channel"),
+            )
+            .map_err(domain_error)?,
+            owner_fingerprint: OwnerFingerprint::try_from_canonical(
+                raw.recipient_owner_fingerprint
+                    .expect("checked recipient owner"),
+            )
+            .map_err(domain_error)?,
+            permission_snapshot_ref: OpaqueRef::try_from_canonical(
+                raw.recipient_permission_snapshot_ref
+                    .expect("checked recipient permission"),
+            )
+            .map_err(domain_error)?,
+            session_revision: i64_to_u64(
+                "handoff_recipient_session_revision",
+                raw.recipient_session_revision
+                    .expect("checked recipient revision"),
+            )?,
+            binding_revision: i64_to_u64(
+                "handoff_recipient_binding_revision",
+                raw.recipient_binding_revision
+                    .expect("checked recipient binding revision"),
+            )?,
+            binding_proof_digest: Sha256Digest::try_from_canonical(
+                raw.recipient_binding_proof_digest
+                    .expect("checked recipient binding proof"),
+            )
+            .map_err(domain_error)?,
+            accepted_at: raw.accepted_at.expect("checked accepted time"),
+        })
+    } else {
+        None
+    };
+    if recipient
+        .as_ref()
+        .map(handoff_recipient_evidence_digest)
+        .transpose()?
+        != persisted_recipient_evidence_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_recipient_evidence_digest_mismatch",
+        ));
+    }
+    let handoff = Handoff {
+        handoff_id: HandoffId::try_from_canonical(raw.handoff_id).map_err(domain_error)?,
+        from_role_session_id: RoleSessionId::try_from_canonical(raw.from_role_session_id)
+            .map_err(domain_error)?,
+        from_actor_id: OpaqueRef::try_from_canonical(raw.from_actor_id).map_err(domain_error)?,
+        from_owner_fingerprint: OwnerFingerprint::try_from_canonical(raw.from_owner_fingerprint)
+            .map_err(domain_error)?,
+        source_role_ref: OpaqueRef::try_from_canonical(raw.source_role_ref)
+            .map_err(domain_error)?,
+        source_current_object_ref: OpaqueRef::try_from_canonical(raw.source_current_object_ref)
+            .map_err(domain_error)?,
+        source_execution_channel: OpaqueRef::try_from_canonical(raw.source_execution_channel)
+            .map_err(domain_error)?,
+        source_session_revision: i64_to_u64(
+            "handoff_source_session_revision",
+            raw.source_session_revision,
+        )?,
+        source_command_receipt_ref: OpaqueRef::try_from_canonical(raw.source_command_receipt_ref)
+            .map_err(domain_error)?,
+        to_role_ref: OpaqueRef::try_from_canonical(raw.to_role_ref).map_err(domain_error)?,
+        to_recipient_ref: OpaqueRef::try_from_canonical(raw.to_recipient_ref)
+            .map_err(domain_error)?,
+        scope_ref: OpaqueRef::try_from_canonical(raw.scope_ref).map_err(domain_error)?,
+        requested_outcome_ref: OpaqueRef::try_from_canonical(raw.requested_outcome_ref)
+            .map_err(domain_error)?,
+        object_refs,
+        risk_class: OpaqueRef::try_from_canonical(raw.risk_class).map_err(domain_error)?,
+        permission_request,
+        status: HandoffState::parse(&raw.status).map_err(domain_error)?,
+        revision: i64_to_u64("handoff_revision", raw.revision)?,
+        correlation_id: CorrelationId::try_from_canonical(raw.correlation_id)
+            .map_err(domain_error)?,
+        created_at: raw.created_at,
+        accept_by: raw.accept_by,
+        recipient,
+        return_by: raw.return_by,
+        current_receipt_id: OpaqueRef::try_from_canonical(raw.current_receipt_id)
+            .map_err(domain_error)?,
+        last_failure_reason: raw
+            .last_failure_reason
+            .as_deref()
+            .map(HandoffReturnFailureReason::parse)
+            .transpose()
+            .map_err(domain_error)?,
+    };
+    validate_loaded_handoff(&handoff, &raw.immutable_fingerprint)?;
+    Ok(handoff)
+}
+
+fn validate_loaded_handoff(
+    handoff: &Handoff,
+    expected_fingerprint: &str,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    handoff
+        .permission_request
+        .validate_against(
+            &handoff.scope_ref,
+            &handoff.object_refs,
+            &handoff.permission_request.source_permission_snapshot_ref,
+        )
+        .map_err(domain_error)?;
+    if handoff.permission_request.risk_class != handoff.risk_class
+        || !handoff
+            .object_refs
+            .contains(&handoff.source_current_object_ref)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_persisted_request_scope_mismatch",
+        ));
+    }
+    let expected_source_owner = owner_fingerprint_for_components(
+        handoff.from_actor_id.as_str(),
+        handoff.source_role_ref.as_str(),
+        handoff.scope_ref.as_str(),
+        handoff.source_current_object_ref.as_str(),
+        handoff.source_execution_channel.as_str(),
+    )
+    .map_err(domain_error)?;
+    if expected_source_owner != handoff.from_owner_fingerprint {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_owner_fingerprint_mismatch",
+        ));
+    }
+    let created = parse_handoff_utc_instant("handoff_created_at", &handoff.created_at)?;
+    let accept_by = parse_handoff_utc_instant("handoff_accept_by", &handoff.accept_by)?;
+    if accept_by <= created {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_persisted_accept_deadline_invalid",
+        ));
+    }
+    if let Some(recipient) = &handoff.recipient {
+        let expected_recipient_owner = owner_fingerprint_for_components(
+            recipient.actor_id.as_str(),
+            recipient.role_ref.as_str(),
+            recipient.scope_ref.as_str(),
+            recipient.current_object_ref.as_str(),
+            recipient.execution_channel.as_str(),
+        )
+        .map_err(domain_error)?;
+        let accepted_at =
+            parse_handoff_utc_instant("handoff_recipient_accepted_at", &recipient.accepted_at)?;
+        if expected_recipient_owner != recipient.owner_fingerprint
+            || recipient.actor_id != handoff.to_recipient_ref
+            || recipient.role_ref != handoff.to_role_ref
+            || recipient.scope_ref != handoff.scope_ref
+            || !handoff.object_refs.contains(&recipient.current_object_ref)
+            || accepted_at >= accept_by
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_persisted_recipient_evidence_mismatch",
+            ));
+        }
+    }
+    if let Some(return_by) = &handoff.return_by {
+        let return_by = parse_handoff_utc_instant("handoff_return_by", return_by)?;
+        if let Some(recipient) = &handoff.recipient {
+            if return_by
+                <= parse_handoff_utc_instant(
+                    "handoff_recipient_accepted_at",
+                    &recipient.accepted_at,
+                )?
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_persisted_return_deadline_invalid",
+                ));
+            }
+        }
+    }
+    let shape_valid = match handoff.status {
+        HandoffState::Created
+        | HandoffState::Rejected
+        | HandoffState::Cancelled
+        | HandoffState::Expired => {
+            handoff.recipient.is_none()
+                && handoff.return_by.is_none()
+                && handoff.last_failure_reason.is_none()
+        }
+        HandoffState::Accepted => {
+            handoff.recipient.is_some()
+                && handoff.return_by.is_none()
+                && handoff.last_failure_reason.is_none()
+        }
+        HandoffState::ReturnPending | HandoffState::Returned => {
+            handoff.recipient.is_some()
+                && handoff.return_by.is_some()
+                && handoff.last_failure_reason.is_none()
+        }
+        HandoffState::ReturnFailed | HandoffState::CancelledBySource => {
+            handoff.recipient.is_some()
+                && handoff.return_by.is_some()
+                && handoff.last_failure_reason.is_some()
+        }
+    };
+    if !shape_valid {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_persisted_state_shape_invalid",
+        ));
+    }
+    if handoff
+        .immutable_fingerprint()
+        .map_err(domain_error)?
+        .as_str()
+        != expected_fingerprint
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_immutable_fingerprint_mismatch",
+        ));
+    }
+    Ok(())
+}
+
+fn load_handoff_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+) -> Result<Option<Handoff>, M3RoleSessionRepositoryError> {
+    let handoff = transaction
+        .query_row(
+            "SELECT handoff_id, from_role_session_id, from_actor_id, source_role_ref,
+                    source_current_object_ref, source_execution_channel, source_session_revision,
+                    source_command_receipt_ref, from_owner_fingerprint, to_role_ref,
+                    to_recipient_ref, scope_ref, requested_outcome_ref, object_refs_json,
+                    risk_class, permission_request_id, requested_capabilities_json,
+                    requested_scope_ref, requested_object_refs_json, permission_risk_class,
+                    permission_reason_ref, source_permission_snapshot_ref,
+                    permission_request_hash, immutable_fingerprint, status, revision,
+                    correlation_id, created_at, accept_by, recipient_role_session_id,
+                    recipient_actor_id, recipient_role_ref, recipient_scope_ref,
+                    recipient_current_object_ref, recipient_execution_channel,
+                    recipient_owner_fingerprint, recipient_permission_snapshot_ref,
+                    recipient_session_revision, recipient_binding_revision,
+                    recipient_binding_proof_digest, recipient_evidence_digest,
+                    accepted_at, return_by, current_receipt_id, last_failure_reason
+             FROM m3_handoffs WHERE handoff_id = ?1",
+            [handoff_id.as_str()],
+            handoff_row,
+        )
+        .optional()
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_load", error))?
+        .map(parse_handoff)
+        .transpose()?;
+    if let Some(handoff) = handoff.as_ref() {
+        validate_handoff_rehydration_in_transaction(transaction, handoff)?;
+    }
+    Ok(handoff)
+}
+
+fn load_required_handoff_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+) -> Result<Handoff, M3RoleSessionRepositoryError> {
+    load_handoff_in_transaction(transaction, handoff_id)?
+        .ok_or_else(|| M3RoleSessionRepositoryError::new("m3_handoff_not_found"))
+}
+
+fn load_handoff_receipts_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+) -> Result<Vec<HandoffReceipt>, M3RoleSessionRepositoryError> {
+    let sql =
+        format!("{HANDOFF_RECEIPT_SELECT} WHERE handoff_id = ?1 ORDER BY handoff_revision ASC");
+    let mut statement = transaction.prepare(&sql).map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_receipt_history_prepare", error)
+    })?;
+    let mut rows = statement.query([handoff_id.as_str()]).map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_receipt_history_query", error)
+    })?;
+    let mut receipts = Vec::new();
+    while let Some(row) = rows.next().map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_receipt_history_next", error)
+    })? {
+        let raw = handoff_receipt_row(row).map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_receipt_history_row", error)
+        })?;
+        receipts.push(parse_handoff_receipt(raw)?);
+    }
+    Ok(receipts)
+}
+
+fn load_handoff_command_receipts_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+) -> Result<Vec<M3HandoffCommandReceiptDto>, M3RoleSessionRepositoryError> {
+    let sql = format!(
+        "{HANDOFF_COMMAND_RECEIPT_SELECT} WHERE handoff_id = ?1 ORDER BY created_at ASC, command_receipt_id ASC"
+    );
+    let mut statement = transaction.prepare(&sql).map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_command_history_prepare", error)
+    })?;
+    let mut rows = statement.query([handoff_id.as_str()]).map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_command_history_query", error)
+    })?;
+    let mut receipts = Vec::new();
+    while let Some(row) = rows.next().map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_command_history_next", error)
+    })? {
+        let raw = handoff_command_receipt_row(row).map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_command_history_row", error)
+        })?;
+        receipts.push(parse_handoff_command_receipt(raw)?);
+    }
+    Ok(receipts)
+}
+
+fn handoff_operation_requires_recipient(operation: HandoffRequestOperation) -> bool {
+    matches!(
+        operation,
+        HandoffRequestOperation::Accept
+            | HandoffRequestOperation::Reject
+            | HandoffRequestOperation::RecordReturnResult
+    )
+}
+
+fn validate_handoff_command_actor_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    command: &M3HandoffCommandReceiptDto,
+) -> Result<SessionBinding, M3RoleSessionRepositoryError> {
+    let actor_session =
+        load_required_role_session_in_transaction(transaction, &command.role_session_id)?;
+    if actor_session.actor_id != command.actor_id
+        || actor_session.owner_fingerprint != command.actor_owner_fingerprint
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_command_actor_session_mismatch",
+        ));
+    }
+    let actor_binding = load_session_binding_at_in_transaction(
+        transaction,
+        &command.role_session_id,
+        command.actor_binding_revision,
+    )?
+    .ok_or_else(|| M3RoleSessionRepositoryError::new("m3_handoff_command_actor_binding_missing"))?;
+    if actor_binding.actor_id != command.actor_id
+        || actor_binding.owner_fingerprint != command.actor_owner_fingerprint
+        || actor_binding.permission_snapshot_ref != command.actor_permission_snapshot_ref
+        || handoff_binding_proof_digest(&actor_binding)? != command.actor_binding_proof_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_command_actor_binding_mismatch",
+        ));
+    }
+    let actor_descriptor = load_handoff_permission_descriptor_in_transaction(
+        transaction,
+        &command.actor_permission_snapshot_ref,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_command_actor_descriptor_missing")
+    })?;
+    if actor_descriptor.descriptor_digest != command.actor_permission_descriptor_digest {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_command_actor_descriptor_mismatch",
+        ));
+    }
+    if handoff_operation_requires_recipient(command.operation) {
+        if command.actor_id != handoff.to_recipient_ref
+            || actor_binding.actor_id != handoff.to_recipient_ref
+            || actor_binding.role_ref != handoff.to_role_ref
+            || actor_binding.scope_ref != handoff.scope_ref
+            || !handoff
+                .object_refs
+                .contains(&actor_binding.current_object_ref)
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_command_recipient_actor_mismatch",
+            ));
+        }
+        if let Some(accepted) = handoff.recipient.as_ref() {
+            if command.operation == HandoffRequestOperation::RecordReturnResult
+                && (accepted.role_session_id != command.role_session_id
+                    || accepted.owner_fingerprint != command.actor_owner_fingerprint)
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_return_recipient_command_continuity_mismatch",
+                ));
+            }
+        }
+    } else if command.role_session_id != handoff.from_role_session_id
+        || command.actor_id != handoff.from_actor_id
+        || command.actor_owner_fingerprint != handoff.from_owner_fingerprint
+        || actor_binding.actor_id != handoff.from_actor_id
+        || actor_binding.owner_fingerprint != handoff.from_owner_fingerprint
+        || actor_binding.role_ref != handoff.source_role_ref
+        || actor_binding.scope_ref != handoff.scope_ref
+        || actor_binding.current_object_ref != handoff.source_current_object_ref
+        || actor_binding.execution_channel != handoff.source_execution_channel
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_command_source_actor_mismatch",
+        ));
+    }
+    Ok(actor_binding)
+}
+
+fn validate_handoff_receipt_actor_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    command: &M3HandoffCommandReceiptDto,
+    receipt: &HandoffReceipt,
+) -> Result<SessionBinding, M3RoleSessionRepositoryError> {
+    if receipt.actor_id != command.actor_id
+        || receipt.role_session_id != command.role_session_id
+        || receipt.actor_owner_fingerprint != command.actor_owner_fingerprint
+        || receipt.actor_permission_snapshot_ref != command.actor_permission_snapshot_ref
+        || receipt.actor_permission_descriptor_digest != command.actor_permission_descriptor_digest
+        || receipt.actor_session_revision != command.actor_session_revision
+        || receipt.actor_binding_revision != command.actor_binding_revision
+        || receipt.actor_binding_proof_digest != command.actor_binding_proof_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_receipt_command_actor_mismatch",
+        ));
+    }
+    let actor_binding =
+        validate_handoff_command_actor_in_transaction(transaction, handoff, command)?;
+    if handoff_operation_requires_recipient(command.operation) {
+        if receipt.actor_id != handoff.to_recipient_ref
+            || actor_binding.actor_id != handoff.to_recipient_ref
+            || actor_binding.role_ref != handoff.to_role_ref
+            || actor_binding.scope_ref != handoff.scope_ref
+            || !handoff
+                .object_refs
+                .contains(&actor_binding.current_object_ref)
+            || actor_binding.owner_fingerprint != receipt.actor_owner_fingerprint
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_receipt_recipient_actor_mismatch",
+            ));
+        }
+        if let Some(accepted) = handoff.recipient.as_ref() {
+            if command.operation == HandoffRequestOperation::RecordReturnResult
+                && (accepted.role_session_id != receipt.role_session_id
+                    || accepted.owner_fingerprint != receipt.actor_owner_fingerprint)
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_return_recipient_continuity_mismatch",
+                ));
+            }
+        }
+    } else if receipt.role_session_id != handoff.from_role_session_id
+        || receipt.actor_id != handoff.from_actor_id
+        || receipt.actor_owner_fingerprint != handoff.from_owner_fingerprint
+        || actor_binding.actor_id != handoff.from_actor_id
+        || actor_binding.owner_fingerprint != handoff.from_owner_fingerprint
+        || actor_binding.role_ref != handoff.source_role_ref
+        || actor_binding.scope_ref != handoff.scope_ref
+        || actor_binding.current_object_ref != handoff.source_current_object_ref
+        || actor_binding.execution_channel != handoff.source_execution_channel
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_receipt_source_actor_mismatch",
+        ));
+    }
+    Ok(actor_binding)
+}
+
+fn validate_handoff_receipt_state_snapshot(
+    receipt: &HandoffReceipt,
+    prior: Option<&HandoffReceipt>,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let no_return_state = matches!(
+        receipt.receipt_kind,
+        HandoffReceiptKind::Created
+            | HandoffReceiptKind::Accepted
+            | HandoffReceiptKind::Rejected
+            | HandoffReceiptKind::Cancelled
+            | HandoffReceiptKind::Expired
+    );
+    if no_return_state
+        && (receipt.return_by_at_transition.is_some()
+            || receipt.failure_reason_at_transition.is_some())
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_return_snapshot_forbidden",
+        ));
+    }
+    if matches!(
+        receipt.receipt_kind,
+        HandoffReceiptKind::ReturnRequested
+            | HandoffReceiptKind::ReturnRetried
+            | HandoffReceiptKind::Returned
+            | HandoffReceiptKind::ReturnFailed
+            | HandoffReceiptKind::CancelledBySource
+    ) && receipt.return_by_at_transition.is_none()
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_return_deadline_snapshot_missing",
+        ));
+    }
+    if let Some(return_by) = receipt.return_by_at_transition.as_deref() {
+        validate_rfc3339_utc_timestamp("handoff_receipt_return_by", return_by)?;
+    }
+    let expected_failure = match (receipt.receipt_kind, receipt.reason_code.as_str()) {
+        (HandoffReceiptKind::ReturnFailed, "RETURN_TIMEOUT") => {
+            Some(HandoffReturnFailureReason::Timeout)
+        }
+        (HandoffReceiptKind::ReturnFailed, "RECIPIENT_RETURN_FAILED") => {
+            Some(HandoffReturnFailureReason::RecipientReturnFailed)
+        }
+        (HandoffReceiptKind::CancelledBySource, "CANCELLED_BY_SOURCE") => {
+            prior.and_then(|prior| prior.failure_reason_at_transition)
+        }
+        _ => None,
+    };
+    if receipt.failure_reason_at_transition != expected_failure {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_failure_reason_snapshot_mismatch",
+        ));
+    }
+    if let Some(prior) = prior {
+        match receipt.receipt_kind {
+            HandoffReceiptKind::ReturnRequested => {}
+            HandoffReceiptKind::ReturnRetried => {
+                let previous = prior.return_by_at_transition.as_deref().ok_or_else(|| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_prior_return_deadline_missing",
+                    )
+                })?;
+                let current = receipt.return_by_at_transition.as_deref().ok_or_else(|| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_retry_return_deadline_missing",
+                    )
+                })?;
+                if parse_handoff_utc_instant("handoff_prior_return_by", previous)?
+                    >= parse_handoff_utc_instant("handoff_retry_return_by", current)?
+                {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_retry_deadline_not_extended",
+                    ));
+                }
+            }
+            HandoffReceiptKind::Returned | HandoffReceiptKind::ReturnFailed => {
+                if receipt.return_by_at_transition != prior.return_by_at_transition {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_return_deadline_continuity_mismatch",
+                    ));
+                }
+            }
+            HandoffReceiptKind::CancelledBySource => {
+                if receipt.return_by_at_transition != prior.return_by_at_transition
+                    || receipt.failure_reason_at_transition != prior.failure_reason_at_transition
+                {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_cancelled_return_snapshot_mismatch",
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn validate_handoff_transition_receipt_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    receipt: &HandoffReceipt,
+    prior_receipt: Option<&HandoffReceipt>,
+) -> Result<HandoffState, M3RoleSessionRepositoryError> {
+    if receipt.handoff_id != handoff.handoff_id
+        || receipt.receipt_kind.resulting_state() != receipt.handoff_status
+        || receipt.source_command_receipt_ref != handoff.source_command_receipt_ref
+        || receipt.correlation_id != handoff.correlation_id
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_receipt_binding_mismatch",
+        ));
+    }
+    let command =
+        load_handoff_command_receipt_by_id_in_transaction(transaction, &receipt.receipt_id)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_history_command_missing")
+            })?;
+    if command.status != M3HandoffCommandReceiptStatus::Committed
+        || command.handoff_id != handoff.handoff_id
+        || command.correlation_id != handoff.correlation_id
+        || command.result_ref != receipt.result_ref
+        || command.result_hash != receipt.result_hash
+        || command.created_at != receipt.recorded_at
+        || command.return_by_at_transition != receipt.return_by_at_transition
+        || command.failure_reason_at_transition != receipt.failure_reason_at_transition
+        || command.handoff_state_digest.as_ref() != Some(&receipt.handoff_state_digest)
+        || !handoff_operation_accepts_receipt_kind(command.operation, receipt.receipt_kind)
+        || command.expected_handoff_revision.checked_add(1) != Some(receipt.handoff_revision)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_command_receipt_mismatch",
+        ));
+    }
+    match prior_receipt.map(|receipt| receipt.handoff_status) {
+        None => {
+            if receipt.handoff_revision != 1
+                || command.operation != HandoffRequestOperation::Create
+                || !matches!(
+                    receipt.receipt_kind,
+                    HandoffReceiptKind::Created | HandoffReceiptKind::Rejected
+                )
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_history_initial_receipt_invalid",
+                ));
+            }
+        }
+        Some(prior_state) => {
+            if !prior_state.can_transition_to(receipt.handoff_status) {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_history_transition_invalid",
+                ));
+            }
+        }
+    }
+    let actor_binding =
+        validate_handoff_receipt_actor_in_transaction(transaction, handoff, &command, receipt)?;
+    if command.operation == HandoffRequestOperation::Accept
+        && receipt.receipt_kind == HandoffReceiptKind::Accepted
+    {
+        let accepted = handoff.recipient.as_ref().ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_history_accept_evidence_missing")
+        })?;
+        if accepted.role_session_id != command.role_session_id
+            || accepted.actor_id != command.actor_id
+            || accepted.role_ref != actor_binding.role_ref
+            || accepted.scope_ref != actor_binding.scope_ref
+            || accepted.current_object_ref != actor_binding.current_object_ref
+            || accepted.execution_channel != actor_binding.execution_channel
+            || accepted.owner_fingerprint != command.actor_owner_fingerprint
+            || accepted.permission_snapshot_ref != command.actor_permission_snapshot_ref
+            || accepted.session_revision != command.actor_session_revision
+            || accepted.binding_revision != command.actor_binding_revision
+            || accepted.binding_proof_digest != command.actor_binding_proof_digest
+            || accepted.accepted_at != command.created_at
+            || accepted.accepted_at != receipt.recorded_at
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_history_accept_evidence_mismatch",
+            ));
+        }
+    }
+    let source_validation =
+        validate_handoff_source_validation_proof_in_transaction(transaction, handoff, receipt)?;
+    let recipient_evidence_digest = if matches!(
+        receipt.handoff_status,
+        HandoffState::Accepted
+            | HandoffState::ReturnPending
+            | HandoffState::Returned
+            | HandoffState::ReturnFailed
+            | HandoffState::CancelledBySource
+    ) {
+        handoff
+            .recipient
+            .as_ref()
+            .map(handoff_recipient_evidence_digest)
+            .transpose()?
+    } else {
+        None
+    };
+    if handoff_transition_integrity_hash_for_fields(
+        receipt.receipt_kind,
+        &handoff.handoff_id,
+        &handoff.immutable_fingerprint().map_err(domain_error)?,
+        receipt.handoff_revision,
+        receipt.handoff_status,
+        &receipt.result_ref,
+        &receipt.result_hash,
+        &receipt.actor_permission_descriptor_digest,
+        receipt.actor_session_revision,
+        &receipt.actor_binding_proof_digest,
+        recipient_evidence_digest.as_ref(),
+        source_validation.as_ref().map(|proof| &proof.proof_digest),
+        receipt.return_by_at_transition.as_deref(),
+        receipt.failure_reason_at_transition,
+        &receipt.handoff_state_digest,
+        &receipt.recorded_at,
+        &receipt.reason_code,
+    )? != receipt.transition_integrity_hash
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_transition_integrity_hash_mismatch",
+        ));
+    }
+    let expected_state_digest = handoff_state_digest_for_fields(
+        &receipt.handoff_id,
+        receipt.handoff_revision,
+        receipt.handoff_status,
+        &receipt.receipt_id,
+        recipient_evidence_digest.as_ref(),
+        receipt.return_by_at_transition.as_deref(),
+        receipt.failure_reason_at_transition,
+    )?;
+    if expected_state_digest != receipt.handoff_state_digest {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_state_digest_mismatch",
+        ));
+    }
+    validate_handoff_receipt_state_snapshot(receipt, prior_receipt)?;
+    let generic_hash_required = !matches!(
+        (command.operation, receipt.receipt_kind),
+        (
+            HandoffRequestOperation::RecordReturnResult,
+            HandoffReceiptKind::Returned
+        ) | (
+            HandoffRequestOperation::RecordReturnResult,
+            HandoffReceiptKind::ReturnFailed
+        )
+    );
+    if generic_hash_required
+        && handoff_transition_result_hash_for_fields(
+            receipt.receipt_kind,
+            &handoff.handoff_id,
+            &handoff.immutable_fingerprint().map_err(domain_error)?,
+            receipt.handoff_revision,
+            receipt.handoff_status,
+            &receipt.result_ref,
+            &receipt.reason_code,
+        )? != receipt.result_hash
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_result_hash_mismatch",
+        ));
+    }
+    match (
+        command.operation,
+        receipt.receipt_kind,
+        receipt.reason_code.as_str(),
+    ) {
+        (HandoffRequestOperation::Create, HandoffReceiptKind::Created, "CREATED")
+        | (
+            HandoffRequestOperation::Create,
+            HandoffReceiptKind::Rejected,
+            "PERMISSION_REQUEST_REJECTED",
+        )
+        | (HandoffRequestOperation::Accept, HandoffReceiptKind::Accepted, "ACCEPTED")
+        | (HandoffRequestOperation::Reject, HandoffReceiptKind::Rejected, "RECIPIENT_REJECTED")
+        | (
+            HandoffRequestOperation::Cancel,
+            HandoffReceiptKind::Cancelled,
+            "CANCELLED_BY_SOURCE_PRE_ACCEPT",
+        )
+        | (
+            HandoffRequestOperation::Expire,
+            HandoffReceiptKind::Expired,
+            "ACCEPT_BY_DEADLINE_REACHED",
+        )
+        | (
+            HandoffRequestOperation::RequestReturn,
+            HandoffReceiptKind::ReturnRequested,
+            "RETURN_REQUESTED",
+        )
+        | (HandoffRequestOperation::RecordReturnResult, HandoffReceiptKind::Returned, "RETURNED")
+        | (
+            HandoffRequestOperation::RecordReturnResult,
+            HandoffReceiptKind::ReturnFailed,
+            "RECIPIENT_RETURN_FAILED",
+        )
+        | (
+            HandoffRequestOperation::RecordReturnTimeout,
+            HandoffReceiptKind::ReturnFailed,
+            "RETURN_TIMEOUT",
+        )
+        | (
+            HandoffRequestOperation::RetryReturn,
+            HandoffReceiptKind::ReturnRetried,
+            "RETURN_RETRIED",
+        )
+        | (
+            HandoffRequestOperation::CancelFailedReturn,
+            HandoffReceiptKind::CancelledBySource,
+            "CANCELLED_BY_SOURCE",
+        ) => {}
+        _ => {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_history_reason_code_mismatch",
+            ))
+        }
+    }
+    Ok(receipt.handoff_status)
+}
+
+fn load_handoff_audit_decision_and_reason_in_transaction(
+    transaction: &Transaction<'_>,
+    command_receipt_id: &OpaqueRef,
+) -> Result<(String, String), M3RoleSessionRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT decision, reason_code
+             FROM m3_handoff_audit_records
+             WHERE command_receipt_id = ?1",
+            [command_receipt_id.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_audit_load", error))?
+        .ok_or_else(|| M3RoleSessionRepositoryError::new("m3_handoff_history_audit_missing"))
+}
+
+fn validate_handoff_event_and_audit_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    command: &M3HandoffCommandReceiptDto,
+    expected_decision: &str,
+    expected_reason_code: &str,
+    transition_receipt: Option<&HandoffReceipt>,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if transition_receipt.is_some_and(|receipt| {
+        receipt.receipt_id != command.command_receipt_id
+            || receipt.handoff_id != command.handoff_id
+            || receipt.actor_permission_descriptor_digest
+                != command.actor_permission_descriptor_digest
+            || receipt.actor_session_revision != command.actor_session_revision
+            || receipt.actor_binding_proof_digest != command.actor_binding_proof_digest
+    }) {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_event_transition_mismatch",
+        ));
+    }
+    let audit: Option<(
+        String,
+        String,
+        String,
+        String,
+        String,
+        i64,
+        String,
+        String,
+        Option<String>,
+        String,
+        String,
+        String,
+    )> = transaction
+        .query_row(
+            "SELECT action, decision, source_owner_fingerprint,
+                    source_permission_snapshot_ref,source_role_session_id,
+                    source_binding_revision,source_binding_proof_digest,
+                    source_permission_descriptor_digest,recipient_owner_fingerprint,
+                    reason_code,record_hash,created_at
+             FROM m3_handoff_audit_records
+             WHERE command_receipt_id = ?1 AND handoff_id = ?2",
+            params![
+                command.command_receipt_id.as_str(),
+                handoff.handoff_id.as_str()
+            ],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                    row.get(10)?,
+                    row.get(11)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_audit_load", error))?;
+    let Some((
+        action,
+        decision,
+        source_owner,
+        source_permission_snapshot_ref,
+        source_role_session_id,
+        source_binding_revision,
+        source_binding_proof_digest,
+        source_permission_descriptor_digest,
+        recipient_owner,
+        reason_code,
+        record_hash,
+        audit_created_at,
+    )) = audit
+    else {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_audit_missing",
+        ));
+    };
+    validate_rfc3339_utc_timestamp("handoff_audit_created_at", &audit_created_at)?;
+    let source_owner = OwnerFingerprint::try_from_canonical(source_owner).map_err(domain_error)?;
+    let source_permission_snapshot_ref =
+        OpaqueRef::try_from_canonical(source_permission_snapshot_ref).map_err(domain_error)?;
+    let source_role_session_id =
+        RoleSessionId::try_from_canonical(source_role_session_id).map_err(domain_error)?;
+    let source_binding_revision = i64_to_u64(
+        "handoff_audit_source_binding_revision",
+        source_binding_revision,
+    )?;
+    let source_binding_proof_digest =
+        Sha256Digest::try_from_canonical(source_binding_proof_digest).map_err(domain_error)?;
+    let source_permission_descriptor_digest =
+        Sha256Digest::try_from_canonical(source_permission_descriptor_digest)
+            .map_err(domain_error)?;
+    let recipient_owner = recipient_owner
+        .map(OwnerFingerprint::try_from_canonical)
+        .transpose()
+        .map_err(domain_error)?;
+    let record_hash = Sha256Digest::try_from_canonical(record_hash).map_err(domain_error)?;
+    let recipient_owner_mismatch = recipient_owner.as_ref().is_some_and(|owner| {
+        if handoff_operation_requires_recipient(command.operation) {
+            owner != &command.actor_owner_fingerprint
+        } else {
+            handoff
+                .recipient
+                .as_ref()
+                .map(|recipient| &recipient.owner_fingerprint)
+                != Some(owner)
+        }
+    });
+    let source_actor_audit_mismatch = !handoff_operation_requires_recipient(command.operation)
+        && (source_owner != command.actor_owner_fingerprint
+            || source_permission_snapshot_ref != command.actor_permission_snapshot_ref
+            || source_role_session_id != command.role_session_id
+            || source_binding_revision != command.actor_binding_revision
+            || source_binding_proof_digest != command.actor_binding_proof_digest
+            || source_permission_descriptor_digest != command.actor_permission_descriptor_digest);
+    if action != command.operation.as_str()
+        || decision != expected_decision
+        || reason_code != expected_reason_code
+        || source_owner != handoff.from_owner_fingerprint
+        || source_role_session_id != handoff.from_role_session_id
+        || audit_created_at != command.created_at
+        || recipient_owner_mismatch
+        || source_actor_audit_mismatch
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_audit_binding_mismatch",
+        ));
+    }
+    let source_binding = load_session_binding_at_in_transaction(
+        transaction,
+        &source_role_session_id,
+        source_binding_revision,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_history_audit_source_binding_missing")
+    })?;
+    if source_binding.actor_id != handoff.from_actor_id
+        || source_binding.role_ref != handoff.source_role_ref
+        || source_binding.scope_ref != handoff.scope_ref
+        || source_binding.current_object_ref != handoff.source_current_object_ref
+        || source_binding.execution_channel != handoff.source_execution_channel
+        || source_binding.owner_fingerprint != handoff.from_owner_fingerprint
+        || source_binding.permission_snapshot_ref != source_permission_snapshot_ref
+        || handoff_binding_proof_digest(&source_binding)? != source_binding_proof_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_audit_source_binding_drift",
+        ));
+    }
+    let source_descriptor = load_handoff_permission_descriptor_in_transaction(
+        transaction,
+        &source_permission_snapshot_ref,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_history_audit_source_descriptor_missing")
+    })?;
+    if source_descriptor.descriptor_digest != source_permission_descriptor_digest {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_audit_source_descriptor_drift",
+        ));
+    }
+    let expected_record_hash = handoff_audit_record_hash(
+        command,
+        &action,
+        &decision,
+        &handoff.from_owner_fingerprint,
+        &source_permission_snapshot_ref,
+        &source_role_session_id,
+        source_binding_revision,
+        &source_binding_proof_digest,
+        &source_permission_descriptor_digest,
+        recipient_owner.as_ref(),
+        &reason_code,
+        transition_receipt,
+    )?;
+    if record_hash != expected_record_hash {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_audit_hash_mismatch",
+        ));
+    }
+
+    let event: Option<(String, String, String, String)> = transaction
+        .query_row(
+            "SELECT event_type, correlation_id, payload_hash, created_at
+             FROM m3_handoff_events
+             WHERE command_receipt_id = ?1 AND handoff_id = ?2",
+            params![
+                command.command_receipt_id.as_str(),
+                handoff.handoff_id.as_str()
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .optional()
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_event_load", error))?;
+    let Some((event_type, correlation_id, payload_hash, event_created_at)) = event else {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_event_missing",
+        ));
+    };
+    validate_rfc3339_utc_timestamp("handoff_event_created_at", &event_created_at)?;
+    let correlation_id = CorrelationId::try_from_canonical(correlation_id).map_err(domain_error)?;
+    let payload_hash = Sha256Digest::try_from_canonical(payload_hash).map_err(domain_error)?;
+    let expected_event_type = handoff_event_type(command.operation);
+    let expected_payload_hash = handoff_event_payload_hash(
+        command,
+        &expected_event_type,
+        expected_decision,
+        expected_reason_code,
+        transition_receipt,
+    )?;
+    if event_type != expected_event_type
+        || correlation_id != command.correlation_id
+        || event_created_at != command.created_at
+        || payload_hash != expected_payload_hash
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_event_binding_mismatch",
+        ));
+    }
+    Ok(())
+}
+
+struct RawHandoffCommandReceipt {
+    command_receipt_id: String,
+    operation_kind: String,
+    handoff_id: String,
+    idempotency_scope_ref: String,
+    base_key: String,
+    request_fingerprint: String,
+    expected_handoff_revision: i64,
+    actor_id: String,
+    role_session_id: String,
+    actor_owner_fingerprint: String,
+    actor_permission_snapshot_ref: String,
+    actor_permission_descriptor_digest: String,
+    actor_session_revision: i64,
+    actor_binding_revision: i64,
+    actor_binding_proof_digest: String,
+    correlation_id: String,
+    result_ref: String,
+    result_hash: String,
+    return_by_at_transition: Option<String>,
+    failure_reason_at_transition: Option<String>,
+    handoff_state_digest: Option<String>,
+    status: String,
+    winner_receipt_ref: Option<String>,
+    created_at: String,
+}
+
+fn handoff_command_receipt_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<RawHandoffCommandReceipt> {
+    Ok(RawHandoffCommandReceipt {
+        command_receipt_id: row.get(0)?,
+        operation_kind: row.get(1)?,
+        handoff_id: row.get(2)?,
+        idempotency_scope_ref: row.get(3)?,
+        base_key: row.get(4)?,
+        request_fingerprint: row.get(5)?,
+        expected_handoff_revision: row.get(6)?,
+        actor_id: row.get(7)?,
+        role_session_id: row.get(8)?,
+        actor_owner_fingerprint: row.get(9)?,
+        actor_permission_snapshot_ref: row.get(10)?,
+        actor_permission_descriptor_digest: row.get(11)?,
+        actor_session_revision: row.get(12)?,
+        actor_binding_revision: row.get(13)?,
+        actor_binding_proof_digest: row.get(14)?,
+        correlation_id: row.get(15)?,
+        result_ref: row.get(16)?,
+        result_hash: row.get(17)?,
+        return_by_at_transition: row.get(18)?,
+        failure_reason_at_transition: row.get(19)?,
+        handoff_state_digest: row.get(20)?,
+        status: row.get(21)?,
+        winner_receipt_ref: row.get(22)?,
+        created_at: row.get(23)?,
+    })
+}
+
+fn parse_handoff_command_receipt(
+    raw: RawHandoffCommandReceipt,
+) -> Result<M3HandoffCommandReceiptDto, M3RoleSessionRepositoryError> {
+    validate_rfc3339_utc_timestamp("handoff_command_created_at", &raw.created_at)?;
+    if let Some(return_by) = raw.return_by_at_transition.as_deref() {
+        validate_rfc3339_utc_timestamp("handoff_command_return_by_at_transition", return_by)?;
+    }
+    let receipt = M3HandoffCommandReceiptDto {
+        command_receipt_id: OpaqueRef::try_from_canonical(raw.command_receipt_id)
+            .map_err(domain_error)?,
+        operation: HandoffRequestOperation::parse(&raw.operation_kind).map_err(domain_error)?,
+        handoff_id: HandoffId::try_from_canonical(raw.handoff_id).map_err(domain_error)?,
+        idempotency_scope_ref: raw.idempotency_scope_ref,
+        base_key: raw.base_key,
+        request_fingerprint: RequestFingerprint::try_from_canonical(raw.request_fingerprint)
+            .map_err(domain_error)?,
+        expected_handoff_revision: i64_to_u64(
+            "handoff_command_expected_revision",
+            raw.expected_handoff_revision,
+        )?,
+        actor_id: OpaqueRef::try_from_canonical(raw.actor_id).map_err(domain_error)?,
+        role_session_id: RoleSessionId::try_from_canonical(raw.role_session_id)
+            .map_err(domain_error)?,
+        actor_owner_fingerprint: OwnerFingerprint::try_from_canonical(raw.actor_owner_fingerprint)
+            .map_err(domain_error)?,
+        actor_permission_snapshot_ref: OpaqueRef::try_from_canonical(
+            raw.actor_permission_snapshot_ref,
+        )
+        .map_err(domain_error)?,
+        actor_permission_descriptor_digest: Sha256Digest::try_from_canonical(
+            raw.actor_permission_descriptor_digest,
+        )
+        .map_err(domain_error)?,
+        actor_session_revision: i64_to_u64(
+            "handoff_command_actor_session_revision",
+            raw.actor_session_revision,
+        )?,
+        actor_binding_revision: i64_to_u64(
+            "handoff_command_actor_binding_revision",
+            raw.actor_binding_revision,
+        )?,
+        actor_binding_proof_digest: Sha256Digest::try_from_canonical(
+            raw.actor_binding_proof_digest,
+        )
+        .map_err(domain_error)?,
+        correlation_id: CorrelationId::try_from_canonical(raw.correlation_id)
+            .map_err(domain_error)?,
+        result_ref: OpaqueRef::try_from_canonical(raw.result_ref).map_err(domain_error)?,
+        result_hash: Sha256Digest::try_from_canonical(raw.result_hash).map_err(domain_error)?,
+        return_by_at_transition: raw.return_by_at_transition,
+        failure_reason_at_transition: raw
+            .failure_reason_at_transition
+            .map(|value| HandoffReturnFailureReason::parse(&value))
+            .transpose()
+            .map_err(domain_error)?,
+        handoff_state_digest: raw
+            .handoff_state_digest
+            .map(Sha256Digest::try_from_canonical)
+            .transpose()
+            .map_err(domain_error)?,
+        status: M3HandoffCommandReceiptStatus::parse(&raw.status)?,
+        winner_receipt_ref: raw
+            .winner_receipt_ref
+            .map(OpaqueRef::try_from_canonical)
+            .transpose()
+            .map_err(domain_error)?,
+        created_at: raw.created_at,
+    };
+    let state_snapshot_required = receipt.status == M3HandoffCommandReceiptStatus::Committed
+        && receipt.operation != HandoffRequestOperation::RecordSourceApplication;
+    if receipt.idempotency_scope_ref != receipt.handoff_id.as_str()
+        || (receipt.status == M3HandoffCommandReceiptStatus::Stale)
+            != receipt.winner_receipt_ref.is_some()
+        || state_snapshot_required != receipt.handoff_state_digest.is_some()
+        || (!state_snapshot_required
+            && (receipt.return_by_at_transition.is_some()
+                || receipt.failure_reason_at_transition.is_some()))
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_command_receipt_shape_mismatch",
+        ));
+    }
+    Ok(receipt)
+}
+
+const HANDOFF_COMMAND_RECEIPT_SELECT: &str =
+    "SELECT command_receipt_id, operation_kind, handoff_id, idempotency_scope_ref,
+            base_key, request_fingerprint, expected_handoff_revision, actor_id,
+            role_session_id, actor_owner_fingerprint, actor_permission_snapshot_ref,
+            actor_permission_descriptor_digest,actor_session_revision,
+            actor_binding_revision, actor_binding_proof_digest, correlation_id,
+            result_ref, result_hash, return_by_at_transition,
+            failure_reason_at_transition, handoff_state_digest,
+            status, winner_receipt_ref, created_at
+     FROM m3_handoff_command_receipts";
+
+fn load_handoff_command_receipt_by_id_in_transaction(
+    transaction: &Transaction<'_>,
+    receipt_id: &OpaqueRef,
+) -> Result<Option<M3HandoffCommandReceiptDto>, M3RoleSessionRepositoryError> {
+    let sql = format!("{HANDOFF_COMMAND_RECEIPT_SELECT} WHERE command_receipt_id = ?1");
+    transaction
+        .query_row(&sql, [receipt_id.as_str()], handoff_command_receipt_row)
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_command_receipt_load", error)
+        })?
+        .map(parse_handoff_command_receipt)
+        .transpose()
+}
+
+fn find_handoff_command_receipt_by_identity(
+    transaction: &Transaction<'_>,
+    identity: &M3HandoffIdempotencyIdentity,
+) -> Result<Option<M3HandoffCommandReceiptDto>, M3RoleSessionRepositoryError> {
+    let sql = format!(
+        "{HANDOFF_COMMAND_RECEIPT_SELECT}
+         WHERE operation_kind = ?1 AND idempotency_scope_ref = ?2 AND base_key = ?3"
+    );
+    let existing = transaction
+        .query_row(
+            &sql,
+            params![
+                identity.operation.as_str(),
+                identity.handoff_id.as_str(),
+                identity.base_key.as_str(),
+            ],
+            handoff_command_receipt_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_command_receipt_idempotency_load",
+                error,
+            )
+        })?
+        .map(parse_handoff_command_receipt)
+        .transpose()?;
+    let Some(existing) = existing else {
+        return Ok(None);
+    };
+    if existing.operation != identity.operation || existing.handoff_id != identity.handoff_id {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_idempotency_scope_mismatch",
+        ));
+    }
+    match idempotency_replay_disposition(
+        &existing.request_fingerprint,
+        &identity.request_fingerprint,
+    ) {
+        crate::m3_role_session::IdempotencyReplayDisposition::ReplayOriginalReceipt => {
+            Ok(Some(existing))
+        }
+        crate::m3_role_session::IdempotencyReplayDisposition::RejectIdempotencyKeyReuse => {
+            Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_idempotency_key_reuse_with_different_request",
+            ))
+        }
+    }
+}
+
+/// Resolve the server-derived actor binding against the persisted RoleSession
+/// before a Handoff command can mutate anything.  The command shape carries
+/// only opaque, already-resolved values; this is the persistence boundary
+/// which makes sure they still designate the exact active owner.
+fn assess_handoff_authority(
+    transaction: &Transaction<'_>,
+    authority: &M3HandoffSessionAuthority,
+    require_active: bool,
+    actor_kind: &str,
+) -> Result<RoleSession, M3RoleSessionRepositoryError> {
+    validate_handoff_authority_shape(authority)?;
+    let session =
+        load_required_role_session_in_transaction(transaction, &authority.role_session_id)?;
+    if session.revision != authority.expected_session_revision {
+        return Err(stale_session_error(
+            authority.expected_session_revision,
+            session.revision,
+        ));
+    }
+    if !session.matches_binding_identity(&authority.binding)
+        || session.owner_fingerprint != authority.binding.owner_fingerprint
+    {
+        return Err(M3RoleSessionRepositoryError::new(format!(
+            "m3_handoff_{actor_kind}_server_binding_mismatch"
+        )));
+    }
+    if require_active && session.status != RoleSessionState::Active {
+        return Err(M3RoleSessionRepositoryError::new(format!(
+            "m3_handoff_{actor_kind}_active_session_required"
+        )));
+    }
+    Ok(session)
+}
+
+fn validate_source_authority_for_handoff(
+    handoff: &Handoff,
+    source: &M3HandoffSessionAuthority,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if source.role_session_id != handoff.from_role_session_id
+        || source.binding.actor_id != handoff.from_actor_id
+        || source.binding.role_ref != handoff.source_role_ref
+        || source.binding.scope_ref != handoff.scope_ref
+        || source.binding.current_object_ref != handoff.source_current_object_ref
+        || source.binding.execution_channel != handoff.source_execution_channel
+        || source.binding.owner_fingerprint != handoff.from_owner_fingerprint
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_authority_mismatch",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_recipient_authority_for_handoff(
+    handoff: &Handoff,
+    recipient: &M3HandoffSessionAuthority,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if recipient.binding.actor_id != handoff.to_recipient_ref
+        || recipient.binding.role_ref != handoff.to_role_ref
+        || recipient.binding.scope_ref != handoff.scope_ref
+        || !handoff
+            .object_refs
+            .contains(&recipient.binding.current_object_ref)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_recipient_authority_mismatch",
+        ));
+    }
+    if let Some(accepted) = handoff.recipient.as_ref() {
+        if recipient.role_session_id != accepted.role_session_id
+            || recipient.binding.actor_id != accepted.actor_id
+            || recipient.binding.role_ref != accepted.role_ref
+            || recipient.binding.scope_ref != accepted.scope_ref
+            || recipient.binding.current_object_ref != accepted.current_object_ref
+            || recipient.binding.execution_channel != accepted.execution_channel
+            || recipient.binding.owner_fingerprint != accepted.owner_fingerprint
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_recipient_continuity_mismatch",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_handoff_replay_session(
+    transaction: &Transaction<'_>,
+    authority: &M3HandoffSessionAuthority,
+    actor_kind: &str,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    validate_handoff_authority_shape(authority)?;
+    let session =
+        load_required_role_session_in_transaction(transaction, &authority.role_session_id)?;
+    if session.status != RoleSessionState::Active
+        || !session.matches_binding_identity(&authority.binding)
+        || session.permission_snapshot_ref != authority.binding.permission_snapshot_ref
+    {
+        return Err(M3RoleSessionRepositoryError::new(format!(
+            "m3_handoff_{actor_kind}_replay_revalidation_required"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_handoff_replay_authority(
+    transaction: &Transaction<'_>,
+    source: &M3HandoffSessionAuthority,
+    recipient: Option<&M3HandoffSessionAuthority>,
+    handoff_id: &HandoffId,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let handoff = load_required_handoff_in_transaction(transaction, handoff_id)?;
+    validate_source_authority_for_handoff(&handoff, source)?;
+    validate_handoff_replay_session(transaction, source, "source")?;
+    if let Some(recipient) = recipient {
+        validate_recipient_authority_for_handoff(&handoff, recipient)?;
+        validate_handoff_replay_session(transaction, recipient, "recipient")?;
+    }
+    Ok(())
+}
+
+/// Same and narrower snapshots must be durably attached to the session before
+/// the Handoff receipt/audit is written.  The outer immediate transaction
+/// rolls both pieces back if the Handoff write cannot finish.
+fn persist_handoff_permission_continuation(
+    transaction: &Transaction<'_>,
+    session: &mut RoleSession,
+    authority: &M3HandoffSessionAuthority,
+    occurred_at: &str,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let relation = permission_relation_for_binding(
+        session,
+        &authority.binding,
+        Some(&authority.previous_permission),
+        Some(&authority.current_permission),
+    );
+    if !relation.allows_continue() {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_continuation_not_allowed",
+        ));
+    }
+    if session.permission_snapshot_ref == authority.binding.permission_snapshot_ref {
+        return Ok(());
+    }
+    let expected_revision = session.revision;
+    let detached = detach_session_binding_for_permission_change_in_transaction(
+        transaction,
+        session,
+        &authority.binding,
+        occurred_at,
+    )?;
+    session.permission_snapshot_ref = authority.binding.permission_snapshot_ref.clone();
+    session.revision = session
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| M3RoleSessionRepositoryError::new("m3_handoff_session_revision_overflow"))?;
+    update_role_session_in_transaction(transaction, session, expected_revision)?;
+    restore_session_binding_after_permission_change_in_transaction(
+        transaction,
+        session,
+        &authority.binding,
+        detached,
+        occurred_at,
+    )?;
+    Ok(())
+}
+
+fn validate_source_command_receipt_in_transaction(
+    transaction: &Transaction<'_>,
+    receipt_id: &OpaqueRef,
+    source: &RoleSession,
+) -> Result<M3CommandReceiptDto, M3RoleSessionRepositoryError> {
+    let receipt =
+        load_command_receipt_by_id_in_transaction(transaction, receipt_id)?.ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_source_command_receipt_missing")
+        })?;
+    if receipt.status != M3CommandReceiptStatus::Committed
+        || receipt.role_session_id.as_ref() != Some(&source.role_session_id)
+        || receipt.owner_fingerprint.as_ref() != Some(&source.owner_fingerprint)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_receipt_authority_mismatch",
+        ));
+    }
+    Ok(receipt)
+}
+
+fn handoff_permission_request_allowed(
+    request: &HandoffPermissionRequest,
+    current_permission: &PermissionSnapshotDescriptor,
+) -> bool {
+    request
+        .requested_capability_refs
+        .is_subset(&current_permission.allowed_capability_refs)
+        && request
+            .requested_capability_refs
+            .is_disjoint(&current_permission.denied_capability_refs)
+}
+
+fn handoff_binding_proof_digest(
+    binding: &SessionBinding,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let binding_revision = binding.binding_revision.to_string();
+    metadata_digest(
+        "m3_handoff_actor_binding_proof",
+        &[
+            ("role_session_id", binding.role_session_id.as_str()),
+            ("actor_id", binding.actor_id.as_str()),
+            ("role_ref", binding.role_ref.as_str()),
+            ("scope_ref", binding.scope_ref.as_str()),
+            ("current_object_ref", binding.current_object_ref.as_str()),
+            ("execution_channel", binding.execution_channel.as_str()),
+            (
+                "permission_snapshot_ref",
+                binding.permission_snapshot_ref.as_str(),
+            ),
+            ("provider_handle_ref", binding.provider_handle_ref.as_str()),
+            ("owner_fingerprint", binding.owner_fingerprint.as_str()),
+            ("binding_revision", &binding_revision),
+        ],
+    )
+}
+
+fn load_current_handoff_actor_binding_proof(
+    transaction: &Transaction<'_>,
+    actor: &RoleSession,
+) -> Result<(SessionBinding, Sha256Digest), M3RoleSessionRepositoryError> {
+    let binding = load_session_binding_in_transaction(transaction, &actor.role_session_id)?
+        .ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_actor_current_binding_missing")
+        })?;
+    if binding.actor_id != actor.actor_id
+        || binding.role_ref != actor.role_ref
+        || binding.scope_ref != actor.scope_ref
+        || binding.current_object_ref != actor.current_object_ref
+        || binding.execution_channel != actor.execution_channel
+        || binding.permission_snapshot_ref != actor.permission_snapshot_ref
+        || binding.owner_fingerprint != actor.owner_fingerprint
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_actor_current_binding_mismatch",
+        ));
+    }
+    let digest = handoff_binding_proof_digest(&binding)?;
+    Ok((binding, digest))
+}
+
+fn handoff_validation_receipt_digest(
+    receipt: &M3CommandReceiptDto,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let role_session_id = receipt
+        .role_session_id
+        .as_ref()
+        .map(RoleSessionId::as_str)
+        .unwrap_or("");
+    let turn_id = receipt.turn_id.as_ref().map(TurnId::as_str).unwrap_or("");
+    let provider_handle_ref = receipt
+        .provider_handle_ref
+        .as_ref()
+        .map(ProviderHandleRef::as_str)
+        .unwrap_or("");
+    let owner_fingerprint = receipt
+        .owner_fingerprint
+        .as_ref()
+        .map(OwnerFingerprint::as_str)
+        .unwrap_or("");
+    let expected_revision = receipt
+        .expected_revision
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let binding_revision = receipt
+        .binding_revision
+        .map(|value| value.to_string())
+        .unwrap_or_default();
+    let provider_attempt_ref = receipt
+        .provider_attempt_ref
+        .as_ref()
+        .map(OpaqueRef::as_str)
+        .unwrap_or("");
+    metadata_digest(
+        "m3_handoff_source_validation_receipt",
+        &[
+            ("receipt_id", receipt.receipt_id.as_str()),
+            ("operation_kind", &receipt.operation_kind),
+            ("idempotency_scope_ref", &receipt.idempotency_scope_ref),
+            ("base_key", &receipt.base_key),
+            ("request_fingerprint", receipt.request_fingerprint.as_str()),
+            ("aggregate_kind", &receipt.aggregate_kind),
+            ("aggregate_id", &receipt.aggregate_id),
+            ("role_session_id", role_session_id),
+            ("turn_id", turn_id),
+            ("provider_handle_ref", provider_handle_ref),
+            ("owner_fingerprint", owner_fingerprint),
+            ("expected_revision", &expected_revision),
+            ("binding_revision", &binding_revision),
+            ("correlation_id", receipt.correlation_id.as_str()),
+            ("provider_attempt_ref", provider_attempt_ref),
+            ("result_ref", receipt.result_ref.as_str()),
+            ("status", receipt.status.as_str()),
+            ("created_at", &receipt.created_at),
+        ],
+    )
+}
+
+fn validate_handoff_context_validation_receipt_in_transaction(
+    transaction: &Transaction<'_>,
+    receipt: &M3CommandReceiptDto,
+    witness: &PersistedHandoffValidationWitness,
+    source_binding: &SessionBinding,
+    expected_scope_ref: &OpaqueRef,
+    expected_object_ref: &OpaqueRef,
+) -> Result<(ConversationContextRef, Sha256Digest), M3RoleSessionRepositoryError> {
+    if receipt.status != M3CommandReceiptStatus::Committed
+        || receipt.operation_kind != "UPSERT_CONVERSATION_CONTEXT"
+        || receipt.aggregate_kind != "CONVERSATION_CONTEXT"
+        || receipt.aggregate_id != receipt.result_ref.as_str()
+        || receipt.role_session_id.as_ref() != Some(&source_binding.role_session_id)
+        || receipt.owner_fingerprint.as_ref() != Some(&source_binding.owner_fingerprint)
+        || receipt.binding_revision != Some(source_binding.binding_revision)
+        || receipt.provider_handle_ref.as_ref() != Some(&source_binding.provider_handle_ref)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_validation_receipt_semantics_mismatch",
+        ));
+    }
+    let context_ref = ConversationContextRef::try_from_canonical(receipt.aggregate_id.clone())
+        .map_err(domain_error)?;
+    let context =
+        load_context_by_ref_in_transaction(transaction, &context_ref)?.ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_source_validation_context_missing")
+        })?;
+    if context.context.role_session_id != source_binding.role_session_id
+        || context.permission_snapshot_ref != source_binding.permission_snapshot_ref
+        || context.binding_revision != source_binding.binding_revision
+        || context.context.scope_ref != *expected_scope_ref
+        || context.context.current_object_ref != *expected_object_ref
+        || context.updated_at != witness.context_updated_at
+        || receipt.created_at != witness.trusted_recorded_at
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_validation_context_mismatch",
+        ));
+    }
+    Ok((context_ref, context.context_metadata_hash))
+}
+
+fn load_handoff_return_validation_window_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+    returned_revision: u64,
+) -> Result<HandoffReceipt, M3RoleSessionRepositoryError> {
+    let window_revision = returned_revision.checked_sub(1).ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_source_validation_window_revision_invalid")
+    })?;
+    let window =
+        load_handoff_receipt_by_revision_in_transaction(transaction, handoff_id, window_revision)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_source_validation_window_missing")
+            })?;
+    if window.handoff_id != *handoff_id
+        || window.handoff_revision != window_revision
+        || window.handoff_status != HandoffState::ReturnPending
+        || !matches!(
+            window.receipt_kind,
+            HandoffReceiptKind::ReturnRequested | HandoffReceiptKind::ReturnRetried
+        )
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_validation_window_mismatch",
+        ));
+    }
+    Ok(window)
+}
+
+fn validate_handoff_source_validation_window_time(
+    window: &HandoffReceipt,
+    validation_created_at: &str,
+    returned_at: &str,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let window_at = parse_handoff_utc_instant(
+        "handoff_source_validation_window_recorded_at",
+        &window.recorded_at,
+    )?;
+    let validation_at = parse_handoff_utc_instant(
+        "handoff_source_validation_receipt_created_at",
+        validation_created_at,
+    )?;
+    let returned_at =
+        parse_handoff_utc_instant("handoff_source_validation_returned_at", returned_at)?;
+    if validation_at < window_at {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_validation_receipt_before_return_window",
+        ));
+    }
+    if validation_at > returned_at {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_validation_receipt_after_returned",
+        ));
+    }
+    Ok(())
+}
+
+fn handoff_validation_witness_digest(
+    witness: &PersistedHandoffValidationWitness,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let validation_expected_session_revision =
+        witness.validation_expected_session_revision.to_string();
+    let validated_session_revision = witness.validated_session_revision.to_string();
+    let source_binding_revision = witness.source_binding_revision.to_string();
+    metadata_digest(
+        "m3_handoff_validation_witness",
+        &[
+            (
+                "validation_receipt_ref",
+                witness.validation_receipt_ref.as_str(),
+            ),
+            (
+                "validation_context_ref",
+                witness.validation_context_ref.as_str(),
+            ),
+            (
+                "source_role_session_id",
+                witness.source_role_session_id.as_str(),
+            ),
+            ("source_actor_id", witness.source_actor_id.as_str()),
+            (
+                "source_owner_fingerprint",
+                witness.source_owner_fingerprint.as_str(),
+            ),
+            (
+                "validation_expected_session_revision",
+                &validation_expected_session_revision,
+            ),
+            ("validated_session_revision", &validated_session_revision),
+            ("source_binding_revision", &source_binding_revision),
+            (
+                "source_permission_snapshot_ref",
+                witness.source_permission_snapshot_ref.as_str(),
+            ),
+            (
+                "previous_permission_descriptor_digest",
+                witness.previous_permission_descriptor_digest.as_str(),
+            ),
+            (
+                "source_permission_descriptor_digest",
+                witness.source_permission_descriptor_digest.as_str(),
+            ),
+            (
+                "source_binding_proof_digest",
+                witness.source_binding_proof_digest.as_str(),
+            ),
+            ("source_object_ref", witness.source_object_ref.as_str()),
+            (
+                "validation_context_hash",
+                witness.validation_context_hash.as_str(),
+            ),
+            (
+                "validation_receipt_hash",
+                witness.validation_receipt_hash.as_str(),
+            ),
+            ("context_updated_at", &witness.context_updated_at),
+            ("trusted_recorded_at", &witness.trusted_recorded_at),
+        ],
+    )
+}
+
+fn new_handoff_validation_witness(
+    receipt: &M3CommandReceiptDto,
+    context: &ConversationContext,
+    binding: &SessionBinding,
+    previous_permission: Option<&PermissionSnapshotDescriptor>,
+    current_permission: &PermissionSnapshotDescriptor,
+    validated_session_revision: u64,
+    context_hash: &Sha256Digest,
+    context_updated_at: &str,
+    trusted_recorded_at: &str,
+) -> Result<PersistedHandoffValidationWitness, M3RoleSessionRepositoryError> {
+    let validation_expected_session_revision = receipt.expected_revision.ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_validation_session_revision_missing")
+    })?;
+    if receipt.status != M3CommandReceiptStatus::Committed
+        || receipt.operation_kind != "UPSERT_CONVERSATION_CONTEXT"
+        || receipt.aggregate_kind != "CONVERSATION_CONTEXT"
+        || receipt.aggregate_id != context.context_ref.as_str()
+        || receipt.result_ref.as_str() != context.context_ref.as_str()
+        || receipt.role_session_id.as_ref() != Some(&context.role_session_id)
+        || receipt.owner_fingerprint.as_ref() != Some(&binding.owner_fingerprint)
+        || receipt.binding_revision != Some(binding.binding_revision)
+        || receipt.created_at != trusted_recorded_at
+        || binding.role_session_id != context.role_session_id
+        || binding.current_object_ref != context.current_object_ref
+        || current_permission.snapshot_ref != binding.permission_snapshot_ref
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_validation_witness_shape_mismatch",
+        ));
+    }
+    let previous_permission_descriptor_digest = permission_descriptor_digest(previous_permission)?;
+    let source_permission_descriptor_digest =
+        permission_descriptor_digest(Some(current_permission))?;
+    let source_binding_proof_digest = handoff_binding_proof_digest(binding)?;
+    let validation_receipt_hash = handoff_validation_receipt_digest(receipt)?;
+    let mut witness = PersistedHandoffValidationWitness {
+        validation_receipt_ref: receipt.receipt_id.clone(),
+        validation_context_ref: context.context_ref.clone(),
+        source_role_session_id: context.role_session_id.clone(),
+        source_actor_id: binding.actor_id.clone(),
+        source_owner_fingerprint: binding.owner_fingerprint.clone(),
+        validation_expected_session_revision,
+        validated_session_revision,
+        source_binding_revision: binding.binding_revision,
+        source_permission_snapshot_ref: binding.permission_snapshot_ref.clone(),
+        previous_permission_descriptor_digest,
+        source_permission_descriptor_digest,
+        source_binding_proof_digest,
+        source_object_ref: context.current_object_ref.clone(),
+        validation_context_hash: context_hash.clone(),
+        validation_receipt_hash,
+        context_updated_at: context_updated_at.to_string(),
+        trusted_recorded_at: trusted_recorded_at.to_string(),
+        witness_digest: Sha256Digest::of_bytes(b"m3.handoff.validation-witness.pending/v1"),
+    };
+    witness.witness_digest = handoff_validation_witness_digest(&witness)?;
+    Ok(witness)
+}
+
+fn insert_handoff_validation_witness_in_transaction(
+    transaction: &Transaction<'_>,
+    witness: &PersistedHandoffValidationWitness,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_validation_witnesses (
+                 validation_receipt_ref,validation_context_ref,source_role_session_id,
+                 source_actor_id,source_owner_fingerprint,
+                 validation_expected_session_revision,validated_session_revision,
+                 source_binding_revision,source_permission_snapshot_ref,
+                 previous_permission_descriptor_digest,source_permission_descriptor_digest,
+                 source_binding_proof_digest,source_object_ref,validation_context_hash,
+                 validation_receipt_hash,context_updated_at,trusted_recorded_at,witness_digest
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+            params![
+                witness.validation_receipt_ref.as_str(),
+                witness.validation_context_ref.as_str(),
+                witness.source_role_session_id.as_str(),
+                witness.source_actor_id.as_str(),
+                witness.source_owner_fingerprint.as_str(),
+                i64::try_from(witness.validation_expected_session_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_validation_expected_session_revision_i64_required",
+                    )
+                })?,
+                i64::try_from(witness.validated_session_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_validation_validated_session_revision_i64_required",
+                    )
+                })?,
+                i64::try_from(witness.source_binding_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_validation_binding_revision_i64_required",
+                    )
+                })?,
+                witness.source_permission_snapshot_ref.as_str(),
+                witness.previous_permission_descriptor_digest.as_str(),
+                witness.source_permission_descriptor_digest.as_str(),
+                witness.source_binding_proof_digest.as_str(),
+                witness.source_object_ref.as_str(),
+                witness.validation_context_hash.as_str(),
+                witness.validation_receipt_hash.as_str(),
+                &witness.context_updated_at,
+                &witness.trusted_recorded_at,
+                witness.witness_digest.as_str(),
+            ],
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_validation_witness_insert", error)
+        })?;
+    Ok(())
+}
+
+struct RawHandoffValidationWitness {
+    validation_receipt_ref: String,
+    validation_context_ref: String,
+    source_role_session_id: String,
+    source_actor_id: String,
+    source_owner_fingerprint: String,
+    validation_expected_session_revision: i64,
+    validated_session_revision: i64,
+    source_binding_revision: i64,
+    source_permission_snapshot_ref: String,
+    previous_permission_descriptor_digest: String,
+    source_permission_descriptor_digest: String,
+    source_binding_proof_digest: String,
+    source_object_ref: String,
+    validation_context_hash: String,
+    validation_receipt_hash: String,
+    context_updated_at: String,
+    trusted_recorded_at: String,
+    witness_digest: String,
+}
+
+fn handoff_validation_witness_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<RawHandoffValidationWitness> {
+    Ok(RawHandoffValidationWitness {
+        validation_receipt_ref: row.get(0)?,
+        validation_context_ref: row.get(1)?,
+        source_role_session_id: row.get(2)?,
+        source_actor_id: row.get(3)?,
+        source_owner_fingerprint: row.get(4)?,
+        validation_expected_session_revision: row.get(5)?,
+        validated_session_revision: row.get(6)?,
+        source_binding_revision: row.get(7)?,
+        source_permission_snapshot_ref: row.get(8)?,
+        previous_permission_descriptor_digest: row.get(9)?,
+        source_permission_descriptor_digest: row.get(10)?,
+        source_binding_proof_digest: row.get(11)?,
+        source_object_ref: row.get(12)?,
+        validation_context_hash: row.get(13)?,
+        validation_receipt_hash: row.get(14)?,
+        context_updated_at: row.get(15)?,
+        trusted_recorded_at: row.get(16)?,
+        witness_digest: row.get(17)?,
+    })
+}
+
+fn parse_handoff_validation_witness(
+    raw: RawHandoffValidationWitness,
+) -> Result<PersistedHandoffValidationWitness, M3RoleSessionRepositoryError> {
+    Ok(PersistedHandoffValidationWitness {
+        validation_receipt_ref: OpaqueRef::try_from_canonical(raw.validation_receipt_ref)
+            .map_err(domain_error)?,
+        validation_context_ref: ConversationContextRef::try_from_canonical(
+            raw.validation_context_ref,
+        )
+        .map_err(domain_error)?,
+        source_role_session_id: RoleSessionId::try_from_canonical(raw.source_role_session_id)
+            .map_err(domain_error)?,
+        source_actor_id: OpaqueRef::try_from_canonical(raw.source_actor_id)
+            .map_err(domain_error)?,
+        source_owner_fingerprint: OwnerFingerprint::try_from_canonical(
+            raw.source_owner_fingerprint,
+        )
+        .map_err(domain_error)?,
+        validation_expected_session_revision: i64_to_u64(
+            "m3_handoff_validation_expected_session_revision",
+            raw.validation_expected_session_revision,
+        )?,
+        validated_session_revision: i64_to_u64(
+            "m3_handoff_validation_validated_session_revision",
+            raw.validated_session_revision,
+        )?,
+        source_binding_revision: i64_to_u64(
+            "m3_handoff_validation_source_binding_revision",
+            raw.source_binding_revision,
+        )?,
+        source_permission_snapshot_ref: OpaqueRef::try_from_canonical(
+            raw.source_permission_snapshot_ref,
+        )
+        .map_err(domain_error)?,
+        previous_permission_descriptor_digest: Sha256Digest::try_from_canonical(
+            raw.previous_permission_descriptor_digest,
+        )
+        .map_err(domain_error)?,
+        source_permission_descriptor_digest: Sha256Digest::try_from_canonical(
+            raw.source_permission_descriptor_digest,
+        )
+        .map_err(domain_error)?,
+        source_binding_proof_digest: Sha256Digest::try_from_canonical(
+            raw.source_binding_proof_digest,
+        )
+        .map_err(domain_error)?,
+        source_object_ref: OpaqueRef::try_from_canonical(raw.source_object_ref)
+            .map_err(domain_error)?,
+        validation_context_hash: Sha256Digest::try_from_canonical(raw.validation_context_hash)
+            .map_err(domain_error)?,
+        validation_receipt_hash: Sha256Digest::try_from_canonical(raw.validation_receipt_hash)
+            .map_err(domain_error)?,
+        context_updated_at: raw.context_updated_at,
+        trusted_recorded_at: raw.trusted_recorded_at,
+        witness_digest: Sha256Digest::try_from_canonical(raw.witness_digest)
+            .map_err(domain_error)?,
+    })
+}
+
+fn load_handoff_validation_witness_in_transaction(
+    transaction: &Transaction<'_>,
+    validation_receipt_ref: &OpaqueRef,
+) -> Result<Option<PersistedHandoffValidationWitness>, M3RoleSessionRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT validation_receipt_ref,validation_context_ref,source_role_session_id,
+                    source_actor_id,source_owner_fingerprint,
+                    validation_expected_session_revision,validated_session_revision,
+                    source_binding_revision,source_permission_snapshot_ref,
+                    previous_permission_descriptor_digest,source_permission_descriptor_digest,
+                    source_binding_proof_digest,source_object_ref,validation_context_hash,
+                    validation_receipt_hash,context_updated_at,trusted_recorded_at,witness_digest
+             FROM m3_handoff_validation_witnesses
+             WHERE validation_receipt_ref = ?1",
+            [validation_receipt_ref.as_str()],
+            handoff_validation_witness_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_validation_witness_load", error)
+        })?
+        .map(parse_handoff_validation_witness)
+        .transpose()
+}
+
+fn validate_handoff_validation_witness_in_transaction(
+    transaction: &Transaction<'_>,
+    witness: &PersistedHandoffValidationWitness,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let context_updated_at = parse_handoff_utc_instant(
+        "m3_handoff_validation_witness_context_updated_at",
+        &witness.context_updated_at,
+    )?;
+    let trusted_recorded_at = parse_handoff_utc_instant(
+        "m3_handoff_validation_witness_trusted_recorded_at",
+        &witness.trusted_recorded_at,
+    )?;
+    let receipt =
+        load_command_receipt_by_id_in_transaction(transaction, &witness.validation_receipt_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_validation_witness_receipt_missing")
+            })?;
+    let binding = load_session_binding_at_in_transaction(
+        transaction,
+        &witness.source_role_session_id,
+        witness.source_binding_revision,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_validation_witness_binding_missing")
+    })?;
+    let context = load_context_by_ref_in_transaction(transaction, &witness.validation_context_ref)?
+        .ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_validation_witness_context_missing")
+        })?;
+    let descriptor_digest: Option<String> = transaction
+        .query_row(
+            "SELECT descriptor_digest FROM m3_handoff_permission_descriptors
+             WHERE permission_snapshot_ref = ?1",
+            [witness.source_permission_snapshot_ref.as_str()],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_validation_witness_descriptor_load",
+                error,
+            )
+        })?;
+    let descriptor_digest = descriptor_digest
+        .map(Sha256Digest::try_from_canonical)
+        .transpose()
+        .map_err(domain_error)?
+        .ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_validation_witness_descriptor_missing")
+        })?;
+    let revision = witness.validation_expected_session_revision.to_string();
+    let source_fence = load_handoff_source_command_fence_in_transaction(
+        transaction,
+        &witness.validation_receipt_ref,
+    )?;
+    let source_fence_revision = source_fence
+        .as_ref()
+        .map(|fence| fence.handoff_revision.to_string());
+    let expected_request_fingerprint =
+        match (source_fence.as_ref(), source_fence_revision.as_deref()) {
+            (Some(fence), Some(handoff_revision)) => request_fingerprint_for_fields(
+                M3RequestOperation::UpsertConversationContext,
+                &[
+                    witness.validation_context_ref.as_str(),
+                    witness.source_role_session_id.as_str(),
+                    witness.validation_context_hash.as_str(),
+                    &revision,
+                    witness.source_permission_snapshot_ref.as_str(),
+                    witness.previous_permission_descriptor_digest.as_str(),
+                    witness.source_permission_descriptor_digest.as_str(),
+                    fence.handoff_id.as_str(),
+                    handoff_revision,
+                ],
+            ),
+            _ => request_fingerprint_for_fields(
+                M3RequestOperation::UpsertConversationContext,
+                &[
+                    witness.validation_context_ref.as_str(),
+                    witness.source_role_session_id.as_str(),
+                    witness.validation_context_hash.as_str(),
+                    &revision,
+                    witness.source_permission_snapshot_ref.as_str(),
+                    witness.previous_permission_descriptor_digest.as_str(),
+                    witness.source_permission_descriptor_digest.as_str(),
+                ],
+            ),
+        }
+        .map_err(domain_error)?;
+    if receipt.status != M3CommandReceiptStatus::Committed
+        || receipt.operation_kind != "UPSERT_CONVERSATION_CONTEXT"
+        || receipt.aggregate_kind != "CONVERSATION_CONTEXT"
+        || receipt.aggregate_id != witness.validation_context_ref.as_str()
+        || receipt.result_ref.as_str() != witness.validation_context_ref.as_str()
+        || receipt.role_session_id.as_ref() != Some(&witness.source_role_session_id)
+        || receipt.owner_fingerprint.as_ref() != Some(&witness.source_owner_fingerprint)
+        || receipt.expected_revision != Some(witness.validation_expected_session_revision)
+        || witness.validated_session_revision < witness.validation_expected_session_revision
+        || witness.validated_session_revision > witness.validation_expected_session_revision + 1
+        || receipt.binding_revision != Some(witness.source_binding_revision)
+        || receipt.created_at != witness.trusted_recorded_at
+        || receipt.request_fingerprint != expected_request_fingerprint
+        || binding.actor_id != witness.source_actor_id
+        || binding.owner_fingerprint != witness.source_owner_fingerprint
+        || binding.permission_snapshot_ref != witness.source_permission_snapshot_ref
+        || binding.current_object_ref != witness.source_object_ref
+        || handoff_binding_proof_digest(&binding)? != witness.source_binding_proof_digest
+        || context.context.role_session_id != witness.source_role_session_id
+        || context.context.current_object_ref != witness.source_object_ref
+        || context.permission_snapshot_ref != witness.source_permission_snapshot_ref
+        || context.binding_revision != witness.source_binding_revision
+        || context.context_metadata_hash != witness.validation_context_hash
+        || context.updated_at != witness.context_updated_at
+        || context_updated_at > trusted_recorded_at
+        || descriptor_digest != witness.source_permission_descriptor_digest
+        || handoff_validation_receipt_digest(&receipt)? != witness.validation_receipt_hash
+        || handoff_validation_witness_digest(witness)? != witness.witness_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_validation_witness_drift",
+        ));
+    }
+    Ok(())
+}
+
+fn load_handoff_source_command_fence_anchor_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+    expected_handoff_revision: u64,
+    command: &UpsertConversationContextCommand,
+) -> Result<HandoffSourceCommandFenceAnchor, M3RoleSessionRepositoryError> {
+    let handoff = load_required_handoff_in_transaction(transaction, handoff_id)?;
+    validate_handoff_rehydration_in_transaction(transaction, &handoff)?;
+    if handoff.status != HandoffState::Returned
+        || handoff.revision != expected_handoff_revision
+        || command.context.role_session_id != handoff.from_role_session_id
+        || command.binding.actor_id != handoff.from_actor_id
+        || command.binding.role_ref != handoff.source_role_ref
+        || command.binding.scope_ref != handoff.scope_ref
+        || command.binding.current_object_ref != handoff.source_current_object_ref
+        || command.binding.execution_channel != handoff.source_execution_channel
+        || command.binding.owner_fingerprint != handoff.from_owner_fingerprint
+        || command.metadata.correlation_id != handoff.correlation_id
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_returned_authority_required",
+        ));
+    }
+    let previous_permission = command.previous_permission.as_ref().ok_or_else(|| {
+        M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_previous_permission_required",
+        )
+    })?;
+    let current_permission = command.current_permission.as_ref().ok_or_else(|| {
+        M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_current_permission_required",
+        )
+    })?;
+    let authority = M3HandoffSessionAuthority {
+        role_session_id: command.context.role_session_id.clone(),
+        binding: command.binding.clone(),
+        previous_permission: previous_permission.clone(),
+        current_permission: current_permission.clone(),
+        expected_session_revision: command.expected_session_revision,
+    };
+    let source_session = assess_handoff_authority(transaction, &authority, true, "source")?;
+    if !permission_relation_for_binding(
+        &source_session,
+        &command.binding,
+        Some(previous_permission),
+        Some(current_permission),
+    )
+    .allows_continue()
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_permission_revalidation_required",
+        ));
+    }
+    let source_binding =
+        load_session_binding_in_transaction(transaction, &command.context.role_session_id)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_command_fence_current_binding_required",
+                )
+            })?;
+    if source_binding.actor_id != command.binding.actor_id
+        || source_binding.role_ref != command.binding.role_ref
+        || source_binding.scope_ref != command.binding.scope_ref
+        || source_binding.current_object_ref != command.binding.current_object_ref
+        || source_binding.execution_channel != command.binding.execution_channel
+        || source_binding.owner_fingerprint != command.binding.owner_fingerprint
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_current_binding_mismatch",
+        ));
+    }
+    let returned =
+        load_handoff_receipt_by_id_in_transaction(transaction, &handoff.current_receipt_id)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_returned_receipt_missing")
+            })?;
+    if returned.receipt_kind != HandoffReceiptKind::Returned
+        || returned.handoff_id != handoff.handoff_id
+        || returned.handoff_revision != handoff.revision
+        || returned.handoff_status != HandoffState::Returned
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_returned_receipt_mismatch",
+        ));
+    }
+    Ok(HandoffSourceCommandFenceAnchor {
+        handoff_id: handoff.handoff_id,
+        handoff_revision: handoff.revision,
+        returned_receipt_id: returned.receipt_id,
+        returned_transition_integrity_hash: returned.transition_integrity_hash,
+        returned_result_ref: returned.result_ref,
+        returned_result_hash: returned.result_hash,
+    })
+}
+
+/// Exact replay validates the already-minted causal evidence against the live
+/// RETURNED aggregate and current source authority. It deliberately does not
+/// reapply the fresh command's pre-write session CAS: a successful permission
+/// narrowing advances that revision before a client can replay a lost response.
+fn validate_handoff_source_command_fence_replay_in_transaction(
+    transaction: &Transaction<'_>,
+    fence: &PersistedHandoffSourceCommandFence,
+    handoff_id: &HandoffId,
+    expected_handoff_revision: u64,
+    command: &UpsertConversationContextCommand,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    validate_handoff_source_command_fence_in_transaction(transaction, fence)?;
+    validate_handoff_source_command_fence_request(fence, handoff_id, expected_handoff_revision)?;
+
+    let handoff = load_required_handoff_in_transaction(transaction, handoff_id)?;
+    validate_handoff_rehydration_in_transaction(transaction, &handoff)?;
+    if handoff.status != HandoffState::Returned
+        || handoff.revision != expected_handoff_revision
+        || handoff.current_receipt_id != fence.returned_receipt_id
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_request_mismatch",
+        ));
+    }
+
+    let previous_permission = command.previous_permission.as_ref().ok_or_else(|| {
+        M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_previous_permission_required",
+        )
+    })?;
+    let current_permission = command.current_permission.as_ref().ok_or_else(|| {
+        M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_current_permission_required",
+        )
+    })?;
+    let authority = M3HandoffSessionAuthority {
+        role_session_id: command.context.role_session_id.clone(),
+        binding: command.binding.clone(),
+        previous_permission: previous_permission.clone(),
+        current_permission: current_permission.clone(),
+        expected_session_revision: command.expected_session_revision,
+    };
+    validate_source_authority_for_handoff(&handoff, &authority)?;
+    validate_handoff_replay_session(transaction, &authority, "source")?;
+    let current_binding =
+        load_session_binding_in_transaction(transaction, &authority.role_session_id)?.ok_or_else(
+            || {
+                M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_command_fence_current_binding_required",
+                )
+            },
+        )?;
+    if !session_binding_matches_server_binding(&current_binding, &command.binding) {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_current_binding_mismatch",
+        ));
+    }
+    Ok(())
+}
+
+fn handoff_source_command_fence_digest(
+    fence: &PersistedHandoffSourceCommandFence,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let handoff_revision = fence.handoff_revision.to_string();
+    let source_binding_revision = fence.source_binding_revision.to_string();
+    let source_session_revision = fence.source_session_revision.to_string();
+    metadata_digest(
+        "m3_handoff_source_command_fence",
+        &[
+            (
+                "source_command_receipt_ref",
+                fence.source_command_receipt_ref.as_str(),
+            ),
+            ("handoff_id", fence.handoff_id.as_str()),
+            ("handoff_revision", &handoff_revision),
+            ("returned_receipt_id", fence.returned_receipt_id.as_str()),
+            (
+                "returned_transition_integrity_hash",
+                fence.returned_transition_integrity_hash.as_str(),
+            ),
+            ("returned_result_ref", fence.returned_result_ref.as_str()),
+            ("returned_result_hash", fence.returned_result_hash.as_str()),
+            (
+                "source_role_session_id",
+                fence.source_role_session_id.as_str(),
+            ),
+            ("source_actor_id", fence.source_actor_id.as_str()),
+            (
+                "source_owner_fingerprint",
+                fence.source_owner_fingerprint.as_str(),
+            ),
+            ("source_session_revision", &source_session_revision),
+            ("source_binding_revision", &source_binding_revision),
+            (
+                "source_permission_snapshot_ref",
+                fence.source_permission_snapshot_ref.as_str(),
+            ),
+            (
+                "source_binding_proof_digest",
+                fence.source_binding_proof_digest.as_str(),
+            ),
+            (
+                "validation_witness_digest",
+                fence.validation_witness_digest.as_str(),
+            ),
+            ("recorded_at", &fence.recorded_at),
+        ],
+    )
+}
+
+fn new_handoff_source_command_fence(
+    anchor: &HandoffSourceCommandFenceAnchor,
+    receipt: &M3CommandReceiptDto,
+    binding: &SessionBinding,
+    witness: &PersistedHandoffValidationWitness,
+) -> Result<PersistedHandoffSourceCommandFence, M3RoleSessionRepositoryError> {
+    if receipt.receipt_id != witness.validation_receipt_ref
+        || receipt.created_at != witness.trusted_recorded_at
+        || receipt.role_session_id.as_ref() != Some(&binding.role_session_id)
+        || receipt.owner_fingerprint.as_ref() != Some(&binding.owner_fingerprint)
+        || receipt.binding_revision != Some(binding.binding_revision)
+        || witness.source_role_session_id != binding.role_session_id
+        || witness.source_actor_id != binding.actor_id
+        || witness.source_owner_fingerprint != binding.owner_fingerprint
+        || witness.source_binding_revision != binding.binding_revision
+        || witness.source_permission_snapshot_ref != binding.permission_snapshot_ref
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_evidence_mismatch",
+        ));
+    }
+    let mut fence = PersistedHandoffSourceCommandFence {
+        source_command_receipt_ref: receipt.receipt_id.clone(),
+        fence_digest: Sha256Digest::of_bytes(b"m3.handoff-source-command-fence/pending"),
+        handoff_id: anchor.handoff_id.clone(),
+        handoff_revision: anchor.handoff_revision,
+        returned_receipt_id: anchor.returned_receipt_id.clone(),
+        returned_transition_integrity_hash: anchor.returned_transition_integrity_hash.clone(),
+        returned_result_ref: anchor.returned_result_ref.clone(),
+        returned_result_hash: anchor.returned_result_hash.clone(),
+        source_role_session_id: binding.role_session_id.clone(),
+        source_actor_id: binding.actor_id.clone(),
+        source_owner_fingerprint: binding.owner_fingerprint.clone(),
+        source_session_revision: witness.validated_session_revision,
+        source_binding_revision: binding.binding_revision,
+        source_permission_snapshot_ref: binding.permission_snapshot_ref.clone(),
+        source_binding_proof_digest: handoff_binding_proof_digest(binding)?,
+        validation_witness_digest: witness.witness_digest.clone(),
+        recorded_at: receipt.created_at.clone(),
+    };
+    fence.fence_digest = handoff_source_command_fence_digest(&fence)?;
+    Ok(fence)
+}
+
+fn insert_handoff_source_command_fence_in_transaction(
+    transaction: &Transaction<'_>,
+    fence: &PersistedHandoffSourceCommandFence,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_source_command_fences (
+                 source_command_receipt_ref,fence_digest,handoff_id,handoff_revision,
+                 returned_receipt_id,returned_transition_integrity_hash,
+                 returned_result_ref,returned_result_hash,source_role_session_id,
+                 source_actor_id,source_owner_fingerprint,source_session_revision,
+                 source_binding_revision,
+                 source_permission_snapshot_ref,source_binding_proof_digest,
+                 validation_witness_digest,recorded_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
+            params![
+                fence.source_command_receipt_ref.as_str(),
+                fence.fence_digest.as_str(),
+                fence.handoff_id.as_str(),
+                i64::try_from(fence.handoff_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new("m3_handoff_revision_i64_required")
+                })?,
+                fence.returned_receipt_id.as_str(),
+                fence.returned_transition_integrity_hash.as_str(),
+                fence.returned_result_ref.as_str(),
+                fence.returned_result_hash.as_str(),
+                fence.source_role_session_id.as_str(),
+                fence.source_actor_id.as_str(),
+                fence.source_owner_fingerprint.as_str(),
+                i64::try_from(fence.source_session_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_source_command_fence_session_revision_i64_required",
+                    )
+                })?,
+                i64::try_from(fence.source_binding_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_source_command_fence_binding_revision_i64_required",
+                    )
+                })?,
+                fence.source_permission_snapshot_ref.as_str(),
+                fence.source_binding_proof_digest.as_str(),
+                fence.validation_witness_digest.as_str(),
+                &fence.recorded_at,
+            ],
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_source_command_fence_insert", error)
+        })?;
+    Ok(())
+}
+
+fn handoff_source_command_fence_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<(
+    String,
+    String,
+    String,
+    i64,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    i64,
+    i64,
+    String,
+    String,
+    String,
+    String,
+)> {
+    Ok((
+        row.get(0)?,
+        row.get(1)?,
+        row.get(2)?,
+        row.get(3)?,
+        row.get(4)?,
+        row.get(5)?,
+        row.get(6)?,
+        row.get(7)?,
+        row.get(8)?,
+        row.get(9)?,
+        row.get(10)?,
+        row.get(11)?,
+        row.get(12)?,
+        row.get(13)?,
+        row.get(14)?,
+        row.get(15)?,
+        row.get(16)?,
+    ))
+}
+
+fn load_handoff_source_command_fence_in_transaction(
+    transaction: &Transaction<'_>,
+    receipt_ref: &OpaqueRef,
+) -> Result<Option<PersistedHandoffSourceCommandFence>, M3RoleSessionRepositoryError> {
+    let raw = transaction
+        .query_row(
+            "SELECT source_command_receipt_ref,fence_digest,handoff_id,handoff_revision,
+                    returned_receipt_id,returned_transition_integrity_hash,
+                    returned_result_ref,returned_result_hash,source_role_session_id,
+                    source_actor_id,source_owner_fingerprint,source_session_revision,
+                    source_binding_revision,
+                    source_permission_snapshot_ref,source_binding_proof_digest,
+                    validation_witness_digest,recorded_at
+             FROM m3_handoff_source_command_fences
+             WHERE source_command_receipt_ref = ?1",
+            [receipt_ref.as_str()],
+            handoff_source_command_fence_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_source_command_fence_load", error)
+        })?;
+    let Some((
+        source_command_receipt_ref,
+        fence_digest,
+        handoff_id,
+        handoff_revision,
+        returned_receipt_id,
+        returned_transition_integrity_hash,
+        returned_result_ref,
+        returned_result_hash,
+        source_role_session_id,
+        source_actor_id,
+        source_owner_fingerprint,
+        source_session_revision,
+        source_binding_revision,
+        source_permission_snapshot_ref,
+        source_binding_proof_digest,
+        validation_witness_digest,
+        recorded_at,
+    )) = raw
+    else {
+        return Ok(None);
+    };
+    Ok(Some(PersistedHandoffSourceCommandFence {
+        source_command_receipt_ref: OpaqueRef::try_from_canonical(source_command_receipt_ref)
+            .map_err(domain_error)?,
+        fence_digest: Sha256Digest::try_from_canonical(fence_digest).map_err(domain_error)?,
+        handoff_id: HandoffId::try_from_canonical(handoff_id).map_err(domain_error)?,
+        handoff_revision: i64_to_u64(
+            "m3_handoff_source_command_fence_handoff_revision",
+            handoff_revision,
+        )?,
+        returned_receipt_id: OpaqueRef::try_from_canonical(returned_receipt_id)
+            .map_err(domain_error)?,
+        returned_transition_integrity_hash: Sha256Digest::try_from_canonical(
+            returned_transition_integrity_hash,
+        )
+        .map_err(domain_error)?,
+        returned_result_ref: OpaqueRef::try_from_canonical(returned_result_ref)
+            .map_err(domain_error)?,
+        returned_result_hash: Sha256Digest::try_from_canonical(returned_result_hash)
+            .map_err(domain_error)?,
+        source_role_session_id: RoleSessionId::try_from_canonical(source_role_session_id)
+            .map_err(domain_error)?,
+        source_actor_id: OpaqueRef::try_from_canonical(source_actor_id).map_err(domain_error)?,
+        source_owner_fingerprint: OwnerFingerprint::try_from_canonical(source_owner_fingerprint)
+            .map_err(domain_error)?,
+        source_session_revision: i64_to_u64(
+            "m3_handoff_source_command_fence_session_revision",
+            source_session_revision,
+        )?,
+        source_binding_revision: i64_to_u64(
+            "m3_handoff_source_command_fence_binding_revision",
+            source_binding_revision,
+        )?,
+        source_permission_snapshot_ref: OpaqueRef::try_from_canonical(
+            source_permission_snapshot_ref,
+        )
+        .map_err(domain_error)?,
+        source_binding_proof_digest: Sha256Digest::try_from_canonical(source_binding_proof_digest)
+            .map_err(domain_error)?,
+        validation_witness_digest: Sha256Digest::try_from_canonical(validation_witness_digest)
+            .map_err(domain_error)?,
+        recorded_at,
+    }))
+}
+
+fn validate_handoff_source_command_fence_request(
+    fence: &PersistedHandoffSourceCommandFence,
+    handoff_id: &HandoffId,
+    expected_handoff_revision: u64,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if fence.handoff_id != *handoff_id || fence.handoff_revision != expected_handoff_revision {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_request_mismatch",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_handoff_source_command_fence_in_transaction(
+    transaction: &Transaction<'_>,
+    fence: &PersistedHandoffSourceCommandFence,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    validate_rfc3339_utc_timestamp(
+        "m3_handoff_source_command_fence_recorded_at",
+        &fence.recorded_at,
+    )?;
+    let receipt =
+        load_command_receipt_by_id_in_transaction(transaction, &fence.source_command_receipt_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_receipt_missing")
+            })?;
+    let witness = load_handoff_validation_witness_in_transaction(
+        transaction,
+        &fence.source_command_receipt_ref,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_witness_missing")
+    })?;
+    validate_handoff_validation_witness_in_transaction(transaction, &witness)?;
+    let binding = load_session_binding_at_in_transaction(
+        transaction,
+        &fence.source_role_session_id,
+        fence.source_binding_revision,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_binding_missing")
+    })?;
+    let returned =
+        load_handoff_receipt_by_id_in_transaction(transaction, &fence.returned_receipt_id)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_command_fence_returned_missing",
+                )
+            })?;
+    let handoff_matches: bool = transaction
+        .query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM m3_handoffs
+                 WHERE handoff_id = ?1 AND status = 'RETURNED' AND revision = ?2
+                   AND current_receipt_id = ?3 AND from_role_session_id = ?4
+                   AND from_actor_id = ?5 AND from_owner_fingerprint = ?6
+             )",
+            params![
+                fence.handoff_id.as_str(),
+                i64::try_from(fence.handoff_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new("m3_handoff_revision_i64_required")
+                })?,
+                fence.returned_receipt_id.as_str(),
+                fence.source_role_session_id.as_str(),
+                fence.source_actor_id.as_str(),
+                fence.source_owner_fingerprint.as_str(),
+            ],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|value| value != 0)
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_source_command_fence_handoff_load",
+                error,
+            )
+        })?;
+    let returned_at = parse_handoff_utc_instant(
+        "m3_handoff_source_command_fence_returned_at",
+        &returned.recorded_at,
+    )?;
+    let fence_at = parse_handoff_utc_instant(
+        "m3_handoff_source_command_fence_recorded_at",
+        &fence.recorded_at,
+    )?;
+    if receipt.status != M3CommandReceiptStatus::Committed
+        || receipt.operation_kind != "UPSERT_CONVERSATION_CONTEXT"
+        || receipt.role_session_id.as_ref() != Some(&fence.source_role_session_id)
+        || receipt.owner_fingerprint.as_ref() != Some(&fence.source_owner_fingerprint)
+        || receipt.binding_revision != Some(fence.source_binding_revision)
+        || receipt.created_at != fence.recorded_at
+        || receipt.correlation_id != returned.correlation_id
+        || receipt.idempotency_scope_ref
+            != handoff_source_application_context_idempotency_scope(
+                &fence.source_role_session_id,
+                &fence.handoff_id,
+            )
+        || witness.validation_receipt_ref != fence.source_command_receipt_ref
+        || witness.witness_digest != fence.validation_witness_digest
+        || witness.source_role_session_id != fence.source_role_session_id
+        || witness.source_actor_id != fence.source_actor_id
+        || witness.source_owner_fingerprint != fence.source_owner_fingerprint
+        || witness.validated_session_revision != fence.source_session_revision
+        || witness.source_binding_revision != fence.source_binding_revision
+        || witness.source_permission_snapshot_ref != fence.source_permission_snapshot_ref
+        || witness.source_binding_proof_digest != fence.source_binding_proof_digest
+        || witness.trusted_recorded_at != fence.recorded_at
+        || binding.actor_id != fence.source_actor_id
+        || binding.owner_fingerprint != fence.source_owner_fingerprint
+        || binding.permission_snapshot_ref != fence.source_permission_snapshot_ref
+        || handoff_binding_proof_digest(&binding)? != fence.source_binding_proof_digest
+        || returned.receipt_kind != HandoffReceiptKind::Returned
+        || returned.handoff_status != HandoffState::Returned
+        || returned.handoff_id != fence.handoff_id
+        || returned.handoff_revision != fence.handoff_revision
+        || returned.transition_integrity_hash != fence.returned_transition_integrity_hash
+        || returned.result_ref != fence.returned_result_ref
+        || returned.result_hash != fence.returned_result_hash
+        || returned_at > fence_at
+        || !handoff_matches
+        || handoff_source_command_fence_digest(fence)? != fence.fence_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_command_fence_drift",
+        ));
+    }
+    Ok(())
+}
+
+fn handoff_source_validation_proof_digest(
+    proof: &PersistedHandoffSourceValidationProof,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let handoff_revision = proof.handoff_revision.to_string();
+    let source_binding_revision = proof.source_binding_revision.to_string();
+    let validation_window_handoff_revision = proof.validation_window_handoff_revision.to_string();
+    metadata_digest(
+        "m3_handoff_source_validation_proof",
+        &[
+            ("returned_receipt_id", proof.returned_receipt_id.as_str()),
+            ("handoff_id", proof.handoff_id.as_str()),
+            ("handoff_revision", &handoff_revision),
+            ("result_ref", proof.result_ref.as_str()),
+            ("result_hash", proof.result_hash.as_str()),
+            (
+                "source_role_session_id",
+                proof.source_role_session_id.as_str(),
+            ),
+            ("source_actor_id", proof.source_actor_id.as_str()),
+            (
+                "source_owner_fingerprint",
+                proof.source_owner_fingerprint.as_str(),
+            ),
+            ("source_binding_revision", &source_binding_revision),
+            (
+                "source_permission_snapshot_ref",
+                proof.source_permission_snapshot_ref.as_str(),
+            ),
+            (
+                "source_permission_descriptor_digest",
+                proof.source_permission_descriptor_digest.as_str(),
+            ),
+            (
+                "source_binding_proof_digest",
+                proof.source_binding_proof_digest.as_str(),
+            ),
+            ("source_object_ref", proof.source_object_ref.as_str()),
+            (
+                "validation_receipt_ref",
+                proof.validation_receipt_ref.as_str(),
+            ),
+            (
+                "validation_receipt_hash",
+                proof.validation_receipt_hash.as_str(),
+            ),
+            (
+                "validation_witness_digest",
+                proof.validation_witness_digest.as_str(),
+            ),
+            ("validation_recorded_at", &proof.validation_recorded_at),
+            (
+                "validation_context_ref",
+                proof.validation_context_ref.as_str(),
+            ),
+            (
+                "validation_context_hash",
+                proof.validation_context_hash.as_str(),
+            ),
+            (
+                "validation_window_receipt_ref",
+                proof.validation_window_receipt_ref.as_str(),
+            ),
+            (
+                "validation_window_handoff_revision",
+                &validation_window_handoff_revision,
+            ),
+            (
+                "validation_window_receipt_hash",
+                proof.validation_window_receipt_hash.as_str(),
+            ),
+            (
+                "validation_window_recorded_at",
+                &proof.validation_window_recorded_at,
+            ),
+            ("returned_recorded_at", &proof.returned_recorded_at),
+        ],
+    )
+}
+
+fn validate_handoff_command_correlation(
+    handoff: &Handoff,
+    metadata: &M3CommandMetadata,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if metadata.correlation_id != handoff.correlation_id {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_correlation_mismatch",
+        ));
+    }
+    Ok(())
+}
+
+fn handoff_actor_session<'a>(
+    command: &PreparedHandoffTransition,
+    source: &'a RoleSession,
+    recipient: Option<&'a RoleSession>,
+) -> Result<&'a RoleSession, M3RoleSessionRepositoryError> {
+    match command.operation {
+        HandoffRequestOperation::Accept
+        | HandoffRequestOperation::Reject
+        | HandoffRequestOperation::RecordReturnResult => recipient.ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_recipient_actor_required")
+        }),
+        HandoffRequestOperation::Cancel
+        | HandoffRequestOperation::Expire
+        | HandoffRequestOperation::RequestReturn
+        | HandoffRequestOperation::RecordReturnTimeout
+        | HandoffRequestOperation::RetryReturn
+        | HandoffRequestOperation::CancelFailedReturn => Ok(source),
+        HandoffRequestOperation::Create | HandoffRequestOperation::RecordSourceApplication => Err(
+            M3RoleSessionRepositoryError::new("m3_handoff_transition_operation_invalid"),
+        ),
+    }
+}
+
+fn handoff_actor_authority<'a>(
+    command: &'a PreparedHandoffTransition,
+) -> Result<&'a M3HandoffSessionAuthority, M3RoleSessionRepositoryError> {
+    match command.operation {
+        HandoffRequestOperation::Accept
+        | HandoffRequestOperation::Reject
+        | HandoffRequestOperation::RecordReturnResult => {
+            command.recipient.as_ref().ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_recipient_authority_required")
+            })
+        }
+        HandoffRequestOperation::Cancel
+        | HandoffRequestOperation::Expire
+        | HandoffRequestOperation::RequestReturn
+        | HandoffRequestOperation::RecordReturnTimeout
+        | HandoffRequestOperation::RetryReturn
+        | HandoffRequestOperation::CancelFailedReturn => Ok(&command.source),
+        HandoffRequestOperation::Create | HandoffRequestOperation::RecordSourceApplication => Err(
+            M3RoleSessionRepositoryError::new("m3_handoff_transition_operation_invalid"),
+        ),
+    }
+}
+
+fn handoff_permission_descriptor_for_actor<'a>(
+    authority: &'a M3HandoffSessionAuthority,
+    actor: &RoleSession,
+) -> Result<&'a PermissionSnapshotDescriptor, M3RoleSessionRepositoryError> {
+    if authority.current_permission.snapshot_ref == actor.permission_snapshot_ref {
+        Ok(&authority.current_permission)
+    } else if authority.previous_permission.snapshot_ref == actor.permission_snapshot_ref {
+        Ok(&authority.previous_permission)
+    } else {
+        Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_actor_permission_descriptor_mismatch",
+        ))
+    }
+}
+
+fn validate_handoff_deadline(
+    handoff: &Handoff,
+    command: &PreparedHandoffTransition,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    // `execute_handoff_transition` overwrites this cloned command metadata from
+    // the repository clock only after the IMMEDIATE transaction is acquired.
+    let now = parse_handoff_utc_instant(
+        "handoff_repository_recorded_at",
+        &command.metadata.occurred_at,
+    )?;
+    match &command.mutation {
+        PreparedHandoffMutation::Accept => {
+            let accept_by = parse_handoff_utc_instant("handoff_accept_by", &handoff.accept_by)?;
+            if now >= accept_by {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_accept_deadline_elapsed",
+                ));
+            }
+        }
+        PreparedHandoffMutation::Expire => {
+            let accept_by = parse_handoff_utc_instant("handoff_accept_by", &handoff.accept_by)?;
+            if now < accept_by {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_expire_before_accept_deadline",
+                ));
+            }
+        }
+        PreparedHandoffMutation::ReturnResult { .. } => {
+            let return_by = handoff.return_by.as_deref().ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_return_deadline_missing")
+            })?;
+            if now >= parse_handoff_utc_instant("handoff_return_by", return_by)? {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_return_result_after_deadline",
+                ));
+            }
+        }
+        PreparedHandoffMutation::ReturnTimeout => {
+            let return_by = handoff.return_by.as_deref().ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_return_deadline_missing")
+            })?;
+            if now < parse_handoff_utc_instant("handoff_return_by", return_by)? {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_timeout_before_return_deadline",
+                ));
+            }
+        }
+        PreparedHandoffMutation::RequestReturn { return_by } => {
+            if parse_handoff_utc_instant("handoff_return_by", return_by)? <= now {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_return_deadline_must_be_future",
+                ));
+            }
+        }
+        PreparedHandoffMutation::RetryReturn { return_by } => {
+            let prior = handoff.return_by.as_deref().ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_prior_return_deadline_missing")
+            })?;
+            let requested = parse_handoff_utc_instant("handoff_retry_return_by", return_by)?;
+            if requested <= now
+                || requested <= parse_handoff_utc_instant("handoff_prior_return_by", prior)?
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_retry_requires_new_return_deadline",
+                ));
+            }
+        }
+        PreparedHandoffMutation::Reject
+        | PreparedHandoffMutation::Cancel
+        | PreparedHandoffMutation::CancelFailedReturn => {}
+    }
+    Ok(())
+}
+
+fn handoff_transition_result_hash(
+    receipt_kind: HandoffReceiptKind,
+    handoff: &Handoff,
+    result_ref: &OpaqueRef,
+    reason_code: &str,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let immutable = handoff.immutable_fingerprint().map_err(domain_error)?;
+    handoff_transition_result_hash_for_fields(
+        receipt_kind,
+        &handoff.handoff_id,
+        &immutable,
+        handoff.revision,
+        handoff.status,
+        result_ref,
+        reason_code,
+    )
+}
+
+fn handoff_transition_result_hash_for_fields(
+    receipt_kind: HandoffReceiptKind,
+    handoff_id: &HandoffId,
+    immutable_fingerprint: &RequestFingerprint,
+    handoff_revision: u64,
+    handoff_status: HandoffState,
+    result_ref: &OpaqueRef,
+    reason_code: &str,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    metadata_digest(
+        "m3_handoff_transition_result",
+        &[
+            ("handoff_id", handoff_id.as_str()),
+            ("immutable_fingerprint", immutable_fingerprint.as_str()),
+            ("handoff_revision", &handoff_revision.to_string()),
+            ("receipt_kind", receipt_kind.as_str()),
+            ("handoff_status", handoff_status.as_str()),
+            ("result_ref", result_ref.as_str()),
+            ("reason_code", reason_code),
+        ],
+    )
+}
+
+fn handoff_recipient_evidence_digest(
+    evidence: &HandoffRecipientEvidence,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    metadata_digest(
+        "m3_handoff_recipient_evidence",
+        &[
+            ("role_session_id", evidence.role_session_id.as_str()),
+            ("actor_id", evidence.actor_id.as_str()),
+            ("role_ref", evidence.role_ref.as_str()),
+            ("scope_ref", evidence.scope_ref.as_str()),
+            ("current_object_ref", evidence.current_object_ref.as_str()),
+            ("execution_channel", evidence.execution_channel.as_str()),
+            ("owner_fingerprint", evidence.owner_fingerprint.as_str()),
+            (
+                "permission_snapshot_ref",
+                evidence.permission_snapshot_ref.as_str(),
+            ),
+            ("session_revision", &evidence.session_revision.to_string()),
+            ("binding_revision", &evidence.binding_revision.to_string()),
+            (
+                "binding_proof_digest",
+                evidence.binding_proof_digest.as_str(),
+            ),
+            ("accepted_at", &evidence.accepted_at),
+        ],
+    )
+}
+
+fn handoff_command_result_hash(
+    operation: HandoffRequestOperation,
+    handoff: &Handoff,
+    result_ref: &OpaqueRef,
+    reason_code: &str,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    handoff_command_result_hash_for_fields(
+        operation,
+        &handoff.handoff_id,
+        handoff.revision,
+        result_ref,
+        reason_code,
+    )
+}
+
+fn handoff_command_result_hash_for_fields(
+    operation: HandoffRequestOperation,
+    handoff_id: &HandoffId,
+    handoff_revision: u64,
+    result_ref: &OpaqueRef,
+    reason_code: &str,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    metadata_digest(
+        "m3_handoff_command_result",
+        &[
+            ("handoff_id", handoff_id.as_str()),
+            ("handoff_revision", &handoff_revision.to_string()),
+            ("operation", operation.as_str()),
+            ("result_ref", result_ref.as_str()),
+            ("reason_code", reason_code),
+        ],
+    )
+}
+
+fn new_handoff_command_receipt(
+    transaction: &Transaction<'_>,
+    metadata: &M3CommandMetadata,
+    identity: &M3HandoffIdempotencyIdentity,
+    expected_handoff_revision: u64,
+    actor: &RoleSession,
+    actor_permission_descriptor: &PermissionSnapshotDescriptor,
+    result_ref: OpaqueRef,
+    result_hash: Sha256Digest,
+    transition_handoff: Option<&Handoff>,
+    status: M3HandoffCommandReceiptStatus,
+    winner_receipt_ref: Option<OpaqueRef>,
+) -> Result<M3HandoffCommandReceiptDto, M3RoleSessionRepositoryError> {
+    metadata.validate()?;
+    required_text("handoff_operation", identity.operation.as_str())?;
+    required_text("handoff_idempotency_key", identity.base_key.as_str())?;
+    reject_sensitive_text("handoff_idempotency_key", identity.base_key.as_str())?;
+    if (status == M3HandoffCommandReceiptStatus::Stale) != winner_receipt_ref.is_some() {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_command_receipt_winner_shape_invalid",
+        ));
+    }
+    let transition_state_required = status == M3HandoffCommandReceiptStatus::Committed
+        && identity.operation != HandoffRequestOperation::RecordSourceApplication;
+    if transition_state_required != transition_handoff.is_some() {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_command_receipt_state_snapshot_shape_invalid",
+        ));
+    }
+    let (actor_binding, actor_binding_proof_digest) =
+        load_current_handoff_actor_binding_proof(transaction, actor)?;
+    let actor_permission_descriptor_digest = require_handoff_permission_descriptor_in_transaction(
+        transaction,
+        actor_permission_descriptor,
+    )?;
+    if actor_permission_descriptor.snapshot_ref != actor.permission_snapshot_ref {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_actor_permission_descriptor_snapshot_mismatch",
+        ));
+    }
+    let handoff_state_digest = transition_handoff.map(handoff_state_digest).transpose()?;
+    let return_by_at_transition = transition_handoff.and_then(|handoff| handoff.return_by.clone());
+    let failure_reason_at_transition =
+        transition_handoff.and_then(|handoff| handoff.last_failure_reason);
+    Ok(M3HandoffCommandReceiptDto {
+        command_receipt_id: metadata.receipt_id.clone(),
+        operation: identity.operation,
+        handoff_id: identity.handoff_id.clone(),
+        idempotency_scope_ref: identity.handoff_id.as_str().to_string(),
+        base_key: identity.base_key.as_str().to_string(),
+        request_fingerprint: identity.request_fingerprint.clone(),
+        expected_handoff_revision,
+        actor_id: actor.actor_id.clone(),
+        role_session_id: actor.role_session_id.clone(),
+        actor_owner_fingerprint: actor.owner_fingerprint.clone(),
+        actor_permission_snapshot_ref: actor.permission_snapshot_ref.clone(),
+        actor_permission_descriptor_digest,
+        actor_session_revision: actor.revision,
+        actor_binding_revision: actor_binding.binding_revision,
+        actor_binding_proof_digest,
+        correlation_id: metadata.correlation_id.clone(),
+        result_ref,
+        result_hash,
+        return_by_at_transition,
+        failure_reason_at_transition,
+        handoff_state_digest,
+        status,
+        winner_receipt_ref,
+        created_at: metadata.occurred_at.clone(),
+    })
+}
+
+fn handoff_operation_accepts_receipt_kind(
+    operation: HandoffRequestOperation,
+    receipt_kind: HandoffReceiptKind,
+) -> bool {
+    matches!(
+        (operation, receipt_kind),
+        (HandoffRequestOperation::Create, HandoffReceiptKind::Created)
+            | (
+                HandoffRequestOperation::Create,
+                HandoffReceiptKind::Rejected
+            )
+            | (
+                HandoffRequestOperation::Accept,
+                HandoffReceiptKind::Accepted
+            )
+            | (
+                HandoffRequestOperation::Reject,
+                HandoffReceiptKind::Rejected
+            )
+            | (
+                HandoffRequestOperation::Cancel,
+                HandoffReceiptKind::Cancelled
+            )
+            | (HandoffRequestOperation::Expire, HandoffReceiptKind::Expired)
+            | (
+                HandoffRequestOperation::RequestReturn,
+                HandoffReceiptKind::ReturnRequested
+            )
+            | (
+                HandoffRequestOperation::RecordReturnResult,
+                HandoffReceiptKind::Returned
+            )
+            | (
+                HandoffRequestOperation::RecordReturnResult,
+                HandoffReceiptKind::ReturnFailed
+            )
+            | (
+                HandoffRequestOperation::RecordReturnTimeout,
+                HandoffReceiptKind::ReturnFailed
+            )
+            | (
+                HandoffRequestOperation::RetryReturn,
+                HandoffReceiptKind::ReturnRetried
+            )
+            | (
+                HandoffRequestOperation::CancelFailedReturn,
+                HandoffReceiptKind::CancelledBySource
+            )
+    )
+}
+
+fn handoff_state_digest(handoff: &Handoff) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let recipient_evidence_digest = handoff
+        .recipient
+        .as_ref()
+        .map(handoff_recipient_evidence_digest)
+        .transpose()?;
+    handoff_state_digest_for_fields(
+        &handoff.handoff_id,
+        handoff.revision,
+        handoff.status,
+        &handoff.current_receipt_id,
+        recipient_evidence_digest.as_ref(),
+        handoff.return_by.as_deref(),
+        handoff.last_failure_reason,
+    )
+}
+
+fn handoff_state_digest_for_fields(
+    handoff_id: &HandoffId,
+    handoff_revision: u64,
+    handoff_status: HandoffState,
+    current_receipt_id: &OpaqueRef,
+    recipient_evidence_digest: Option<&Sha256Digest>,
+    return_by_at_transition: Option<&str>,
+    failure_reason_at_transition: Option<HandoffReturnFailureReason>,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    metadata_digest(
+        "m3_handoff_state",
+        &[
+            ("handoff_id", handoff_id.as_str()),
+            ("handoff_revision", &handoff_revision.to_string()),
+            ("handoff_status", handoff_status.as_str()),
+            ("current_receipt_id", current_receipt_id.as_str()),
+            (
+                "recipient_evidence_digest",
+                recipient_evidence_digest
+                    .map(Sha256Digest::as_str)
+                    .unwrap_or(""),
+            ),
+            (
+                "return_by_at_transition",
+                return_by_at_transition.unwrap_or(""),
+            ),
+            (
+                "failure_reason_at_transition",
+                failure_reason_at_transition
+                    .map(HandoffReturnFailureReason::as_str)
+                    .unwrap_or(""),
+            ),
+        ],
+    )
+}
+
+fn handoff_transition_integrity_hash(
+    receipt_kind: HandoffReceiptKind,
+    handoff: &Handoff,
+    result_ref: &OpaqueRef,
+    result_hash: &Sha256Digest,
+    actor_permission_descriptor_digest: &Sha256Digest,
+    actor_session_revision: u64,
+    actor_binding_proof_digest: &Sha256Digest,
+    source_validation_proof_digest: Option<&Sha256Digest>,
+    recorded_at: &str,
+    reason_code: &str,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let immutable = handoff.immutable_fingerprint().map_err(domain_error)?;
+    let recipient_evidence_digest = handoff
+        .recipient
+        .as_ref()
+        .map(handoff_recipient_evidence_digest)
+        .transpose()?;
+    let state_digest = handoff_state_digest(handoff)?;
+    handoff_transition_integrity_hash_for_fields(
+        receipt_kind,
+        &handoff.handoff_id,
+        &immutable,
+        handoff.revision,
+        handoff.status,
+        result_ref,
+        result_hash,
+        actor_permission_descriptor_digest,
+        actor_session_revision,
+        actor_binding_proof_digest,
+        recipient_evidence_digest.as_ref(),
+        source_validation_proof_digest,
+        handoff.return_by.as_deref(),
+        handoff.last_failure_reason,
+        &state_digest,
+        recorded_at,
+        reason_code,
+    )
+}
+
+fn handoff_transition_integrity_hash_for_fields(
+    receipt_kind: HandoffReceiptKind,
+    handoff_id: &HandoffId,
+    immutable_fingerprint: &RequestFingerprint,
+    handoff_revision: u64,
+    handoff_status: HandoffState,
+    result_ref: &OpaqueRef,
+    result_hash: &Sha256Digest,
+    actor_permission_descriptor_digest: &Sha256Digest,
+    actor_session_revision: u64,
+    actor_binding_proof_digest: &Sha256Digest,
+    recipient_evidence_digest: Option<&Sha256Digest>,
+    source_validation_proof_digest: Option<&Sha256Digest>,
+    return_by_at_transition: Option<&str>,
+    failure_reason_at_transition: Option<HandoffReturnFailureReason>,
+    handoff_state_digest: &Sha256Digest,
+    recorded_at: &str,
+    reason_code: &str,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let handoff_revision = handoff_revision.to_string();
+    metadata_digest(
+        "m3_handoff_transition_integrity",
+        &[
+            ("handoff_id", handoff_id.as_str()),
+            ("immutable_fingerprint", immutable_fingerprint.as_str()),
+            ("handoff_revision", &handoff_revision),
+            ("receipt_kind", receipt_kind.as_str()),
+            ("handoff_status", handoff_status.as_str()),
+            ("result_ref", result_ref.as_str()),
+            ("result_hash", result_hash.as_str()),
+            (
+                "actor_permission_descriptor_digest",
+                actor_permission_descriptor_digest.as_str(),
+            ),
+            (
+                "actor_session_revision",
+                &actor_session_revision.to_string(),
+            ),
+            (
+                "actor_binding_proof_digest",
+                actor_binding_proof_digest.as_str(),
+            ),
+            (
+                "recipient_evidence_digest",
+                recipient_evidence_digest
+                    .map(Sha256Digest::as_str)
+                    .unwrap_or(""),
+            ),
+            (
+                "source_validation_proof_digest",
+                source_validation_proof_digest
+                    .map(Sha256Digest::as_str)
+                    .unwrap_or(""),
+            ),
+            (
+                "return_by_at_transition",
+                return_by_at_transition.unwrap_or(""),
+            ),
+            (
+                "failure_reason_at_transition",
+                failure_reason_at_transition
+                    .map(HandoffReturnFailureReason::as_str)
+                    .unwrap_or(""),
+            ),
+            ("handoff_state_digest", handoff_state_digest.as_str()),
+            ("recorded_at", recorded_at),
+            ("reason_code", reason_code),
+        ],
+    )
+}
+
+fn new_handoff_transition_receipt(
+    command_receipt: &M3HandoffCommandReceiptDto,
+    handoff: &Handoff,
+    receipt_kind: HandoffReceiptKind,
+    result_ref: OpaqueRef,
+    result_hash: Sha256Digest,
+    source_object_validation: Option<&PersistedHandoffSourceValidationProof>,
+    reason_code: &str,
+) -> Result<HandoffReceipt, M3RoleSessionRepositoryError> {
+    let source_object_validation_receipt_ref =
+        source_object_validation.map(|proof| proof.validation_receipt_ref.clone());
+    let source_object_validation_proof_digest =
+        source_object_validation.map(|proof| proof.proof_digest.clone());
+    let state_digest = handoff_state_digest(handoff)?;
+    if command_receipt.status != M3HandoffCommandReceiptStatus::Committed
+        || command_receipt.command_receipt_id != handoff.current_receipt_id
+        || command_receipt.handoff_id != handoff.handoff_id
+        || command_receipt.correlation_id != handoff.correlation_id
+        || !handoff_operation_accepts_receipt_kind(command_receipt.operation, receipt_kind)
+        || receipt_kind.resulting_state() != handoff.status
+        || command_receipt.expected_handoff_revision.checked_add(1) != Some(handoff.revision)
+        || command_receipt.return_by_at_transition != handoff.return_by
+        || command_receipt.failure_reason_at_transition != handoff.last_failure_reason
+        || command_receipt.handoff_state_digest.as_ref() != Some(&state_digest)
+        || (receipt_kind == HandoffReceiptKind::Returned)
+            != source_object_validation_receipt_ref.is_some()
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_transition_receipt_shape_invalid",
+        ));
+    }
+    required_text("handoff_reason_code", reason_code)?;
+    let transition_integrity_hash = handoff_transition_integrity_hash(
+        receipt_kind,
+        handoff,
+        &result_ref,
+        &result_hash,
+        &command_receipt.actor_permission_descriptor_digest,
+        command_receipt.actor_session_revision,
+        &command_receipt.actor_binding_proof_digest,
+        source_object_validation_proof_digest.as_ref(),
+        &command_receipt.created_at,
+        reason_code,
+    )?;
+    Ok(HandoffReceipt {
+        receipt_id: command_receipt.command_receipt_id.clone(),
+        handoff_id: handoff.handoff_id.clone(),
+        handoff_revision: handoff.revision,
+        receipt_kind,
+        actor_id: command_receipt.actor_id.clone(),
+        role_session_id: command_receipt.role_session_id.clone(),
+        actor_owner_fingerprint: command_receipt.actor_owner_fingerprint.clone(),
+        actor_permission_snapshot_ref: command_receipt.actor_permission_snapshot_ref.clone(),
+        actor_permission_descriptor_digest: command_receipt
+            .actor_permission_descriptor_digest
+            .clone(),
+        actor_session_revision: command_receipt.actor_session_revision,
+        actor_binding_revision: command_receipt.actor_binding_revision,
+        actor_binding_proof_digest: command_receipt.actor_binding_proof_digest.clone(),
+        handoff_status: handoff.status,
+        result_ref,
+        result_hash,
+        return_by_at_transition: handoff.return_by.clone(),
+        failure_reason_at_transition: handoff.last_failure_reason,
+        handoff_state_digest: state_digest,
+        transition_integrity_hash,
+        source_object_validation_receipt_ref,
+        source_object_validation_proof_digest,
+        source_command_receipt_ref: handoff.source_command_receipt_ref.clone(),
+        correlation_id: command_receipt.correlation_id.clone(),
+        recorded_at: command_receipt.created_at.clone(),
+        reason_code: reason_code.to_string(),
+    })
+}
+
+fn validate_source_object_validation_proof(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    source_authority: &M3HandoffSessionAuthority,
+    source_session: &RoleSession,
+    result_ref: &OpaqueRef,
+    result_hash: &Sha256Digest,
+    proof: &HandoffSourceObjectValidationProof,
+    returned_at: &str,
+) -> Result<PersistedHandoffSourceValidationProof, M3RoleSessionRepositoryError> {
+    validate_server_binding_metadata_only(&proof.binding)?;
+    proof
+        .binding
+        .verify_owner_fingerprint()
+        .map_err(domain_error)?;
+    validate_reference_fields(&[
+        (
+            "handoff_source_validation_role_session_id",
+            proof.role_session_id.as_str(),
+        ),
+        (
+            "handoff_source_validation_object_ref",
+            proof.object_ref.as_str(),
+        ),
+        (
+            "handoff_source_validation_receipt_ref",
+            proof.validation_receipt_ref.as_str(),
+        ),
+    ])?;
+    if proof.role_session_id != handoff.from_role_session_id
+        || proof.object_ref != handoff.source_current_object_ref
+        || !handoff.object_refs.contains(&proof.object_ref)
+        || proof.binding.actor_id != handoff.from_actor_id
+        || proof.binding.role_ref != handoff.source_role_ref
+        || proof.binding.scope_ref != handoff.scope_ref
+        || proof.binding.current_object_ref != handoff.source_current_object_ref
+        || proof.binding.execution_channel != handoff.source_execution_channel
+        || proof.binding.owner_fingerprint != handoff.from_owner_fingerprint
+        || proof.binding != source_authority.binding
+        || source_session.role_session_id != handoff.from_role_session_id
+        || source_session.actor_id != handoff.from_actor_id
+        || source_session.owner_fingerprint != handoff.from_owner_fingerprint
+        || source_session.permission_snapshot_ref != proof.binding.permission_snapshot_ref
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_object_validation_mismatch",
+        ));
+    }
+    let source_binding = load_session_binding_in_transaction(transaction, &proof.role_session_id)?
+        .ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_source_validation_binding_missing")
+        })?;
+    if source_binding.actor_id != proof.binding.actor_id
+        || source_binding.role_ref != proof.binding.role_ref
+        || source_binding.scope_ref != proof.binding.scope_ref
+        || source_binding.current_object_ref != proof.binding.current_object_ref
+        || source_binding.execution_channel != proof.binding.execution_channel
+        || source_binding.permission_snapshot_ref != proof.binding.permission_snapshot_ref
+        || source_binding.owner_fingerprint != proof.binding.owner_fingerprint
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_validation_binding_mismatch",
+        ));
+    }
+    let validation_receipt =
+        load_command_receipt_by_id_in_transaction(transaction, &proof.validation_receipt_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_source_validation_receipt_missing")
+            })?;
+    let validation_witness =
+        load_handoff_validation_witness_in_transaction(transaction, &proof.validation_receipt_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_source_validation_witness_missing")
+            })?;
+    validate_handoff_validation_witness_in_transaction(transaction, &validation_witness)?;
+    let (validation_context_ref, validation_context_hash) =
+        validate_handoff_context_validation_receipt_in_transaction(
+            transaction,
+            &validation_receipt,
+            &validation_witness,
+            &source_binding,
+            &handoff.scope_ref,
+            &proof.object_ref,
+        )?;
+    let validation_window = load_handoff_return_validation_window_in_transaction(
+        transaction,
+        &handoff.handoff_id,
+        handoff.revision,
+    )?;
+    validate_handoff_source_validation_window_time(
+        &validation_window,
+        &validation_receipt.created_at,
+        returned_at,
+    )?;
+    let source_binding_proof_digest = handoff_binding_proof_digest(&source_binding)?;
+    let source_permission_descriptor_digest = require_handoff_permission_descriptor_in_transaction(
+        transaction,
+        &source_authority.current_permission,
+    )?;
+    let validation_receipt_hash = handoff_validation_receipt_digest(&validation_receipt)?;
+    if validation_witness.validation_receipt_ref != proof.validation_receipt_ref
+        || validation_witness.validation_context_ref != validation_context_ref
+        || validation_witness.source_role_session_id != proof.role_session_id
+        || validation_witness.source_actor_id != source_binding.actor_id
+        || validation_witness.source_owner_fingerprint != source_binding.owner_fingerprint
+        || validation_witness.validated_session_revision != source_session.revision
+        || validation_witness.source_binding_revision != source_binding.binding_revision
+        || validation_witness.source_permission_snapshot_ref
+            != source_binding.permission_snapshot_ref
+        || validation_witness.source_permission_descriptor_digest
+            != source_permission_descriptor_digest
+        || validation_witness.source_binding_proof_digest != source_binding_proof_digest
+        || validation_witness.source_object_ref != proof.object_ref
+        || validation_witness.validation_context_hash != validation_context_hash
+        || validation_witness.validation_receipt_hash != validation_receipt_hash
+        || validation_witness.trusted_recorded_at != validation_receipt.created_at
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_validation_witness_mismatch",
+        ));
+    }
+    let mut persisted = PersistedHandoffSourceValidationProof {
+        returned_receipt_id: handoff.current_receipt_id.clone(),
+        handoff_id: handoff.handoff_id.clone(),
+        handoff_revision: handoff.revision,
+        source_role_session_id: proof.role_session_id.clone(),
+        source_actor_id: proof.binding.actor_id.clone(),
+        source_owner_fingerprint: proof.binding.owner_fingerprint.clone(),
+        source_binding_revision: source_binding.binding_revision,
+        source_permission_snapshot_ref: proof.binding.permission_snapshot_ref.clone(),
+        source_permission_descriptor_digest,
+        source_binding_proof_digest,
+        source_object_ref: proof.object_ref.clone(),
+        validation_receipt_ref: proof.validation_receipt_ref.clone(),
+        validation_receipt_hash,
+        validation_witness_digest: validation_witness.witness_digest,
+        validation_recorded_at: validation_witness.trusted_recorded_at,
+        validation_context_ref,
+        validation_context_hash,
+        validation_window_receipt_ref: validation_window.receipt_id,
+        validation_window_handoff_revision: validation_window.handoff_revision,
+        validation_window_receipt_hash: validation_window.transition_integrity_hash,
+        validation_window_recorded_at: validation_window.recorded_at,
+        result_ref: result_ref.clone(),
+        result_hash: result_hash.clone(),
+        returned_recorded_at: returned_at.to_string(),
+        proof_digest: Sha256Digest::of_bytes(b"m3.handoff.source-validation.pending/v1"),
+    };
+    persisted.proof_digest = handoff_source_validation_proof_digest(&persisted)?;
+    Ok(persisted)
+}
+
+fn apply_prepared_handoff_mutation(
+    transaction: &Transaction<'_>,
+    handoff: &mut Handoff,
+    command: &PreparedHandoffTransition,
+    source_session: &RoleSession,
+    recipient_session: Option<&RoleSession>,
+) -> Result<
+    (
+        HandoffReceiptKind,
+        OpaqueRef,
+        Sha256Digest,
+        Option<PersistedHandoffSourceValidationProof>,
+        &'static str,
+    ),
+    M3RoleSessionRepositoryError,
+> {
+    let receipt_id = command.metadata.receipt_id.clone();
+    let generic_result_ref = OpaqueRef::try_from_canonical(handoff.handoff_id.as_str().to_string())
+        .map_err(domain_error)?;
+    match &command.mutation {
+        PreparedHandoffMutation::Accept => {
+            let recipient = recipient_session.ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_accept_recipient_required")
+            })?;
+            let (recipient_binding, recipient_binding_proof_digest) =
+                load_current_handoff_actor_binding_proof(transaction, recipient)?;
+            let evidence = HandoffRecipientEvidence {
+                role_session_id: recipient.role_session_id.clone(),
+                actor_id: recipient.actor_id.clone(),
+                role_ref: recipient.role_ref.clone(),
+                scope_ref: recipient.scope_ref.clone(),
+                current_object_ref: recipient.current_object_ref.clone(),
+                execution_channel: recipient.execution_channel.clone(),
+                owner_fingerprint: recipient.owner_fingerprint.clone(),
+                permission_snapshot_ref: recipient.permission_snapshot_ref.clone(),
+                session_revision: recipient.revision,
+                binding_revision: recipient_binding.binding_revision,
+                binding_proof_digest: recipient_binding_proof_digest,
+                accepted_at: command.metadata.occurred_at.clone(),
+            };
+            handoff
+                .accept(command.expected_handoff_revision, evidence, receipt_id)
+                .map_err(domain_error)?;
+            let hash = handoff_transition_result_hash(
+                HandoffReceiptKind::Accepted,
+                handoff,
+                &generic_result_ref,
+                "ACCEPTED",
+            )?;
+            Ok((
+                HandoffReceiptKind::Accepted,
+                generic_result_ref,
+                hash,
+                None,
+                "ACCEPTED",
+            ))
+        }
+        PreparedHandoffMutation::Reject => {
+            handoff
+                .reject(command.expected_handoff_revision, receipt_id)
+                .map_err(domain_error)?;
+            let hash = handoff_transition_result_hash(
+                HandoffReceiptKind::Rejected,
+                handoff,
+                &generic_result_ref,
+                "RECIPIENT_REJECTED",
+            )?;
+            Ok((
+                HandoffReceiptKind::Rejected,
+                generic_result_ref,
+                hash,
+                None,
+                "RECIPIENT_REJECTED",
+            ))
+        }
+        PreparedHandoffMutation::Cancel => {
+            handoff
+                .cancel(command.expected_handoff_revision, receipt_id)
+                .map_err(domain_error)?;
+            let hash = handoff_transition_result_hash(
+                HandoffReceiptKind::Cancelled,
+                handoff,
+                &generic_result_ref,
+                "CANCELLED_BY_SOURCE_PRE_ACCEPT",
+            )?;
+            Ok((
+                HandoffReceiptKind::Cancelled,
+                generic_result_ref,
+                hash,
+                None,
+                "CANCELLED_BY_SOURCE_PRE_ACCEPT",
+            ))
+        }
+        PreparedHandoffMutation::Expire => {
+            handoff
+                .expire(command.expected_handoff_revision, receipt_id)
+                .map_err(domain_error)?;
+            let hash = handoff_transition_result_hash(
+                HandoffReceiptKind::Expired,
+                handoff,
+                &generic_result_ref,
+                "ACCEPT_BY_DEADLINE_REACHED",
+            )?;
+            Ok((
+                HandoffReceiptKind::Expired,
+                generic_result_ref,
+                hash,
+                None,
+                "ACCEPT_BY_DEADLINE_REACHED",
+            ))
+        }
+        PreparedHandoffMutation::RequestReturn { return_by } => {
+            handoff
+                .request_return(
+                    command.expected_handoff_revision,
+                    return_by.clone(),
+                    receipt_id,
+                )
+                .map_err(domain_error)?;
+            let hash = handoff_transition_result_hash(
+                HandoffReceiptKind::ReturnRequested,
+                handoff,
+                &generic_result_ref,
+                "RETURN_REQUESTED",
+            )?;
+            Ok((
+                HandoffReceiptKind::ReturnRequested,
+                generic_result_ref,
+                hash,
+                None,
+                "RETURN_REQUESTED",
+            ))
+        }
+        PreparedHandoffMutation::ReturnResult { result } => match result {
+            HandoffReturnResult::Returned {
+                result_ref,
+                result_hash,
+                source_object_validation,
+            } => {
+                handoff
+                    .record_returned(command.expected_handoff_revision, receipt_id)
+                    .map_err(domain_error)?;
+                let persisted_validation = validate_source_object_validation_proof(
+                    transaction,
+                    handoff,
+                    &command.source,
+                    source_session,
+                    result_ref,
+                    result_hash,
+                    source_object_validation,
+                    &command.metadata.occurred_at,
+                )?;
+                Ok((
+                    HandoffReceiptKind::Returned,
+                    result_ref.clone(),
+                    result_hash.clone(),
+                    Some(persisted_validation),
+                    "RETURNED",
+                ))
+            }
+            HandoffReturnResult::RecipientReturnFailed {
+                failure_ref,
+                failure_hash,
+            } => {
+                handoff
+                    .record_return_failed(
+                        command.expected_handoff_revision,
+                        receipt_id,
+                        HandoffReturnFailureReason::RecipientReturnFailed,
+                    )
+                    .map_err(domain_error)?;
+                Ok((
+                    HandoffReceiptKind::ReturnFailed,
+                    failure_ref.clone(),
+                    failure_hash.clone(),
+                    None,
+                    "RECIPIENT_RETURN_FAILED",
+                ))
+            }
+        },
+        PreparedHandoffMutation::ReturnTimeout => {
+            handoff
+                .record_return_failed(
+                    command.expected_handoff_revision,
+                    receipt_id,
+                    HandoffReturnFailureReason::Timeout,
+                )
+                .map_err(domain_error)?;
+            let hash = handoff_transition_result_hash(
+                HandoffReceiptKind::ReturnFailed,
+                handoff,
+                &generic_result_ref,
+                "RETURN_TIMEOUT",
+            )?;
+            Ok((
+                HandoffReceiptKind::ReturnFailed,
+                generic_result_ref,
+                hash,
+                None,
+                "RETURN_TIMEOUT",
+            ))
+        }
+        PreparedHandoffMutation::RetryReturn { return_by } => {
+            handoff
+                .retry_return(
+                    command.expected_handoff_revision,
+                    return_by.clone(),
+                    receipt_id,
+                )
+                .map_err(domain_error)?;
+            let hash = handoff_transition_result_hash(
+                HandoffReceiptKind::ReturnRetried,
+                handoff,
+                &generic_result_ref,
+                "RETURN_RETRIED",
+            )?;
+            Ok((
+                HandoffReceiptKind::ReturnRetried,
+                generic_result_ref,
+                hash,
+                None,
+                "RETURN_RETRIED",
+            ))
+        }
+        PreparedHandoffMutation::CancelFailedReturn => {
+            handoff
+                .cancel_failed_return(command.expected_handoff_revision, receipt_id)
+                .map_err(domain_error)?;
+            let hash = handoff_transition_result_hash(
+                HandoffReceiptKind::CancelledBySource,
+                handoff,
+                &generic_result_ref,
+                "CANCELLED_BY_SOURCE",
+            )?;
+            Ok((
+                HandoffReceiptKind::CancelledBySource,
+                generic_result_ref,
+                hash,
+                None,
+                "CANCELLED_BY_SOURCE",
+            ))
+        }
+    }
+}
+
+fn canonical_handoff_ref_set_json(
+    references: &BTreeSet<OpaqueRef>,
+) -> Result<String, M3RoleSessionRepositoryError> {
+    let values = references.iter().map(OpaqueRef::as_str).collect::<Vec<_>>();
+    serde_json::to_string(&values).map_err(|_| {
+        M3RoleSessionRepositoryError::new("m3_handoff_reference_json_serialize_failed")
+    })
+}
+
+fn insert_handoff_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let permission_hash = handoff
+        .permission_request
+        .immutable_hash()
+        .map_err(domain_error)?;
+    let immutable_fingerprint = handoff.immutable_fingerprint().map_err(domain_error)?;
+    let object_refs_json = canonical_handoff_ref_set_json(&handoff.object_refs)?;
+    let requested_capabilities_json =
+        canonical_handoff_ref_set_json(&handoff.permission_request.requested_capability_refs)?;
+    let requested_object_refs_json =
+        canonical_handoff_ref_set_json(&handoff.permission_request.requested_object_refs)?;
+    let recipient = handoff.recipient.as_ref();
+    let recipient_evidence_digest = recipient
+        .map(handoff_recipient_evidence_digest)
+        .transpose()?;
+    transaction
+        .execute(
+            "INSERT INTO m3_handoffs (
+                 handoff_id,from_role_session_id,from_actor_id,source_role_ref,
+                 source_current_object_ref,source_execution_channel,source_session_revision,
+                 source_command_receipt_ref,from_owner_fingerprint,to_role_ref,to_recipient_ref,
+                 scope_ref,requested_outcome_ref,object_refs_json,risk_class,
+                 permission_request_id,requested_capabilities_json,requested_scope_ref,
+                 requested_object_refs_json,permission_risk_class,permission_reason_ref,
+                 source_permission_snapshot_ref,permission_request_hash,immutable_fingerprint,
+                 status,revision,correlation_id,created_at,accept_by,recipient_role_session_id,
+                 recipient_actor_id,recipient_role_ref,recipient_scope_ref,
+                 recipient_current_object_ref,recipient_execution_channel,
+                 recipient_owner_fingerprint,recipient_permission_snapshot_ref,
+                 recipient_session_revision,recipient_binding_revision,
+                 recipient_binding_proof_digest,recipient_evidence_digest,
+                 accepted_at,return_by,current_receipt_id,last_failure_reason
+             ) VALUES (
+                 ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,
+                 ?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,
+                 ?31,?32,?33,?34,?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,
+                 ?45
+             )",
+            params![
+                handoff.handoff_id.as_str(),
+                handoff.from_role_session_id.as_str(),
+                handoff.from_actor_id.as_str(),
+                handoff.source_role_ref.as_str(),
+                handoff.source_current_object_ref.as_str(),
+                handoff.source_execution_channel.as_str(),
+                i64::try_from(handoff.source_session_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_source_session_revision_i64_required",
+                    )
+                })?,
+                handoff.source_command_receipt_ref.as_str(),
+                handoff.from_owner_fingerprint.as_str(),
+                handoff.to_role_ref.as_str(),
+                handoff.to_recipient_ref.as_str(),
+                handoff.scope_ref.as_str(),
+                handoff.requested_outcome_ref.as_str(),
+                object_refs_json,
+                handoff.risk_class.as_str(),
+                handoff.permission_request.request_id.as_str(),
+                requested_capabilities_json,
+                handoff.permission_request.requested_scope_ref.as_str(),
+                requested_object_refs_json,
+                handoff.permission_request.risk_class.as_str(),
+                handoff.permission_request.reason_ref.as_str(),
+                handoff
+                    .permission_request
+                    .source_permission_snapshot_ref
+                    .as_str(),
+                permission_hash.as_str(),
+                immutable_fingerprint.as_str(),
+                handoff.status.as_str(),
+                i64::try_from(handoff.revision).map_err(|_| M3RoleSessionRepositoryError::new(
+                    "m3_handoff_revision_i64_required"
+                ))?,
+                handoff.correlation_id.as_str(),
+                &handoff.created_at,
+                &handoff.accept_by,
+                recipient.map(|value| value.role_session_id.as_str()),
+                recipient.map(|value| value.actor_id.as_str()),
+                recipient.map(|value| value.role_ref.as_str()),
+                recipient.map(|value| value.scope_ref.as_str()),
+                recipient.map(|value| value.current_object_ref.as_str()),
+                recipient.map(|value| value.execution_channel.as_str()),
+                recipient.map(|value| value.owner_fingerprint.as_str()),
+                recipient.map(|value| value.permission_snapshot_ref.as_str()),
+                recipient
+                    .map(|value| i64::try_from(value.session_revision))
+                    .transpose()
+                    .map_err(|_| M3RoleSessionRepositoryError::new(
+                        "m3_handoff_recipient_session_revision_i64_required"
+                    ))?,
+                recipient
+                    .map(|value| i64::try_from(value.binding_revision))
+                    .transpose()
+                    .map_err(|_| M3RoleSessionRepositoryError::new(
+                        "m3_handoff_recipient_binding_revision_i64_required"
+                    ))?,
+                recipient.map(|value| value.binding_proof_digest.as_str()),
+                recipient_evidence_digest.as_ref().map(Sha256Digest::as_str),
+                recipient.map(|value| value.accepted_at.as_str()),
+                handoff.return_by.as_deref(),
+                handoff.current_receipt_id.as_str(),
+                handoff
+                    .last_failure_reason
+                    .map(HandoffReturnFailureReason::as_str),
+            ],
+        )
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_insert", error))?;
+    Ok(())
+}
+
+fn update_handoff_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    expected_prior_revision: u64,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if handoff
+        .revision
+        .checked_sub(1)
+        .filter(|actual| *actual == expected_prior_revision)
+        .is_none()
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_transition_revision_continuity_invalid",
+        ));
+    }
+    let recipient = handoff.recipient.as_ref();
+    let recipient_evidence_digest = recipient
+        .map(handoff_recipient_evidence_digest)
+        .transpose()?;
+    let rows = transaction
+        .execute(
+            "UPDATE m3_handoffs
+             SET status = ?1, revision = ?2, recipient_role_session_id = ?3,
+                 recipient_actor_id = ?4, recipient_role_ref = ?5,
+                 recipient_scope_ref = ?6, recipient_current_object_ref = ?7,
+                 recipient_execution_channel = ?8, recipient_owner_fingerprint = ?9,
+                 recipient_permission_snapshot_ref = ?10, recipient_session_revision = ?11,
+                 recipient_binding_revision = ?12,
+                 recipient_binding_proof_digest = ?13, recipient_evidence_digest = ?14,
+                 accepted_at = ?15, return_by = ?16, current_receipt_id = ?17,
+                 last_failure_reason = ?18
+             WHERE handoff_id = ?19 AND revision = ?20",
+            params![
+                handoff.status.as_str(),
+                i64::try_from(handoff.revision).map_err(|_| M3RoleSessionRepositoryError::new(
+                    "m3_handoff_revision_i64_required"
+                ))?,
+                recipient.map(|value| value.role_session_id.as_str()),
+                recipient.map(|value| value.actor_id.as_str()),
+                recipient.map(|value| value.role_ref.as_str()),
+                recipient.map(|value| value.scope_ref.as_str()),
+                recipient.map(|value| value.current_object_ref.as_str()),
+                recipient.map(|value| value.execution_channel.as_str()),
+                recipient.map(|value| value.owner_fingerprint.as_str()),
+                recipient.map(|value| value.permission_snapshot_ref.as_str()),
+                recipient
+                    .map(|value| i64::try_from(value.session_revision))
+                    .transpose()
+                    .map_err(|_| M3RoleSessionRepositoryError::new(
+                        "m3_handoff_recipient_session_revision_i64_required"
+                    ))?,
+                recipient
+                    .map(|value| i64::try_from(value.binding_revision))
+                    .transpose()
+                    .map_err(|_| M3RoleSessionRepositoryError::new(
+                        "m3_handoff_recipient_binding_revision_i64_required"
+                    ))?,
+                recipient.map(|value| value.binding_proof_digest.as_str()),
+                recipient_evidence_digest.as_ref().map(Sha256Digest::as_str),
+                recipient.map(|value| value.accepted_at.as_str()),
+                handoff.return_by.as_deref(),
+                handoff.current_receipt_id.as_str(),
+                handoff
+                    .last_failure_reason
+                    .map(HandoffReturnFailureReason::as_str),
+                handoff.handoff_id.as_str(),
+                i64::try_from(expected_prior_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new("m3_handoff_expected_revision_i64_required")
+                })?,
+            ],
+        )
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_update", error))?;
+    if rows != 1 {
+        return Err(M3RoleSessionRepositoryError::new("m3_handoff_cas_lost"));
+    }
+    Ok(())
+}
+
+fn insert_handoff_command_receipt_in_transaction(
+    transaction: &Transaction<'_>,
+    receipt: &M3HandoffCommandReceiptDto,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_command_receipts (
+                 command_receipt_id,operation_kind,handoff_id,idempotency_scope_ref,base_key,
+                 request_fingerprint,expected_handoff_revision,actor_id,role_session_id,
+                 actor_owner_fingerprint,actor_permission_snapshot_ref,
+                 actor_permission_descriptor_digest,actor_session_revision,
+                 actor_binding_revision,actor_binding_proof_digest,correlation_id,
+                 result_ref,result_hash,return_by_at_transition,
+                 failure_reason_at_transition,handoff_state_digest,
+                 status,winner_receipt_ref,created_at
+             ) VALUES (
+                 ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,
+                 ?17,?18,?19,?20,?21,?22,?23,?24
+             )",
+            params![
+                receipt.command_receipt_id.as_str(),
+                receipt.operation.as_str(),
+                receipt.handoff_id.as_str(),
+                &receipt.idempotency_scope_ref,
+                &receipt.base_key,
+                receipt.request_fingerprint.as_str(),
+                i64::try_from(receipt.expected_handoff_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new("m3_handoff_expected_revision_i64_required")
+                })?,
+                receipt.actor_id.as_str(),
+                receipt.role_session_id.as_str(),
+                receipt.actor_owner_fingerprint.as_str(),
+                receipt.actor_permission_snapshot_ref.as_str(),
+                receipt.actor_permission_descriptor_digest.as_str(),
+                i64::try_from(receipt.actor_session_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_actor_session_revision_i64_required",
+                    )
+                })?,
+                i64::try_from(receipt.actor_binding_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_actor_binding_revision_i64_required",
+                    )
+                })?,
+                receipt.actor_binding_proof_digest.as_str(),
+                receipt.correlation_id.as_str(),
+                receipt.result_ref.as_str(),
+                receipt.result_hash.as_str(),
+                receipt.return_by_at_transition.as_deref(),
+                receipt
+                    .failure_reason_at_transition
+                    .map(HandoffReturnFailureReason::as_str),
+                receipt
+                    .handoff_state_digest
+                    .as_ref()
+                    .map(Sha256Digest::as_str),
+                receipt.status.as_str(),
+                receipt.winner_receipt_ref.as_ref().map(OpaqueRef::as_str),
+                &receipt.created_at,
+            ],
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_command_receipt_insert", error)
+        })?;
+    Ok(())
+}
+
+struct RawHandoffReceipt {
+    receipt_id: String,
+    handoff_id: String,
+    handoff_revision: i64,
+    receipt_kind: String,
+    actor_id: String,
+    role_session_id: String,
+    actor_owner_fingerprint: String,
+    actor_permission_snapshot_ref: String,
+    actor_permission_descriptor_digest: String,
+    actor_session_revision: i64,
+    actor_binding_revision: i64,
+    actor_binding_proof_digest: String,
+    handoff_status: String,
+    result_ref: String,
+    result_hash: String,
+    return_by_at_transition: Option<String>,
+    failure_reason_at_transition: Option<String>,
+    handoff_state_digest: String,
+    transition_integrity_hash: String,
+    source_object_validation_receipt_ref: Option<String>,
+    source_object_validation_proof_digest: Option<String>,
+    source_command_receipt_ref: String,
+    correlation_id: String,
+    recorded_at: String,
+    reason_code: String,
+}
+
+fn handoff_receipt_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawHandoffReceipt> {
+    Ok(RawHandoffReceipt {
+        receipt_id: row.get(0)?,
+        handoff_id: row.get(1)?,
+        handoff_revision: row.get(2)?,
+        receipt_kind: row.get(3)?,
+        actor_id: row.get(4)?,
+        role_session_id: row.get(5)?,
+        actor_owner_fingerprint: row.get(6)?,
+        actor_permission_snapshot_ref: row.get(7)?,
+        actor_permission_descriptor_digest: row.get(8)?,
+        actor_session_revision: row.get(9)?,
+        actor_binding_revision: row.get(10)?,
+        actor_binding_proof_digest: row.get(11)?,
+        handoff_status: row.get(12)?,
+        result_ref: row.get(13)?,
+        result_hash: row.get(14)?,
+        return_by_at_transition: row.get(15)?,
+        failure_reason_at_transition: row.get(16)?,
+        handoff_state_digest: row.get(17)?,
+        transition_integrity_hash: row.get(18)?,
+        source_object_validation_receipt_ref: row.get(19)?,
+        source_object_validation_proof_digest: row.get(20)?,
+        source_command_receipt_ref: row.get(21)?,
+        correlation_id: row.get(22)?,
+        recorded_at: row.get(23)?,
+        reason_code: row.get(24)?,
+    })
+}
+
+fn parse_handoff_receipt(
+    raw: RawHandoffReceipt,
+) -> Result<HandoffReceipt, M3RoleSessionRepositoryError> {
+    validate_rfc3339_utc_timestamp("handoff_receipt_recorded_at", &raw.recorded_at)?;
+    if let Some(return_by) = raw.return_by_at_transition.as_deref() {
+        validate_rfc3339_utc_timestamp("handoff_receipt_return_by_at_transition", return_by)?;
+    }
+    required_text("handoff_receipt_reason_code", &raw.reason_code)?;
+    let receipt = HandoffReceipt {
+        receipt_id: OpaqueRef::try_from_canonical(raw.receipt_id).map_err(domain_error)?,
+        handoff_id: HandoffId::try_from_canonical(raw.handoff_id).map_err(domain_error)?,
+        handoff_revision: i64_to_u64("handoff_receipt_revision", raw.handoff_revision)?,
+        receipt_kind: HandoffReceiptKind::parse(&raw.receipt_kind).map_err(domain_error)?,
+        actor_id: OpaqueRef::try_from_canonical(raw.actor_id).map_err(domain_error)?,
+        role_session_id: RoleSessionId::try_from_canonical(raw.role_session_id)
+            .map_err(domain_error)?,
+        actor_owner_fingerprint: OwnerFingerprint::try_from_canonical(raw.actor_owner_fingerprint)
+            .map_err(domain_error)?,
+        actor_permission_snapshot_ref: OpaqueRef::try_from_canonical(
+            raw.actor_permission_snapshot_ref,
+        )
+        .map_err(domain_error)?,
+        actor_permission_descriptor_digest: Sha256Digest::try_from_canonical(
+            raw.actor_permission_descriptor_digest,
+        )
+        .map_err(domain_error)?,
+        actor_session_revision: i64_to_u64(
+            "handoff_receipt_actor_session_revision",
+            raw.actor_session_revision,
+        )?,
+        actor_binding_revision: i64_to_u64(
+            "handoff_receipt_actor_binding_revision",
+            raw.actor_binding_revision,
+        )?,
+        actor_binding_proof_digest: Sha256Digest::try_from_canonical(
+            raw.actor_binding_proof_digest,
+        )
+        .map_err(domain_error)?,
+        handoff_status: HandoffState::parse(&raw.handoff_status).map_err(domain_error)?,
+        result_ref: OpaqueRef::try_from_canonical(raw.result_ref).map_err(domain_error)?,
+        result_hash: Sha256Digest::try_from_canonical(raw.result_hash).map_err(domain_error)?,
+        return_by_at_transition: raw.return_by_at_transition,
+        failure_reason_at_transition: raw
+            .failure_reason_at_transition
+            .map(|value| HandoffReturnFailureReason::parse(&value))
+            .transpose()
+            .map_err(domain_error)?,
+        handoff_state_digest: Sha256Digest::try_from_canonical(raw.handoff_state_digest)
+            .map_err(domain_error)?,
+        transition_integrity_hash: Sha256Digest::try_from_canonical(raw.transition_integrity_hash)
+            .map_err(domain_error)?,
+        source_object_validation_receipt_ref: raw
+            .source_object_validation_receipt_ref
+            .map(OpaqueRef::try_from_canonical)
+            .transpose()
+            .map_err(domain_error)?,
+        source_object_validation_proof_digest: raw
+            .source_object_validation_proof_digest
+            .map(Sha256Digest::try_from_canonical)
+            .transpose()
+            .map_err(domain_error)?,
+        source_command_receipt_ref: OpaqueRef::try_from_canonical(raw.source_command_receipt_ref)
+            .map_err(domain_error)?,
+        correlation_id: CorrelationId::try_from_canonical(raw.correlation_id)
+            .map_err(domain_error)?,
+        recorded_at: raw.recorded_at,
+        reason_code: raw.reason_code,
+    };
+    if receipt.receipt_kind.resulting_state() != receipt.handoff_status
+        || (receipt.receipt_kind == HandoffReceiptKind::Returned)
+            != receipt.source_object_validation_receipt_ref.is_some()
+        || receipt.source_object_validation_receipt_ref.is_some()
+            != receipt.source_object_validation_proof_digest.is_some()
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_receipt_shape_mismatch",
+        ));
+    }
+    Ok(receipt)
+}
+
+const HANDOFF_RECEIPT_SELECT: &str =
+    "SELECT receipt_id,handoff_id,handoff_revision,receipt_kind,actor_id,role_session_id,
+            actor_owner_fingerprint,actor_permission_snapshot_ref,
+            actor_permission_descriptor_digest,actor_session_revision,
+            actor_binding_revision,actor_binding_proof_digest,handoff_status,result_ref,result_hash,
+            return_by_at_transition,failure_reason_at_transition,handoff_state_digest,
+            transition_integrity_hash,source_object_validation_receipt_ref,
+            source_object_validation_proof_digest,source_command_receipt_ref,correlation_id,
+            recorded_at,reason_code FROM m3_handoff_receipts";
+
+fn load_handoff_receipt_by_id_in_transaction(
+    transaction: &Transaction<'_>,
+    receipt_id: &OpaqueRef,
+) -> Result<Option<HandoffReceipt>, M3RoleSessionRepositoryError> {
+    let sql = format!("{HANDOFF_RECEIPT_SELECT} WHERE receipt_id = ?1");
+    transaction
+        .query_row(&sql, [receipt_id.as_str()], handoff_receipt_row)
+        .optional()
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_receipt_load", error))?
+        .map(parse_handoff_receipt)
+        .transpose()
+}
+
+fn load_handoff_receipt_by_revision_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+    revision: u64,
+) -> Result<Option<HandoffReceipt>, M3RoleSessionRepositoryError> {
+    let sql = format!("{HANDOFF_RECEIPT_SELECT} WHERE handoff_id = ?1 AND handoff_revision = ?2");
+    transaction
+        .query_row(
+            &sql,
+            params![
+                handoff_id.as_str(),
+                i64::try_from(revision).map_err(|_| M3RoleSessionRepositoryError::new(
+                    "m3_handoff_revision_i64_required"
+                ))?,
+            ],
+            handoff_receipt_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_receipt_revision_load", error)
+        })?
+        .map(parse_handoff_receipt)
+        .transpose()
+}
+
+fn insert_handoff_transition_receipt_in_transaction(
+    transaction: &Transaction<'_>,
+    receipt: &HandoffReceipt,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_receipts (
+                 receipt_id,handoff_id,handoff_revision,receipt_kind,actor_id,role_session_id,
+                 actor_owner_fingerprint,actor_permission_snapshot_ref,
+                 actor_permission_descriptor_digest,actor_session_revision,
+                 actor_binding_revision,actor_binding_proof_digest,handoff_status,result_ref,result_hash,
+                 return_by_at_transition,failure_reason_at_transition,handoff_state_digest,
+                 transition_integrity_hash,source_object_validation_receipt_ref,
+                 source_object_validation_proof_digest,source_command_receipt_ref,correlation_id,
+                 recorded_at,reason_code
+             ) VALUES (
+                 ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,
+                 ?17,?18,?19,?20,?21,?22,?23,?24,?25
+             )",
+            params![
+                receipt.receipt_id.as_str(),
+                receipt.handoff_id.as_str(),
+                i64::try_from(receipt.handoff_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new("m3_handoff_revision_i64_required")
+                })?,
+                receipt.receipt_kind.as_str(),
+                receipt.actor_id.as_str(),
+                receipt.role_session_id.as_str(),
+                receipt.actor_owner_fingerprint.as_str(),
+                receipt.actor_permission_snapshot_ref.as_str(),
+                receipt.actor_permission_descriptor_digest.as_str(),
+                i64::try_from(receipt.actor_session_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_actor_session_revision_i64_required",
+                    )
+                })?,
+                i64::try_from(receipt.actor_binding_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_actor_binding_revision_i64_required",
+                    )
+                })?,
+                receipt.actor_binding_proof_digest.as_str(),
+                receipt.handoff_status.as_str(),
+                receipt.result_ref.as_str(),
+                receipt.result_hash.as_str(),
+                receipt.return_by_at_transition.as_deref(),
+                receipt
+                    .failure_reason_at_transition
+                    .map(HandoffReturnFailureReason::as_str),
+                receipt.handoff_state_digest.as_str(),
+                receipt.transition_integrity_hash.as_str(),
+                receipt
+                    .source_object_validation_receipt_ref
+                    .as_ref()
+                    .map(OpaqueRef::as_str),
+                receipt
+                    .source_object_validation_proof_digest
+                    .as_ref()
+                    .map(Sha256Digest::as_str),
+                receipt.source_command_receipt_ref.as_str(),
+                receipt.correlation_id.as_str(),
+                &receipt.recorded_at,
+                &receipt.reason_code,
+            ],
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_receipt_insert", error)
+        })?;
+    Ok(())
+}
+
+fn insert_handoff_source_validation_proof_in_transaction(
+    transaction: &Transaction<'_>,
+    proof: &PersistedHandoffSourceValidationProof,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_source_validation_proofs (
+                 returned_receipt_id,handoff_id,handoff_revision,source_role_session_id,
+                 source_actor_id,source_owner_fingerprint,source_binding_revision,
+                 source_permission_snapshot_ref,source_permission_descriptor_digest,
+                 source_binding_proof_digest,source_object_ref,validation_receipt_ref,
+                 validation_receipt_hash,validation_witness_digest,validation_recorded_at,
+                 validation_context_ref,validation_context_hash,
+                 validation_window_receipt_ref,validation_window_handoff_revision,
+                 validation_window_receipt_hash,validation_window_recorded_at,
+                 result_ref,result_hash,returned_recorded_at,proof_digest
+             ) VALUES (
+                 ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,
+                 ?17,?18,?19,?20,?21,?22,?23,?24,?25
+             )",
+            params![
+                proof.returned_receipt_id.as_str(),
+                proof.handoff_id.as_str(),
+                i64::try_from(proof.handoff_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_source_validation_revision_i64_required",
+                    )
+                })?,
+                proof.source_role_session_id.as_str(),
+                proof.source_actor_id.as_str(),
+                proof.source_owner_fingerprint.as_str(),
+                i64::try_from(proof.source_binding_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_source_validation_binding_revision_i64_required",
+                    )
+                })?,
+                proof.source_permission_snapshot_ref.as_str(),
+                proof.source_permission_descriptor_digest.as_str(),
+                proof.source_binding_proof_digest.as_str(),
+                proof.source_object_ref.as_str(),
+                proof.validation_receipt_ref.as_str(),
+                proof.validation_receipt_hash.as_str(),
+                proof.validation_witness_digest.as_str(),
+                &proof.validation_recorded_at,
+                proof.validation_context_ref.as_str(),
+                proof.validation_context_hash.as_str(),
+                proof.validation_window_receipt_ref.as_str(),
+                i64::try_from(proof.validation_window_handoff_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_source_validation_window_revision_i64_required",
+                    )
+                })?,
+                proof.validation_window_receipt_hash.as_str(),
+                &proof.validation_window_recorded_at,
+                proof.result_ref.as_str(),
+                proof.result_hash.as_str(),
+                &proof.returned_recorded_at,
+                proof.proof_digest.as_str(),
+            ],
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_source_validation_proof_insert", error)
+        })?;
+    Ok(())
+}
+
+struct RawHandoffSourceValidationProof {
+    returned_receipt_id: String,
+    handoff_id: String,
+    handoff_revision: i64,
+    source_role_session_id: String,
+    source_actor_id: String,
+    source_owner_fingerprint: String,
+    source_binding_revision: i64,
+    source_permission_snapshot_ref: String,
+    source_permission_descriptor_digest: String,
+    source_binding_proof_digest: String,
+    source_object_ref: String,
+    validation_receipt_ref: String,
+    validation_receipt_hash: String,
+    validation_witness_digest: String,
+    validation_recorded_at: String,
+    validation_context_ref: String,
+    validation_context_hash: String,
+    validation_window_receipt_ref: String,
+    validation_window_handoff_revision: i64,
+    validation_window_receipt_hash: String,
+    validation_window_recorded_at: String,
+    result_ref: String,
+    result_hash: String,
+    returned_recorded_at: String,
+    proof_digest: String,
+}
+
+fn handoff_source_validation_proof_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<RawHandoffSourceValidationProof> {
+    Ok(RawHandoffSourceValidationProof {
+        returned_receipt_id: row.get(0)?,
+        handoff_id: row.get(1)?,
+        handoff_revision: row.get(2)?,
+        source_role_session_id: row.get(3)?,
+        source_actor_id: row.get(4)?,
+        source_owner_fingerprint: row.get(5)?,
+        source_binding_revision: row.get(6)?,
+        source_permission_snapshot_ref: row.get(7)?,
+        source_permission_descriptor_digest: row.get(8)?,
+        source_binding_proof_digest: row.get(9)?,
+        source_object_ref: row.get(10)?,
+        validation_receipt_ref: row.get(11)?,
+        validation_receipt_hash: row.get(12)?,
+        validation_witness_digest: row.get(13)?,
+        validation_recorded_at: row.get(14)?,
+        validation_context_ref: row.get(15)?,
+        validation_context_hash: row.get(16)?,
+        validation_window_receipt_ref: row.get(17)?,
+        validation_window_handoff_revision: row.get(18)?,
+        validation_window_receipt_hash: row.get(19)?,
+        validation_window_recorded_at: row.get(20)?,
+        result_ref: row.get(21)?,
+        result_hash: row.get(22)?,
+        returned_recorded_at: row.get(23)?,
+        proof_digest: row.get(24)?,
+    })
+}
+
+fn parse_handoff_source_validation_proof(
+    raw: RawHandoffSourceValidationProof,
+) -> Result<PersistedHandoffSourceValidationProof, M3RoleSessionRepositoryError> {
+    Ok(PersistedHandoffSourceValidationProof {
+        returned_receipt_id: OpaqueRef::try_from_canonical(raw.returned_receipt_id)
+            .map_err(domain_error)?,
+        handoff_id: HandoffId::try_from_canonical(raw.handoff_id).map_err(domain_error)?,
+        handoff_revision: i64_to_u64("handoff_source_validation_revision", raw.handoff_revision)?,
+        source_role_session_id: RoleSessionId::try_from_canonical(raw.source_role_session_id)
+            .map_err(domain_error)?,
+        source_actor_id: OpaqueRef::try_from_canonical(raw.source_actor_id)
+            .map_err(domain_error)?,
+        source_owner_fingerprint: OwnerFingerprint::try_from_canonical(
+            raw.source_owner_fingerprint,
+        )
+        .map_err(domain_error)?,
+        source_binding_revision: i64_to_u64(
+            "handoff_source_validation_binding_revision",
+            raw.source_binding_revision,
+        )?,
+        source_permission_snapshot_ref: OpaqueRef::try_from_canonical(
+            raw.source_permission_snapshot_ref,
+        )
+        .map_err(domain_error)?,
+        source_permission_descriptor_digest: Sha256Digest::try_from_canonical(
+            raw.source_permission_descriptor_digest,
+        )
+        .map_err(domain_error)?,
+        source_binding_proof_digest: Sha256Digest::try_from_canonical(
+            raw.source_binding_proof_digest,
+        )
+        .map_err(domain_error)?,
+        source_object_ref: OpaqueRef::try_from_canonical(raw.source_object_ref)
+            .map_err(domain_error)?,
+        validation_receipt_ref: OpaqueRef::try_from_canonical(raw.validation_receipt_ref)
+            .map_err(domain_error)?,
+        validation_receipt_hash: Sha256Digest::try_from_canonical(raw.validation_receipt_hash)
+            .map_err(domain_error)?,
+        validation_witness_digest: Sha256Digest::try_from_canonical(raw.validation_witness_digest)
+            .map_err(domain_error)?,
+        validation_recorded_at: raw.validation_recorded_at,
+        validation_context_ref: ConversationContextRef::try_from_canonical(
+            raw.validation_context_ref,
+        )
+        .map_err(domain_error)?,
+        validation_context_hash: Sha256Digest::try_from_canonical(raw.validation_context_hash)
+            .map_err(domain_error)?,
+        validation_window_receipt_ref: OpaqueRef::try_from_canonical(
+            raw.validation_window_receipt_ref,
+        )
+        .map_err(domain_error)?,
+        validation_window_handoff_revision: i64_to_u64(
+            "handoff_source_validation_window_revision",
+            raw.validation_window_handoff_revision,
+        )?,
+        validation_window_receipt_hash: Sha256Digest::try_from_canonical(
+            raw.validation_window_receipt_hash,
+        )
+        .map_err(domain_error)?,
+        validation_window_recorded_at: raw.validation_window_recorded_at,
+        result_ref: OpaqueRef::try_from_canonical(raw.result_ref).map_err(domain_error)?,
+        result_hash: Sha256Digest::try_from_canonical(raw.result_hash).map_err(domain_error)?,
+        returned_recorded_at: raw.returned_recorded_at,
+        proof_digest: Sha256Digest::try_from_canonical(raw.proof_digest).map_err(domain_error)?,
+    })
+}
+
+fn load_handoff_source_validation_proof_in_transaction(
+    transaction: &Transaction<'_>,
+    returned_receipt_id: &OpaqueRef,
+) -> Result<Option<PersistedHandoffSourceValidationProof>, M3RoleSessionRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT returned_receipt_id,handoff_id,handoff_revision,source_role_session_id,
+                    source_actor_id,source_owner_fingerprint,source_binding_revision,
+                    source_permission_snapshot_ref,source_permission_descriptor_digest,
+                    source_binding_proof_digest,source_object_ref,validation_receipt_ref,
+                    validation_receipt_hash,validation_witness_digest,validation_recorded_at,
+                    validation_context_ref,validation_context_hash,
+                    validation_window_receipt_ref,validation_window_handoff_revision,
+                    validation_window_receipt_hash,validation_window_recorded_at,
+                    result_ref,result_hash,returned_recorded_at,proof_digest
+             FROM m3_handoff_source_validation_proofs
+             WHERE returned_receipt_id = ?1",
+            [returned_receipt_id.as_str()],
+            handoff_source_validation_proof_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_source_validation_proof_load", error)
+        })?
+        .map(parse_handoff_source_validation_proof)
+        .transpose()
+}
+
+fn validate_handoff_source_validation_proof_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    receipt: &HandoffReceipt,
+) -> Result<Option<PersistedHandoffSourceValidationProof>, M3RoleSessionRepositoryError> {
+    let persisted =
+        load_handoff_source_validation_proof_in_transaction(transaction, &receipt.receipt_id)?;
+    if receipt.receipt_kind != HandoffReceiptKind::Returned {
+        if persisted.is_some()
+            || receipt.source_object_validation_receipt_ref.is_some()
+            || receipt.source_object_validation_proof_digest.is_some()
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_history_source_validation_forbidden",
+            ));
+        }
+        return Ok(None);
+    }
+    let persisted = persisted.ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_history_source_validation_missing")
+    })?;
+    if persisted.returned_receipt_id != receipt.receipt_id
+        || persisted.handoff_id != handoff.handoff_id
+        || persisted.handoff_revision != receipt.handoff_revision
+        || persisted.result_ref != receipt.result_ref
+        || persisted.result_hash != receipt.result_hash
+        || receipt.source_object_validation_receipt_ref.as_ref()
+            != Some(&persisted.validation_receipt_ref)
+        || receipt.source_object_validation_proof_digest.as_ref() != Some(&persisted.proof_digest)
+        || persisted.source_role_session_id != handoff.from_role_session_id
+        || persisted.source_actor_id != handoff.from_actor_id
+        || persisted.source_owner_fingerprint != handoff.from_owner_fingerprint
+        || persisted.source_object_ref != handoff.source_current_object_ref
+        || !handoff.object_refs.contains(&persisted.source_object_ref)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_source_validation_binding_mismatch",
+        ));
+    }
+
+    let source_binding = load_session_binding_at_in_transaction(
+        transaction,
+        &persisted.source_role_session_id,
+        persisted.source_binding_revision,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_history_source_validation_binding_missing")
+    })?;
+    if source_binding.actor_id != persisted.source_actor_id
+        || source_binding.owner_fingerprint != persisted.source_owner_fingerprint
+        || source_binding.role_ref != handoff.source_role_ref
+        || source_binding.scope_ref != handoff.scope_ref
+        || source_binding.current_object_ref != persisted.source_object_ref
+        || source_binding.execution_channel != handoff.source_execution_channel
+        || source_binding.permission_snapshot_ref != persisted.source_permission_snapshot_ref
+        || handoff_binding_proof_digest(&source_binding)? != persisted.source_binding_proof_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_source_validation_binding_drift",
+        ));
+    }
+    let source_descriptor = load_handoff_permission_descriptor_in_transaction(
+        transaction,
+        &persisted.source_permission_snapshot_ref,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_history_source_permission_descriptor_missing")
+    })?;
+    if source_descriptor.descriptor_digest != persisted.source_permission_descriptor_digest {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_source_permission_descriptor_drift",
+        ));
+    }
+
+    let validation_receipt =
+        load_command_receipt_by_id_in_transaction(transaction, &persisted.validation_receipt_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new(
+                    "m3_handoff_history_source_validation_receipt_missing",
+                )
+            })?;
+    let validation_witness = load_handoff_validation_witness_in_transaction(
+        transaction,
+        &persisted.validation_receipt_ref,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_history_source_validation_witness_missing")
+    })?;
+    validate_handoff_validation_witness_in_transaction(transaction, &validation_witness)?;
+    let (validation_context_ref, validation_context_hash) =
+        validate_handoff_context_validation_receipt_in_transaction(
+            transaction,
+            &validation_receipt,
+            &validation_witness,
+            &source_binding,
+            &handoff.scope_ref,
+            &persisted.source_object_ref,
+        )?;
+    let validation_window = load_handoff_return_validation_window_in_transaction(
+        transaction,
+        &handoff.handoff_id,
+        receipt.handoff_revision,
+    )?;
+    if persisted.validation_window_receipt_ref != validation_window.receipt_id
+        || persisted.validation_window_handoff_revision != validation_window.handoff_revision
+        || persisted.validation_window_receipt_hash != validation_window.transition_integrity_hash
+        || persisted.validation_window_recorded_at != validation_window.recorded_at
+        || persisted.validation_recorded_at != validation_receipt.created_at
+        || persisted.returned_recorded_at != receipt.recorded_at
+        || persisted.validation_witness_digest != validation_witness.witness_digest
+        || validation_witness.validation_receipt_ref != persisted.validation_receipt_ref
+        || validation_witness.validation_context_ref != persisted.validation_context_ref
+        || validation_witness.source_role_session_id != persisted.source_role_session_id
+        || validation_witness.source_actor_id != persisted.source_actor_id
+        || validation_witness.source_owner_fingerprint != persisted.source_owner_fingerprint
+        || validation_witness.source_binding_revision != persisted.source_binding_revision
+        || validation_witness.source_permission_snapshot_ref
+            != persisted.source_permission_snapshot_ref
+        || validation_witness.source_permission_descriptor_digest
+            != persisted.source_permission_descriptor_digest
+        || validation_witness.source_binding_proof_digest != persisted.source_binding_proof_digest
+        || validation_witness.source_object_ref != persisted.source_object_ref
+        || validation_witness.validation_context_hash != persisted.validation_context_hash
+        || validation_witness.validation_receipt_hash != persisted.validation_receipt_hash
+        || validation_witness.trusted_recorded_at != persisted.validation_recorded_at
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_source_validation_window_drift",
+        ));
+    }
+    validate_handoff_source_validation_window_time(
+        &validation_window,
+        &validation_receipt.created_at,
+        &receipt.recorded_at,
+    )?;
+    if validation_context_ref != persisted.validation_context_ref
+        || validation_context_hash != persisted.validation_context_hash
+        || handoff_validation_receipt_digest(&validation_receipt)?
+            != persisted.validation_receipt_hash
+        || handoff_source_validation_proof_digest(&persisted)? != persisted.proof_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_source_validation_evidence_drift",
+        ));
+    }
+    Ok(Some(persisted))
+}
+
+fn handoff_event_type(operation: HandoffRequestOperation) -> String {
+    format!("Handoff{}", operation.as_str())
+}
+
+fn handoff_event_payload_hash(
+    command: &M3HandoffCommandReceiptDto,
+    event_type: &str,
+    decision: &str,
+    reason_code: &str,
+    transition_receipt: Option<&HandoffReceipt>,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let expected_revision = command.expected_handoff_revision.to_string();
+    let actor_session_revision = command.actor_session_revision.to_string();
+    let actor_binding_revision = command.actor_binding_revision.to_string();
+    let transition_integrity_hash = transition_receipt
+        .map(|receipt| receipt.transition_integrity_hash.as_str())
+        .unwrap_or("");
+    let source_validation_proof_digest = transition_receipt
+        .and_then(|receipt| receipt.source_object_validation_proof_digest.as_ref())
+        .map(Sha256Digest::as_str)
+        .unwrap_or("");
+    metadata_digest(
+        "m3_handoff_event",
+        &[
+            ("command_receipt_id", command.command_receipt_id.as_str()),
+            ("handoff_id", command.handoff_id.as_str()),
+            ("operation", command.operation.as_str()),
+            ("expected_handoff_revision", &expected_revision),
+            ("request_fingerprint", command.request_fingerprint.as_str()),
+            ("actor_id", command.actor_id.as_str()),
+            ("role_session_id", command.role_session_id.as_str()),
+            (
+                "actor_owner_fingerprint",
+                command.actor_owner_fingerprint.as_str(),
+            ),
+            (
+                "actor_permission_snapshot_ref",
+                command.actor_permission_snapshot_ref.as_str(),
+            ),
+            (
+                "actor_permission_descriptor_digest",
+                command.actor_permission_descriptor_digest.as_str(),
+            ),
+            ("actor_session_revision", &actor_session_revision),
+            ("actor_binding_revision", &actor_binding_revision),
+            (
+                "actor_binding_proof_digest",
+                command.actor_binding_proof_digest.as_str(),
+            ),
+            ("result_ref", command.result_ref.as_str()),
+            ("result_hash", command.result_hash.as_str()),
+            ("transition_integrity_hash", transition_integrity_hash),
+            (
+                "source_validation_proof_digest",
+                source_validation_proof_digest,
+            ),
+            ("event_type", event_type),
+            ("correlation_id", command.correlation_id.as_str()),
+            ("decision", decision),
+            ("reason_code", reason_code),
+        ],
+    )
+}
+
+fn handoff_audit_record_hash(
+    command: &M3HandoffCommandReceiptDto,
+    action: &str,
+    decision: &str,
+    source_owner_fingerprint: &OwnerFingerprint,
+    source_permission_snapshot_ref: &OpaqueRef,
+    source_role_session_id: &RoleSessionId,
+    source_binding_revision: u64,
+    source_binding_proof_digest: &Sha256Digest,
+    source_permission_descriptor_digest: &Sha256Digest,
+    recipient_owner_fingerprint: Option<&OwnerFingerprint>,
+    reason_code: &str,
+    transition_receipt: Option<&HandoffReceipt>,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let actor_session_revision = command.actor_session_revision.to_string();
+    let actor_binding_revision = command.actor_binding_revision.to_string();
+    let source_binding_revision = source_binding_revision.to_string();
+    let transition_integrity_hash = transition_receipt
+        .map(|receipt| receipt.transition_integrity_hash.as_str())
+        .unwrap_or("");
+    let source_validation_proof_digest = transition_receipt
+        .and_then(|receipt| receipt.source_object_validation_proof_digest.as_ref())
+        .map(Sha256Digest::as_str)
+        .unwrap_or("");
+    metadata_digest(
+        "m3_handoff_audit",
+        &[
+            ("command_receipt_id", command.command_receipt_id.as_str()),
+            ("handoff_id", command.handoff_id.as_str()),
+            ("action", action),
+            ("decision", decision),
+            ("request_fingerprint", command.request_fingerprint.as_str()),
+            ("actor_id", command.actor_id.as_str()),
+            ("role_session_id", command.role_session_id.as_str()),
+            (
+                "actor_owner_fingerprint",
+                command.actor_owner_fingerprint.as_str(),
+            ),
+            (
+                "actor_permission_snapshot_ref",
+                command.actor_permission_snapshot_ref.as_str(),
+            ),
+            (
+                "actor_permission_descriptor_digest",
+                command.actor_permission_descriptor_digest.as_str(),
+            ),
+            ("actor_session_revision", &actor_session_revision),
+            ("actor_binding_revision", &actor_binding_revision),
+            (
+                "actor_binding_proof_digest",
+                command.actor_binding_proof_digest.as_str(),
+            ),
+            ("result_ref", command.result_ref.as_str()),
+            ("result_hash", command.result_hash.as_str()),
+            ("transition_integrity_hash", transition_integrity_hash),
+            (
+                "source_validation_proof_digest",
+                source_validation_proof_digest,
+            ),
+            (
+                "source_owner_fingerprint",
+                source_owner_fingerprint.as_str(),
+            ),
+            (
+                "source_permission_snapshot_ref",
+                source_permission_snapshot_ref.as_str(),
+            ),
+            ("source_role_session_id", source_role_session_id.as_str()),
+            ("source_binding_revision", &source_binding_revision),
+            (
+                "source_binding_proof_digest",
+                source_binding_proof_digest.as_str(),
+            ),
+            (
+                "source_permission_descriptor_digest",
+                source_permission_descriptor_digest.as_str(),
+            ),
+            (
+                "recipient_owner_fingerprint",
+                recipient_owner_fingerprint
+                    .map(OwnerFingerprint::as_str)
+                    .unwrap_or(""),
+            ),
+            ("reason_code", reason_code),
+        ],
+    )
+}
+
+fn insert_handoff_event_and_audit_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    command_receipt: &M3HandoffCommandReceiptDto,
+    metadata: &M3CommandMetadata,
+    action: &str,
+    decision: &str,
+    reason_code: &str,
+    source_session: &RoleSession,
+    recipient_owner_fingerprint: Option<&OwnerFingerprint>,
+    transition_receipt: Option<&HandoffReceipt>,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if source_session.role_session_id != handoff.from_role_session_id
+        || source_session.actor_id != handoff.from_actor_id
+        || source_session.owner_fingerprint != handoff.from_owner_fingerprint
+        || command_receipt.handoff_id != handoff.handoff_id
+        || command_receipt.correlation_id != handoff.correlation_id
+        || transition_receipt.is_some_and(|receipt| {
+            receipt.receipt_id != command_receipt.command_receipt_id
+                || receipt.handoff_id != command_receipt.handoff_id
+                || receipt.actor_binding_proof_digest != command_receipt.actor_binding_proof_digest
+        })
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_event_audit_authority_mismatch",
+        ));
+    }
+    let event_type = handoff_event_type(command_receipt.operation);
+    let payload_hash = handoff_event_payload_hash(
+        command_receipt,
+        &event_type,
+        decision,
+        reason_code,
+        transition_receipt,
+    )?;
+    let (source_binding, source_binding_proof_digest) =
+        load_current_handoff_actor_binding_proof(transaction, source_session)?;
+    let source_permission_descriptor = load_handoff_permission_descriptor_in_transaction(
+        transaction,
+        &source_session.permission_snapshot_ref,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_audit_source_descriptor_missing")
+    })?;
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_events (
+                 event_id,command_receipt_id,handoff_id,event_type,correlation_id,payload_hash,
+                 created_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                metadata.event_id.as_str(),
+                command_receipt.command_receipt_id.as_str(),
+                handoff.handoff_id.as_str(),
+                &event_type,
+                command_receipt.correlation_id.as_str(),
+                payload_hash.as_str(),
+                &metadata.occurred_at,
+            ],
+        )
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_event_insert", error))?;
+    let record_hash = handoff_audit_record_hash(
+        command_receipt,
+        action,
+        decision,
+        &handoff.from_owner_fingerprint,
+        &source_session.permission_snapshot_ref,
+        &source_session.role_session_id,
+        source_binding.binding_revision,
+        &source_binding_proof_digest,
+        &source_permission_descriptor.descriptor_digest,
+        recipient_owner_fingerprint,
+        reason_code,
+        transition_receipt,
+    )?;
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_audit_records (
+                 audit_id,command_receipt_id,handoff_id,action,decision,
+                 source_owner_fingerprint,source_permission_snapshot_ref,
+                 source_role_session_id,source_binding_revision,
+                 source_binding_proof_digest,source_permission_descriptor_digest,
+                 recipient_owner_fingerprint,reason_code,record_hash,created_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+            params![
+                metadata.audit_id.as_str(),
+                command_receipt.command_receipt_id.as_str(),
+                handoff.handoff_id.as_str(),
+                action,
+                decision,
+                handoff.from_owner_fingerprint.as_str(),
+                source_session.permission_snapshot_ref.as_str(),
+                source_session.role_session_id.as_str(),
+                i64::try_from(source_binding.binding_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_audit_source_binding_revision_i64_required",
+                    )
+                })?,
+                source_binding_proof_digest.as_str(),
+                source_permission_descriptor.descriptor_digest.as_str(),
+                recipient_owner_fingerprint.map(OwnerFingerprint::as_str),
+                reason_code,
+                record_hash.as_str(),
+                &metadata.occurred_at,
+            ],
+        )
+        .map_err(|error| M3RoleSessionRepositoryError::sqlite("m3_handoff_audit_insert", error))?;
+    Ok(())
+}
+
+fn persist_handoff_transition_in_transaction(
+    transaction: &Transaction<'_>,
+    previous_revision: Option<u64>,
+    handoff: &Handoff,
+    command_receipt: &M3HandoffCommandReceiptDto,
+    transition_receipt: &HandoffReceipt,
+    source_validation: Option<&PersistedHandoffSourceValidationProof>,
+    metadata: &M3CommandMetadata,
+    reason_code: &str,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if transition_receipt.receipt_id != command_receipt.command_receipt_id
+        || handoff.current_receipt_id != command_receipt.command_receipt_id
+        || transition_receipt.handoff_id != handoff.handoff_id
+        || transition_receipt.handoff_revision != handoff.revision
+        || transition_receipt.handoff_status != handoff.status
+        || transition_receipt
+            .source_object_validation_proof_digest
+            .as_ref()
+            != source_validation.map(|proof| &proof.proof_digest)
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_persist_transition_shape_invalid",
+        ));
+    }
+    match previous_revision {
+        Some(previous_revision) => {
+            update_handoff_in_transaction(transaction, handoff, previous_revision)?
+        }
+        None => insert_handoff_in_transaction(transaction, handoff)?,
+    }
+    insert_handoff_command_receipt_in_transaction(transaction, command_receipt)?;
+    insert_handoff_transition_receipt_in_transaction(transaction, transition_receipt)?;
+    if let Some(source_validation) = source_validation {
+        insert_handoff_source_validation_proof_in_transaction(transaction, source_validation)?;
+    }
+    let source_session =
+        load_required_role_session_in_transaction(transaction, &handoff.from_role_session_id)?;
+    let recipient_owner = handoff
+        .recipient
+        .as_ref()
+        .map(|recipient| &recipient.owner_fingerprint);
+    insert_handoff_event_and_audit_in_transaction(
+        transaction,
+        handoff,
+        command_receipt,
+        metadata,
+        command_receipt.operation.as_str(),
+        handoff.status.as_str(),
+        reason_code,
+        &source_session,
+        recipient_owner,
+        Some(transition_receipt),
+    )
+}
+
+fn persist_handoff_nontransition_command_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    command_receipt: &M3HandoffCommandReceiptDto,
+    metadata: &M3CommandMetadata,
+    decision: &str,
+    reason_code: &str,
+    source_session: &RoleSession,
+    recipient_owner_fingerprint: Option<&OwnerFingerprint>,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    insert_handoff_command_receipt_in_transaction(transaction, command_receipt)?;
+    insert_handoff_event_and_audit_in_transaction(
+        transaction,
+        handoff,
+        command_receipt,
+        metadata,
+        command_receipt.operation.as_str(),
+        decision,
+        reason_code,
+        source_session,
+        recipient_owner_fingerprint,
+        None,
+    )
+}
+
+fn suspend_handoff_session_for_permission_failure(
+    transaction: &Transaction<'_>,
+    session: &mut RoleSession,
+    relation: PermissionRelation,
+    occurred_at: &str,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let reason = if relation == PermissionRelation::Wider {
+        SessionResolutionReason::PermissionWidened
+    } else {
+        SessionResolutionReason::PermissionMismatchOrUnknown
+    };
+    let expected_revision = session.revision;
+    session
+        .apply_resolution_reason(expected_revision, reason, occurred_at.to_string())
+        .map_err(domain_error)?;
+    update_role_session_in_transaction(transaction, session, expected_revision)
+}
+
+fn persist_handoff_permission_failure(
+    transaction: &Transaction<'_>,
+    command: &PreparedHandoffTransition,
+    identity: &M3HandoffIdempotencyIdentity,
+    handoff: Handoff,
+    mut source_session: RoleSession,
+    mut recipient_session: Option<RoleSession>,
+    source_relation: PermissionRelation,
+    recipient_relation: Option<PermissionRelation>,
+) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+    let source_failed = !source_relation.allows_continue();
+    let recipient_failed = recipient_relation.is_some_and(|relation| !relation.allows_continue());
+    if !source_failed && !recipient_failed {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_failure_requires_failure",
+        ));
+    }
+    if source_failed {
+        suspend_handoff_session_for_permission_failure(
+            transaction,
+            &mut source_session,
+            source_relation,
+            &command.metadata.occurred_at,
+        )?;
+    }
+    if recipient_failed {
+        let relation = recipient_relation.expect("checked recipient relation");
+        let recipient = recipient_session.as_mut().ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_permission_recipient_missing")
+        })?;
+        suspend_handoff_session_for_permission_failure(
+            transaction,
+            recipient,
+            relation,
+            &command.metadata.occurred_at,
+        )?;
+    }
+    let actor = handoff_actor_session(&command, &source_session, recipient_session.as_ref())?;
+    let actor_permission_descriptor =
+        handoff_permission_descriptor_for_actor(handoff_actor_authority(command)?, actor)?;
+    let result_ref = OpaqueRef::try_from_canonical(handoff.handoff_id.as_str().to_string())
+        .map_err(domain_error)?;
+    let reason_code = if source_relation == PermissionRelation::Wider
+        || recipient_relation == Some(PermissionRelation::Wider)
+    {
+        "PERMISSION_WIDENED"
+    } else {
+        "PERMISSION_MISMATCH_OR_UNKNOWN"
+    };
+    let result_hash =
+        handoff_command_result_hash(command.operation, &handoff, &result_ref, reason_code)?;
+    let command_receipt = new_handoff_command_receipt(
+        transaction,
+        &command.metadata,
+        identity,
+        command.expected_handoff_revision,
+        actor,
+        actor_permission_descriptor,
+        result_ref,
+        result_hash,
+        None,
+        M3HandoffCommandReceiptStatus::Suspended,
+        None,
+    )?;
+    let recipient_owner = recipient_session
+        .as_ref()
+        .map(|recipient| &recipient.owner_fingerprint);
+    persist_handoff_nontransition_command_in_transaction(
+        transaction,
+        &handoff,
+        &command_receipt,
+        &command.metadata,
+        "SUSPENDED",
+        reason_code,
+        &source_session,
+        recipient_owner,
+    )?;
+    Ok(M3HandoffCommandOutcome {
+        command_receipt,
+        transition_receipt: None,
+        winning_receipt: None,
+        handoff,
+        source_application: None,
+        source_session: Some(source_session),
+        recipient_session,
+        replayed: false,
+    })
+}
+
+fn persist_stale_handoff_command(
+    transaction: &Transaction<'_>,
+    command: &PreparedHandoffTransition,
+    identity: &M3HandoffIdempotencyIdentity,
+    handoff: Handoff,
+    source_session: RoleSession,
+    recipient_session: Option<RoleSession>,
+) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+    let winner_revision = command
+        .expected_handoff_revision
+        .checked_add(1)
+        .ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_handoff_stale_winner_revision_overflow")
+        })?;
+    let winner = load_handoff_receipt_by_revision_in_transaction(
+        transaction,
+        &handoff.handoff_id,
+        winner_revision,
+    )?
+    .ok_or_else(|| M3RoleSessionRepositoryError::new("m3_handoff_stale_winner_missing"))?;
+    if winner.handoff_id != handoff.handoff_id || winner.handoff_revision != winner_revision {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_stale_winner_mismatch",
+        ));
+    }
+    let actor = handoff_actor_session(&command, &source_session, recipient_session.as_ref())?;
+    let actor_permission_descriptor =
+        handoff_permission_descriptor_for_actor(handoff_actor_authority(command)?, actor)?;
+    let command_receipt = new_handoff_command_receipt(
+        transaction,
+        &command.metadata,
+        identity,
+        command.expected_handoff_revision,
+        actor,
+        actor_permission_descriptor,
+        winner.result_ref.clone(),
+        winner.result_hash.clone(),
+        None,
+        M3HandoffCommandReceiptStatus::Stale,
+        Some(winner.receipt_id.clone()),
+    )?;
+    let recipient_owner = recipient_session
+        .as_ref()
+        .map(|recipient| &recipient.owner_fingerprint);
+    persist_handoff_nontransition_command_in_transaction(
+        transaction,
+        &handoff,
+        &command_receipt,
+        &command.metadata,
+        "STALE",
+        "STALE_REVISION",
+        &source_session,
+        recipient_owner,
+    )?;
+    Ok(M3HandoffCommandOutcome {
+        command_receipt,
+        transition_receipt: None,
+        winning_receipt: Some(winner),
+        handoff,
+        source_application: None,
+        source_session: Some(source_session),
+        recipient_session,
+        replayed: false,
+    })
+}
+
+fn handoff_source_application_is_applied(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+) -> Result<bool, M3RoleSessionRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM m3_handoff_source_applications
+                 WHERE handoff_id = ?1 AND status = 'APPLIED'
+             )",
+            [handoff_id.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|value| value != 0)
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_source_application_applied_load",
+                error,
+            )
+        })
+}
+
+fn handoff_source_command_receipt_was_consumed(
+    transaction: &Transaction<'_>,
+    source_command_receipt_ref: &OpaqueRef,
+) -> Result<bool, M3RoleSessionRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM m3_handoff_source_applications
+                 WHERE source_command_receipt_ref = ?1
+             )",
+            [source_command_receipt_ref.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|value| value != 0)
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_source_command_fence_consumption_load",
+                error,
+            )
+        })
+}
+
+struct RawHandoffSourceApplication {
+    application_id: String,
+    command_receipt_id: String,
+    handoff_id: String,
+    handoff_revision: i64,
+    returned_receipt_id: String,
+    source_role_session_id: String,
+    source_actor_id: String,
+    source_owner_fingerprint: String,
+    source_permission_snapshot_ref: String,
+    result_ref: String,
+    result_hash: String,
+    source_command_receipt_ref: String,
+    source_command_fence_digest: String,
+    status: String,
+    recorded_at: String,
+}
+
+fn handoff_source_application_row(
+    row: &rusqlite::Row<'_>,
+) -> rusqlite::Result<RawHandoffSourceApplication> {
+    Ok(RawHandoffSourceApplication {
+        application_id: row.get(0)?,
+        command_receipt_id: row.get(1)?,
+        handoff_id: row.get(2)?,
+        handoff_revision: row.get(3)?,
+        returned_receipt_id: row.get(4)?,
+        source_role_session_id: row.get(5)?,
+        source_actor_id: row.get(6)?,
+        source_owner_fingerprint: row.get(7)?,
+        source_permission_snapshot_ref: row.get(8)?,
+        result_ref: row.get(9)?,
+        result_hash: row.get(10)?,
+        source_command_receipt_ref: row.get(11)?,
+        source_command_fence_digest: row.get(12)?,
+        status: row.get(13)?,
+        recorded_at: row.get(14)?,
+    })
+}
+
+fn parse_handoff_source_application(
+    raw: RawHandoffSourceApplication,
+) -> Result<HandoffSourceApplication, M3RoleSessionRepositoryError> {
+    validate_rfc3339_utc_timestamp("handoff_source_application_recorded_at", &raw.recorded_at)?;
+    Ok(HandoffSourceApplication {
+        application_id: OpaqueRef::try_from_canonical(raw.application_id).map_err(domain_error)?,
+        command_receipt_id: OpaqueRef::try_from_canonical(raw.command_receipt_id)
+            .map_err(domain_error)?,
+        handoff_id: HandoffId::try_from_canonical(raw.handoff_id).map_err(domain_error)?,
+        handoff_revision: i64_to_u64("handoff_source_application_revision", raw.handoff_revision)?,
+        returned_receipt_id: OpaqueRef::try_from_canonical(raw.returned_receipt_id)
+            .map_err(domain_error)?,
+        source_role_session_id: RoleSessionId::try_from_canonical(raw.source_role_session_id)
+            .map_err(domain_error)?,
+        source_actor_id: OpaqueRef::try_from_canonical(raw.source_actor_id)
+            .map_err(domain_error)?,
+        source_owner_fingerprint: OwnerFingerprint::try_from_canonical(
+            raw.source_owner_fingerprint,
+        )
+        .map_err(domain_error)?,
+        source_permission_snapshot_ref: OpaqueRef::try_from_canonical(
+            raw.source_permission_snapshot_ref,
+        )
+        .map_err(domain_error)?,
+        result_ref: OpaqueRef::try_from_canonical(raw.result_ref).map_err(domain_error)?,
+        result_hash: Sha256Digest::try_from_canonical(raw.result_hash).map_err(domain_error)?,
+        source_command_receipt_ref: OpaqueRef::try_from_canonical(raw.source_command_receipt_ref)
+            .map_err(domain_error)?,
+        source_command_fence_digest: Sha256Digest::try_from_canonical(
+            raw.source_command_fence_digest,
+        )
+        .map_err(domain_error)?,
+        status: HandoffSourceApplicationStatus::parse(&raw.status).map_err(domain_error)?,
+        recorded_at: raw.recorded_at,
+    })
+}
+
+const HANDOFF_SOURCE_APPLICATION_SELECT: &str =
+    "SELECT application_id,command_receipt_id,handoff_id,handoff_revision,returned_receipt_id,
+            source_role_session_id,source_actor_id,source_owner_fingerprint,
+            source_permission_snapshot_ref,result_ref,result_hash,source_command_receipt_ref,
+            source_command_fence_digest,status,recorded_at
+     FROM m3_handoff_source_applications";
+
+fn load_handoff_source_application_by_command_receipt_in_transaction(
+    transaction: &Transaction<'_>,
+    command_receipt_id: &OpaqueRef,
+) -> Result<Option<HandoffSourceApplication>, M3RoleSessionRepositoryError> {
+    let sql = format!("{HANDOFF_SOURCE_APPLICATION_SELECT} WHERE command_receipt_id = ?1");
+    transaction
+        .query_row(
+            &sql,
+            [command_receipt_id.as_str()],
+            handoff_source_application_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_source_application_load", error)
+        })?
+        .map(parse_handoff_source_application)
+        .transpose()
+}
+
+fn load_handoff_source_applications_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff_id: &HandoffId,
+) -> Result<Vec<HandoffSourceApplication>, M3RoleSessionRepositoryError> {
+    let sql = format!(
+        "{HANDOFF_SOURCE_APPLICATION_SELECT}
+         WHERE handoff_id = ?1 ORDER BY recorded_at ASC, application_id ASC"
+    );
+    let mut statement = transaction.prepare(&sql).map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_source_application_history_prepare", error)
+    })?;
+    let mut rows = statement.query([handoff_id.as_str()]).map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_source_application_history_query", error)
+    })?;
+    let mut applications = Vec::new();
+    while let Some(row) = rows.next().map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_source_application_history_next", error)
+    })? {
+        applications.push(
+            handoff_source_application_row(row)
+                .map_err(|error| {
+                    M3RoleSessionRepositoryError::sqlite(
+                        "m3_handoff_source_application_history_row",
+                        error,
+                    )
+                })
+                .and_then(parse_handoff_source_application)?,
+        );
+    }
+    Ok(applications)
+}
+
+fn validate_handoff_source_application_history_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    transition_receipts: &[HandoffReceipt],
+    command_receipts: &[M3HandoffCommandReceiptDto],
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let applications =
+        load_handoff_source_applications_in_transaction(transaction, &handoff.handoff_id)?;
+    for application in applications {
+        let command = command_receipts
+            .iter()
+            .find(|command| command.command_receipt_id == application.command_receipt_id)
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_source_application_command_missing")
+            })?;
+        let returned = transition_receipts
+            .iter()
+            .find(|receipt| receipt.receipt_id == application.returned_receipt_id)
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_returned_receipt_missing",
+                )
+            })?;
+        if returned.handoff_id != handoff.handoff_id
+            || returned.receipt_kind != HandoffReceiptKind::Returned
+            || returned.handoff_revision != handoff.revision
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_source_application_history_binding_mismatch",
+            ));
+        }
+        validate_handoff_source_application_lineage_in_transaction(
+            transaction,
+            handoff,
+            command,
+            &application,
+        )?;
+        validate_handoff_event_and_audit_in_transaction(
+            transaction,
+            handoff,
+            command,
+            application.status.as_str(),
+            application.status.as_str(),
+            None,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_handoff_rehydration_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let source_session =
+        load_required_role_session_in_transaction(transaction, &handoff.from_role_session_id)?;
+    if source_session.actor_id != handoff.from_actor_id
+        || source_session.owner_fingerprint != handoff.from_owner_fingerprint
+        || source_session.role_ref != handoff.source_role_ref
+        || source_session.scope_ref != handoff.scope_ref
+        || source_session.current_object_ref != handoff.source_current_object_ref
+        || source_session.execution_channel != handoff.source_execution_channel
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_rehydration_source_identity_mismatch",
+        ));
+    }
+    validate_source_command_receipt_in_transaction(
+        transaction,
+        &handoff.source_command_receipt_ref,
+        &source_session,
+    )?;
+
+    let transition_receipts =
+        load_handoff_receipts_in_transaction(transaction, &handoff.handoff_id)?;
+    if u64::try_from(transition_receipts.len()).ok() != Some(handoff.revision) {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_revision_count_mismatch",
+        ));
+    }
+    let mut prior_receipt: Option<&HandoffReceipt> = None;
+    for (index, receipt) in transition_receipts.iter().enumerate() {
+        let expected_revision = u64::try_from(index)
+            .ok()
+            .and_then(|index| index.checked_add(1))
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_history_revision_overflow")
+            })?;
+        if receipt.handoff_revision != expected_revision {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_history_revision_gap",
+            ));
+        }
+        validate_handoff_transition_receipt_in_transaction(
+            transaction,
+            handoff,
+            receipt,
+            prior_receipt,
+        )?;
+        prior_receipt = Some(receipt);
+    }
+    let current = transition_receipts.last().ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_history_current_receipt_missing")
+    })?;
+    if prior_receipt.map(|receipt| receipt.handoff_status) != Some(handoff.status)
+        || current.receipt_id != handoff.current_receipt_id
+        || current.handoff_revision != handoff.revision
+        || current.handoff_status != handoff.status
+        || current.return_by_at_transition != handoff.return_by
+        || current.failure_reason_at_transition != handoff.last_failure_reason
+        || handoff_state_digest(handoff)? != current.handoff_state_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_current_receipt_mismatch",
+        ));
+    }
+
+    let command_receipts =
+        load_handoff_command_receipts_in_transaction(transaction, &handoff.handoff_id)?;
+    if command_receipts.is_empty() {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_history_command_receipts_missing",
+        ));
+    }
+    for command in &command_receipts {
+        required_text("handoff_command_base_key", &command.base_key)?;
+        reject_sensitive_text("handoff_command_base_key", &command.base_key)?;
+        if command.handoff_id != handoff.handoff_id
+            || command.idempotency_scope_ref != handoff.handoff_id.as_str()
+            || command.correlation_id != handoff.correlation_id
+            || command.expected_handoff_revision > handoff.revision
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_history_command_binding_mismatch",
+            ));
+        }
+        validate_handoff_command_actor_in_transaction(transaction, handoff, command)?;
+        match command.status {
+            M3HandoffCommandReceiptStatus::Committed
+                if command.operation != HandoffRequestOperation::RecordSourceApplication =>
+            {
+                let receipt = transition_receipts
+                    .iter()
+                    .find(|receipt| receipt.receipt_id == command.command_receipt_id)
+                    .ok_or_else(|| {
+                        M3RoleSessionRepositoryError::new(
+                            "m3_handoff_history_committed_transition_missing",
+                        )
+                    })?;
+                validate_handoff_event_and_audit_in_transaction(
+                    transaction,
+                    handoff,
+                    command,
+                    receipt.handoff_status.as_str(),
+                    &receipt.reason_code,
+                    Some(receipt),
+                )?;
+            }
+            M3HandoffCommandReceiptStatus::Committed => {
+                if load_handoff_source_application_by_command_receipt_in_transaction(
+                    transaction,
+                    &command.command_receipt_id,
+                )?
+                .is_none()
+                {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_source_application_missing",
+                    ));
+                }
+            }
+            M3HandoffCommandReceiptStatus::Stale => {
+                let winner_id = command.winner_receipt_ref.as_ref().ok_or_else(|| {
+                    M3RoleSessionRepositoryError::new("m3_handoff_history_stale_winner_missing")
+                })?;
+                let winner = transition_receipts
+                    .iter()
+                    .find(|receipt| &receipt.receipt_id == winner_id)
+                    .ok_or_else(|| {
+                        M3RoleSessionRepositoryError::new("m3_handoff_history_stale_winner_missing")
+                    })?;
+                if winner.handoff_revision
+                    != command
+                        .expected_handoff_revision
+                        .checked_add(1)
+                        .ok_or_else(|| {
+                            M3RoleSessionRepositoryError::new(
+                                "m3_handoff_history_stale_winner_revision_overflow",
+                            )
+                        })?
+                    || winner.result_ref != command.result_ref
+                    || winner.result_hash != command.result_hash
+                {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_stale_winner_mismatch",
+                    ));
+                }
+                validate_handoff_event_and_audit_in_transaction(
+                    transaction,
+                    handoff,
+                    command,
+                    "STALE",
+                    "STALE_REVISION",
+                    None,
+                )?;
+            }
+            M3HandoffCommandReceiptStatus::Suspended => {
+                let (decision, reason_code) =
+                    load_handoff_audit_decision_and_reason_in_transaction(
+                        transaction,
+                        &command.command_receipt_id,
+                    )?;
+                if decision != "SUSPENDED"
+                    || !matches!(
+                        reason_code.as_str(),
+                        "PERMISSION_WIDENED" | "PERMISSION_MISMATCH_OR_UNKNOWN"
+                    )
+                    || command.result_hash
+                        != handoff_command_result_hash_for_fields(
+                            command.operation,
+                            &handoff.handoff_id,
+                            command.expected_handoff_revision,
+                            &command.result_ref,
+                            &reason_code,
+                        )?
+                {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_suspended_command_mismatch",
+                    ));
+                }
+                validate_handoff_event_and_audit_in_transaction(
+                    transaction,
+                    handoff,
+                    command,
+                    &decision,
+                    &reason_code,
+                    None,
+                )?;
+            }
+            M3HandoffCommandReceiptStatus::Rejected => {
+                let (decision, reason_code) =
+                    load_handoff_audit_decision_and_reason_in_transaction(
+                        transaction,
+                        &command.command_receipt_id,
+                    )?;
+                if decision != "REJECTED" {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_handoff_history_rejected_command_mismatch",
+                    ));
+                }
+                validate_handoff_event_and_audit_in_transaction(
+                    transaction,
+                    handoff,
+                    command,
+                    &decision,
+                    &reason_code,
+                    None,
+                )?;
+            }
+        }
+    }
+    validate_handoff_source_application_history_in_transaction(
+        transaction,
+        handoff,
+        &transition_receipts,
+        &command_receipts,
+    )?;
+    Ok(())
+}
+
+fn validate_all_handoff_rehydration_in_transaction(
+    transaction: &Transaction<'_>,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let mut statement = transaction
+        .prepare("SELECT handoff_id FROM m3_handoffs ORDER BY handoff_id ASC")
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_rehydration_list_prepare", error)
+        })?;
+    let mut rows = statement.query([]).map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_rehydration_list_query", error)
+    })?;
+    let mut handoff_ids = Vec::new();
+    while let Some(row) = rows.next().map_err(|error| {
+        M3RoleSessionRepositoryError::sqlite("m3_handoff_rehydration_list_next", error)
+    })? {
+        handoff_ids.push(
+            HandoffId::try_from_canonical(row.get::<_, String>(0).map_err(|error| {
+                M3RoleSessionRepositoryError::sqlite("m3_handoff_rehydration_list_row", error)
+            })?)
+            .map_err(domain_error)?,
+        );
+    }
+    drop(rows);
+    drop(statement);
+    for handoff_id in handoff_ids {
+        let handoff = load_required_handoff_in_transaction(transaction, &handoff_id)?;
+        validate_handoff_rehydration_in_transaction(transaction, &handoff)?;
+    }
+    Ok(())
+}
+
+fn validate_all_handoff_validation_witnesses_in_transaction(
+    transaction: &Transaction<'_>,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let mut statement = transaction
+        .prepare(
+            "SELECT validation_receipt_ref
+             FROM m3_handoff_validation_witnesses
+             ORDER BY validation_receipt_ref ASC",
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_validation_witness_list_prepare",
+                error,
+            )
+        })?;
+    let receipt_refs = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_validation_witness_list_query", error)
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_validation_witness_list_row", error)
+        })?;
+    drop(statement);
+    for receipt_ref in receipt_refs {
+        let receipt_ref = OpaqueRef::try_from_canonical(receipt_ref).map_err(domain_error)?;
+        let witness = load_handoff_validation_witness_in_transaction(transaction, &receipt_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_validation_witness_list_missing")
+            })?;
+        validate_handoff_validation_witness_in_transaction(transaction, &witness)?;
+    }
+    Ok(())
+}
+
+fn validate_all_handoff_permission_descriptors_in_transaction(
+    transaction: &Transaction<'_>,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let mut statement = transaction
+        .prepare(
+            "SELECT permission_snapshot_ref
+             FROM m3_handoff_permission_descriptors
+             ORDER BY permission_snapshot_ref ASC",
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_permission_descriptor_list_prepare",
+                error,
+            )
+        })?;
+    let snapshot_refs = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_permission_descriptor_list_query",
+                error,
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_permission_descriptor_list_row", error)
+        })?;
+    drop(statement);
+    for snapshot_ref in snapshot_refs {
+        let snapshot_ref = OpaqueRef::try_from_canonical(snapshot_ref).map_err(domain_error)?;
+        if load_handoff_permission_descriptor_in_transaction(transaction, &snapshot_ref)?.is_none()
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_permission_descriptor_list_missing",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_all_handoff_source_command_fences_in_transaction(
+    transaction: &Transaction<'_>,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let mut statement = transaction
+        .prepare(
+            "SELECT source_command_receipt_ref
+             FROM m3_handoff_source_command_fences
+             ORDER BY source_command_receipt_ref ASC",
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_source_command_fence_list_prepare",
+                error,
+            )
+        })?;
+    let receipt_refs = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_source_command_fence_list_query",
+                error,
+            )
+        })?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_source_command_fence_list_row", error)
+        })?;
+    drop(statement);
+    for receipt_ref in receipt_refs {
+        let receipt_ref = OpaqueRef::try_from_canonical(receipt_ref).map_err(domain_error)?;
+        let fence = load_handoff_source_command_fence_in_transaction(transaction, &receipt_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_list_missing")
+            })?;
+        validate_handoff_source_command_fence_in_transaction(transaction, &fence)?;
+    }
+    Ok(())
+}
+
+fn insert_handoff_source_application_in_transaction(
+    transaction: &Transaction<'_>,
+    application: &HandoffSourceApplication,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_source_applications (
+                 application_id,command_receipt_id,handoff_id,handoff_revision,
+                 returned_receipt_id,source_role_session_id,source_actor_id,
+                 source_owner_fingerprint,source_permission_snapshot_ref,result_ref,result_hash,
+                 source_command_receipt_ref,source_command_fence_digest,status,recorded_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+            params![
+                application.application_id.as_str(),
+                application.command_receipt_id.as_str(),
+                application.handoff_id.as_str(),
+                i64::try_from(application.handoff_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new("m3_handoff_revision_i64_required")
+                })?,
+                application.returned_receipt_id.as_str(),
+                application.source_role_session_id.as_str(),
+                application.source_actor_id.as_str(),
+                application.source_owner_fingerprint.as_str(),
+                application.source_permission_snapshot_ref.as_str(),
+                application.result_ref.as_str(),
+                application.result_hash.as_str(),
+                application.source_command_receipt_ref.as_str(),
+                application.source_command_fence_digest.as_str(),
+                application.status.as_str(),
+                &application.recorded_at,
+            ],
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_source_application_insert", error)
+        })?;
+    Ok(())
+}
+
+fn validate_handoff_source_application_lineage_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    command_receipt: &M3HandoffCommandReceiptDto,
+    application: &HandoffSourceApplication,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    let returned = load_handoff_receipt_by_id_in_transaction(
+        transaction,
+        &application.returned_receipt_id,
+    )?
+    .ok_or_else(|| M3RoleSessionRepositoryError::new("m3_handoff_returned_receipt_missing"))?;
+    let source_fence = load_handoff_source_command_fence_in_transaction(
+        transaction,
+        &application.source_command_receipt_ref,
+    )?
+    .ok_or_else(|| M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_missing"))?;
+    validate_handoff_source_command_fence_in_transaction(transaction, &source_fence)?;
+    let witness = load_handoff_validation_witness_in_transaction(
+        transaction,
+        &application.source_command_receipt_ref,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_source_command_fence_witness_missing")
+    })?;
+    let application_at = parse_handoff_utc_instant(
+        "m3_handoff_source_application_recorded_at",
+        &application.recorded_at,
+    )?;
+    let fence_at = parse_handoff_utc_instant(
+        "m3_handoff_source_application_fence_recorded_at",
+        &source_fence.recorded_at,
+    )?;
+    if handoff.status != HandoffState::Returned
+        || application.handoff_id != handoff.handoff_id
+        || application.handoff_revision != handoff.revision
+        || application.returned_receipt_id != handoff.current_receipt_id
+        || application.source_role_session_id != handoff.from_role_session_id
+        || application.source_actor_id != handoff.from_actor_id
+        || application.source_owner_fingerprint != handoff.from_owner_fingerprint
+        || application.source_command_receipt_ref == handoff.source_command_receipt_ref
+        || returned.handoff_id != handoff.handoff_id
+        || returned.handoff_revision != handoff.revision
+        || returned.receipt_kind != HandoffReceiptKind::Returned
+        || returned.handoff_status != HandoffState::Returned
+        || returned.result_ref != application.result_ref
+        || returned.result_hash != application.result_hash
+        || command_receipt.operation != HandoffRequestOperation::RecordSourceApplication
+        || command_receipt.status != M3HandoffCommandReceiptStatus::Committed
+        || command_receipt.command_receipt_id != application.command_receipt_id
+        || command_receipt.handoff_id != handoff.handoff_id
+        || command_receipt.expected_handoff_revision != handoff.revision
+        || command_receipt.idempotency_scope_ref != handoff.handoff_id.as_str()
+        || command_receipt.role_session_id != application.source_role_session_id
+        || command_receipt.actor_id != application.source_actor_id
+        || command_receipt.actor_owner_fingerprint != application.source_owner_fingerprint
+        || command_receipt.actor_permission_snapshot_ref
+            != application.source_permission_snapshot_ref
+        || command_receipt.actor_session_revision != source_fence.source_session_revision
+        || command_receipt.actor_binding_revision != source_fence.source_binding_revision
+        || command_receipt.actor_binding_proof_digest != source_fence.source_binding_proof_digest
+        || command_receipt.actor_permission_descriptor_digest
+            != witness.source_permission_descriptor_digest
+        || command_receipt.correlation_id != handoff.correlation_id
+        || command_receipt.result_ref != application.result_ref
+        || command_receipt.result_hash != application.result_hash
+        || command_receipt.created_at != application.recorded_at
+        || application.source_command_receipt_ref != source_fence.source_command_receipt_ref
+        || application.source_command_fence_digest != source_fence.fence_digest
+        || application.handoff_id != source_fence.handoff_id
+        || application.handoff_revision != source_fence.handoff_revision
+        || application.returned_receipt_id != source_fence.returned_receipt_id
+        || application.result_ref != source_fence.returned_result_ref
+        || application.result_hash != source_fence.returned_result_hash
+        || application.source_role_session_id != source_fence.source_role_session_id
+        || application.source_actor_id != source_fence.source_actor_id
+        || application.source_owner_fingerprint != source_fence.source_owner_fingerprint
+        || application.source_permission_snapshot_ref != source_fence.source_permission_snapshot_ref
+        || application_at < fence_at
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_application_fence_binding_mismatch",
+        ));
+    }
+    Ok(())
+}
+
+fn persist_handoff_source_application_in_transaction(
+    transaction: &Transaction<'_>,
+    handoff: &Handoff,
+    command_receipt: &M3HandoffCommandReceiptDto,
+    application: &HandoffSourceApplication,
+    metadata: &M3CommandMetadata,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if command_receipt.created_at != metadata.occurred_at
+        || command_receipt.correlation_id != metadata.correlation_id
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_application_shape_invalid",
+        ));
+    }
+    validate_handoff_source_application_lineage_in_transaction(
+        transaction,
+        handoff,
+        command_receipt,
+        application,
+    )?;
+    let source_session =
+        load_required_role_session_in_transaction(transaction, &handoff.from_role_session_id)?;
+    if source_session.permission_snapshot_ref != application.source_permission_snapshot_ref {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_application_permission_snapshot_mismatch",
+        ));
+    }
+    if handoff_source_command_receipt_was_consumed(
+        transaction,
+        &application.source_command_receipt_ref,
+    )? {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_source_application_fence_already_consumed",
+        ));
+    }
+    insert_handoff_command_receipt_in_transaction(transaction, command_receipt)?;
+    insert_handoff_source_application_in_transaction(transaction, application)?;
+    let recipient_owner = handoff
+        .recipient
+        .as_ref()
+        .map(|recipient| &recipient.owner_fingerprint);
+    insert_handoff_event_and_audit_in_transaction(
+        transaction,
+        handoff,
+        command_receipt,
+        metadata,
+        command_receipt.operation.as_str(),
+        application.status.as_str(),
+        application.status.as_str(),
+        &source_session,
+        recipient_owner,
+        None,
+    )
+}
+
+fn handoff_outcome_from_command_receipt(
+    transaction: &Transaction<'_>,
+    command_receipt: M3HandoffCommandReceiptDto,
+    replayed: bool,
+) -> Result<M3HandoffCommandOutcome, M3RoleSessionRepositoryError> {
+    let handoff = load_required_handoff_in_transaction(transaction, &command_receipt.handoff_id)?;
+    let (transition_receipt, winning_receipt, source_application) = match command_receipt.status {
+        M3HandoffCommandReceiptStatus::Committed
+            if command_receipt.operation == HandoffRequestOperation::RecordSourceApplication =>
+        {
+            let application = load_handoff_source_application_by_command_receipt_in_transaction(
+                transaction,
+                &command_receipt.command_receipt_id,
+            )?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new(
+                    "m3_handoff_source_application_replay_row_missing",
+                )
+            })?;
+            (None, None, Some(application))
+        }
+        M3HandoffCommandReceiptStatus::Committed => {
+            let transition = load_handoff_receipt_by_id_in_transaction(
+                transaction,
+                &command_receipt.command_receipt_id,
+            )?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_transition_replay_receipt_missing")
+            })?;
+            (Some(transition), None, None)
+        }
+        M3HandoffCommandReceiptStatus::Stale => {
+            let winner_id = command_receipt.winner_receipt_ref.as_ref().ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_handoff_stale_winner_missing")
+            })?;
+            let winner = load_handoff_receipt_by_id_in_transaction(transaction, winner_id)?
+                .ok_or_else(|| {
+                    M3RoleSessionRepositoryError::new("m3_handoff_stale_winner_missing")
+                })?;
+            if winner.handoff_id != handoff.handoff_id
+                || winner.handoff_revision
+                    != command_receipt
+                        .expected_handoff_revision
+                        .checked_add(1)
+                        .ok_or_else(|| {
+                            M3RoleSessionRepositoryError::new(
+                                "m3_handoff_stale_winner_revision_overflow",
+                            )
+                        })?
+            {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_handoff_stale_winner_mismatch",
+                ));
+            }
+            (None, Some(winner), None)
+        }
+        M3HandoffCommandReceiptStatus::Suspended | M3HandoffCommandReceiptStatus::Rejected => {
+            (None, None, None)
+        }
+    };
+    let source_session = Some(load_required_role_session_in_transaction(
+        transaction,
+        &handoff.from_role_session_id,
+    )?);
+    let recipient_session = handoff
+        .recipient
+        .as_ref()
+        .map(|recipient| {
+            load_required_role_session_in_transaction(transaction, &recipient.role_session_id)
+        })
+        .transpose()?;
+    Ok(M3HandoffCommandOutcome {
+        command_receipt,
+        transition_receipt,
+        winning_receipt,
+        handoff,
+        source_application,
+        source_session,
+        recipient_session,
+        replayed,
+    })
 }
 
 fn domain_error(_error: impl std::fmt::Display) -> M3RoleSessionRepositoryError {
@@ -5759,6 +13850,431 @@ fn permission_descriptor_digest(
     Ok(Sha256Digest::of_bytes(&bytes))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawPermissionSnapshotDescriptor {
+    snapshot_ref: String,
+    allowed_capability_refs: BTreeSet<String>,
+    denied_capability_refs: BTreeSet<String>,
+    constraint_refs: BTreeSet<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct PersistedHandoffPermissionDescriptor {
+    descriptor: PermissionSnapshotDescriptor,
+    descriptor_json: String,
+    descriptor_digest: Sha256Digest,
+    source_role_session_id: RoleSessionId,
+    source_binding_revision: u64,
+    source_binding_proof_digest: Sha256Digest,
+    validation_context_ref: ConversationContextRef,
+    validation_context_hash: Sha256Digest,
+    validation_receipt_ref: OpaqueRef,
+    context_updated_at: String,
+    recorded_at: String,
+}
+
+fn parse_raw_permission_refs(
+    values: BTreeSet<String>,
+) -> Result<BTreeSet<OpaqueRef>, M3RoleSessionRepositoryError> {
+    values
+        .into_iter()
+        .map(|value| OpaqueRef::try_from_canonical(value).map_err(domain_error))
+        .collect()
+}
+
+fn load_context_by_ref_in_transaction(
+    transaction: &Transaction<'_>,
+    context_ref: &ConversationContextRef,
+) -> Result<Option<M3ConversationContextReadDto>, M3RoleSessionRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT context_ref, role_session_id, permission_snapshot_ref, binding_revision,
+                    objective_ref, scope_ref, current_object_ref, source_refs_json,
+                    included_material_refs_json, included_skill_refs_json, source_watermark,
+                    freshness_marker, known_gaps_json, known_conflicts_json,
+                    excluded_material_refs_json, retrieval_status, request_more_material_ref,
+                    projection_version, scrubbed_summary_ref, source_link_labels_json,
+                    context_hash, updated_at
+             FROM m3_conversation_contexts WHERE context_ref = ?1",
+            [context_ref.as_str()],
+            conversation_context_read_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_handoff_validation_context_load", error)
+        })?
+        .map(parse_conversation_context_read)
+        .transpose()
+}
+
+fn validate_handoff_permission_descriptor_lineage_in_transaction(
+    transaction: &Transaction<'_>,
+    persisted: &PersistedHandoffPermissionDescriptor,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    validate_permission_descriptor_metadata_only(&persisted.descriptor)?;
+    validate_rfc3339_utc_timestamp(
+        "handoff_permission_descriptor_context_updated_at",
+        &persisted.context_updated_at,
+    )?;
+    validate_rfc3339_utc_timestamp(
+        "handoff_permission_descriptor_recorded_at",
+        &persisted.recorded_at,
+    )?;
+    if parse_handoff_utc_instant(
+        "m3_handoff_permission_descriptor_context_updated_at",
+        &persisted.context_updated_at,
+    )? > parse_handoff_utc_instant(
+        "m3_handoff_permission_descriptor_recorded_at",
+        &persisted.recorded_at,
+    )? {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_context_drift",
+        ));
+    }
+    let canonical_json = serde_json::to_string(&persisted.descriptor).map_err(|_| {
+        M3RoleSessionRepositoryError::new("m3_handoff_permission_descriptor_serialize_failed")
+    })?;
+    let computed_digest = permission_descriptor_digest(Some(&persisted.descriptor))?;
+    if canonical_json != persisted.descriptor_json
+        || computed_digest != persisted.descriptor_digest
+        || persisted.descriptor.snapshot_ref.as_str().is_empty()
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_catalog_drift",
+        ));
+    }
+    let binding = load_session_binding_at_in_transaction(
+        transaction,
+        &persisted.source_role_session_id,
+        persisted.source_binding_revision,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new("m3_handoff_permission_descriptor_binding_missing")
+    })?;
+    if binding.permission_snapshot_ref != persisted.descriptor.snapshot_ref
+        || handoff_binding_proof_digest(&binding)? != persisted.source_binding_proof_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_binding_drift",
+        ));
+    }
+    let context =
+        load_context_by_ref_in_transaction(transaction, &persisted.validation_context_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new(
+                    "m3_handoff_permission_descriptor_context_missing",
+                )
+            })?;
+    if context.context.role_session_id != persisted.source_role_session_id
+        || context.permission_snapshot_ref != persisted.descriptor.snapshot_ref
+        || context.binding_revision != persisted.source_binding_revision
+        || context.context_metadata_hash != persisted.validation_context_hash
+        || context.updated_at != persisted.context_updated_at
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_context_drift",
+        ));
+    }
+    let receipt =
+        load_command_receipt_by_id_in_transaction(transaction, &persisted.validation_receipt_ref)?
+            .ok_or_else(|| {
+                M3RoleSessionRepositoryError::new(
+                    "m3_handoff_permission_descriptor_receipt_missing",
+                )
+            })?;
+    if receipt.status != M3CommandReceiptStatus::Committed
+        || receipt.operation_kind != "UPSERT_CONVERSATION_CONTEXT"
+        || receipt.aggregate_kind != "CONVERSATION_CONTEXT"
+        || receipt.aggregate_id != persisted.validation_context_ref.as_str()
+        || receipt.result_ref.as_str() != persisted.validation_context_ref.as_str()
+        || receipt.role_session_id.as_ref() != Some(&persisted.source_role_session_id)
+        || receipt.owner_fingerprint.as_ref() != Some(&binding.owner_fingerprint)
+        || receipt.binding_revision != Some(persisted.source_binding_revision)
+        || receipt.provider_handle_ref.as_ref() != Some(&binding.provider_handle_ref)
+        || receipt.created_at != persisted.recorded_at
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_receipt_drift",
+        ));
+    }
+    let witness = load_handoff_validation_witness_in_transaction(
+        transaction,
+        &persisted.validation_receipt_ref,
+    )?
+    .ok_or_else(|| {
+        M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_validation_witness_missing",
+        )
+    })?;
+    validate_handoff_validation_witness_in_transaction(transaction, &witness)?;
+    if witness.validation_context_ref != persisted.validation_context_ref
+        || witness.source_role_session_id != persisted.source_role_session_id
+        || witness.source_binding_revision != persisted.source_binding_revision
+        || witness.source_permission_snapshot_ref != persisted.descriptor.snapshot_ref
+        || witness.source_permission_descriptor_digest != persisted.descriptor_digest
+        || witness.source_binding_proof_digest != persisted.source_binding_proof_digest
+        || witness.validation_context_hash != persisted.validation_context_hash
+        || witness.validation_receipt_ref != persisted.validation_receipt_ref
+        || witness.context_updated_at != persisted.context_updated_at
+        || witness.trusted_recorded_at != persisted.recorded_at
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_validation_witness_drift",
+        ));
+    }
+    Ok(())
+}
+
+fn load_handoff_permission_descriptor_in_transaction(
+    transaction: &Transaction<'_>,
+    permission_snapshot_ref: &OpaqueRef,
+) -> Result<Option<PersistedHandoffPermissionDescriptor>, M3RoleSessionRepositoryError> {
+    let raw: Option<(
+        String,
+        String,
+        String,
+        String,
+        i64,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+    )> = transaction
+        .query_row(
+            "SELECT permission_snapshot_ref,descriptor_json,descriptor_digest,
+                    source_role_session_id,source_binding_revision,
+                    source_binding_proof_digest,validation_context_ref,
+                    validation_context_hash,validation_receipt_ref,
+                    context_updated_at,recorded_at
+             FROM m3_handoff_permission_descriptors
+             WHERE permission_snapshot_ref = ?1",
+            [permission_snapshot_ref.as_str()],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                    row.get(10)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_permission_descriptor_catalog_load",
+                error,
+            )
+        })?;
+    let Some((
+        stored_snapshot_ref,
+        descriptor_json,
+        descriptor_digest,
+        source_role_session_id,
+        source_binding_revision,
+        source_binding_proof_digest,
+        validation_context_ref,
+        validation_context_hash,
+        validation_receipt_ref,
+        context_updated_at,
+        recorded_at,
+    )) = raw
+    else {
+        return Ok(None);
+    };
+    let raw_descriptor: RawPermissionSnapshotDescriptor = serde_json::from_str(&descriptor_json)
+        .map_err(|_| {
+            M3RoleSessionRepositoryError::new("m3_handoff_permission_descriptor_json_invalid")
+        })?;
+    let descriptor = PermissionSnapshotDescriptor {
+        snapshot_ref: OpaqueRef::try_from_canonical(raw_descriptor.snapshot_ref)
+            .map_err(domain_error)?,
+        allowed_capability_refs: parse_raw_permission_refs(raw_descriptor.allowed_capability_refs)?,
+        denied_capability_refs: parse_raw_permission_refs(raw_descriptor.denied_capability_refs)?,
+        constraint_refs: parse_raw_permission_refs(raw_descriptor.constraint_refs)?,
+    };
+    if descriptor.snapshot_ref.as_str() != stored_snapshot_ref
+        || &descriptor.snapshot_ref != permission_snapshot_ref
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_snapshot_mismatch",
+        ));
+    }
+    let persisted = PersistedHandoffPermissionDescriptor {
+        descriptor,
+        descriptor_json,
+        descriptor_digest: Sha256Digest::try_from_canonical(descriptor_digest)
+            .map_err(domain_error)?,
+        source_role_session_id: RoleSessionId::try_from_canonical(source_role_session_id)
+            .map_err(domain_error)?,
+        source_binding_revision: i64_to_u64(
+            "handoff_permission_descriptor_binding_revision",
+            source_binding_revision,
+        )?,
+        source_binding_proof_digest: Sha256Digest::try_from_canonical(source_binding_proof_digest)
+            .map_err(domain_error)?,
+        validation_context_ref: ConversationContextRef::try_from_canonical(validation_context_ref)
+            .map_err(domain_error)?,
+        validation_context_hash: Sha256Digest::try_from_canonical(validation_context_hash)
+            .map_err(domain_error)?,
+        validation_receipt_ref: OpaqueRef::try_from_canonical(validation_receipt_ref)
+            .map_err(domain_error)?,
+        context_updated_at,
+        recorded_at,
+    };
+    validate_handoff_permission_descriptor_lineage_in_transaction(transaction, &persisted)?;
+    Ok(Some(persisted))
+}
+
+fn require_handoff_permission_descriptor_in_transaction(
+    transaction: &Transaction<'_>,
+    descriptor: &PermissionSnapshotDescriptor,
+) -> Result<Sha256Digest, M3RoleSessionRepositoryError> {
+    let persisted =
+        load_handoff_permission_descriptor_in_transaction(transaction, &descriptor.snapshot_ref)?
+            .ok_or_else(|| {
+            M3RoleSessionRepositoryError::new(
+                "m3_handoff_permission_descriptor_authoritative_history_required",
+            )
+        })?;
+    let submitted_json = serde_json::to_string(descriptor).map_err(|_| {
+        M3RoleSessionRepositoryError::new("m3_handoff_permission_descriptor_serialize_failed")
+    })?;
+    let submitted_digest = permission_descriptor_digest(Some(descriptor))?;
+    if submitted_json != persisted.descriptor_json
+        || submitted_digest != persisted.descriptor_digest
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_authoritative_mismatch",
+        ));
+    }
+    Ok(persisted.descriptor_digest)
+}
+
+fn seed_handoff_permission_descriptor_from_context_in_transaction(
+    transaction: &Transaction<'_>,
+    descriptor: &PermissionSnapshotDescriptor,
+    binding: &SessionBinding,
+    context_ref: &ConversationContextRef,
+    context_hash: &Sha256Digest,
+    receipt: &M3CommandReceiptDto,
+    recorded_at: &str,
+) -> Result<(), M3RoleSessionRepositoryError> {
+    if descriptor.snapshot_ref != binding.permission_snapshot_ref
+        || receipt.status != M3CommandReceiptStatus::Committed
+        || receipt.operation_kind != "UPSERT_CONVERSATION_CONTEXT"
+        || receipt.aggregate_kind != "CONVERSATION_CONTEXT"
+        || receipt.aggregate_id != context_ref.as_str()
+        || receipt.result_ref.as_str() != context_ref.as_str()
+        || receipt.role_session_id.as_ref() != Some(&binding.role_session_id)
+        || receipt.owner_fingerprint.as_ref() != Some(&binding.owner_fingerprint)
+        || receipt.binding_revision != Some(binding.binding_revision)
+        || receipt.provider_handle_ref.as_ref() != Some(&binding.provider_handle_ref)
+        || receipt.created_at != recorded_at
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_seed_evidence_mismatch",
+        ));
+    }
+    if let Some(existing) =
+        load_handoff_permission_descriptor_in_transaction(transaction, &descriptor.snapshot_ref)?
+    {
+        let descriptor_json = serde_json::to_string(descriptor).map_err(|_| {
+            M3RoleSessionRepositoryError::new("m3_handoff_permission_descriptor_serialize_failed")
+        })?;
+        if existing.descriptor_json != descriptor_json
+            || existing.descriptor_digest != permission_descriptor_digest(Some(descriptor))?
+        {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_handoff_permission_descriptor_snapshot_collision",
+            ));
+        }
+        return Ok(());
+    }
+    let validation_context = load_context_by_ref_in_transaction(transaction, context_ref)?
+        .ok_or_else(|| {
+            M3RoleSessionRepositoryError::new(
+                "m3_handoff_permission_descriptor_seed_context_missing",
+            )
+        })?;
+    if validation_context.context.role_session_id != binding.role_session_id
+        || validation_context.context.current_object_ref != binding.current_object_ref
+        || validation_context.permission_snapshot_ref != binding.permission_snapshot_ref
+        || validation_context.binding_revision != binding.binding_revision
+        || validation_context.context_metadata_hash != *context_hash
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_seed_context_mismatch",
+        ));
+    }
+    let descriptor_json = serde_json::to_string(descriptor).map_err(|_| {
+        M3RoleSessionRepositoryError::new("m3_handoff_permission_descriptor_serialize_failed")
+    })?;
+    let descriptor_digest = permission_descriptor_digest(Some(descriptor))?;
+    let binding_proof_digest = handoff_binding_proof_digest(binding)?;
+    transaction
+        .execute(
+            "INSERT INTO m3_handoff_permission_descriptors (
+                 permission_snapshot_ref,descriptor_json,descriptor_digest,
+                 source_role_session_id,source_binding_revision,
+                 source_binding_proof_digest,validation_context_ref,
+                 validation_context_hash,validation_receipt_ref,
+                 context_updated_at,recorded_at
+             ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                descriptor.snapshot_ref.as_str(),
+                descriptor_json,
+                descriptor_digest.as_str(),
+                binding.role_session_id.as_str(),
+                i64::try_from(binding.binding_revision).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_handoff_permission_descriptor_binding_revision_i64_required",
+                    )
+                })?,
+                binding_proof_digest.as_str(),
+                context_ref.as_str(),
+                context_hash.as_str(),
+                receipt.receipt_id.as_str(),
+                &validation_context.updated_at,
+                recorded_at,
+            ],
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_permission_descriptor_catalog_insert",
+                error,
+            )
+        })?;
+    let stored_digest: String = transaction
+        .query_row(
+            "SELECT descriptor_digest FROM m3_handoff_permission_descriptors
+             WHERE permission_snapshot_ref = ?1",
+            [descriptor.snapshot_ref.as_str()],
+            |row| row.get(0),
+        )
+        .map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite(
+                "m3_handoff_permission_descriptor_insert_verify",
+                error,
+            )
+        })?;
+    if stored_digest != descriptor_digest.as_str() {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_handoff_permission_descriptor_insert_mismatch",
+        ));
+    }
+    Ok(())
+}
+
 fn json_value_for_refs<T: serde::Serialize>(
     value: &T,
     field: &str,
@@ -7186,6 +15702,19 @@ mod tests {
                 })
                 .expect("count M3 fixture foreign-key violations")
         }
+
+        fn handoff_rehydration_error_code(&self, handoff_id: &HandoffId) -> String {
+            let mut connection = self
+                .repository
+                .read_connection()
+                .expect("open fixture handoff rehydration connection");
+            let transaction = connection
+                .transaction()
+                .expect("begin fixture handoff rehydration transaction");
+            load_required_handoff_in_transaction(&transaction, handoff_id)
+                .expect_err("fault-injected handoff rehydration must fail")
+                .code
+        }
     }
 
     impl Drop for RepositoryFixture {
@@ -7363,6 +15892,24 @@ mod tests {
             &[],
             &[],
         );
+        seed_bound_session_with_binding(
+            fixture,
+            tag,
+            provider_namespace_ref,
+            provider_conversation_ref,
+            binding,
+            permission,
+        )
+    }
+
+    fn seed_bound_session_with_binding(
+        fixture: &RepositoryFixture,
+        tag: &str,
+        provider_namespace_ref: &str,
+        provider_conversation_ref: &str,
+        binding: ServerResolvedBinding,
+        permission: PermissionSnapshotDescriptor,
+    ) -> BoundSessionSeed {
         let role_session_id = role_session_id(format!("session:{tag}"));
         let create = fixture
             .repository
@@ -7450,6 +15997,453 @@ mod tests {
             provider_handle,
             binding_revision: session_binding.binding_revision,
         }
+    }
+
+    fn handoff_authority(seed: &BoundSessionSeed) -> M3HandoffSessionAuthority {
+        M3HandoffSessionAuthority {
+            role_session_id: seed.role_session_id.clone(),
+            binding: seed.binding.clone(),
+            previous_permission: seed.permission.clone(),
+            current_permission: seed.permission.clone(),
+            expected_session_revision: 1,
+        }
+    }
+
+    fn handoff_authority_with(
+        seed: &BoundSessionSeed,
+        binding: ServerResolvedBinding,
+        previous_permission: PermissionSnapshotDescriptor,
+        current_permission: PermissionSnapshotDescriptor,
+        expected_session_revision: u64,
+    ) -> M3HandoffSessionAuthority {
+        M3HandoffSessionAuthority {
+            role_session_id: seed.role_session_id.clone(),
+            binding,
+            previous_permission,
+            current_permission,
+            expected_session_revision,
+        }
+    }
+
+    fn handoff_id(tag: &str) -> HandoffId {
+        HandoffId::try_from_canonical(sealed_text("handoff", tag)).expect("canonical handoff id")
+    }
+
+    fn handoff_metadata(tag: &str, correlation_tag: &str, occurred_at: &str) -> M3CommandMetadata {
+        let mut metadata = metadata_with_correlation(tag, correlation_tag);
+        metadata.occurred_at = occurred_at.to_string();
+        metadata
+    }
+
+    fn handoff_server_now(occurred_at: &str) -> String {
+        validate_rfc3339_utc_timestamp("handoff_test_clock_now", occurred_at)
+            .expect("test repository clock must be RFC3339 UTC");
+        occurred_at.to_string()
+    }
+
+    fn committed_source_command_receipt(
+        fixture: &RepositoryFixture,
+        role_session_id: &RoleSessionId,
+    ) -> OpaqueRef {
+        committed_source_command_receipts(fixture, role_session_id)
+            .into_iter()
+            .next()
+            .expect("committed source command receipt")
+    }
+
+    fn committed_source_command_receipts(
+        fixture: &RepositoryFixture,
+        role_session_id: &RoleSessionId,
+    ) -> Vec<OpaqueRef> {
+        fixture
+            .repository
+            .read_connection()
+            .expect("open source receipt fixture connection")
+            .prepare(
+                "SELECT receipt_id FROM m3_command_receipts
+                 WHERE role_session_id = ?1 AND status = 'COMMITTED'
+                 ORDER BY created_at ASC, receipt_id ASC",
+            )
+            .expect("prepare source receipt fixture query")
+            .query_map([role_session_id.as_str()], |row| row.get::<_, String>(0))
+            .expect("query committed source command receipts")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect committed source command receipts")
+            .into_iter()
+            .map(|receipt_id| {
+                OpaqueRef::try_from_canonical(receipt_id).expect("canonical source receipt ref")
+            })
+            .collect()
+    }
+
+    fn handoff_permission_request(
+        tag: &str,
+        source: &BoundSessionSeed,
+        object_refs: BTreeSet<OpaqueRef>,
+    ) -> HandoffPermissionRequest {
+        HandoffPermissionRequest {
+            request_id: opaque(format!("handoff-permission-request:{tag}")),
+            requested_capability_refs: [opaque("capability:read")].into_iter().collect(),
+            requested_scope_ref: source.binding.scope_ref.clone(),
+            requested_object_refs: object_refs,
+            risk_class: opaque(format!("handoff-risk:{tag}")),
+            reason_ref: opaque(format!("handoff-reason:{tag}")),
+            source_permission_snapshot_ref: source.binding.permission_snapshot_ref.clone(),
+        }
+    }
+
+    fn mint_handoff_permission_descriptor_for_test(
+        fixture: &RepositoryFixture,
+        tag: &str,
+        seed: &BoundSessionSeed,
+    ) -> OpaqueRef {
+        let context_reference = context_ref(format!("handoff-descriptor:{tag}"));
+        let command_metadata = metadata(&format!("{tag}:handoff-descriptor"));
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now(&command_metadata.occurred_at)
+            .expect("set trusted validation clock");
+        fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: context_for(tag, seed, context_reference),
+                binding: seed.binding.clone(),
+                previous_permission: Some(seed.permission.clone()),
+                current_permission: Some(seed.permission.clone()),
+                expected_session_revision: 1,
+                metadata: command_metadata,
+            })
+            .expect("mint authoritative handoff permission descriptor from context")
+            .receipt
+            .receipt_id
+    }
+
+    fn mint_detached_handoff_permission_descriptor_for_test(
+        fixture: &RepositoryFixture,
+        tag: &str,
+        descriptor: &PermissionSnapshotDescriptor,
+    ) {
+        let binding = ServerResolvedBinding::from_server_canonical(
+            sealed_text("actor", format!("{tag}:descriptor-mint")),
+            sealed_text("role", "descriptor-mint"),
+            sealed_text("scope", format!("{tag}:descriptor-mint")),
+            sealed_text("object", format!("{tag}:descriptor-mint")),
+            sealed_text("channel", "agent"),
+            descriptor.snapshot_ref.as_str().to_string(),
+        )
+        .expect("server binding for detached descriptor mint");
+        let seed = seed_bound_session_with_binding(
+            fixture,
+            &format!("{tag}:descriptor-mint"),
+            &format!("namespace:{tag}:descriptor-mint"),
+            &format!("conversation:{tag}:descriptor-mint"),
+            binding,
+            descriptor.clone(),
+        );
+        mint_handoff_permission_descriptor_for_test(
+            fixture,
+            &format!("{tag}:descriptor-mint"),
+            &seed,
+        );
+    }
+
+    fn seed_handoff_parties_without_descriptors(
+        fixture: &RepositoryFixture,
+        tag: &str,
+    ) -> (BoundSessionSeed, BoundSessionSeed) {
+        let source = seed_bound_session(
+            fixture,
+            &format!("{tag}:source"),
+            &format!("namespace:{tag}:source"),
+            &format!("conversation:{tag}:source"),
+        );
+        let recipient_snapshot = format!("permission:{tag}:recipient:v1");
+        let recipient_binding = ServerResolvedBinding::from_server_canonical(
+            sealed_text("actor", format!("{tag}:recipient")),
+            sealed_text("role", format!("{tag}:recipient")),
+            source.binding.scope_ref.as_str().to_string(),
+            source.binding.current_object_ref.as_str().to_string(),
+            source.binding.execution_channel.as_str().to_string(),
+            sealed_text("permission", &recipient_snapshot),
+        )
+        .expect("recipient binding shares handoff scope and object");
+        let recipient_permission = permission(
+            &recipient_snapshot,
+            &["capability:read", "capability:write"],
+            &[],
+            &[],
+        );
+        let recipient = seed_bound_session_with_binding(
+            fixture,
+            &format!("{tag}:recipient"),
+            &format!("namespace:{tag}:recipient"),
+            &format!("conversation:{tag}:recipient"),
+            recipient_binding,
+            recipient_permission,
+        );
+        (source, recipient)
+    }
+
+    fn seed_handoff_parties(
+        fixture: &RepositoryFixture,
+        tag: &str,
+    ) -> (BoundSessionSeed, BoundSessionSeed) {
+        let (source, recipient) = seed_handoff_parties_without_descriptors(fixture, tag);
+        mint_handoff_permission_descriptor_for_test(fixture, &format!("{tag}:source"), &source);
+        mint_handoff_permission_descriptor_for_test(
+            fixture,
+            &format!("{tag}:recipient"),
+            &recipient,
+        );
+        (source, recipient)
+    }
+
+    fn create_handoff_command_for_test(
+        fixture: &RepositoryFixture,
+        tag: &str,
+        source: &BoundSessionSeed,
+        recipient: &BoundSessionSeed,
+    ) -> CreateHandoffCommand {
+        let handoff_id = handoff_id(tag);
+        let object_refs: BTreeSet<OpaqueRef> = [source.binding.current_object_ref.clone()]
+            .into_iter()
+            .collect();
+        CreateHandoffCommand {
+            handoff_id,
+            source: handoff_authority(source),
+            source_command_receipt_ref: committed_source_command_receipt(
+                fixture,
+                &source.role_session_id,
+            ),
+            to_role_ref: recipient.binding.role_ref.clone(),
+            to_recipient_ref: recipient.binding.actor_id.clone(),
+            requested_outcome_ref: opaque(format!("handoff-outcome:{tag}")),
+            object_refs: object_refs.clone(),
+            risk_class: opaque(format!("handoff-risk:{tag}")),
+            permission_request: handoff_permission_request(tag, source, object_refs),
+            accept_by: "2026-08-09T00:10:00Z".to_string(),
+            metadata: handoff_metadata(
+                &format!("{tag}:create-handoff"),
+                &format!("{tag}:correlation"),
+                "2026-08-09T00:00:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:00:00Z"),
+        }
+    }
+
+    fn create_handoff_for_test(
+        fixture: &RepositoryFixture,
+        tag: &str,
+        source: &BoundSessionSeed,
+        recipient: &BoundSessionSeed,
+    ) -> M3HandoffCommandOutcome {
+        fixture
+            .repository
+            .create_handoff(&create_handoff_command_for_test(
+                fixture, tag, source, recipient,
+            ))
+            .expect("create handoff")
+    }
+
+    fn fresh_source_application_base_receipt(
+        fixture: &RepositoryFixture,
+        tag: &str,
+        source: &BoundSessionSeed,
+    ) -> OpaqueRef {
+        fresh_source_application_base_receipt_at(fixture, tag, source, "2026-08-09T00:02:30Z")
+    }
+
+    fn fresh_source_application_base_receipt_at(
+        fixture: &RepositoryFixture,
+        tag: &str,
+        source: &BoundSessionSeed,
+        occurred_at: &str,
+    ) -> OpaqueRef {
+        let context_reference = context_ref(format!("context:{tag}"));
+        let mut command_metadata = metadata(&format!("{tag}:source-application-base"));
+        command_metadata.occurred_at = occurred_at.to_string();
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now(occurred_at)
+            .expect("set trusted validation clock");
+        fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: context_for(tag, source, context_reference),
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: command_metadata,
+            })
+            .expect("record a new source-owned base command")
+            .receipt
+            .receipt_id
+    }
+
+    fn fresh_source_application_fence_receipt_at(
+        fixture: &RepositoryFixture,
+        tag: &str,
+        source: &BoundSessionSeed,
+        handoff_id: &HandoffId,
+        expected_handoff_revision: u64,
+        correlation: &str,
+        occurred_at: &str,
+    ) -> OpaqueRef {
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now(occurred_at)
+            .expect("set trusted source-application fence clock");
+        fixture
+            .repository
+            .upsert_handoff_source_application_context(
+                &UpsertHandoffSourceApplicationContextCommand {
+                    handoff_id: handoff_id.clone(),
+                    expected_handoff_revision,
+                    context_command: UpsertConversationContextCommand {
+                        context: context_for(
+                            tag,
+                            source,
+                            context_ref(format!("source-application-context:{tag}")),
+                        ),
+                        binding: source.binding.clone(),
+                        previous_permission: Some(source.permission.clone()),
+                        current_permission: Some(source.permission.clone()),
+                        expected_session_revision: 1,
+                        metadata: handoff_metadata(
+                            &format!("{tag}:source-application-fence"),
+                            correlation,
+                            occurred_at,
+                        ),
+                    },
+                },
+            )
+            .expect("mint trusted source-application receipt and causal fence")
+            .receipt
+            .receipt_id
+    }
+
+    fn prepare_return_pending_handoff_for_test(
+        fixture: &RepositoryFixture,
+        tag: &str,
+    ) -> (BoundSessionSeed, BoundSessionSeed, HandoffId, String) {
+        let (source, recipient) = seed_handoff_parties(fixture, tag);
+        let created = create_handoff_for_test(fixture, tag, &source, &recipient);
+        let handoff_id = created.handoff.handoff_id.clone();
+        let correlation = format!("{tag}:correlation");
+        fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    &format!("{tag}:accept"),
+                    &correlation,
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("accept handoff for returned-lineage fixture");
+        fixture
+            .repository
+            .request_handoff_return(&RequestHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 2,
+                return_by: "2026-08-09T00:10:00Z".to_string(),
+                metadata: handoff_metadata(
+                    &format!("{tag}:request-return"),
+                    &correlation,
+                    "2026-08-09T00:02:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:02:00Z"),
+            })
+            .expect("request return for returned-lineage fixture");
+        (source, recipient, handoff_id, correlation)
+    }
+
+    fn create_returned_handoff_for_test(
+        fixture: &RepositoryFixture,
+        tag: &str,
+    ) -> (
+        BoundSessionSeed,
+        BoundSessionSeed,
+        M3HandoffCommandOutcome,
+        OpaqueRef,
+    ) {
+        let (source, recipient, handoff_id, correlation) =
+            prepare_return_pending_handoff_for_test(fixture, tag);
+        let validation_receipt_ref =
+            fresh_source_application_base_receipt(fixture, &format!("{tag}:validation"), &source);
+        let returned = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:returned-result")),
+                    result_hash: Sha256Digest::of_bytes(
+                        format!("{tag}:returned-result").as_bytes(),
+                    ),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: validation_receipt_ref.clone(),
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:returned"),
+                    &correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect("persist returned handoff with source validation lineage");
+        (source, recipient, returned, validation_receipt_ref)
+    }
+
+    fn create_handoff_with_narrowed_source_binding_for_test(
+        fixture: &RepositoryFixture,
+        tag: &str,
+    ) -> (BoundSessionSeed, M3HandoffCommandOutcome) {
+        let (source, recipient) = seed_handoff_parties(fixture, tag);
+        let narrowed_snapshot = format!("permission:{tag}:source:v2");
+        let narrowed_binding = server_binding(&format!("{tag}:source"), &narrowed_snapshot);
+        let narrowed_permission = permission(
+            &narrowed_snapshot,
+            &["capability:read"],
+            &["capability:write"],
+            &["constraint:read-only"],
+        );
+        mint_detached_handoff_permission_descriptor_for_test(
+            fixture,
+            &format!("{tag}:source:v2"),
+            &narrowed_permission,
+        );
+        let mut command = create_handoff_command_for_test(fixture, tag, &source, &recipient);
+        command.source = handoff_authority_with(
+            &source,
+            narrowed_binding.clone(),
+            source.permission.clone(),
+            narrowed_permission,
+            1,
+        );
+        command.permission_request.source_permission_snapshot_ref =
+            narrowed_binding.permission_snapshot_ref;
+        let created = fixture
+            .repository
+            .create_handoff(&command)
+            .expect("create handoff after a bounded source permission narrowing");
+        assert_eq!(created.command_receipt.actor_binding_revision, 2);
+        (source, created)
     }
 
     fn seed_starting_turn(
@@ -9516,21 +18510,63 @@ mod tests {
 
         fixture
             .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:00:00Z")
+            .expect("set trusted validation clock for FK lineage fixture");
+        fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: context_for(
+                    "guarded-snapshot",
+                    &seed.bound,
+                    context_ref("context:guarded-snapshot"),
+                ),
+                binding: seed.bound.binding.clone(),
+                previous_permission: Some(seed.bound.permission.clone()),
+                current_permission: Some(seed.bound.permission.clone()),
+                expected_session_revision: 1,
+                metadata: metadata("guarded-snapshot:validation-lineage"),
+            })
+            .expect("seed descriptor and witness lineage for live FK assertion");
+
+        let connection = fixture
+            .repository
             .read_connection()
-            .expect("open context tamper fixture")
+            .expect("open context tamper fixture");
+        let fk_error = connection
+            .execute(
+                "UPDATE m3_conversation_contexts SET context_hash = ?1 WHERE role_session_id = ?2",
+                params!["0".repeat(64), seed.bound.role_session_id.as_str()],
+            )
+            .expect_err("descriptor lineage FK rejects live context hash drift");
+        assert!(fk_error.to_string().contains("FOREIGN KEY"));
+        connection
+            .pragma_update(None, "foreign_keys", "OFF")
+            .expect("simulate historical context drift with foreign keys disabled");
+        connection
             .execute(
                 "UPDATE m3_conversation_contexts SET context_hash = ?1 WHERE role_session_id = ?2",
                 params!["0".repeat(64), seed.bound.role_session_id.as_str()],
             )
             .expect("tamper stored metadata hash while preserving SQL shape");
+        connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .expect("restore foreign-key enforcement after context drift injection");
+        drop(connection);
         let corrupted = fixture
             .repository
             .load_authorized_role_session_snapshot(&M3RoleSessionSnapshotQuery {
-                role_session_id: seed.bound.role_session_id,
-                binding: seed.bound.binding,
+                role_session_id: seed.bound.role_session_id.clone(),
+                binding: seed.bound.binding.clone(),
             })
             .expect_err("context hash corruption fails closed");
         assert_eq!(corrupted.code, "m3_persisted_context_hash_mismatch");
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("historical context hash corruption remains closed on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
     }
 
     #[test]
@@ -11875,5 +20911,4647 @@ mod tests {
             "UNMATCHED_THREAD_OR_RECORD".to_string(),
             "QUARANTINE".to_string(),
         )));
+    }
+
+    #[test]
+    fn m3c05_repository_policy_reject_is_initial_revision_one_and_create_replay_is_exact() {
+        let fixture = RepositoryFixture::new("m3c05-policy-reject");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-policy-reject");
+        let mut command =
+            create_handoff_command_for_test(&fixture, "m3c05-policy-reject", &source, &recipient);
+        command.permission_request.requested_capability_refs =
+            [opaque("capability:not-authorized")].into_iter().collect();
+
+        let rejected = fixture
+            .repository
+            .create_handoff(&command)
+            .expect("policy denial persists an initial rejected handoff");
+        assert_eq!(rejected.handoff.status, HandoffState::Rejected);
+        assert_eq!(rejected.handoff.revision, 1);
+        assert_eq!(
+            rejected
+                .transition_receipt
+                .as_ref()
+                .expect("initial rejection receipt")
+                .receipt_kind,
+            HandoffReceiptKind::Rejected
+        );
+        assert!(
+            fixture
+                .repository
+                .create_handoff(&command)
+                .expect("exact rejected create replay")
+                .replayed
+        );
+        let mut divergent = command.clone();
+        divergent.requested_outcome_ref = opaque("handoff-outcome:m3c05-policy-reject:changed");
+        assert_eq!(
+            fixture
+                .repository
+                .create_handoff(&divergent)
+                .expect_err("same create key cannot change immutable outcome")
+                .code,
+            "m3_handoff_idempotency_key_reuse_with_different_request"
+        );
+        fixture
+            .repository
+            .verify_schema()
+            .expect("policy-rejected revision one rehydrates");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("policy-rejected revision one reopens cleanly");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_recipient_reject_expire_and_return_pending_reopen() {
+        let reject_fixture = RepositoryFixture::new("m3c05-recipient-reject");
+        let (reject_source, reject_recipient) =
+            seed_handoff_parties(&reject_fixture, "m3c05-recipient-reject");
+        let reject_created = create_handoff_for_test(
+            &reject_fixture,
+            "m3c05-recipient-reject",
+            &reject_source,
+            &reject_recipient,
+        );
+        let rejected = reject_fixture
+            .repository
+            .reject_handoff(&RejectHandoffCommand {
+                handoff_id: reject_created.handoff.handoff_id.clone(),
+                source: handoff_authority(&reject_source),
+                recipient: handoff_authority(&reject_recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-recipient-reject:reject",
+                    "m3c05-recipient-reject:correlation",
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("bound recipient rejects the created handoff");
+        assert_eq!(rejected.handoff.status, HandoffState::Rejected);
+        assert_eq!(rejected.handoff.revision, 2);
+        assert_eq!(
+            rejected
+                .transition_receipt
+                .as_ref()
+                .expect("recipient rejection receipt")
+                .receipt_kind,
+            HandoffReceiptKind::Rejected
+        );
+        reject_fixture
+            .reopen()
+            .verify_schema()
+            .expect("recipient rejection reopens cleanly");
+        assert_eq!(reject_fixture.foreign_key_violation_count(), 0);
+
+        let expire_fixture = RepositoryFixture::new("m3c05-expire");
+        let (expire_source, expire_recipient) =
+            seed_handoff_parties(&expire_fixture, "m3c05-expire");
+        let expire_created = create_handoff_for_test(
+            &expire_fixture,
+            "m3c05-expire",
+            &expire_source,
+            &expire_recipient,
+        );
+        let expired = expire_fixture
+            .repository
+            .expire_handoff(&ExpireHandoffCommand {
+                handoff_id: expire_created.handoff.handoff_id.clone(),
+                source: handoff_authority(&expire_source),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-expire:expire",
+                    "m3c05-expire:correlation",
+                    "2026-08-09T00:10:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:10:00Z"),
+            })
+            .expect("source expires only at the authoritative accept deadline");
+        assert_eq!(expired.handoff.status, HandoffState::Expired);
+        assert_eq!(expired.handoff.revision, 2);
+        expire_fixture
+            .reopen()
+            .verify_schema()
+            .expect("expired handoff reopens cleanly");
+        assert_eq!(expire_fixture.foreign_key_violation_count(), 0);
+
+        let pending_fixture = RepositoryFixture::new("m3c05-return-pending");
+        let (pending_source, pending_recipient) =
+            seed_handoff_parties(&pending_fixture, "m3c05-return-pending");
+        let pending_created = create_handoff_for_test(
+            &pending_fixture,
+            "m3c05-return-pending",
+            &pending_source,
+            &pending_recipient,
+        );
+        let accepted = pending_fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: pending_created.handoff.handoff_id.clone(),
+                source: handoff_authority(&pending_source),
+                recipient: handoff_authority(&pending_recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-return-pending:accept",
+                    "m3c05-return-pending:correlation",
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("recipient accepts before source requests return");
+        assert_eq!(accepted.handoff.status, HandoffState::Accepted);
+        let pending = pending_fixture
+            .repository
+            .request_handoff_return(&RequestHandoffReturnCommand {
+                handoff_id: pending_created.handoff.handoff_id.clone(),
+                source: handoff_authority(&pending_source),
+                expected_handoff_revision: 2,
+                return_by: "2026-08-09T00:05:00Z".to_string(),
+                metadata: handoff_metadata(
+                    "m3c05-return-pending:request",
+                    "m3c05-return-pending:correlation",
+                    "2026-08-09T00:02:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:02:00Z"),
+            })
+            .expect("source requests a bounded return");
+        assert_eq!(pending.handoff.status, HandoffState::ReturnPending);
+        assert_eq!(pending.handoff.revision, 3);
+        pending_fixture
+            .reopen()
+            .verify_schema()
+            .expect("return-pending handoff reopens cleanly");
+        assert_eq!(pending_fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_recipient_actor_cas_replay_and_accept_deadline_fail_closed() {
+        let fixture = RepositoryFixture::new("m3c05-cas-deadline");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-cas-deadline");
+        let created = create_handoff_for_test(&fixture, "m3c05-cas-deadline", &source, &recipient);
+        let handoff_id = created.handoff.handoff_id.clone();
+        let correlation = "m3c05-cas-deadline:correlation";
+
+        let wrong_actor = AcceptHandoffCommand {
+            handoff_id: handoff_id.clone(),
+            source: handoff_authority(&source),
+            recipient: handoff_authority(&source),
+            expected_handoff_revision: 1,
+            metadata: handoff_metadata(
+                "m3c05-cas-deadline:wrong-actor",
+                correlation,
+                "2026-08-09T00:01:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+        };
+        assert_eq!(
+            fixture
+                .repository
+                .accept_handoff(&wrong_actor)
+                .expect_err("source must not accept as the recipient")
+                .code,
+            "m3_handoff_recipient_authority_mismatch"
+        );
+        assert_eq!(fixture.count("m3_handoff_command_receipts"), 1);
+
+        let late = AcceptHandoffCommand {
+            handoff_id: handoff_id.clone(),
+            source: handoff_authority(&source),
+            recipient: handoff_authority(&recipient),
+            expected_handoff_revision: 1,
+            metadata: handoff_metadata(
+                "m3c05-cas-deadline:late",
+                correlation,
+                "2026-08-09T00:10:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:10:00Z"),
+        };
+        assert_eq!(
+            fixture
+                .repository
+                .accept_handoff(&late)
+                .expect_err("accept deadline is an exclusive upper bound")
+                .code,
+            "m3_handoff_accept_deadline_elapsed"
+        );
+        assert_eq!(fixture.count("m3_handoff_command_receipts"), 1);
+
+        let accepted_command = AcceptHandoffCommand {
+            handoff_id: handoff_id.clone(),
+            source: handoff_authority(&source),
+            recipient: handoff_authority(&recipient),
+            expected_handoff_revision: 1,
+            metadata: handoff_metadata(
+                "m3c05-cas-deadline:accept",
+                correlation,
+                "2026-08-09T00:01:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+        };
+        let accepted = fixture
+            .repository
+            .accept_handoff(&accepted_command)
+            .expect("bound recipient accepts before deadline");
+        assert_eq!(accepted.handoff.status, HandoffState::Accepted);
+        assert_eq!(accepted.handoff.revision, 2);
+        assert!(
+            fixture
+                .repository
+                .accept_handoff(&accepted_command)
+                .expect("exact acceptance replay")
+                .replayed
+        );
+
+        let stale = fixture
+            .repository
+            .reject_handoff(&RejectHandoffCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-cas-deadline:stale-reject",
+                    correlation,
+                    "2026-08-09T00:02:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:02:00Z"),
+            })
+            .expect("older revision receives a stale receipt, not a mutation");
+        assert_eq!(
+            stale.command_receipt.status,
+            M3HandoffCommandReceiptStatus::Stale
+        );
+        assert_eq!(
+            stale
+                .winning_receipt
+                .as_ref()
+                .expect("same-handoff winner receipt")
+                .handoff_revision,
+            2
+        );
+        assert_eq!(fixture.count("m3_handoff_command_receipts"), 3);
+        fixture
+            .repository
+            .verify_schema()
+            .expect("CAS history rehydrates with the same-handoff winner");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("CAS history reopens cleanly");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_server_now_rejects_forged_metadata_before_transaction() {
+        let fixture = RepositoryFixture::new("m3c05-server-now");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-server-now");
+        let created = create_handoff_for_test(&fixture, "m3c05-server-now", &source, &recipient);
+        let handoff_id = created.handoff.handoff_id.clone();
+        let correlation = "m3c05-server-now:correlation";
+        let durable_before: BTreeMap<&str, i64> = [
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]
+        .into_iter()
+        .map(|table| (table, fixture.count(table)))
+        .collect();
+
+        // Client metadata is an untrusted transport echo.  The repository
+        // deadline decision uses only its private clock sampled in IMMEDIATE.
+        let forged_old_metadata = AcceptHandoffCommand {
+            handoff_id: handoff_id.clone(),
+            source: handoff_authority(&source),
+            recipient: handoff_authority(&recipient),
+            expected_handoff_revision: 1,
+            metadata: handoff_metadata(
+                "m3c05-server-now:forged-old",
+                correlation,
+                "2026-08-09T00:01:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:10:00Z"),
+        };
+        assert_eq!(
+            fixture
+                .repository
+                .accept_handoff(&forged_old_metadata)
+                .expect_err("repository time at the deadline rejects accept")
+                .code,
+            "m3_handoff_accept_deadline_elapsed"
+        );
+
+        // A client future-date cannot expire a handoff while repository time
+        // remains before accept_by.
+        let forged_future_metadata = ExpireHandoffCommand {
+            handoff_id: handoff_id.clone(),
+            source: handoff_authority(&source),
+            expected_handoff_revision: 1,
+            metadata: handoff_metadata(
+                "m3c05-server-now:forged-future",
+                correlation,
+                "2026-08-09T00:10:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+        };
+        assert_eq!(
+            fixture
+                .repository
+                .expire_handoff(&forged_future_metadata)
+                .expect_err("repository time before deadline rejects expire")
+                .code,
+            "m3_handoff_expire_before_accept_deadline"
+        );
+
+        let mut forged_create_metadata = create_handoff_command_for_test(
+            &fixture,
+            "m3c05-server-now:forged-create",
+            &source,
+            &recipient,
+        );
+        forged_create_metadata.metadata = handoff_metadata(
+            "m3c05-server-now:forged-create",
+            "m3c05-server-now:forged-create:correlation",
+            "2026-08-09T00:01:00Z",
+        );
+        for (table, count_before) in durable_before {
+            assert_eq!(
+                fixture.count(table),
+                count_before,
+                "deadline failures leave zero writes for {table}"
+            );
+        }
+        let trusted_create = fixture
+            .repository
+            .create_handoff(&forged_create_metadata)
+            .expect("client occurred_at does not control persisted create time");
+        assert_eq!(trusted_create.handoff.created_at, "2026-08-09T00:00:00Z");
+        let persisted: (String, i64) = fixture
+            .repository
+            .read_connection()
+            .expect("open handoff readback")
+            .query_row(
+                "SELECT status, revision FROM m3_handoffs WHERE handoff_id = ?1",
+                [handoff_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("created handoff remains after rejected forged timestamps");
+        assert_eq!(persisted, ("CREATED".to_string(), 1));
+        fixture
+            .repository
+            .verify_schema()
+            .expect("untrusted metadata leaves rehydratable history");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("untrusted metadata leaves reopen clean");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_receipt_lost_exact_replay_after_reopen_is_durable() {
+        let fixture = RepositoryFixture::new("m3c05-receipt-lost");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-receipt-lost");
+        let command =
+            create_handoff_command_for_test(&fixture, "m3c05-receipt-lost", &source, &recipient);
+
+        let committed = fixture
+            .repository
+            .create_handoff(&command)
+            .expect("first create commits before its response is lost");
+        let committed_receipt_id = committed.command_receipt.command_receipt_id.clone();
+        let committed_transition_id = committed
+            .transition_receipt
+            .as_ref()
+            .expect("created transition receipt")
+            .receipt_id
+            .clone();
+        let counts_before = fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+
+        // The caller never received `committed`; it retries only after the
+        // repository has been closed and reopened.
+        let replayed = fixture
+            .reopen()
+            .create_handoff(&command)
+            .expect("exact retry returns durable receipt rather than a second create");
+        assert!(replayed.replayed);
+        assert_eq!(
+            replayed.command_receipt.command_receipt_id,
+            committed_receipt_id
+        );
+        assert_eq!(
+            replayed
+                .transition_receipt
+                .as_ref()
+                .expect("replayed transition receipt")
+                .receipt_id,
+            committed_transition_id
+        );
+        assert_eq!(replayed.handoff, committed.handoff);
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            counts_before
+        );
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("receipt-lost replay reopens from one durable history");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_transaction_late_failure_rolls_back_handoff_and_permission_continuation() {
+        let fixture = RepositoryFixture::new("m3c05-late-rollback");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-late-rollback");
+        let mut command =
+            create_handoff_command_for_test(&fixture, "m3c05-late-rollback", &source, &recipient);
+        let narrowed_snapshot = "permission:m3c05-late-rollback:source:v2";
+        let narrowed_binding = server_binding("m3c05-late-rollback:source", narrowed_snapshot);
+        let narrowed_permission = permission(
+            narrowed_snapshot,
+            &["capability:read"],
+            &["capability:write"],
+            &["constraint:read-only"],
+        );
+        mint_detached_handoff_permission_descriptor_for_test(
+            &fixture,
+            "m3c05-late-rollback:source:v2",
+            &narrowed_permission,
+        );
+        command.source = handoff_authority_with(
+            &source,
+            narrowed_binding.clone(),
+            source.permission.clone(),
+            narrowed_permission,
+            1,
+        );
+        command.permission_request.source_permission_snapshot_ref =
+            narrowed_binding.permission_snapshot_ref.clone();
+        let source_before = fixture
+            .repository
+            .find_role_session(&source.role_session_id)
+            .expect("read source before injected late failure")
+            .expect("source exists before injected late failure");
+        let durable_before = fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+            "m3_session_bindings",
+        ]);
+        fixture.execute_batch(
+            "CREATE TRIGGER m3c05_late_handoff_audit_failure
+             BEFORE INSERT ON m3_handoff_audit_records
+             BEGIN
+               SELECT RAISE(ABORT, 'm3c05 forced late audit failure');
+             END;",
+        );
+
+        assert_eq!(
+            fixture
+                .repository
+                .create_handoff(&command)
+                .expect_err("last audit write aborts the complete IMMEDIATE transaction")
+                .code,
+            "m3_handoff_audit_insert:sqlite_failed"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+                "m3_session_bindings",
+            ]),
+            durable_before
+        );
+        let source_after = fixture
+            .repository
+            .find_role_session(&source.role_session_id)
+            .expect("read source after rolled-back transaction")
+            .expect("source survives rolled-back transaction");
+        assert_eq!(source_after.revision, source_before.revision);
+        assert_eq!(
+            source_after.permission_snapshot_ref,
+            source_before.permission_snapshot_ref
+        );
+        assert_eq!(source_after.status, source_before.status);
+        fixture.execute_batch("DROP TRIGGER m3c05_late_handoff_audit_failure;");
+        fixture
+            .repository
+            .verify_schema()
+            .expect("rolled-back late failure leaves no partial overlay");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("rolled-back late failure reopens cleanly");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_history_audit_drift_fails_closed_on_verify_and_reopen() {
+        let fixture = RepositoryFixture::new("m3c05-history-drift");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-history-drift");
+        let created = create_handoff_for_test(&fixture, "m3c05-history-drift", &source, &recipient);
+        let drift_hash = Sha256Digest::of_bytes(b"m3c05 forced audit drift");
+        fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_audit_records
+             SET record_hash = '{}'
+             WHERE handoff_id = '{}'",
+            drift_hash.as_str(),
+            created.handoff.handoff_id.as_str()
+        ));
+
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err("audit history drift is never repaired or ignored")
+                .code,
+            "m3_handoff_history_audit_hash_mismatch"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("reopen remains fail-closed for the drifted history")
+                .code,
+            "m3_handoff_history_audit_hash_mismatch"
+        );
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_return_timeout_retry_and_source_cancel_survive_recipient_offline() {
+        let fixture = RepositoryFixture::new("m3c05-return-timeout");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-return-timeout");
+        let created =
+            create_handoff_for_test(&fixture, "m3c05-return-timeout", &source, &recipient);
+        let handoff_id = created.handoff.handoff_id.clone();
+        let correlation = "m3c05-return-timeout:correlation";
+
+        let accepted = fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-return-timeout:accept",
+                    correlation,
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("recipient accepts");
+        assert_eq!(accepted.handoff.revision, 2);
+
+        assert_eq!(
+            fixture
+                .repository
+                .expire_handoff(&ExpireHandoffCommand {
+                    handoff_id: handoff_id.clone(),
+                    source: handoff_authority(&source),
+                    expected_handoff_revision: 2,
+                    metadata: handoff_metadata(
+                        "m3c05-return-timeout:illegal-expire",
+                        correlation,
+                        "2026-08-09T00:11:00Z",
+                    ),
+                    test_clock_now: handoff_server_now("2026-08-09T00:11:00Z"),
+                })
+                .expect_err("accepted handoff can never expire")
+                .code,
+            "m3_domain_validation_failed"
+        );
+
+        let requested = fixture
+            .repository
+            .request_handoff_return(&RequestHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 2,
+                return_by: "2026-08-09T00:05:00Z".to_string(),
+                metadata: handoff_metadata(
+                    "m3c05-return-timeout:request-return",
+                    correlation,
+                    "2026-08-09T00:02:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:02:00Z"),
+            })
+            .expect("source requests return");
+        assert_eq!(requested.handoff.status, HandoffState::ReturnPending);
+        assert_eq!(requested.handoff.revision, 3);
+        let requested_receipt = requested
+            .transition_receipt
+            .as_ref()
+            .expect("return request transition receipt");
+        assert_eq!(
+            requested_receipt.return_by_at_transition.as_deref(),
+            Some("2026-08-09T00:05:00Z")
+        );
+        assert_eq!(requested_receipt.failure_reason_at_transition, None);
+        assert_eq!(
+            requested.command_receipt.handoff_state_digest.as_ref(),
+            Some(&requested_receipt.handoff_state_digest)
+        );
+
+        fixture.execute_batch(&format!(
+            "UPDATE m3_role_sessions SET state = 'SUSPENDED'
+             WHERE role_session_id = '{}'",
+            recipient.role_session_id.as_str()
+        ));
+        let timed_out = fixture
+            .repository
+            .timeout_handoff_return(&TimeoutHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 3,
+                metadata: handoff_metadata(
+                    "m3c05-return-timeout:timeout",
+                    correlation,
+                    "2026-08-09T00:05:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:05:00Z"),
+            })
+            .expect("source times out an offline recipient without recipient authority");
+        assert_eq!(timed_out.handoff.status, HandoffState::ReturnFailed);
+        assert_eq!(
+            timed_out.handoff.last_failure_reason,
+            Some(HandoffReturnFailureReason::Timeout)
+        );
+        assert_eq!(timed_out.handoff.revision, 4);
+        let timed_out_receipt = timed_out
+            .transition_receipt
+            .as_ref()
+            .expect("timeout transition receipt");
+        assert_eq!(
+            timed_out_receipt.return_by_at_transition.as_deref(),
+            Some("2026-08-09T00:05:00Z")
+        );
+        assert_eq!(
+            timed_out_receipt.failure_reason_at_transition,
+            Some(HandoffReturnFailureReason::Timeout)
+        );
+
+        let retried = fixture
+            .repository
+            .retry_failed_handoff_return(&RetryFailedHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 4,
+                return_by: "2026-08-09T00:10:00Z".to_string(),
+                metadata: handoff_metadata(
+                    "m3c05-return-timeout:retry",
+                    correlation,
+                    "2026-08-09T00:06:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:06:00Z"),
+            })
+            .expect("source retry requires and supplies a new later deadline");
+        assert_eq!(retried.handoff.status, HandoffState::ReturnPending);
+        assert_eq!(retried.handoff.revision, 5);
+        let retried_receipt = retried
+            .transition_receipt
+            .as_ref()
+            .expect("retry transition receipt");
+        assert_eq!(
+            retried_receipt.return_by_at_transition.as_deref(),
+            Some("2026-08-09T00:10:00Z")
+        );
+        assert_eq!(retried_receipt.failure_reason_at_transition, None);
+
+        let recipient_failure = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 5,
+                result: HandoffReturnResult::RecipientReturnFailed {
+                    failure_ref: opaque("m3c05-return-timeout:recipient-failure"),
+                    failure_hash: Sha256Digest::of_bytes(b"m3c05 recipient return failure"),
+                },
+                metadata: handoff_metadata(
+                    "m3c05-return-timeout:recipient-failure",
+                    correlation,
+                    "2026-08-09T00:07:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:07:00Z"),
+            })
+            .expect_err("offline recipient cannot submit the return result");
+        assert_eq!(
+            recipient_failure.code,
+            "m3_handoff_recipient_active_session_required"
+        );
+
+        let cancelled = fixture
+            .repository
+            .cancel_failed_handoff_by_source(&CancelFailedHandoffBySourceCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 5,
+                metadata: handoff_metadata(
+                    "m3c05-return-timeout:cancel-failed",
+                    correlation,
+                    "2026-08-09T00:08:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:08:00Z"),
+            })
+            .expect_err("source cannot cancel until an explicit failed return exists");
+        assert_eq!(cancelled.code, "m3_domain_validation_failed");
+        let timed_out_again = fixture
+            .repository
+            .timeout_handoff_return(&TimeoutHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 5,
+                metadata: handoff_metadata(
+                    "m3c05-return-timeout:timeout-again",
+                    correlation,
+                    "2026-08-09T00:10:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:10:00Z"),
+            })
+            .expect("source alone records the retried-return timeout");
+        assert_eq!(timed_out_again.handoff.status, HandoffState::ReturnFailed);
+        assert_eq!(timed_out_again.handoff.revision, 6);
+        assert_eq!(
+            timed_out_again
+                .transition_receipt
+                .as_ref()
+                .expect("second timeout transition receipt")
+                .failure_reason_at_transition,
+            Some(HandoffReturnFailureReason::Timeout)
+        );
+        let cancelled = fixture
+            .repository
+            .cancel_failed_handoff_by_source(&CancelFailedHandoffBySourceCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                expected_handoff_revision: 6,
+                metadata: handoff_metadata(
+                    "m3c05-return-timeout:cancel-failed-after-timeout",
+                    correlation,
+                    "2026-08-09T00:11:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:11:00Z"),
+            })
+            .expect("source may close an explicitly failed return");
+        assert_eq!(cancelled.handoff.status, HandoffState::CancelledBySource);
+        assert_eq!(cancelled.handoff.revision, 7);
+        assert_eq!(
+            cancelled.handoff.last_failure_reason,
+            Some(HandoffReturnFailureReason::Timeout)
+        );
+        let cancelled_receipt = cancelled
+            .transition_receipt
+            .as_ref()
+            .expect("cancel failed return transition receipt");
+        assert_eq!(
+            cancelled_receipt.return_by_at_transition.as_deref(),
+            Some("2026-08-09T00:10:00Z")
+        );
+        assert_eq!(
+            cancelled_receipt.failure_reason_at_transition,
+            Some(HandoffReturnFailureReason::Timeout)
+        );
+        fixture
+            .repository
+            .verify_schema()
+            .expect("timeout/retry history rehydrates with offline recipient");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("timeout/retry cancellation reopens with offline recipient history");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_return_by_state_snapshot_single_and_coordinated_drift_fail_closed() {
+        let single = RepositoryFixture::new("m3c05-return-by-single-drift");
+        let (source, recipient, handoff_id, correlation) =
+            prepare_return_pending_handoff_for_test(&single, "m3c05-return-by-single-drift");
+        let durable_before = single.counts([
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        single.execute_batch(&format!(
+            "UPDATE m3_handoffs
+             SET return_by = '2099-08-09T00:10:00Z'
+             WHERE handoff_id = '{}'",
+            handoff_id.as_str(),
+        ));
+        assert_eq!(single.foreign_key_violation_count(), 0);
+        let rejected = single
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::RecipientReturnFailed {
+                    failure_ref: opaque("m3c05-return-by-single-drift:failure"),
+                    failure_hash: Sha256Digest::of_bytes(b"return-by single drift failure"),
+                },
+                metadata: handoff_metadata(
+                    "m3c05-return-by-single-drift:result",
+                    &correlation,
+                    "2026-08-09T00:11:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:11:00Z"),
+            })
+            .expect_err("a current-row deadline rewrite must fail before a transition write");
+        assert_eq!(rejected.code, "m3_handoff_history_current_receipt_mismatch");
+        assert_eq!(
+            single.counts([
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            durable_before
+        );
+        assert!(single.repository.verify_schema().is_err());
+        assert!(M3RoleSessionSqliteRepository::open_rehearsal(&single.path).is_err());
+
+        let coordinated = RepositoryFixture::new("m3c05-return-by-coordinated-drift");
+        let (source, recipient, handoff_id, correlation) = prepare_return_pending_handoff_for_test(
+            &coordinated,
+            "m3c05-return-by-coordinated-drift",
+        );
+        let durable_before = coordinated.counts([
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        coordinated.execute_batch(&format!(
+            "UPDATE m3_handoff_command_receipts
+             SET return_by_at_transition = '2099-08-09T00:10:00Z'
+             WHERE command_receipt_id = (
+                 SELECT current_receipt_id FROM m3_handoffs WHERE handoff_id = '{0}'
+             );
+             UPDATE m3_handoff_receipts
+             SET return_by_at_transition = '2099-08-09T00:10:00Z'
+             WHERE receipt_id = (
+                 SELECT current_receipt_id FROM m3_handoffs WHERE handoff_id = '{0}'
+             );
+             UPDATE m3_handoffs
+             SET return_by = '2099-08-09T00:10:00Z'
+             WHERE handoff_id = '{0}';",
+            handoff_id.as_str(),
+        ));
+        assert_eq!(coordinated.foreign_key_violation_count(), 0);
+        let rejected = coordinated
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::RecipientReturnFailed {
+                    failure_ref: opaque("m3c05-return-by-coordinated-drift:failure"),
+                    failure_hash: Sha256Digest::of_bytes(b"return-by coordinated drift failure"),
+                },
+                metadata: handoff_metadata(
+                    "m3c05-return-by-coordinated-drift:result",
+                    &correlation,
+                    "2026-08-09T00:11:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:11:00Z"),
+            })
+            .expect_err("coordinated deadline projection drift cannot replace its state hash");
+        assert_eq!(
+            rejected.code,
+            "m3_handoff_history_transition_integrity_hash_mismatch"
+        );
+        assert_eq!(
+            coordinated.counts([
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            durable_before
+        );
+        assert!(coordinated.repository.verify_schema().is_err());
+        assert!(M3RoleSessionSqliteRepository::open_rehearsal(&coordinated.path).is_err());
+    }
+
+    #[test]
+    fn m3c05_repository_return_failure_state_snapshot_single_and_coordinated_drift_fail_closed() {
+        let single = RepositoryFixture::new("m3c05-return-failure-single-drift");
+        let (source, _, handoff_id, correlation) =
+            prepare_return_pending_handoff_for_test(&single, "m3c05-return-failure-single-drift");
+        let timed_out = single
+            .repository
+            .timeout_handoff_return(&TimeoutHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 3,
+                metadata: handoff_metadata(
+                    "m3c05-return-failure-single-drift:timeout",
+                    &correlation,
+                    "2026-08-09T00:10:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:10:00Z"),
+            })
+            .expect("create timeout failure snapshot");
+        assert_eq!(
+            timed_out
+                .transition_receipt
+                .as_ref()
+                .expect("timeout receipt")
+                .failure_reason_at_transition,
+            Some(HandoffReturnFailureReason::Timeout)
+        );
+        let durable_before = single.counts([
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        single.execute_batch(&format!(
+            "UPDATE m3_handoffs
+             SET last_failure_reason = 'RECIPIENT_RETURN_FAILED'
+             WHERE handoff_id = '{}'",
+            handoff_id.as_str(),
+        ));
+        assert_eq!(single.foreign_key_violation_count(), 0);
+        let rejected = single
+            .repository
+            .cancel_failed_handoff_by_source(&CancelFailedHandoffBySourceCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 4,
+                metadata: handoff_metadata(
+                    "m3c05-return-failure-single-drift:cancel",
+                    &correlation,
+                    "2026-08-09T00:11:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:11:00Z"),
+            })
+            .expect_err("a current-row failure reason rewrite must fail before cancellation");
+        assert_eq!(rejected.code, "m3_handoff_history_current_receipt_mismatch");
+        assert_eq!(
+            single.counts([
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            durable_before
+        );
+        assert!(single.repository.verify_schema().is_err());
+        assert!(M3RoleSessionSqliteRepository::open_rehearsal(&single.path).is_err());
+
+        let coordinated = RepositoryFixture::new("m3c05-return-failure-coordinated-drift");
+        let (source, _, handoff_id, correlation) = prepare_return_pending_handoff_for_test(
+            &coordinated,
+            "m3c05-return-failure-coordinated-drift",
+        );
+        coordinated
+            .repository
+            .timeout_handoff_return(&TimeoutHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 3,
+                metadata: handoff_metadata(
+                    "m3c05-return-failure-coordinated-drift:timeout",
+                    &correlation,
+                    "2026-08-09T00:10:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:10:00Z"),
+            })
+            .expect("create coordinated timeout failure snapshot");
+        let durable_before = coordinated.counts([
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        coordinated.execute_batch(&format!(
+            "UPDATE m3_handoff_command_receipts
+             SET failure_reason_at_transition = 'RECIPIENT_RETURN_FAILED'
+             WHERE command_receipt_id = (
+                 SELECT current_receipt_id FROM m3_handoffs WHERE handoff_id = '{0}'
+             );
+             UPDATE m3_handoff_receipts
+             SET failure_reason_at_transition = 'RECIPIENT_RETURN_FAILED',
+                 reason_code = 'RECIPIENT_RETURN_FAILED'
+             WHERE receipt_id = (
+                 SELECT current_receipt_id FROM m3_handoffs WHERE handoff_id = '{0}'
+             );
+             UPDATE m3_handoffs
+             SET last_failure_reason = 'RECIPIENT_RETURN_FAILED'
+             WHERE handoff_id = '{0}';",
+            handoff_id.as_str(),
+        ));
+        assert_eq!(coordinated.foreign_key_violation_count(), 0);
+        let rejected = coordinated
+            .repository
+            .cancel_failed_handoff_by_source(&CancelFailedHandoffBySourceCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 4,
+                metadata: handoff_metadata(
+                    "m3c05-return-failure-coordinated-drift:cancel",
+                    &correlation,
+                    "2026-08-09T00:11:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:11:00Z"),
+            })
+            .expect_err("coordinated failure projection drift cannot replace its state hash");
+        assert_eq!(
+            rejected.code,
+            "m3_handoff_history_transition_integrity_hash_mismatch"
+        );
+        assert_eq!(
+            coordinated.counts([
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            durable_before
+        );
+        assert!(coordinated.repository.verify_schema().is_err());
+        assert!(M3RoleSessionSqliteRepository::open_rehearsal(&coordinated.path).is_err());
+    }
+
+    #[test]
+    fn m3c05_repository_handoff_permission_descriptor_requires_authoritative_seed_and_fingerprints_capabilities(
+    ) {
+        let fixture = RepositoryFixture::new("m3c05-descriptor-authoritative-seed");
+        let tag = "m3c05-descriptor-authoritative-seed";
+        let (source, recipient) = seed_handoff_parties_without_descriptors(&fixture, tag);
+        let command = create_handoff_command_for_test(&fixture, tag, &source, &recipient);
+        let before = fixture.counts([
+            "m3_handoff_permission_descriptors",
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+
+        let missing = fixture
+            .repository
+            .create_handoff(&command)
+            .expect_err("ordinary handoff command cannot first-register its descriptor");
+        assert_eq!(
+            missing.code,
+            "m3_handoff_permission_descriptor_authoritative_history_required"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoff_permission_descriptors",
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            before,
+            "missing trusted history is a zero-write rejection"
+        );
+
+        mint_handoff_permission_descriptor_for_test(&fixture, &format!("{tag}:source"), &source);
+        mint_handoff_permission_descriptor_for_test(
+            &fixture,
+            &format!("{tag}:recipient"),
+            &recipient,
+        );
+        let original_identity =
+            handoff_create_idempotency_identity(&command).expect("fingerprint original descriptor");
+        let committed = fixture
+            .repository
+            .create_handoff(&command)
+            .expect("trusted context lineage authorizes the handoff descriptor");
+        assert_eq!(committed.handoff.status, HandoffState::Created);
+
+        let mut different_descriptor = command.clone();
+        different_descriptor
+            .source
+            .current_permission
+            .allowed_capability_refs
+            .remove(&opaque("capability:write"));
+        let divergent_identity = handoff_create_idempotency_identity(&different_descriptor)
+            .expect("fingerprint changed descriptor");
+        assert_ne!(
+            original_identity.request_fingerprint, divergent_identity.request_fingerprint,
+            "previous/current permission descriptor digests are request authority fields"
+        );
+        let durable_before_divergent = fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        assert_eq!(
+            fixture
+                .repository
+                .create_handoff(&different_descriptor)
+                .expect_err("same key with a changed capability descriptor is divergent")
+                .code,
+            "m3_handoff_idempotency_key_reuse_with_different_request"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            durable_before_divergent
+        );
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("authoritative descriptor and fingerprint history reopen");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_handoff_permission_descriptor_catalog_json_time_and_lineage_drift_fail_closed(
+    ) {
+        let json_fixture = RepositoryFixture::new("m3c05-descriptor-json-drift");
+        let json_tag = "m3c05-descriptor-json-drift";
+        let (source, recipient) = seed_handoff_parties(&json_fixture, json_tag);
+        create_handoff_for_test(&json_fixture, json_tag, &source, &recipient);
+        json_fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_permission_descriptors
+             SET descriptor_json = ' ' || descriptor_json
+             WHERE permission_snapshot_ref = '{}'",
+            source.permission.snapshot_ref.as_str(),
+        ));
+        assert_eq!(json_fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            json_fixture
+                .repository
+                .verify_schema()
+                .expect_err("noncanonical JSON cannot rewrite a trusted descriptor")
+                .code,
+            "m3_handoff_permission_descriptor_catalog_drift"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&json_fixture.path)
+                .expect_err("noncanonical descriptor JSON remains closed on reopen")
+                .code,
+            "m3_handoff_permission_descriptor_catalog_drift"
+        );
+
+        let orphan_fixture = RepositoryFixture::new("m3c05-descriptor-orphan-json-drift");
+        let orphan_tag = "m3c05-descriptor-orphan-json-drift";
+        let (_, orphan_recipient) = seed_handoff_parties(&orphan_fixture, orphan_tag);
+        assert_eq!(orphan_fixture.count("m3_handoffs"), 0);
+        orphan_fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_permission_descriptors
+             SET descriptor_json = ' ' || descriptor_json
+             WHERE permission_snapshot_ref = '{}'",
+            orphan_recipient.permission.snapshot_ref.as_str(),
+        ));
+        assert_eq!(orphan_fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            orphan_fixture
+                .repository
+                .verify_schema()
+                .expect_err("even an unused descriptor catalog row is revalidated")
+                .code,
+            "m3_handoff_permission_descriptor_catalog_drift"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&orphan_fixture.path)
+                .expect_err("unused descriptor catalog drift fails on reopen")
+                .code,
+            "m3_handoff_permission_descriptor_catalog_drift"
+        );
+
+        let time_fixture = RepositoryFixture::new("m3c05-descriptor-time-drift");
+        let time_tag = "m3c05-descriptor-time-drift";
+        let (source, recipient) = seed_handoff_parties(&time_fixture, time_tag);
+        let created = create_handoff_for_test(&time_fixture, time_tag, &source, &recipient);
+        time_fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_permission_descriptors
+             SET recorded_at = '2026-08-09T00:00:01Z'
+             WHERE permission_snapshot_ref = '{}'",
+            source.permission.snapshot_ref.as_str(),
+        ));
+        assert_eq!(time_fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            time_fixture.handoff_rehydration_error_code(&created.handoff.handoff_id),
+            "m3_handoff_permission_descriptor_receipt_drift"
+        );
+        assert_eq!(
+            time_fixture
+                .repository
+                .verify_schema()
+                .expect_err("schema join rejects descriptor trusted receipt time drift")
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&time_fixture.path)
+                .expect_err("descriptor time drift remains closed on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+
+        let lineage_fixture = RepositoryFixture::new("m3c05-descriptor-lineage-fk");
+        let lineage_tag = "m3c05-descriptor-lineage-fk";
+        let (source, recipient) = seed_handoff_parties(&lineage_fixture, lineage_tag);
+        create_handoff_for_test(&lineage_fixture, lineage_tag, &source, &recipient);
+        let drift_hash = Sha256Digest::of_bytes(b"different descriptor validation context");
+        let connection = lineage_fixture
+            .repository
+            .read_connection()
+            .expect("open descriptor lineage injection connection");
+        let drift = connection
+            .execute(
+                "UPDATE m3_handoff_permission_descriptors
+                 SET validation_context_hash = ?1
+                 WHERE permission_snapshot_ref = ?2",
+                params![drift_hash.as_str(), source.permission.snapshot_ref.as_str(),],
+            )
+            .expect_err("descriptor context lineage hash is FK-constrained");
+        assert!(drift.to_string().contains("FOREIGN KEY constraint failed"));
+        drop(connection);
+        lineage_fixture
+            .repository
+            .verify_schema()
+            .expect("rejected descriptor lineage drift leaves history intact");
+        lineage_fixture
+            .reopen()
+            .verify_schema()
+            .expect("rejected descriptor lineage drift reopens cleanly");
+        assert_eq!(lineage_fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_validation_context_same_ref_revalidates_with_independent_trusted_time_and_is_immediately_usable(
+    ) {
+        let fixture = RepositoryFixture::new("m3c05-validation-context-revalidation");
+        let tag = "m3c05-validation-context-revalidation";
+        let (source, recipient) = seed_handoff_parties_without_descriptors(&fixture, tag);
+        let validation_context_ref = context_ref(format!("context:{tag}:source"));
+        let validation_context = context_for(tag, &source, validation_context_ref.clone());
+
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:00:00Z")
+            .expect("set initial trusted validation time");
+        let first = fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: validation_context.clone(),
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: metadata(&format!("{tag}:initial-validation")),
+            })
+            .expect("initial dedicated validation context mints authoritative evidence");
+        mint_handoff_permission_descriptor_for_test(
+            &fixture,
+            &format!("{tag}:recipient"),
+            &recipient,
+        );
+
+        let created = create_handoff_for_test(&fixture, tag, &source, &recipient);
+        let handoff_id = created.handoff.handoff_id.clone();
+        let correlation = format!("{tag}:correlation");
+        fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    &format!("{tag}:accept"),
+                    &correlation,
+                    "2099-08-09T00:00:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("accept before deadline using repository time");
+        fixture
+            .repository
+            .request_handoff_return(&RequestHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 2,
+                return_by: "2026-08-09T00:10:00Z".to_string(),
+                metadata: handoff_metadata(
+                    &format!("{tag}:request-return"),
+                    &correlation,
+                    "1999-08-09T00:00:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:02:00Z"),
+            })
+            .expect("request return using repository time");
+
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:02:30Z")
+            .expect("set independent revalidation time");
+        let mut revalidation_metadata = metadata(&format!("{tag}:revalidation"));
+        revalidation_metadata.occurred_at = "2099-08-09T00:02:30Z".to_string();
+        let revalidated = fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: validation_context.clone(),
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: revalidation_metadata,
+            })
+            .expect("same immutable context is independently revalidated");
+        assert_eq!(revalidated.receipt.created_at, "2026-08-09T00:02:30Z");
+        assert_ne!(first.receipt.receipt_id, revalidated.receipt.receipt_id);
+
+        let witness_rows = fixture
+            .repository
+            .read_connection()
+            .expect("open validation witness query")
+            .prepare(
+                "SELECT validation_receipt_ref,context_updated_at,trusted_recorded_at
+                 FROM m3_handoff_validation_witnesses
+                 WHERE validation_context_ref = ?1
+                 ORDER BY trusted_recorded_at ASC, validation_receipt_ref ASC",
+            )
+            .expect("prepare validation witness query")
+            .query_map([validation_context_ref.as_str()], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .expect("query validation witnesses")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect validation witnesses");
+        assert_eq!(witness_rows.len(), 2);
+        assert_eq!(witness_rows[0].1, "2026-08-09T00:00:00Z");
+        assert_eq!(witness_rows[0].2, "2026-08-09T00:00:00Z");
+        assert_eq!(witness_rows[1].1, "2026-08-09T00:00:00Z");
+        assert_eq!(witness_rows[1].2, "2026-08-09T00:02:30Z");
+
+        let before_changed_payload = fixture.counts([
+            "m3_conversation_contexts",
+            "m3_command_receipts",
+            "m3_events",
+            "m3_audit_records",
+            "m3_handoff_validation_witnesses",
+        ]);
+        let mut changed_context = validation_context.clone();
+        changed_context.source_watermark = opaque(format!("watermark:{tag}:changed"));
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:02:40Z")
+            .expect("set changed-payload attempt time");
+        let changed = fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: changed_context,
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: metadata(&format!("{tag}:changed-payload")),
+            })
+            .expect_err("same context ref cannot be rebound to changed content");
+        assert_eq!(changed.code, "m3_context_ref_immutable_payload_mismatch");
+        assert_eq!(
+            fixture.counts([
+                "m3_conversation_contexts",
+                "m3_command_receipts",
+                "m3_events",
+                "m3_audit_records",
+                "m3_handoff_validation_witnesses",
+            ]),
+            before_changed_payload,
+            "changed same-ref validation payload rolls back atomically"
+        );
+
+        let returned = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:result")),
+                    result_hash: Sha256Digest::of_bytes(b"same-ref revalidation result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: revalidated.receipt.receipt_id,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:returned"),
+                    &correlation,
+                    "1999-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect("new witness is immediately usable in the current return window");
+        assert_eq!(returned.handoff.status, HandoffState::Returned);
+        fixture
+            .repository
+            .verify_schema()
+            .expect("both validation witnesses verify together");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("same-ref independent revalidation reopens");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_generic_t0_context_dedicated_t1_seeds_descriptor_with_dual_time_lineage() {
+        let fixture = RepositoryFixture::new("m3c05-generic-context-first-descriptor");
+        let tag = "m3c05-generic-context-first-descriptor";
+        let source = seed_bound_session(
+            &fixture,
+            &format!("{tag}:source"),
+            &format!("namespace:{tag}:source"),
+            &format!("conversation:{tag}:source"),
+        );
+        let validation_context_ref = context_ref(format!("context:{tag}:source"));
+        let validation_context = context_for(tag, &source, validation_context_ref.clone());
+
+        let mut generic_metadata = metadata(&format!("{tag}:generic-t0"));
+        generic_metadata.occurred_at = "2026-08-09T00:00:00Z".to_string();
+        fixture
+            .repository
+            .upsert_conversation_context(&UpsertConversationContextCommand {
+                context: validation_context.clone(),
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: generic_metadata,
+            })
+            .expect("generic boundary creates the immutable context at T0");
+        assert_eq!(fixture.count("m3_handoff_permission_descriptors"), 0);
+        assert_eq!(fixture.count("m3_handoff_validation_witnesses"), 0);
+
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:01:00Z")
+            .expect("set trusted independent revalidation time T1");
+        let mut untrusted_metadata = metadata(&format!("{tag}:dedicated-t1"));
+        untrusted_metadata.occurred_at = "2099-08-09T00:01:00Z".to_string();
+        let dedicated = fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: validation_context,
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: untrusted_metadata,
+            })
+            .expect("dedicated T1 revalidation seeds the first descriptor and witness");
+        assert_eq!(dedicated.receipt.created_at, "2026-08-09T00:01:00Z");
+
+        let descriptor_times: (String, String, String) = fixture
+            .repository
+            .read_connection()
+            .expect("open descriptor dual-time query")
+            .query_row(
+                "SELECT descriptor.context_updated_at,descriptor.recorded_at,
+                        witness.witness_digest
+                 FROM m3_handoff_permission_descriptors AS descriptor
+                 JOIN m3_handoff_validation_witnesses AS witness
+                   ON witness.validation_receipt_ref = descriptor.validation_receipt_ref
+                 WHERE descriptor.permission_snapshot_ref = ?1",
+                [source.permission.snapshot_ref.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("load descriptor and witness dual-time lineage");
+        assert_eq!(descriptor_times.0, "2026-08-09T00:00:00Z");
+        assert_eq!(descriptor_times.1, "2026-08-09T00:01:00Z");
+        assert_eq!(descriptor_times.2.len(), 64);
+        assert_eq!(fixture.count("m3_handoff_permission_descriptors"), 1);
+        assert_eq!(fixture.count("m3_handoff_validation_witnesses"), 1);
+        fixture
+            .repository
+            .verify_schema()
+            .expect("generic T0 to dedicated T1 lineage verifies");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("generic T0 to dedicated T1 lineage reopens");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_orphan_validation_witness_drift_fails_verify_and_reopen() {
+        let fixture = RepositoryFixture::new("m3c05-orphan-validation-witness-drift");
+        let tag = "m3c05-orphan-validation-witness-drift";
+        let source = seed_bound_session(
+            &fixture,
+            &format!("{tag}:source"),
+            &format!("namespace:{tag}:source"),
+            &format!("conversation:{tag}:source"),
+        );
+        let validation_context_ref = context_ref(format!("context:{tag}:source"));
+        let validation_context = context_for(tag, &source, validation_context_ref);
+
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:00:00Z")
+            .expect("set descriptor-seed validation time");
+        let first = fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: validation_context.clone(),
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: metadata(&format!("{tag}:first")),
+            })
+            .expect("mint descriptor seed witness");
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:01:00Z")
+            .expect("set orphan witness validation time");
+        let orphan = fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: validation_context,
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: metadata(&format!("{tag}:orphan")),
+            })
+            .expect("mint a second witness not yet referenced by a handoff proof");
+        assert_ne!(first.receipt.receipt_id, orphan.receipt.receipt_id);
+        assert_eq!(fixture.count("m3_handoffs"), 0);
+        let descriptor_seed: String = fixture
+            .repository
+            .read_connection()
+            .expect("open descriptor seed query")
+            .query_row(
+                "SELECT validation_receipt_ref
+                 FROM m3_handoff_permission_descriptors
+                 WHERE permission_snapshot_ref = ?1",
+                [source.permission.snapshot_ref.as_str()],
+                |row| row.get(0),
+            )
+            .expect("load descriptor seed receipt");
+        assert_eq!(descriptor_seed, first.receipt.receipt_id.as_str());
+
+        fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_validation_witnesses
+             SET context_updated_at = '2026-08-09T00:00:30Z'
+             WHERE validation_receipt_ref = '{}'",
+            orphan.receipt.receipt_id.as_str(),
+        ));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err("orphan witness drift is included in full repository verification")
+                .code,
+            "m3_handoff_validation_witness_drift"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("orphan witness drift remains closed on reopen")
+                .code,
+            "m3_handoff_validation_witness_drift"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_generic_future_context_cannot_premint_handoff_validation() {
+        let fixture = RepositoryFixture::new("m3c05-generic-future-context");
+        let tag = "m3c05-generic-future-context";
+        let (source, recipient) = seed_handoff_parties(&fixture, tag);
+        let created = create_handoff_for_test(&fixture, tag, &source, &recipient);
+        let handoff_id = created.handoff.handoff_id.clone();
+        let correlation = format!("{tag}:correlation");
+        fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    &format!("{tag}:accept"),
+                    &correlation,
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("accept future-context fixture");
+
+        let validation_context_ref = context_ref(format!("context:{tag}:source"));
+        let validation_context = context_for(tag, &source, validation_context_ref.clone());
+        let mut future_metadata = metadata(&format!("{tag}:generic-future"));
+        future_metadata.occurred_at = "2026-08-09T00:02:30Z".to_string();
+        let generic = fixture
+            .repository
+            .upsert_conversation_context(&UpsertConversationContextCommand {
+                context: validation_context.clone(),
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: future_metadata,
+            })
+            .expect("generic context persists caller audit time but no handoff witness");
+        assert_eq!(fixture.count("m3_handoff_validation_witnesses"), 2);
+        let generic_witness_count: i64 = fixture
+            .repository
+            .read_connection()
+            .expect("open generic witness query")
+            .query_row(
+                "SELECT COUNT(*) FROM m3_handoff_validation_witnesses
+                 WHERE validation_receipt_ref = ?1",
+                [generic.receipt.receipt_id.as_str()],
+                |row| row.get(0),
+            )
+            .expect("count generic receipt witnesses");
+        assert_eq!(generic_witness_count, 0);
+
+        fixture
+            .repository
+            .request_handoff_return(&RequestHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 2,
+                return_by: "2026-08-09T00:10:00Z".to_string(),
+                metadata: handoff_metadata(
+                    &format!("{tag}:request-return"),
+                    &correlation,
+                    "2026-08-09T00:02:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:02:00Z"),
+            })
+            .expect("open return window after generic future context was persisted");
+        let before_generic_return = fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_source_validation_proofs",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        let generic_return = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:generic-result")),
+                    result_hash: Sha256Digest::of_bytes(b"generic receipt result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: generic.receipt.receipt_id.clone(),
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:generic-return"),
+                    &correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect_err("generic context receipt is not authoritative validation evidence");
+        assert_eq!(
+            generic_return.code,
+            "m3_handoff_source_validation_witness_missing"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_source_validation_proofs",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            before_generic_return
+        );
+
+        let validation_write_counts = fixture.counts([
+            "m3_command_receipts",
+            "m3_events",
+            "m3_audit_records",
+            "m3_handoff_validation_witnesses",
+        ]);
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:02:15Z")
+            .expect("set time before generic caller timestamp");
+        let too_early = fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: validation_context.clone(),
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: metadata(&format!("{tag}:too-early-revalidation")),
+            })
+            .expect_err("repository validation cannot adopt a future-dated generic context early");
+        assert_eq!(
+            too_early.code,
+            "m3_handoff_validation_context_revalidation_mismatch"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_command_receipts",
+                "m3_events",
+                "m3_audit_records",
+                "m3_handoff_validation_witnesses",
+            ]),
+            validation_write_counts
+        );
+
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:02:30Z")
+            .expect("set trusted validation time at the context history lower bound");
+        let mut forged_client_time = metadata(&format!("{tag}:trusted-revalidation"));
+        forged_client_time.occurred_at = "2099-08-09T00:02:30Z".to_string();
+        let trusted = fixture
+            .repository
+            .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+                context: validation_context,
+                binding: source.binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(source.permission.clone()),
+                expected_session_revision: 1,
+                metadata: forged_client_time,
+            })
+            .expect("dedicated boundary independently revalidates at repository time");
+        assert_eq!(trusted.receipt.created_at, "2026-08-09T00:02:30Z");
+        let trusted_times: (String, String) = fixture
+            .repository
+            .read_connection()
+            .expect("open trusted witness time query")
+            .query_row(
+                "SELECT context_updated_at,trusted_recorded_at
+                 FROM m3_handoff_validation_witnesses
+                 WHERE validation_receipt_ref = ?1",
+                [trusted.receipt.receipt_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("load trusted witness times");
+        assert_eq!(
+            trusted_times,
+            (
+                "2026-08-09T00:02:30Z".to_string(),
+                "2026-08-09T00:02:30Z".to_string()
+            )
+        );
+        let returned = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:trusted-result")),
+                    result_hash: Sha256Digest::of_bytes(b"trusted revalidation result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: trusted.receipt.receipt_id,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:trusted-return"),
+                    &correlation,
+                    "1999-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect("only the dedicated trusted witness completes return");
+        assert_eq!(returned.handoff.status, HandoffState::Returned);
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("generic future pre-mint and trusted revalidation reopen cleanly");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_returned_source_validation_rejects_wrong_operation_and_other_object_zero_write(
+    ) {
+        let fixture = RepositoryFixture::new("m3c05-returned-validation-semantics");
+        let tag = "m3c05-returned-validation-semantics";
+        let (source, recipient, handoff_id, correlation) =
+            prepare_return_pending_handoff_for_test(&fixture, tag);
+        let wrong_operation_ref = fixture
+            .repository
+            .read_connection()
+            .expect("open wrong-operation receipt query")
+            .query_row(
+                "SELECT receipt_id FROM m3_command_receipts
+                 WHERE role_session_id = ?1
+                   AND operation_kind = 'BIND_PROVIDER_HANDLE'
+                   AND status = 'COMMITTED'",
+                [source.role_session_id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .map(|value| OpaqueRef::try_from_canonical(value).expect("canonical receipt ref"))
+            .expect("committed non-context receipt");
+        let before_wrong_operation = fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_source_validation_proofs",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        let wrong_operation = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:wrong-operation-result")),
+                    result_hash: Sha256Digest::of_bytes(b"wrong operation result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: wrong_operation_ref,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:wrong-operation"),
+                    &correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect_err("a committed receipt for another operation is not validation evidence");
+        assert_eq!(
+            wrong_operation.code,
+            "m3_handoff_source_validation_witness_missing"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_source_validation_proofs",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            before_wrong_operation
+        );
+
+        let other = seed_bound_session(
+            &fixture,
+            &format!("{tag}:other-object"),
+            &format!("namespace:{tag}:other-object"),
+            &format!("conversation:{tag}:other-object"),
+        );
+        let other_object_context_receipt =
+            fresh_source_application_base_receipt(&fixture, &format!("{tag}:other-object"), &other);
+        assert_ne!(
+            other.binding.current_object_ref,
+            source.binding.current_object_ref
+        );
+        let before_other_object = fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_source_validation_proofs",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        let other_object = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:other-object-result")),
+                    result_hash: Sha256Digest::of_bytes(b"other object result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: other_object_context_receipt,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:other-object"),
+                    &correlation,
+                    "2026-08-09T00:04:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:04:00Z"),
+            })
+            .expect_err("another object's valid context receipt is not source-object evidence");
+        assert_eq!(
+            other_object.code,
+            "m3_handoff_source_validation_receipt_semantics_mismatch"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_source_validation_proofs",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            before_other_object
+        );
+
+        let valid_context_receipt =
+            fresh_source_application_base_receipt(&fixture, &format!("{tag}:valid"), &source);
+        fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:valid-result")),
+                    result_hash: Sha256Digest::of_bytes(b"valid context result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: valid_context_receipt,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:valid"),
+                    &correlation,
+                    "2026-08-09T00:05:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:05:00Z"),
+            })
+            .expect("the exact source context validation receipt commits");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("exact source validation semantics reopen");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_returned_source_validation_fake_ref_is_zero_write() {
+        let fixture = RepositoryFixture::new("m3c05-returned-fake-validation-ref");
+        let (source, recipient, handoff_id, correlation) =
+            prepare_return_pending_handoff_for_test(&fixture, "m3c05-returned-fake-validation-ref");
+        let before = fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_source_validation_proofs",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        let fake = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque("m3c05-returned-fake-validation-ref:result"),
+                    result_hash: Sha256Digest::of_bytes(b"fake validation ref result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: opaque(
+                            "m3c05-returned-fake-validation-ref:missing",
+                        ),
+                    },
+                },
+                metadata: handoff_metadata(
+                    "m3c05-returned-fake-validation-ref:return",
+                    &correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect_err("an opaque but nonexistent validation ref fails before persistence");
+        assert_eq!(fake.code, "m3_handoff_source_validation_receipt_missing");
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_source_validation_proofs",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            before
+        );
+        let state: (String, i64) = fixture
+            .repository
+            .read_connection()
+            .expect("open fake-ref state query")
+            .query_row(
+                "SELECT status, revision FROM m3_handoffs WHERE handoff_id = ?1",
+                [handoff_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read return-pending state after fake ref");
+        assert_eq!(state, ("RETURN_PENDING".to_string(), 3));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+
+        let real_validation = fresh_source_application_base_receipt(
+            &fixture,
+            "m3c05-returned-fake-validation-ref:real",
+            &source,
+        );
+        fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque("m3c05-returned-fake-validation-ref:real-result"),
+                    result_hash: Sha256Digest::of_bytes(b"real validation ref result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: real_validation,
+                    },
+                },
+                metadata: handoff_metadata(
+                    "m3c05-returned-fake-validation-ref:real-return",
+                    &correlation,
+                    "2026-08-09T00:04:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:04:00Z"),
+            })
+            .expect("a real validation receipt persists after the zero-write rejection");
+        assert_eq!(fixture.count("m3_handoff_source_validation_proofs"), 1);
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("real validation lineage reopens");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_returned_source_validation_other_legitimate_ref_fails_closed() {
+        let fixture = RepositoryFixture::new("m3c05-returned-other-validation-ref");
+        let (source, _, returned, original_validation) =
+            create_returned_handoff_for_test(&fixture, "m3c05-returned-other-validation-ref");
+        let returned_receipt = returned
+            .transition_receipt
+            .as_ref()
+            .expect("returned transition receipt");
+        let alternate_validation = fresh_source_application_base_receipt(
+            &fixture,
+            "m3c05-returned-other-validation-ref:alternate",
+            &source,
+        );
+        assert_ne!(alternate_validation, original_validation);
+        let alternate_witness_digest: String = fixture
+            .repository
+            .read_connection()
+            .expect("open alternate validation witness query")
+            .query_row(
+                "SELECT witness_digest FROM m3_handoff_validation_witnesses
+                 WHERE validation_receipt_ref = ?1",
+                [alternate_validation.as_str()],
+                |row| row.get(0),
+            )
+            .expect("load alternate validation witness digest");
+        let connection = fixture
+            .repository
+            .read_connection()
+            .expect("open live validation-ref FK connection");
+        let live_fk_error = connection
+            .execute(
+                "UPDATE m3_handoff_source_validation_proofs
+                 SET validation_receipt_ref = ?1
+                 WHERE returned_receipt_id = ?2",
+                params![
+                    alternate_validation.as_str(),
+                    returned_receipt.receipt_id.as_str()
+                ],
+            )
+            .expect_err("live FK rejects a ref without its matching witness digest");
+        assert!(live_fk_error.to_string().contains("FOREIGN KEY"));
+        connection
+            .pragma_update(None, "foreign_keys", "OFF")
+            .expect("simulate coordinated persisted validation-ref drift");
+        connection
+            .execute_batch(&format!(
+                "BEGIN IMMEDIATE;
+             UPDATE m3_handoff_source_validation_proofs
+             SET validation_receipt_ref = '{}', validation_witness_digest = '{}'
+             WHERE returned_receipt_id = '{}';
+             UPDATE m3_handoff_receipts
+             SET source_object_validation_receipt_ref = '{}'
+             WHERE receipt_id = '{}';
+             COMMIT;",
+                alternate_validation.as_str(),
+                alternate_witness_digest,
+                returned_receipt.receipt_id.as_str(),
+                alternate_validation.as_str(),
+                returned_receipt.receipt_id.as_str(),
+            ))
+            .expect("inject coordinated persisted validation-ref drift");
+        drop(connection);
+        assert_eq!(
+            fixture.handoff_rehydration_error_code(&returned.handoff.handoff_id),
+            "m3_handoff_history_source_validation_window_drift"
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err("schema join rejects the substituted validation receipt")
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("the substituted validation receipt remains closed on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_returned_source_validation_receipt_time_drift_fails_closed() {
+        let fixture = RepositoryFixture::new("m3c05-returned-validation-time-drift");
+        let (_, _, returned, validation_receipt_ref) =
+            create_returned_handoff_for_test(&fixture, "m3c05-returned-validation-time-drift");
+        let validation_context_ref: String = fixture
+            .repository
+            .read_connection()
+            .expect("open validation context ref query")
+            .query_row(
+                "SELECT validation_context_ref
+                 FROM m3_handoff_source_validation_proofs
+                 WHERE validation_receipt_ref = ?1",
+                [validation_receipt_ref.as_str()],
+                |row| row.get(0),
+            )
+            .expect("load validation context ref");
+        fixture.execute_batch(&format!(
+            "BEGIN IMMEDIATE;
+             UPDATE m3_command_receipts
+             SET created_at = '2026-08-09T00:01:30Z'
+             WHERE receipt_id = '{}';
+             UPDATE m3_conversation_contexts
+             SET updated_at = '2026-08-09T00:01:30Z'
+             WHERE context_ref = '{}';
+             COMMIT;",
+            validation_receipt_ref.as_str(),
+            validation_context_ref,
+        ));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            fixture.handoff_rehydration_error_code(&returned.handoff.handoff_id),
+            "m3_handoff_validation_witness_drift"
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err("coordinated validation receipt/context time drift changes proof hash")
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("validation receipt time drift remains closed on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_returned_validation_window_stale_zero_write_and_equal_bounds() {
+        let lower_fixture = RepositoryFixture::new("m3c05-validation-window-lower-bound");
+        let lower_tag = "m3c05-validation-window-lower-bound";
+        let (source, recipient, handoff_id, correlation) =
+            prepare_return_pending_handoff_for_test(&lower_fixture, lower_tag);
+        let stale_validation = fresh_source_application_base_receipt_at(
+            &lower_fixture,
+            &format!("{lower_tag}:stale"),
+            &source,
+            "2026-08-09T00:01:30Z",
+        );
+        let before_stale = lower_fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_source_validation_proofs",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        let stale = lower_fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{lower_tag}:stale-result")),
+                    result_hash: Sha256Digest::of_bytes(b"stale validation window result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: stale_validation,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{lower_tag}:stale-return"),
+                    &correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect_err("validation older than the active request window is rejected");
+        assert_eq!(
+            stale.code,
+            "m3_handoff_source_validation_receipt_before_return_window"
+        );
+        assert_eq!(
+            lower_fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_source_validation_proofs",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            before_stale,
+            "stale validation is rejected by the same IMMEDIATE transaction with zero handoff writes"
+        );
+
+        let lower_validation = fresh_source_application_base_receipt_at(
+            &lower_fixture,
+            &format!("{lower_tag}:equal-lower"),
+            &source,
+            "2026-08-09T00:02:00Z",
+        );
+        let returned = lower_fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{lower_tag}:equal-lower-result")),
+                    result_hash: Sha256Digest::of_bytes(b"equal lower validation window result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: lower_validation,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{lower_tag}:equal-lower-return"),
+                    &correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect("validation exactly at REQUEST_RETURN is inside the closed interval");
+        assert_eq!(returned.handoff.status, HandoffState::Returned);
+        let lower_window: (String, i64, String) = lower_fixture
+            .repository
+            .read_connection()
+            .expect("open lower-window proof query")
+            .query_row(
+                "SELECT proof.validation_window_receipt_ref,
+                        proof.validation_window_handoff_revision,
+                        proof.validation_window_receipt_hash
+                 FROM m3_handoff_source_validation_proofs AS proof
+                 JOIN m3_handoff_receipts AS window
+                   ON window.receipt_id = proof.validation_window_receipt_ref
+                  AND window.handoff_id = proof.handoff_id
+                  AND window.handoff_revision = proof.validation_window_handoff_revision
+                  AND window.transition_integrity_hash = proof.validation_window_receipt_hash
+                 WHERE proof.handoff_id = ?1",
+                [handoff_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("load exact lower-bound validation window lineage");
+        assert_eq!(lower_window.1, 3);
+        assert!(!lower_window.0.is_empty());
+        assert_eq!(lower_window.2.len(), 64);
+        lower_fixture
+            .reopen()
+            .verify_schema()
+            .expect("equal lower-bound validation window reopens");
+        assert_eq!(lower_fixture.foreign_key_violation_count(), 0);
+
+        let upper_fixture = RepositoryFixture::new("m3c05-validation-window-upper-bound");
+        let upper_tag = "m3c05-validation-window-upper-bound";
+        let (source, recipient, handoff_id, correlation) =
+            prepare_return_pending_handoff_for_test(&upper_fixture, upper_tag);
+        let upper_validation = fresh_source_application_base_receipt_at(
+            &upper_fixture,
+            &format!("{upper_tag}:equal-upper"),
+            &source,
+            "2026-08-09T00:03:00Z",
+        );
+        let returned = upper_fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{upper_tag}:equal-upper-result")),
+                    result_hash: Sha256Digest::of_bytes(b"equal upper validation window result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: upper_validation,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{upper_tag}:equal-upper-return"),
+                    &correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect("validation exactly at RETURNED server time is inside the closed interval");
+        assert_eq!(returned.handoff.status, HandoffState::Returned);
+        upper_fixture
+            .reopen()
+            .verify_schema()
+            .expect("equal upper-bound validation window reopens");
+        assert_eq!(upper_fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_returned_validation_retry_requires_latest_window_and_reopen_drift_fails_closed(
+    ) {
+        let fixture = RepositoryFixture::new("m3c05-validation-retry-window");
+        let tag = "m3c05-validation-retry-window";
+        let (source, recipient, handoff_id, correlation) =
+            prepare_return_pending_handoff_for_test(&fixture, tag);
+        let prior_validation = fresh_source_application_base_receipt_at(
+            &fixture,
+            &format!("{tag}:prior-window"),
+            &source,
+            "2026-08-09T00:02:30Z",
+        );
+        fixture
+            .repository
+            .timeout_handoff_return(&TimeoutHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 3,
+                metadata: handoff_metadata(
+                    &format!("{tag}:timeout"),
+                    &correlation,
+                    "2026-08-09T00:10:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:10:00Z"),
+            })
+            .expect("record the first return-window timeout");
+        fixture
+            .repository
+            .retry_failed_handoff_return(&RetryFailedHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 4,
+                return_by: "2026-08-09T00:20:00Z".to_string(),
+                metadata: handoff_metadata(
+                    &format!("{tag}:retry"),
+                    &correlation,
+                    "2026-08-09T00:11:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:11:00Z"),
+            })
+            .expect("open a new return-validation window after timeout");
+
+        let before_prior_window = fixture.counts([
+            "m3_handoffs",
+            "m3_handoff_command_receipts",
+            "m3_handoff_receipts",
+            "m3_handoff_source_validation_proofs",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        let prior_window = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 5,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:prior-window-result")),
+                    result_hash: Sha256Digest::of_bytes(b"prior return window validation result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: prior_validation,
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:prior-window-return"),
+                    &correlation,
+                    "2026-08-09T00:12:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:12:00Z"),
+            })
+            .expect_err("retry requires validation created in the latest retry window");
+        assert_eq!(
+            prior_window.code,
+            "m3_handoff_source_validation_receipt_before_return_window"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_source_validation_proofs",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            before_prior_window,
+            "validation from the timed-out request window produces zero handoff writes"
+        );
+        let state: (String, i64) = fixture
+            .repository
+            .read_connection()
+            .expect("open retry state query")
+            .query_row(
+                "SELECT status, revision FROM m3_handoffs WHERE handoff_id = ?1",
+                [handoff_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("load state after prior-window rejection");
+        assert_eq!(state, ("RETURN_PENDING".to_string(), 5));
+
+        let latest_validation = fresh_source_application_base_receipt_at(
+            &fixture,
+            &format!("{tag}:latest-window"),
+            &source,
+            "2026-08-09T00:11:30Z",
+        );
+        let returned = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 5,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque(format!("{tag}:latest-window-result")),
+                    result_hash: Sha256Digest::of_bytes(b"latest retry window validation result"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: latest_validation.clone(),
+                    },
+                },
+                metadata: handoff_metadata(
+                    &format!("{tag}:latest-window-return"),
+                    &correlation,
+                    "2026-08-09T00:12:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:12:00Z"),
+            })
+            .expect("latest retry-window validation commits");
+        assert_eq!(returned.handoff.revision, 6);
+
+        let connection = fixture
+            .repository
+            .read_connection()
+            .expect("open retry-window lineage query");
+        let request_receipt: (String, String) = connection
+            .query_row(
+                "SELECT receipt_id, transition_integrity_hash
+                 FROM m3_handoff_receipts
+                 WHERE handoff_id = ?1 AND handoff_revision = 3",
+                [handoff_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("load original request window receipt");
+        let retry_receipt: (String, String) = connection
+            .query_row(
+                "SELECT receipt_id, transition_integrity_hash
+                 FROM m3_handoff_receipts
+                 WHERE handoff_id = ?1 AND handoff_revision = 5",
+                [handoff_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("load latest retry window receipt");
+        let persisted_window: (String, i64, String) = connection
+            .query_row(
+                "SELECT validation_window_receipt_ref,
+                        validation_window_handoff_revision,
+                        validation_window_receipt_hash
+                 FROM m3_handoff_source_validation_proofs
+                 WHERE handoff_id = ?1",
+                [handoff_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("load persisted retry-window proof");
+        assert_ne!(request_receipt.0, retry_receipt.0);
+        assert_eq!(
+            persisted_window,
+            (retry_receipt.0.clone(), 5, retry_receipt.1.clone())
+        );
+
+        let ref_fk_error = connection
+            .execute(
+                "UPDATE m3_handoff_source_validation_proofs
+                 SET validation_window_receipt_ref = ?1
+                 WHERE handoff_id = ?2",
+                params![request_receipt.0, handoff_id.as_str()],
+            )
+            .expect_err("live FK rejects an older legitimate window receipt ref");
+        assert!(ref_fk_error.to_string().contains("FOREIGN KEY"));
+        let drift_hash = Sha256Digest::of_bytes(b"drifted validation window receipt hash");
+        let hash_fk_error = connection
+            .execute(
+                "UPDATE m3_handoff_source_validation_proofs
+                 SET validation_window_receipt_hash = ?1
+                 WHERE handoff_id = ?2",
+                params![drift_hash.as_str(), handoff_id.as_str()],
+            )
+            .expect_err("live FK rejects validation window hash drift");
+        assert!(hash_fk_error.to_string().contains("FOREIGN KEY"));
+        drop(connection);
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("FK-rejected window ref/hash drift leaves reopen history intact");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+
+        let validation_context_ref: String = fixture
+            .repository
+            .read_connection()
+            .expect("open retry validation context query")
+            .query_row(
+                "SELECT validation_context_ref
+                 FROM m3_handoff_source_validation_proofs
+                 WHERE validation_receipt_ref = ?1",
+                [latest_validation.as_str()],
+                |row| row.get(0),
+            )
+            .expect("load retry validation context ref");
+        fixture.execute_batch(&format!(
+            "BEGIN IMMEDIATE;
+             UPDATE m3_command_receipts
+             SET created_at = '2026-08-09T00:10:30Z'
+             WHERE receipt_id = '{}';
+             UPDATE m3_conversation_contexts
+             SET updated_at = '2026-08-09T00:10:30Z'
+             WHERE context_ref = '{}';
+             COMMIT;",
+            latest_validation.as_str(),
+            validation_context_ref,
+        ));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            fixture.handoff_rehydration_error_code(&handoff_id),
+            "m3_handoff_validation_witness_drift"
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err("retry validation time drift fails schema verification")
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("retry validation time drift remains closed on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+
+        let ref_fixture = RepositoryFixture::new("m3c05-validation-window-ref-drift");
+        let (_, _, ref_returned, _) =
+            create_returned_handoff_for_test(&ref_fixture, "m3c05-validation-window-ref-drift");
+        let returned_receipt_id = ref_returned
+            .transition_receipt
+            .as_ref()
+            .expect("returned receipt for ref drift")
+            .receipt_id
+            .clone();
+        let ref_connection = ref_fixture
+            .repository
+            .read_connection()
+            .expect("open validation-window ref drift connection");
+        ref_connection
+            .pragma_update(None, "foreign_keys", "OFF")
+            .expect("simulate persisted ref drift with foreign keys disabled");
+        ref_connection
+            .execute(
+                "UPDATE m3_handoff_source_validation_proofs
+                 SET validation_window_receipt_ref = ?1
+                 WHERE handoff_id = ?2",
+                params![
+                    returned_receipt_id.as_str(),
+                    ref_returned.handoff.handoff_id.as_str(),
+                ],
+            )
+            .expect("inject persisted validation-window ref drift");
+        ref_connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .expect("restore FK enforcement after ref drift injection");
+        drop(ref_connection);
+        assert_eq!(
+            ref_fixture.handoff_rehydration_error_code(&ref_returned.handoff.handoff_id),
+            "m3_handoff_history_source_validation_window_drift"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&ref_fixture.path)
+                .expect_err("persisted validation-window ref drift fails on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+
+        let hash_fixture = RepositoryFixture::new("m3c05-validation-window-hash-drift");
+        let (_, _, hash_returned, _) =
+            create_returned_handoff_for_test(&hash_fixture, "m3c05-validation-window-hash-drift");
+        let hash_connection = hash_fixture
+            .repository
+            .read_connection()
+            .expect("open validation-window hash drift connection");
+        hash_connection
+            .pragma_update(None, "foreign_keys", "OFF")
+            .expect("simulate persisted hash drift with foreign keys disabled");
+        hash_connection
+            .execute(
+                "UPDATE m3_handoff_source_validation_proofs
+                 SET validation_window_receipt_hash = ?1
+                 WHERE handoff_id = ?2",
+                params![
+                    drift_hash.as_str(),
+                    hash_returned.handoff.handoff_id.as_str(),
+                ],
+            )
+            .expect("inject persisted validation-window hash drift");
+        hash_connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .expect("restore FK enforcement after hash drift injection");
+        drop(hash_connection);
+        assert_eq!(
+            hash_fixture.handoff_rehydration_error_code(&hash_returned.handoff.handoff_id),
+            "m3_handoff_history_source_validation_window_drift"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&hash_fixture.path)
+                .expect_err("persisted validation-window hash drift fails on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_returned_source_binding_object_permission_drift_fails_closed() {
+        let binding_fixture = RepositoryFixture::new("m3c05-returned-binding-drift");
+        let (_, _, binding_returned, _) =
+            create_returned_handoff_for_test(&binding_fixture, "m3c05-returned-binding-drift");
+        let binding_receipt_id = binding_returned
+            .transition_receipt
+            .as_ref()
+            .expect("binding-drift returned receipt")
+            .receipt_id
+            .clone();
+        let binding_drift = Sha256Digest::of_bytes(b"drifted source binding proof");
+        binding_fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_source_validation_proofs
+             SET source_binding_proof_digest = '{}'
+             WHERE returned_receipt_id = '{}'",
+            binding_drift.as_str(),
+            binding_receipt_id.as_str(),
+        ));
+        assert_eq!(binding_fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            binding_fixture
+                .repository
+                .verify_schema()
+                .expect_err("source binding proof drift is detected")
+                .code,
+            "m3_handoff_history_source_validation_binding_drift"
+        );
+
+        let object_fixture = RepositoryFixture::new("m3c05-returned-object-drift");
+        let (_, _, object_returned, _) =
+            create_returned_handoff_for_test(&object_fixture, "m3c05-returned-object-drift");
+        let object_receipt_id = object_returned
+            .transition_receipt
+            .as_ref()
+            .expect("object-drift returned receipt")
+            .receipt_id
+            .clone();
+        object_fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_source_validation_proofs
+             SET source_object_ref = '{}'
+             WHERE returned_receipt_id = '{}'",
+            opaque("m3c05-returned-object-drift:other-object").as_str(),
+            object_receipt_id.as_str(),
+        ));
+        assert_eq!(object_fixture.foreign_key_violation_count(), 0);
+        let object_error = object_fixture
+            .repository
+            .verify_schema()
+            .expect_err("source object drift is detected")
+            .code;
+        assert_eq!(object_error, "m3_schema_verify_failed");
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&object_fixture.path)
+                .expect_err("source object drift remains closed on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+
+        let permission_fixture = RepositoryFixture::new("m3c05-returned-permission-drift");
+        let (_, _, permission_returned, _) = create_returned_handoff_for_test(
+            &permission_fixture,
+            "m3c05-returned-permission-drift",
+        );
+        let permission_receipt_id = permission_returned
+            .transition_receipt
+            .as_ref()
+            .expect("permission-drift returned receipt")
+            .receipt_id
+            .clone();
+        let permission_drift = Sha256Digest::of_bytes(b"drifted permission descriptor");
+        let connection = permission_fixture
+            .repository
+            .read_connection()
+            .expect("open permission descriptor drift injection connection");
+        let drift = connection
+            .execute(
+                "UPDATE m3_handoff_source_validation_proofs
+                 SET source_permission_descriptor_digest = ?1
+                 WHERE returned_receipt_id = ?2",
+                params![permission_drift.as_str(), permission_receipt_id.as_str(),],
+            )
+            .expect_err("uncatalogued permission descriptor drift violates lineage FK");
+        assert!(drift.to_string().contains("FOREIGN KEY constraint failed"));
+        drop(connection);
+        assert_eq!(permission_fixture.foreign_key_violation_count(), 0);
+        permission_fixture
+            .repository
+            .verify_schema()
+            .expect("rejected permission descriptor drift leaves history intact");
+        permission_fixture
+            .reopen()
+            .verify_schema()
+            .expect("rejected permission descriptor drift reopens cleanly");
+    }
+
+    #[test]
+    fn m3c05_repository_actor_permission_two_table_alternate_valid_snapshot_fails_audit() {
+        let fixture = RepositoryFixture::new("m3c05-actor-alternate-snapshot");
+        let (source, created) = create_handoff_with_narrowed_source_binding_for_test(
+            &fixture,
+            "m3c05-actor-alternate-snapshot",
+        );
+        let historical_binding = {
+            let connection = fixture
+                .repository
+                .read_connection()
+                .expect("open alternate-snapshot binding query");
+            load_session_binding_at_from_connection(&connection, &source.role_session_id, 1)
+                .expect("load alternate historical binding")
+                .expect("historical binding revision one")
+        };
+        assert_eq!(
+            historical_binding.permission_snapshot_ref,
+            source.binding.permission_snapshot_ref
+        );
+        let historical_binding_digest =
+            handoff_binding_proof_digest(&historical_binding).expect("hash historical binding");
+        let historical_descriptor_digest = permission_descriptor_digest(Some(&source.permission))
+            .expect("hash historical permission descriptor");
+        let historical_session_revision = 1;
+        let transition = created
+            .transition_receipt
+            .as_ref()
+            .expect("created transition receipt");
+        let altered_transition_hash = handoff_transition_integrity_hash(
+            transition.receipt_kind,
+            &created.handoff,
+            &transition.result_ref,
+            &transition.result_hash,
+            &historical_descriptor_digest,
+            historical_session_revision,
+            &historical_binding_digest,
+            None,
+            &transition.recorded_at,
+            &transition.reason_code,
+        )
+        .expect("hash coordinated alternate actor evidence");
+
+        fixture.execute_batch(&format!(
+            "BEGIN IMMEDIATE;
+             UPDATE m3_handoff_command_receipts
+             SET actor_permission_snapshot_ref = '{}',
+                 actor_permission_descriptor_digest = '{}',
+                 actor_session_revision = {},
+                 actor_binding_revision = 1,
+                 actor_binding_proof_digest = '{}'
+             WHERE command_receipt_id = '{}';
+             UPDATE m3_handoff_receipts
+             SET actor_permission_snapshot_ref = '{}',
+                 actor_permission_descriptor_digest = '{}',
+                 actor_session_revision = {},
+                 actor_binding_revision = 1,
+                 actor_binding_proof_digest = '{}',
+                 transition_integrity_hash = '{}'
+             WHERE receipt_id = '{}';
+             COMMIT;",
+            historical_binding.permission_snapshot_ref.as_str(),
+            historical_descriptor_digest.as_str(),
+            historical_session_revision,
+            historical_binding_digest.as_str(),
+            created.command_receipt.command_receipt_id.as_str(),
+            historical_binding.permission_snapshot_ref.as_str(),
+            historical_descriptor_digest.as_str(),
+            historical_session_revision,
+            historical_binding_digest.as_str(),
+            altered_transition_hash.as_str(),
+            transition.receipt_id.as_str(),
+        ));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            fixture.handoff_rehydration_error_code(&created.handoff.handoff_id),
+            "m3_handoff_history_audit_binding_mismatch"
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err(
+                    "two internally consistent tables cannot replace audit-bound actor evidence",
+                )
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("alternate valid actor evidence remains closed on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_source_actor_audit_alternate_historical_snapshot_fails_closed() {
+        let fixture = RepositoryFixture::new("m3c05-source-audit-alternate-snapshot");
+        let (source, created) = create_handoff_with_narrowed_source_binding_for_test(
+            &fixture,
+            "m3c05-source-audit-alternate-snapshot",
+        );
+        let historical_binding = {
+            let connection = fixture
+                .repository
+                .read_connection()
+                .expect("open historical source audit binding query");
+            load_session_binding_at_from_connection(&connection, &source.role_session_id, 1)
+                .expect("query historical source audit binding")
+                .expect("historical source audit binding revision one")
+        };
+        let historical_binding_digest = handoff_binding_proof_digest(&historical_binding)
+            .expect("hash historical source audit binding");
+        let historical_descriptor_digest = permission_descriptor_digest(Some(&source.permission))
+            .expect("hash historical source audit descriptor");
+        let transition = created
+            .transition_receipt
+            .as_ref()
+            .expect("created transition for source audit drift");
+        let altered_record_hash = handoff_audit_record_hash(
+            &created.command_receipt,
+            created.command_receipt.operation.as_str(),
+            created.handoff.status.as_str(),
+            &created.handoff.from_owner_fingerprint,
+            &historical_binding.permission_snapshot_ref,
+            &historical_binding.role_session_id,
+            historical_binding.binding_revision,
+            &historical_binding_digest,
+            &historical_descriptor_digest,
+            None,
+            &transition.reason_code,
+            Some(transition),
+        )
+        .expect("hash internally consistent alternate source audit evidence");
+        fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_audit_records
+             SET source_permission_snapshot_ref = '{}',
+                 source_binding_revision = {},
+                 source_binding_proof_digest = '{}',
+                 source_permission_descriptor_digest = '{}',
+                 record_hash = '{}'
+             WHERE command_receipt_id = '{}'",
+            historical_binding.permission_snapshot_ref.as_str(),
+            historical_binding.binding_revision,
+            historical_binding_digest.as_str(),
+            historical_descriptor_digest.as_str(),
+            altered_record_hash.as_str(),
+            created.command_receipt.command_receipt_id.as_str(),
+        ));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            fixture.handoff_rehydration_error_code(&created.handoff.handoff_id),
+            "m3_handoff_history_audit_binding_mismatch"
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err("source audit evidence must match its source actor command")
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("alternate historical source audit snapshot fails on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_actor_binding_revision_snapshot_mismatch_is_fk_rejected() {
+        let fixture = RepositoryFixture::new("m3c05-actor-revision-ref-mismatch");
+        let (_, created) = create_handoff_with_narrowed_source_binding_for_test(
+            &fixture,
+            "m3c05-actor-revision-ref-mismatch",
+        );
+        let connection = fixture
+            .repository
+            .read_connection()
+            .expect("open revision/ref mismatch injection connection");
+        let mismatch = connection
+            .execute(
+                "UPDATE m3_handoff_command_receipts
+                 SET actor_binding_revision = 1
+                 WHERE command_receipt_id = ?1",
+                [created.command_receipt.command_receipt_id.as_str()],
+            )
+            .expect_err("binding revision with a different snapshot ref violates lineage FK");
+        assert!(mismatch
+            .to_string()
+            .contains("FOREIGN KEY constraint failed"));
+        drop(connection);
+
+        fixture
+            .repository
+            .verify_schema()
+            .expect("rejected revision/ref mismatch leaves history intact");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("rejected revision/ref mismatch reopens cleanly");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_actor_historical_binding_drift_fails_closed() {
+        let fixture = RepositoryFixture::new("m3c05-actor-historical-binding-drift");
+        let (source, _created) = create_handoff_with_narrowed_source_binding_for_test(
+            &fixture,
+            "m3c05-actor-historical-binding-drift",
+        );
+        let mut drifted_binding = {
+            let connection = fixture
+                .repository
+                .read_connection()
+                .expect("open historical binding drift query");
+            load_session_binding_at_from_connection(&connection, &source.role_session_id, 2)
+                .expect("load actor binding revision two")
+                .expect("actor binding revision two exists")
+        };
+        assert_ne!(
+            drifted_binding.permission_snapshot_ref,
+            source.binding.permission_snapshot_ref
+        );
+        drifted_binding.permission_snapshot_ref = source.binding.permission_snapshot_ref.clone();
+        let connection = fixture
+            .repository
+            .read_connection()
+            .expect("open historical binding drift injection connection");
+        let drift = connection
+            .execute(
+                "UPDATE m3_session_bindings
+                 SET permission_snapshot_ref = ?1
+                 WHERE role_session_id = ?2 AND binding_revision = 2",
+                params![
+                    drifted_binding.permission_snapshot_ref.as_str(),
+                    drifted_binding.role_session_id.as_str(),
+                ],
+            )
+            .expect_err("descriptor/context/receipt lineage prevents historical binding rewrite");
+        assert!(drift.to_string().contains("FOREIGN KEY constraint failed"));
+        drop(connection);
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        fixture
+            .repository
+            .verify_schema()
+            .expect("rejected historical binding drift leaves history intact");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("rejected historical binding drift reopens cleanly");
+    }
+
+    #[test]
+    fn m3c05_repository_accepted_recipient_evidence_binds_accept_actor_snapshot_revision_and_time()
+    {
+        let snapshot_fixture = RepositoryFixture::new("m3c05-accepted-evidence-snapshot");
+        let snapshot_tag = "m3c05-accepted-evidence-snapshot";
+        let (source, recipient) = seed_handoff_parties(&snapshot_fixture, snapshot_tag);
+        let created = create_handoff_for_test(&snapshot_fixture, snapshot_tag, &source, &recipient);
+        let narrowed_snapshot = format!("permission:{snapshot_tag}:recipient:v2");
+        let narrowed_permission = permission(
+            &narrowed_snapshot,
+            &["capability:read"],
+            &["capability:write"],
+            &["constraint:read-only"],
+        );
+        let narrowed_binding = ServerResolvedBinding::from_server_canonical(
+            recipient.binding.actor_id.as_str().to_string(),
+            recipient.binding.role_ref.as_str().to_string(),
+            recipient.binding.scope_ref.as_str().to_string(),
+            recipient.binding.current_object_ref.as_str().to_string(),
+            recipient.binding.execution_channel.as_str().to_string(),
+            narrowed_permission.snapshot_ref.as_str().to_string(),
+        )
+        .expect("narrowed recipient binding");
+        mint_detached_handoff_permission_descriptor_for_test(
+            &snapshot_fixture,
+            &format!("{snapshot_tag}:recipient:v2"),
+            &narrowed_permission,
+        );
+        let accepted = snapshot_fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: created.handoff.handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority_with(
+                    &recipient,
+                    narrowed_binding,
+                    recipient.permission.clone(),
+                    narrowed_permission,
+                    1,
+                ),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    &format!("{snapshot_tag}:accept"),
+                    &format!("{snapshot_tag}:correlation"),
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("accept with trusted narrowed recipient descriptor");
+        let accepted_evidence = accepted
+            .handoff
+            .recipient
+            .as_ref()
+            .expect("accepted recipient evidence");
+        assert_eq!(accepted_evidence.binding_revision, 2);
+        assert_eq!(accepted_evidence.session_revision, 2);
+        let historical_binding = {
+            let connection = snapshot_fixture
+                .repository
+                .read_connection()
+                .expect("open historical recipient binding query");
+            load_session_binding_at_from_connection(&connection, &recipient.role_session_id, 1)
+                .expect("query historical recipient binding")
+                .expect("historical recipient binding revision one")
+        };
+        let mut substituted = accepted_evidence.clone();
+        substituted.permission_snapshot_ref = historical_binding.permission_snapshot_ref.clone();
+        substituted.session_revision = 1;
+        substituted.binding_revision = historical_binding.binding_revision;
+        substituted.binding_proof_digest = handoff_binding_proof_digest(&historical_binding)
+            .expect("hash historical recipient binding");
+        let substituted_digest = handoff_recipient_evidence_digest(&substituted)
+            .expect("hash substituted recipient evidence");
+        snapshot_fixture.execute_batch(&format!(
+            "UPDATE m3_handoffs
+             SET recipient_permission_snapshot_ref = '{}',
+                 recipient_session_revision = {},
+                 recipient_binding_revision = {},
+                 recipient_binding_proof_digest = '{}',
+                 recipient_evidence_digest = '{}'
+             WHERE handoff_id = '{}'",
+            substituted.permission_snapshot_ref.as_str(),
+            substituted.session_revision,
+            substituted.binding_revision,
+            substituted.binding_proof_digest.as_str(),
+            substituted_digest.as_str(),
+            accepted.handoff.handoff_id.as_str(),
+        ));
+        assert_eq!(snapshot_fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            snapshot_fixture.handoff_rehydration_error_code(&accepted.handoff.handoff_id),
+            "m3_handoff_history_accept_evidence_mismatch"
+        );
+        assert_eq!(
+            snapshot_fixture
+                .repository
+                .verify_schema()
+                .expect_err(
+                    "FK-clean recipient evidence cannot detach from the ACCEPT actor record",
+                )
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&snapshot_fixture.path)
+                .expect_err("recipient evidence snapshot/revision substitution fails on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+
+        let time_fixture = RepositoryFixture::new("m3c05-accepted-evidence-time");
+        let time_tag = "m3c05-accepted-evidence-time";
+        let (source, recipient) = seed_handoff_parties(&time_fixture, time_tag);
+        let created = create_handoff_for_test(&time_fixture, time_tag, &source, &recipient);
+        let accepted = time_fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: created.handoff.handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    &format!("{time_tag}:accept"),
+                    &format!("{time_tag}:correlation"),
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("accept for recorded-at drift fixture");
+        let mut time_drift = accepted
+            .handoff
+            .recipient
+            .as_ref()
+            .expect("accepted evidence for time drift")
+            .clone();
+        time_drift.accepted_at = "2026-08-09T00:02:00Z".to_string();
+        let time_drift_digest =
+            handoff_recipient_evidence_digest(&time_drift).expect("hash changed accepted time");
+        time_fixture.execute_batch(&format!(
+            "UPDATE m3_handoffs
+             SET accepted_at = '{}', recipient_evidence_digest = '{}'
+             WHERE handoff_id = '{}'",
+            time_drift.accepted_at,
+            time_drift_digest.as_str(),
+            accepted.handoff.handoff_id.as_str(),
+        ));
+        assert_eq!(time_fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            time_fixture.handoff_rehydration_error_code(&accepted.handoff.handoff_id),
+            "m3_handoff_history_accept_evidence_mismatch"
+        );
+        assert_eq!(
+            time_fixture
+                .repository
+                .verify_schema()
+                .expect_err("accepted_at must equal ACCEPT command and receipt time")
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&time_fixture.path)
+                .expect_err("coordinated recipient time digest drift fails on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+
+        let deadline_fixture = RepositoryFixture::new("m3c05-accepted-evidence-deadline");
+        let deadline_tag = "m3c05-accepted-evidence-deadline";
+        let (source, recipient) = seed_handoff_parties(&deadline_fixture, deadline_tag);
+        let created = create_handoff_for_test(&deadline_fixture, deadline_tag, &source, &recipient);
+        let accepted = deadline_fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: created.handoff.handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    &format!("{deadline_tag}:accept"),
+                    &format!("{deadline_tag}:correlation"),
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("accept before the exclusive deadline");
+        let mut deadline_drift = accepted
+            .handoff
+            .recipient
+            .as_ref()
+            .expect("accepted evidence for deadline drift")
+            .clone();
+        deadline_drift.accepted_at = accepted.handoff.accept_by.clone();
+        let deadline_drift_digest = handoff_recipient_evidence_digest(&deadline_drift)
+            .expect("hash accepted-at deadline drift");
+        deadline_fixture.execute_batch(&format!(
+            "UPDATE m3_handoffs
+             SET accepted_at = '{}', recipient_evidence_digest = '{}'
+             WHERE handoff_id = '{}'",
+            deadline_drift.accepted_at,
+            deadline_drift_digest.as_str(),
+            accepted.handoff.handoff_id.as_str(),
+        ));
+        assert_eq!(deadline_fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            deadline_fixture.handoff_rehydration_error_code(&accepted.handoff.handoff_id),
+            "m3_handoff_persisted_recipient_evidence_mismatch"
+        );
+        assert_eq!(
+            deadline_fixture
+                .repository
+                .verify_schema()
+                .expect_err("accepted_at equal to accept_by is invalid on rehydrate")
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&deadline_fixture.path)
+                .expect_err("exclusive accept deadline remains enforced on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_source_application_uses_new_base_retries_and_reopens() {
+        let fixture = RepositoryFixture::new("m3c05-source-application");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-source-application");
+        let created =
+            create_handoff_for_test(&fixture, "m3c05-source-application", &source, &recipient);
+        let handoff_id = created.handoff.handoff_id.clone();
+        let correlation = "m3c05-source-application:correlation";
+
+        fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-source-application:accept",
+                    correlation,
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("recipient accepts before return flow");
+        fixture
+            .repository
+            .request_handoff_return(&RequestHandoffReturnCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 2,
+                return_by: "2026-08-09T00:10:00Z".to_string(),
+                metadata: handoff_metadata(
+                    "m3c05-source-application:request-return",
+                    correlation,
+                    "2026-08-09T00:02:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:02:00Z"),
+            })
+            .expect("source requests return");
+        let source_validation_receipt_ref = fresh_source_application_base_receipt(
+            &fixture,
+            "m3c05-source-application:source-validation",
+            &source,
+        );
+        let returned = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::Returned {
+                    result_ref: opaque("m3c05-source-application:returned-result"),
+                    result_hash: Sha256Digest::of_bytes(b"m3c05 source application returned"),
+                    source_object_validation: HandoffSourceObjectValidationProof {
+                        role_session_id: source.role_session_id.clone(),
+                        binding: source.binding.clone(),
+                        object_ref: source.binding.current_object_ref.clone(),
+                        validation_receipt_ref: source_validation_receipt_ref,
+                    },
+                },
+                metadata: handoff_metadata(
+                    "m3c05-source-application:returned",
+                    correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect("recipient returns a source-validated result");
+        assert_eq!(returned.handoff.status, HandoffState::Returned);
+        assert_eq!(returned.handoff.revision, 4);
+
+        let original_base = RecordHandoffSourceApplicationCommand {
+            application_id: opaque("m3c05-source-application:original-base"),
+            handoff_id: handoff_id.clone(),
+            source: handoff_authority(&source),
+            expected_handoff_revision: 4,
+            source_command_receipt_ref: created.handoff.source_command_receipt_ref.clone(),
+            status: HandoffSourceApplicationStatus::OriginalObjectMissing,
+            metadata: handoff_metadata(
+                "m3c05-source-application:original-base",
+                correlation,
+                "2026-08-09T00:04:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:04:00Z"),
+        };
+        assert_eq!(
+            fixture
+                .repository
+                .record_handoff_source_application(&original_base)
+                .expect_err("the create base cannot apply the returned result")
+                .code,
+            "m3_handoff_source_application_requires_new_source_command"
+        );
+        assert_eq!(fixture.count("m3_handoff_source_applications"), 0);
+
+        let ordinary_validation_receipt = fresh_source_application_base_receipt_at(
+            &fixture,
+            "m3c05-source-application:ordinary-validation",
+            &source,
+            "2026-08-09T00:04:10Z",
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .record_handoff_source_application(&RecordHandoffSourceApplicationCommand {
+                    application_id: opaque("m3c05-source-application:ordinary-validation"),
+                    handoff_id: handoff_id.clone(),
+                    source: handoff_authority(&source),
+                    expected_handoff_revision: 4,
+                    source_command_receipt_ref: ordinary_validation_receipt,
+                    status: HandoffSourceApplicationStatus::OriginalObjectMissing,
+                    metadata: handoff_metadata(
+                        "m3c05-source-application:ordinary-validation",
+                        correlation,
+                        "2026-08-09T00:04:20Z",
+                    ),
+                    test_clock_now: handoff_server_now("2026-08-09T00:04:20Z"),
+                })
+                .expect_err("ordinary validation receipt has no causal application fence")
+                .code,
+            "m3_handoff_source_command_fence_missing"
+        );
+        assert_eq!(fixture.count("m3_handoff_source_applications"), 0);
+
+        let missing_fence_receipt = fresh_source_application_fence_receipt_at(
+            &fixture,
+            "m3c05-source-application:missing",
+            &source,
+            &handoff_id,
+            4,
+            correlation,
+            "2026-08-09T00:04:30Z",
+        );
+        let original_object_missing = RecordHandoffSourceApplicationCommand {
+            application_id: opaque("m3c05-source-application:missing"),
+            handoff_id: handoff_id.clone(),
+            source: handoff_authority(&source),
+            expected_handoff_revision: 4,
+            source_command_receipt_ref: missing_fence_receipt.clone(),
+            status: HandoffSourceApplicationStatus::OriginalObjectMissing,
+            metadata: handoff_metadata(
+                "m3c05-source-application:missing",
+                correlation,
+                "2026-08-09T00:05:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:05:00Z"),
+        };
+        let missing = fixture
+            .repository
+            .record_handoff_source_application(&original_object_missing)
+            .expect("missing original object is an auditable non-terminal application result");
+        assert_eq!(
+            missing
+                .source_application
+                .as_ref()
+                .expect("missing application record")
+                .status,
+            HandoffSourceApplicationStatus::OriginalObjectMissing
+        );
+        assert_eq!(missing.handoff.status, HandoffState::Returned);
+        assert_eq!(missing.handoff.revision, 4);
+        let durable_after_missing = fixture.counts([
+            "m3_handoff_command_receipts",
+            "m3_handoff_source_applications",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        let mut transport_metadata_retry = original_object_missing.clone();
+        transport_metadata_retry.metadata.correlation_id = CorrelationId::try_from_canonical(
+            sealed_text("correlation", "m3c05-source-application:transport-retry"),
+        )
+        .expect("source-application transport retry correlation");
+        transport_metadata_retry.metadata.occurred_at = "2099-01-01T00:00:00Z".to_string();
+        let missing_replay = fixture
+            .repository
+            .record_handoff_source_application(&transport_metadata_retry)
+            .expect("exact source-application replay ignores changed transport metadata");
+        assert!(missing_replay.replayed);
+        assert_eq!(
+            missing_replay.command_receipt.command_receipt_id,
+            missing.command_receipt.command_receipt_id
+        );
+        assert_eq!(
+            missing_replay.command_receipt.correlation_id,
+            missing.command_receipt.correlation_id
+        );
+        assert_ne!(
+            missing_replay.command_receipt.correlation_id,
+            transport_metadata_retry.metadata.correlation_id,
+            "replay returns the original persisted correlation"
+        );
+        assert_eq!(
+            missing_replay
+                .source_application
+                .as_ref()
+                .expect("replayed source application")
+                .application_id,
+            original_object_missing.application_id
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoff_command_receipts",
+                "m3_handoff_source_applications",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            durable_after_missing,
+            "source-application exact replay performs no writes"
+        );
+
+        let mut fresh_transport_chain = original_object_missing.clone();
+        fresh_transport_chain.metadata = handoff_metadata(
+            "m3c05-source-application:fresh-correlation",
+            "m3c05-source-application:different-correlation",
+            "2099-01-01T00:00:01Z",
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .record_handoff_source_application(&fresh_transport_chain)
+                .expect_err("a fresh application key must match the Handoff correlation")
+                .code,
+            "m3_handoff_correlation_mismatch"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoff_command_receipts",
+                "m3_handoff_source_applications",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            durable_after_missing,
+            "fresh application correlation mismatch is rejected before any write"
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .record_handoff_source_application(&RecordHandoffSourceApplicationCommand {
+                    application_id: opaque("m3c05-source-application:missing-reuse"),
+                    handoff_id: handoff_id.clone(),
+                    source: handoff_authority(&source),
+                    expected_handoff_revision: 4,
+                    source_command_receipt_ref: missing_fence_receipt,
+                    status: HandoffSourceApplicationStatus::ApplicationFailed,
+                    metadata: handoff_metadata(
+                        "m3c05-source-application:missing-reuse",
+                        correlation,
+                        "2026-08-09T00:05:10Z",
+                    ),
+                    test_clock_now: handoff_server_now("2026-08-09T00:05:10Z"),
+                })
+                .expect_err("every application attempt consumes its causal fence")
+                .code,
+            "m3_handoff_source_application_fence_already_consumed"
+        );
+
+        let failed_fence_receipt = fresh_source_application_fence_receipt_at(
+            &fixture,
+            "m3c05-source-application:failed",
+            &source,
+            &handoff_id,
+            4,
+            correlation,
+            "2026-08-09T00:05:30Z",
+        );
+        let application_failed = fixture
+            .repository
+            .record_handoff_source_application(&RecordHandoffSourceApplicationCommand {
+                application_id: opaque("m3c05-source-application:failed"),
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 4,
+                source_command_receipt_ref: failed_fence_receipt.clone(),
+                status: HandoffSourceApplicationStatus::ApplicationFailed,
+                metadata: handoff_metadata(
+                    "m3c05-source-application:failed",
+                    correlation,
+                    "2026-08-09T00:06:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:06:00Z"),
+            })
+            .expect("failed application may be retried by a new source command");
+        assert_eq!(
+            application_failed
+                .source_application
+                .as_ref()
+                .expect("failed application record")
+                .status,
+            HandoffSourceApplicationStatus::ApplicationFailed
+        );
+        assert_eq!(application_failed.handoff.status, HandoffState::Returned);
+        assert_eq!(application_failed.handoff.revision, 4);
+        assert_eq!(
+            fixture
+                .repository
+                .record_handoff_source_application(&RecordHandoffSourceApplicationCommand {
+                    application_id: opaque("m3c05-source-application:failed-reuse"),
+                    handoff_id: handoff_id.clone(),
+                    source: handoff_authority(&source),
+                    expected_handoff_revision: 4,
+                    source_command_receipt_ref: failed_fence_receipt,
+                    status: HandoffSourceApplicationStatus::ApplicationFailed,
+                    metadata: handoff_metadata(
+                        "m3c05-source-application:failed-reuse",
+                        correlation,
+                        "2026-08-09T00:06:10Z",
+                    ),
+                    test_clock_now: handoff_server_now("2026-08-09T00:06:10Z"),
+                })
+                .expect_err("failed application retry requires a freshly minted fence")
+                .code,
+            "m3_handoff_source_application_fence_already_consumed"
+        );
+
+        let applied_fence_receipt = fresh_source_application_fence_receipt_at(
+            &fixture,
+            "m3c05-source-application:applied",
+            &source,
+            &handoff_id,
+            4,
+            correlation,
+            "2026-08-09T00:06:30Z",
+        );
+        let applied = fixture
+            .repository
+            .record_handoff_source_application(&RecordHandoffSourceApplicationCommand {
+                application_id: opaque("m3c05-source-application:applied"),
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 4,
+                source_command_receipt_ref: applied_fence_receipt,
+                status: HandoffSourceApplicationStatus::Applied,
+                metadata: handoff_metadata(
+                    "m3c05-source-application:applied",
+                    correlation,
+                    "2026-08-09T00:07:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:07:00Z"),
+            })
+            .expect("source-only application records the returned result");
+        assert_eq!(
+            applied
+                .source_application
+                .as_ref()
+                .expect("applied source application record")
+                .status,
+            HandoffSourceApplicationStatus::Applied
+        );
+        assert_eq!(applied.handoff.status, HandoffState::Returned);
+        assert_eq!(applied.handoff.revision, 4);
+
+        let after_applied_fence_receipt = fresh_source_application_fence_receipt_at(
+            &fixture,
+            "m3c05-source-application:after-applied",
+            &source,
+            &handoff_id,
+            4,
+            correlation,
+            "2026-08-09T00:07:30Z",
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .record_handoff_source_application(&RecordHandoffSourceApplicationCommand {
+                    application_id: opaque("m3c05-source-application:after-applied"),
+                    handoff_id,
+                    source: handoff_authority(&source),
+                    expected_handoff_revision: 4,
+                    source_command_receipt_ref: after_applied_fence_receipt,
+                    status: HandoffSourceApplicationStatus::OriginalObjectMissing,
+                    metadata: handoff_metadata(
+                        "m3c05-source-application:after-applied",
+                        correlation,
+                        "2026-08-09T00:08:00Z",
+                    ),
+                    test_clock_now: handoff_server_now("2026-08-09T00:08:00Z"),
+                })
+                .expect_err("a handoff has only one successful source application")
+                .code,
+            "m3_handoff_source_application_already_applied"
+        );
+        assert_eq!(fixture.count("m3_handoff_source_applications"), 3);
+        fixture
+            .repository
+            .verify_schema()
+            .expect("source application history rehydrates");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("source application history reopens cleanly");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_source_application_fence_requires_returned_anchor_and_causal_clock() {
+        let pre_return = RepositoryFixture::new("m3c05-source-fence-pre-return");
+        let pre_tag = "m3c05-source-fence-pre-return";
+        let (source, recipient) = seed_handoff_parties(&pre_return, pre_tag);
+        let created = create_handoff_for_test(&pre_return, pre_tag, &source, &recipient);
+        let before = pre_return.counts([
+            "m3_command_receipts",
+            "m3_handoff_validation_witnesses",
+            "m3_handoff_source_command_fences",
+        ]);
+        pre_return
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:00:30Z")
+            .expect("set pre-return trusted clock");
+        let pre_return_error = pre_return
+            .repository
+            .upsert_handoff_source_application_context(
+                &UpsertHandoffSourceApplicationContextCommand {
+                    handoff_id: created.handoff.handoff_id.clone(),
+                    expected_handoff_revision: 1,
+                    context_command: UpsertConversationContextCommand {
+                        context: context_for(
+                            pre_tag,
+                            &source,
+                            context_ref("m3c05-source-fence-pre-return:context"),
+                        ),
+                        binding: source.binding.clone(),
+                        previous_permission: Some(source.permission.clone()),
+                        current_permission: Some(source.permission.clone()),
+                        expected_session_revision: 1,
+                        metadata: handoff_metadata(
+                            "m3c05-source-fence-pre-return:base",
+                            "m3c05-source-fence-pre-return:correlation",
+                            "2099-01-01T00:00:00Z",
+                        ),
+                    },
+                },
+            )
+            .expect_err("source-application fence requires a current RETURNED anchor");
+        assert_eq!(
+            pre_return_error.code,
+            "m3_handoff_source_command_fence_returned_authority_required"
+        );
+        assert_eq!(
+            pre_return.counts([
+                "m3_command_receipts",
+                "m3_handoff_validation_witnesses",
+                "m3_handoff_source_command_fences",
+            ]),
+            before,
+            "invalid anchor is rejected before the private clock or any write"
+        );
+
+        let fixture = RepositoryFixture::new("m3c05-source-fence-causal-clock");
+        let tag = "m3c05-source-fence-causal-clock";
+        let (source, _, returned, _) = create_returned_handoff_for_test(&fixture, tag);
+        let handoff_id = returned.handoff.handoff_id.clone();
+        let correlation = "m3c05-source-fence-causal-clock:correlation";
+        let fence_receipt = fresh_source_application_fence_receipt_at(
+            &fixture,
+            "m3c05-source-fence-causal-clock:fence",
+            &source,
+            &handoff_id,
+            4,
+            correlation,
+            "2026-08-09T00:04:00Z",
+        );
+        let before_regressed = fixture.counts([
+            "m3_handoff_command_receipts",
+            "m3_handoff_source_applications",
+            "m3_handoff_events",
+            "m3_handoff_audit_records",
+        ]);
+        let regressed = RecordHandoffSourceApplicationCommand {
+            application_id: opaque("m3c05-source-fence-causal-clock:regressed"),
+            handoff_id: handoff_id.clone(),
+            source: handoff_authority(&source),
+            expected_handoff_revision: 4,
+            source_command_receipt_ref: fence_receipt.clone(),
+            status: HandoffSourceApplicationStatus::OriginalObjectMissing,
+            metadata: handoff_metadata(
+                "m3c05-source-fence-causal-clock:regressed",
+                correlation,
+                "2099-01-01T00:00:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:03:59Z"),
+        };
+        assert_eq!(
+            fixture
+                .repository
+                .record_handoff_source_application(&regressed)
+                .expect_err("application clock cannot precede its causal fence")
+                .code,
+            "m3_handoff_source_application_precedes_source_command_fence"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoff_command_receipts",
+                "m3_handoff_source_applications",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            before_regressed,
+            "clock regression is a zero-write rejection and does not consume the fence"
+        );
+
+        let equal_boundary = fixture
+            .repository
+            .record_handoff_source_application(&RecordHandoffSourceApplicationCommand {
+                application_id: opaque("m3c05-source-fence-causal-clock:equal"),
+                handoff_id,
+                source: handoff_authority(&source),
+                expected_handoff_revision: 4,
+                source_command_receipt_ref: fence_receipt,
+                status: HandoffSourceApplicationStatus::OriginalObjectMissing,
+                metadata: handoff_metadata(
+                    "m3c05-source-fence-causal-clock:equal",
+                    correlation,
+                    "2000-01-01T00:00:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:04:00Z"),
+            })
+            .expect("equal trusted fence/application times are causally ordered");
+        assert_eq!(
+            equal_boundary
+                .source_application
+                .as_ref()
+                .expect("equal-boundary application")
+                .recorded_at,
+            "2026-08-09T00:04:00Z",
+            "caller occurred_at is only an audit echo; repository time is durable"
+        );
+        fixture
+            .repository
+            .verify_schema()
+            .expect("causal source-application boundary verifies");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("causal source-application boundary reopens");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_source_application_fence_narrowing_exact_replay_and_history_drift_fail_closed(
+    ) {
+        let fixture = RepositoryFixture::new("m3c05-source-fence-narrowing-replay");
+        let tag = "m3c05-source-fence-narrowing-replay";
+        let (source, _, returned, _) = create_returned_handoff_for_test(&fixture, tag);
+        let narrowed_snapshot = "permission:m3c05-source-fence-narrowing-replay:source:v2";
+        let narrowed_binding = server_binding(
+            "m3c05-source-fence-narrowing-replay:source",
+            narrowed_snapshot,
+        );
+        let narrowed_permission = permission(
+            narrowed_snapshot,
+            &["capability:read"],
+            &["capability:write"],
+            &["constraint:read-only"],
+        );
+        let command = UpsertHandoffSourceApplicationContextCommand {
+            handoff_id: returned.handoff.handoff_id.clone(),
+            expected_handoff_revision: 4,
+            context_command: UpsertConversationContextCommand {
+                context: context_for(
+                    tag,
+                    &source,
+                    context_ref("m3c05-source-fence-narrowing-replay:context"),
+                ),
+                binding: narrowed_binding.clone(),
+                previous_permission: Some(source.permission.clone()),
+                current_permission: Some(narrowed_permission),
+                expected_session_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-source-fence-narrowing-replay:base",
+                    "m3c05-source-fence-narrowing-replay:correlation",
+                    "2099-01-01T00:00:00Z",
+                ),
+            },
+        };
+        fixture
+            .repository
+            .handoff_clock
+            .set_fixed_now("2026-08-09T00:04:00Z")
+            .expect("set trusted narrowing fence clock");
+        let first = fixture
+            .repository
+            .upsert_handoff_source_application_context(&command)
+            .expect("fresh source-application fence may narrow permission");
+        assert!(!first.replayed);
+        assert_eq!(
+            first
+                .role_session
+                .as_ref()
+                .expect("narrowed source session")
+                .revision,
+            2
+        );
+        assert_eq!(
+            first
+                .role_session
+                .as_ref()
+                .expect("narrowed source session")
+                .permission_snapshot_ref,
+            narrowed_binding.permission_snapshot_ref
+        );
+        let first_receipt_id = first.receipt.receipt_id.clone();
+        let durable_after_first = fixture.counts([
+            "m3_command_receipts",
+            "m3_conversation_contexts",
+            "m3_handoff_validation_witnesses",
+            "m3_handoff_source_command_fences",
+        ]);
+
+        let mut transport_metadata_retry = command.clone();
+        transport_metadata_retry
+            .context_command
+            .metadata
+            .correlation_id = CorrelationId::try_from_canonical(sealed_text(
+            "correlation",
+            "m3c05-source-fence-narrowing-replay:transport-retry",
+        ))
+        .expect("transport retry correlation");
+        transport_metadata_retry
+            .context_command
+            .metadata
+            .occurred_at = "2099-01-01T00:00:01Z".to_string();
+        let replay = fixture
+            .repository
+            .upsert_handoff_source_application_context(&transport_metadata_retry)
+            .expect("lost response replays after source revision and transport metadata advance");
+        assert!(replay.replayed);
+        assert_eq!(replay.receipt.receipt_id, first_receipt_id);
+        assert_eq!(replay.receipt.correlation_id, first.receipt.correlation_id);
+        assert_ne!(
+            replay.receipt.correlation_id,
+            transport_metadata_retry
+                .context_command
+                .metadata
+                .correlation_id,
+            "replay returns the original persisted correlation"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_command_receipts",
+                "m3_conversation_contexts",
+                "m3_handoff_validation_witnesses",
+                "m3_handoff_source_command_fences",
+            ]),
+            durable_after_first,
+            "exact replay performs no writes"
+        );
+
+        let mut fresh_transport_chain = command.clone();
+        fresh_transport_chain.context_command.metadata = handoff_metadata(
+            "m3c05-source-fence-narrowing-replay:new-key",
+            "m3c05-source-fence-narrowing-replay:different-correlation",
+            "2099-01-01T00:00:02Z",
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .upsert_handoff_source_application_context(&fresh_transport_chain)
+                .expect_err("a fresh key must still bind to the Handoff correlation")
+                .code,
+            "m3_handoff_source_command_fence_returned_authority_required"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_command_receipts",
+                "m3_conversation_contexts",
+                "m3_handoff_validation_witnesses",
+                "m3_handoff_source_command_fences",
+            ]),
+            durable_after_first,
+            "fresh transport-chain mismatch is rejected before any write"
+        );
+
+        let mut divergent = command.clone();
+        divergent.context_command.context.source_watermark =
+            opaque("m3c05-source-fence-narrowing-replay:changed-watermark");
+        assert_eq!(
+            fixture
+                .repository
+                .upsert_handoff_source_application_context(&divergent)
+                .expect_err("same key with a changed context remains immutable")
+                .code,
+            "m3_idempotency_key_reuse_with_different_immutable_request"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_command_receipts",
+                "m3_conversation_contexts",
+                "m3_handoff_validation_witnesses",
+                "m3_handoff_source_command_fences",
+            ]),
+            durable_after_first
+        );
+
+        fixture.execute_batch(&format!(
+            "UPDATE m3_handoffs
+             SET return_by = '2099-08-09T00:10:00Z'
+             WHERE handoff_id = '{}'",
+            returned.handoff.handoff_id.as_str(),
+        ));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            fixture
+                .repository
+                .upsert_handoff_source_application_context(&command)
+                .expect_err("exact replay rehydrates the current RETURNED history")
+                .code,
+            "m3_handoff_history_current_receipt_mismatch"
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_command_receipts",
+                "m3_conversation_contexts",
+                "m3_handoff_validation_witnesses",
+                "m3_handoff_source_command_fences",
+            ]),
+            durable_after_first,
+            "history drift fails before any replay write"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_orphan_source_command_fence_drift_fails_verify_and_reopen() {
+        let fixture = RepositoryFixture::new("m3c05-orphan-source-fence-drift");
+        let tag = "m3c05-orphan-source-fence-drift";
+        let (source, _, returned, _) = create_returned_handoff_for_test(&fixture, tag);
+        let fence_receipt = fresh_source_application_fence_receipt_at(
+            &fixture,
+            "m3c05-orphan-source-fence-drift:fence",
+            &source,
+            &returned.handoff.handoff_id,
+            4,
+            "m3c05-orphan-source-fence-drift:correlation",
+            "2026-08-09T00:04:00Z",
+        );
+        assert_eq!(fixture.count("m3_handoff_source_applications"), 0);
+        fixture
+            .repository
+            .verify_schema()
+            .expect("untouched orphan fence is fully verifiable");
+        let drifted_digest = Sha256Digest::of_bytes(b"orphan source fence canonical drift");
+        fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_source_command_fences
+             SET fence_digest = '{}'
+             WHERE source_command_receipt_ref = '{}'",
+            drifted_digest.as_str(),
+            fence_receipt.as_str(),
+        ));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err("orphan fence digest is always recomputed")
+                .code,
+            "m3_handoff_source_command_fence_drift"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("orphan fence drift fails closed on reopen")
+                .code,
+            "m3_handoff_source_command_fence_drift"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_source_application_replay_and_history_reject_time_drift() {
+        let fixture = RepositoryFixture::new("m3c05-source-application-time-drift");
+        let tag = "m3c05-source-application-time-drift";
+        let (source, _, returned, _) = create_returned_handoff_for_test(&fixture, tag);
+        let handoff_id = returned.handoff.handoff_id.clone();
+        let correlation = "m3c05-source-application-time-drift:correlation";
+        let fence_receipt = fresh_source_application_fence_receipt_at(
+            &fixture,
+            "m3c05-source-application-time-drift:fence",
+            &source,
+            &handoff_id,
+            4,
+            correlation,
+            "2026-08-09T00:04:00Z",
+        );
+        let command = RecordHandoffSourceApplicationCommand {
+            application_id: opaque("m3c05-source-application-time-drift:application"),
+            handoff_id,
+            source: handoff_authority(&source),
+            expected_handoff_revision: 4,
+            source_command_receipt_ref: fence_receipt,
+            status: HandoffSourceApplicationStatus::ApplicationFailed,
+            metadata: handoff_metadata(
+                "m3c05-source-application-time-drift:application",
+                correlation,
+                "2026-08-09T00:05:00Z",
+            ),
+            test_clock_now: handoff_server_now("2026-08-09T00:05:00Z"),
+        };
+        fixture
+            .repository
+            .record_handoff_source_application(&command)
+            .expect("persist source application before time fault injection");
+        fixture.execute_batch(&format!(
+            "UPDATE m3_handoff_source_applications
+             SET recorded_at = '2026-08-09T00:03:59Z'
+             WHERE application_id = '{}'",
+            command.application_id.as_str(),
+        ));
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+        assert_eq!(
+            fixture
+                .repository
+                .record_handoff_source_application(&command)
+                .expect_err("exact replay revalidates application and fence history")
+                .code,
+            "m3_handoff_source_application_fence_binding_mismatch"
+        );
+        assert_eq!(
+            fixture
+                .repository
+                .verify_schema()
+                .expect_err("application time drift fails schema verification")
+                .code,
+            "m3_schema_verify_failed"
+        );
+        assert_eq!(
+            M3RoleSessionSqliteRepository::open_rehearsal(&fixture.path)
+                .expect_err("application time drift fails closed on reopen")
+                .code,
+            "m3_schema_install_failed"
+        );
+    }
+
+    #[test]
+    fn m3c05_repository_same_revision_competition_and_return_result_timeout_cas_reopen() {
+        let fixture = RepositoryFixture::new("m3c05-competition");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-competition");
+        let created =
+            create_handoff_for_test(&fixture, "m3c05-competition:cancel", &source, &recipient);
+        let handoff_id = created.handoff.handoff_id.clone();
+        let correlation = "m3c05-competition:cancel:correlation";
+
+        let cancelled = fixture
+            .repository
+            .cancel_handoff(&CancelHandoffCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-competition:cancel:winner",
+                    correlation,
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("source cancellation wins the initial revision");
+        let cancelled_receipt = cancelled
+            .transition_receipt
+            .as_ref()
+            .expect("cancel winner receipt")
+            .receipt_id
+            .clone();
+        assert_eq!(cancelled.handoff.status, HandoffState::Cancelled);
+        assert_eq!(cancelled.handoff.revision, 2);
+
+        let accept_stale = fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-competition:cancel:accept-stale",
+                    correlation,
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("same-revision accept gets the durable winner");
+        let reject_stale = fixture
+            .repository
+            .reject_handoff(&RejectHandoffCommand {
+                handoff_id: handoff_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-competition:cancel:reject-stale",
+                    correlation,
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("same-revision reject gets the durable winner");
+        let expire_stale = fixture
+            .repository
+            .expire_handoff(&ExpireHandoffCommand {
+                handoff_id,
+                source: handoff_authority(&source),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-competition:cancel:expire-stale",
+                    correlation,
+                    "2026-08-09T00:10:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:10:00Z"),
+            })
+            .expect("same-revision expire gets the durable winner");
+        for stale in [&accept_stale, &reject_stale, &expire_stale] {
+            assert_eq!(
+                stale.command_receipt.status,
+                M3HandoffCommandReceiptStatus::Stale
+            );
+            let winner = stale.winning_receipt.as_ref().expect("same-handoff winner");
+            assert_eq!(winner.receipt_id, cancelled_receipt);
+            assert_eq!(winner.handoff_revision, 2);
+            assert_eq!(
+                winner.handoff_revision,
+                stale.command_receipt.expected_handoff_revision + 1
+            );
+        }
+
+        let return_created =
+            create_handoff_for_test(&fixture, "m3c05-competition:return", &source, &recipient);
+        let return_id = return_created.handoff.handoff_id.clone();
+        let return_correlation = "m3c05-competition:return:correlation";
+        fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: return_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-competition:return:accept",
+                    return_correlation,
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("recipient accepts returned-result race handoff");
+        fixture
+            .repository
+            .request_handoff_return(&RequestHandoffReturnCommand {
+                handoff_id: return_id.clone(),
+                source: handoff_authority(&source),
+                expected_handoff_revision: 2,
+                return_by: "2026-08-09T00:05:00Z".to_string(),
+                metadata: handoff_metadata(
+                    "m3c05-competition:return:request",
+                    return_correlation,
+                    "2026-08-09T00:02:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:02:00Z"),
+            })
+            .expect("source requests return before race");
+        let recipient_failed = fixture
+            .repository
+            .record_handoff_return_result(&RecordHandoffReturnResultCommand {
+                handoff_id: return_id.clone(),
+                source: handoff_authority(&source),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 3,
+                result: HandoffReturnResult::RecipientReturnFailed {
+                    failure_ref: opaque("m3c05-competition:return:recipient-failure"),
+                    failure_hash: Sha256Digest::of_bytes(b"m3c05 recipient failure winner"),
+                },
+                metadata: handoff_metadata(
+                    "m3c05-competition:return:recipient-failure",
+                    return_correlation,
+                    "2026-08-09T00:03:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:03:00Z"),
+            })
+            .expect("recipient return failure is a durable state transition");
+        assert_eq!(recipient_failed.handoff.status, HandoffState::ReturnFailed);
+        assert_eq!(recipient_failed.handoff.revision, 4);
+        assert_eq!(
+            recipient_failed.handoff.last_failure_reason,
+            Some(HandoffReturnFailureReason::RecipientReturnFailed)
+        );
+        let recipient_failure_receipt = recipient_failed
+            .transition_receipt
+            .as_ref()
+            .expect("recipient failure receipt")
+            .receipt_id
+            .clone();
+
+        let timeout_stale = fixture
+            .repository
+            .timeout_handoff_return(&TimeoutHandoffReturnCommand {
+                handoff_id: return_id,
+                source: handoff_authority(&source),
+                expected_handoff_revision: 3,
+                metadata: handoff_metadata(
+                    "m3c05-competition:return:timeout-stale",
+                    return_correlation,
+                    "2026-08-09T00:05:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:05:00Z"),
+            })
+            .expect("timeout loses to the same-revision recipient result");
+        assert_eq!(
+            timeout_stale.command_receipt.status,
+            M3HandoffCommandReceiptStatus::Stale
+        );
+        let timeout_winner = timeout_stale
+            .winning_receipt
+            .as_ref()
+            .expect("return race winner");
+        assert_eq!(timeout_winner.receipt_id, recipient_failure_receipt);
+        assert_eq!(timeout_winner.handoff_revision, 4);
+        assert_eq!(
+            timeout_winner.handoff_revision,
+            timeout_stale.command_receipt.expected_handoff_revision + 1
+        );
+        assert_eq!(
+            timeout_winner.receipt_kind,
+            HandoffReceiptKind::ReturnFailed
+        );
+        assert_eq!(timeout_winner.reason_code, "RECIPIENT_RETURN_FAILED");
+        fixture
+            .repository
+            .verify_schema()
+            .expect("competition and return-result history rehydrates");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("competition and return-result history reopens cleanly");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_permission_continuation_is_bounded_audited_and_grant_free() {
+        let narrowed_fixture = RepositoryFixture::new("m3c05-permission-narrower");
+        let (source, recipient) =
+            seed_handoff_parties(&narrowed_fixture, "m3c05-permission-narrower");
+        let narrowed_snapshot = "permission:m3c05-permission-narrower:source:v2";
+        let narrowed_binding =
+            server_binding("m3c05-permission-narrower:source", narrowed_snapshot);
+        let narrowed_permission = permission(
+            narrowed_snapshot,
+            &["capability:read"],
+            &["capability:write"],
+            &["constraint:read-only"],
+        );
+        mint_detached_handoff_permission_descriptor_for_test(
+            &narrowed_fixture,
+            "m3c05-permission-narrower:source:v2",
+            &narrowed_permission,
+        );
+        let mut create = create_handoff_command_for_test(
+            &narrowed_fixture,
+            "m3c05-permission-narrower",
+            &source,
+            &recipient,
+        );
+        create.source = handoff_authority_with(
+            &source,
+            narrowed_binding.clone(),
+            source.permission.clone(),
+            narrowed_permission.clone(),
+            1,
+        );
+        create.permission_request.source_permission_snapshot_ref =
+            narrowed_binding.permission_snapshot_ref.clone();
+        let created = narrowed_fixture
+            .repository
+            .create_handoff(&create)
+            .expect("narrower source permission persists before handoff creation");
+        assert_eq!(created.handoff.status, HandoffState::Created);
+        let narrowed_source = created
+            .source_session
+            .as_ref()
+            .expect("narrowed source session");
+        assert_eq!(narrowed_source.revision, 2);
+        assert_eq!(
+            narrowed_source.permission_snapshot_ref,
+            narrowed_binding.permission_snapshot_ref
+        );
+        assert_eq!(
+            created.handoff.permission_request.requested_capability_refs,
+            [opaque("capability:read")].into_iter().collect()
+        );
+        let accepted = narrowed_fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: created.handoff.handoff_id.clone(),
+                source: handoff_authority_with(
+                    &source,
+                    narrowed_binding.clone(),
+                    narrowed_permission.clone(),
+                    narrowed_permission.clone(),
+                    2,
+                ),
+                recipient: handoff_authority(&recipient),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-permission-narrower:accept",
+                    "m3c05-permission-narrower:correlation",
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("same narrowed permission continues without a grant");
+        assert_eq!(accepted.handoff.status, HandoffState::Accepted);
+        assert_eq!(
+            accepted
+                .source_session
+                .as_ref()
+                .expect("continued source session")
+                .revision,
+            2
+        );
+        let grant_objects: i64 = narrowed_fixture
+            .repository
+            .read_connection()
+            .expect("open grant-free schema query")
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE lower(name) LIKE '%grant%'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("query grant-free schema");
+        assert_eq!(grant_objects, 0);
+        let recipient_after_request = narrowed_fixture
+            .repository
+            .find_role_session(&recipient.role_session_id)
+            .expect("read recipient after request")
+            .expect("recipient remains present");
+        assert_eq!(recipient_after_request.revision, 1);
+        assert_eq!(
+            recipient_after_request.permission_snapshot_ref,
+            recipient.binding.permission_snapshot_ref
+        );
+        narrowed_fixture
+            .repository
+            .verify_schema()
+            .expect("narrower/same permission history rehydrates");
+        narrowed_fixture
+            .reopen()
+            .verify_schema()
+            .expect("narrower/same permission history reopens cleanly");
+        assert_eq!(narrowed_fixture.foreign_key_violation_count(), 0);
+
+        let wider_fixture = RepositoryFixture::new("m3c05-permission-wider");
+        let (wider_source, wider_recipient) =
+            seed_handoff_parties(&wider_fixture, "m3c05-permission-wider");
+        let wider_created = create_handoff_for_test(
+            &wider_fixture,
+            "m3c05-permission-wider",
+            &wider_source,
+            &wider_recipient,
+        );
+        let wider_snapshot = "permission:m3c05-permission-wider:recipient:v2";
+        let mut wider_binding = wider_recipient.binding.clone();
+        wider_binding.permission_snapshot_ref = sealed_opaque("permission", wider_snapshot);
+        let wider_permission = permission(
+            wider_snapshot,
+            &["capability:read", "capability:write", "capability:admin"],
+            &[],
+            &[],
+        );
+        let wider = wider_fixture
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id: wider_created.handoff.handoff_id.clone(),
+                source: handoff_authority(&wider_source),
+                recipient: handoff_authority_with(
+                    &wider_recipient,
+                    wider_binding,
+                    wider_recipient.permission.clone(),
+                    wider_permission,
+                    1,
+                ),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-permission-wider:accept",
+                    "m3c05-permission-wider:correlation",
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("wider recipient permission is durably suspended, not granted");
+        assert_eq!(
+            wider.command_receipt.status,
+            M3HandoffCommandReceiptStatus::Suspended
+        );
+        assert_eq!(wider.handoff.status, HandoffState::Created);
+        assert_eq!(wider.handoff.revision, 1);
+        let suspended_recipient = wider
+            .recipient_session
+            .as_ref()
+            .expect("suspended recipient session");
+        assert_eq!(suspended_recipient.status, RoleSessionState::Suspended);
+        assert_eq!(suspended_recipient.revision, 2);
+        assert_eq!(
+            suspended_recipient.resolution_reason,
+            Some(SessionResolutionReason::PermissionWidened)
+        );
+        wider_fixture
+            .repository
+            .verify_schema()
+            .expect("wider permission suspension is auditable and rehydratable");
+        wider_fixture
+            .reopen()
+            .verify_schema()
+            .expect("wider permission suspension reopens cleanly");
+        assert_eq!(wider_fixture.foreign_key_violation_count(), 0);
+
+        let unknown_fixture = RepositoryFixture::new("m3c05-permission-unknown");
+        let (unknown_source, unknown_recipient) =
+            seed_handoff_parties(&unknown_fixture, "m3c05-permission-unknown");
+        let unknown_created = create_handoff_for_test(
+            &unknown_fixture,
+            "m3c05-permission-unknown",
+            &unknown_source,
+            &unknown_recipient,
+        );
+        let unknown_previous = permission(
+            "permission:m3c05-permission-unknown:untrusted-previous",
+            &["capability:read", "capability:write"],
+            &[],
+            &[],
+        );
+        let unknown = unknown_fixture
+            .repository
+            .cancel_handoff(&CancelHandoffCommand {
+                handoff_id: unknown_created.handoff.handoff_id.clone(),
+                source: handoff_authority_with(
+                    &unknown_source,
+                    unknown_source.binding.clone(),
+                    unknown_previous,
+                    unknown_source.permission.clone(),
+                    1,
+                ),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    "m3c05-permission-unknown:cancel",
+                    "m3c05-permission-unknown:correlation",
+                    "2026-08-09T00:01:00Z",
+                ),
+                test_clock_now: handoff_server_now("2026-08-09T00:01:00Z"),
+            })
+            .expect("unknown permission evidence fails closed with an audit receipt");
+        assert_eq!(
+            unknown.command_receipt.status,
+            M3HandoffCommandReceiptStatus::Suspended
+        );
+        assert_eq!(unknown.handoff.status, HandoffState::Created);
+        let suspended_source = unknown
+            .source_session
+            .as_ref()
+            .expect("suspended source session");
+        assert_eq!(suspended_source.status, RoleSessionState::Suspended);
+        assert_eq!(
+            suspended_source.resolution_reason,
+            Some(SessionResolutionReason::PermissionMismatchOrUnknown)
+        );
+        unknown_fixture
+            .repository
+            .verify_schema()
+            .expect("unknown permission suspension is auditable and rehydratable");
+        unknown_fixture
+            .reopen()
+            .verify_schema()
+            .expect("unknown permission suspension reopens cleanly");
+        assert_eq!(unknown_fixture.foreign_key_violation_count(), 0);
+    }
+
+    #[test]
+    fn m3c05_repository_create_is_atomic_rehydratable_and_fk_clean() {
+        let fixture = RepositoryFixture::new("m3c05-create");
+        let (source, recipient) = seed_handoff_parties(&fixture, "m3c05-create");
+        let created = create_handoff_for_test(&fixture, "m3c05-create", &source, &recipient);
+
+        assert_eq!(created.handoff.status, HandoffState::Created);
+        assert_eq!(created.handoff.revision, 1);
+        assert_eq!(
+            created
+                .transition_receipt
+                .as_ref()
+                .expect("created transition receipt")
+                .receipt_kind,
+            HandoffReceiptKind::Created
+        );
+        assert_eq!(
+            fixture.counts([
+                "m3_handoffs",
+                "m3_handoff_command_receipts",
+                "m3_handoff_receipts",
+                "m3_handoff_events",
+                "m3_handoff_audit_records",
+            ]),
+            [1, 1, 1, 1, 1]
+        );
+        fixture
+            .repository
+            .verify_schema()
+            .expect("fresh created handoff rehydrates");
+        fixture
+            .reopen()
+            .verify_schema()
+            .expect("reopened created handoff rehydrates");
+        assert_eq!(fixture.foreign_key_violation_count(), 0);
     }
 }

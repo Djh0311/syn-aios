@@ -69,6 +69,7 @@ mod m2_workflow_state;
 // modules may reuse the ordinary SQLite immediate-transaction primitive, but
 // never the M2 workflow-state sidecar or its R4 command gate.
 mod m3_conversation_transport;
+mod m3_handoff;
 mod m3_role_session;
 mod m3_role_session_repository;
 mod m3_role_session_schema;

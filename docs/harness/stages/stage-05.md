@@ -62,7 +62,7 @@
 - [x] M3C02 Agent existing-thread owner / scope 后端守卫
 - [x] M3C03 RoleSession repository、schema 与 shadow import
 - [x] M3C04 ConversationTransportPort 与 fake provider 重启语义
-- [ ] M3C05 显式 Handoff 状态机与结果回源
+- [x] M3C05 显式 Handoff 状态机与结果回源
 - [ ] M3C06 会话读模型与前端缓存退位
 - [ ] M3C07 隔离桌面分层验收与迁移回切证据
 - [ ] M3C08 M3 集成回归、现状回写与阶段收口
