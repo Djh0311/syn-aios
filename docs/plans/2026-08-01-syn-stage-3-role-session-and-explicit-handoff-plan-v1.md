@@ -2,10 +2,10 @@
 
 日期：2026-08-01<br>
 阶段：`M3`<br>
-状态：**ACTIVE / USER_AUTHORIZED / STAGE-05 / M3C08 CURRENT / MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD。**<br>
+状态：**COMPLETED / MAINLINE / STAGE-05 CLOSED。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M3。<br>
 硬前置：M1 identity / scope / policy 合同和后端守卫通过；M2 UoW / event / audit / receipt ports 可用。<br>
-当前活动阶段 / 任务包：`stage-05 / M3C08-integration-regression-closeout`。M3C01–M3C07 已由 `29085cc`、`17933ea`、`0769dc5`、`089d36e`、`b953939`、`3472262`、`0a6507c` 完成并归档；M3C08 主线回归已通过，终态提交、最终工作树核对与 stage close 由主线程随后执行。具体写入面和权限只以当前用户指令、唯一活动叶与 `../harness/authorization.json` 为准。
+阶段状态：M3C01–M3C07 已由 `29085cc`、`17933ea`、`0769dc5`、`089d36e`、`b953939`、`3472262`、`0a6507c` 完成并归档；M3C08 内容提交为 `fa8e392`。M3 为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`，当前没有活动 stage 或 leaf。M3C08 `done` 与 stage-05 `close-stage` 由与本次状态回写同批的终态控制提交执行并归档；不在此猜测控制提交 hash。新的工程写入面和权限必须由新的用户指令、stage、leaf 和授权决定。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → 轻量开发护栏 `../harness/plan.md` / 活动阶段 / 唯一活动叶 / `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 2026-08-01 修订 → 总计划 → M1/M2 退出回执 → 本计划。下文的目标对象均是计划，不是当前实现事实。
 
@@ -142,7 +142,7 @@ scope / security 接线、local schema / store migration、App 启动 / 强制�
 
 ## 9. 阶段退出与下游交接
 
-2026-08-10，M3C08 是唯一活动叶，主线回归结论为 `MAINLINE_REGRESSION_PASS`。终态提交、最终工作树核对与 stage close 由主线程随后执行；在新的明确用户指令、匹配的活动阶段和授权出现前，M4/M5 不进入实现。
+2026-08-10，M3 已为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`，M3C08 内容提交为 `fa8e392`，当前没有活动 stage 或 leaf。终态控制提交执行 M3C08 `done`、stage-05 `close-stage` 与归档；在新的明确用户指令、匹配的新 stage、唯一 leaf 和授权出现前，M4/M5 不进入实现。
 
 全部满足才允许 M4 / M5 进入实现：
 

@@ -1,19 +1,20 @@
 # M3C08 主线集成与验收报告
 
 日期：2026-08-10<br>
-状态：`MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD`<br>
-当前叶：`stage-05 / M3C08-integration-regression-closeout`
+状态：`COMPLETED / MAINLINE / STAGE-05 CLOSED`<br>
+已关闭叶：`stage-05 / M3C08-integration-regression-closeout`
 
-本报告已经整理 M3C01–M3C07 的可核对事实、退出矩阵、迁移 / 回切边界、隔离桌面证据和下游交接。主线程已提供 M1 frozen input、Rust 聚焦与完整主机权限 `--lib`、script disambiguation、resident-session 精确重跑、前端 / build 和 launcher 的最终回归证据；M3C08 主线回归通过。产品 / 内容终态提交、最终 HEAD / clean tree 核对和 Harness stage close 仍由主线程随后执行，本报告不把这些动作写成已发生。
+本报告已经整理 M3C01–M3C07 的可核对事实、退出矩阵、迁移 / 回切边界、隔离桌面证据和下游交接。主线程已提供 M1 frozen input、Rust 聚焦与完整主机权限 `--lib`、script disambiguation、resident-session 精确重跑、前端 / build 和 launcher 的最终回归证据；M3C08 内容提交为 `fa8e392`，阶段结论为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。与本次状态回写同批的终态控制提交执行并归档 M3C08 `done` 与 stage-05 `close-stage`；本报告不猜测该控制提交 hash，也不声称 push、merge 或 release。
 
 ## 1. 范围、来源与结论口径
 
 | 项目 | 记录 |
 | --- | --- |
 | 审计 HEAD | `0a6507c8ce2dddee6a0f99b2d806c6e2bdf0b4a1`（M3C07 提交） |
+| M3C08 内容提交 | `fa8e392`（`fix(m3): close integration regression [catch:none]`） |
 | 本次读取范围 | `AGENTS.md`、stage-05、M3C08 leaf、授权、M3 总 / 阶段计划、current-state、task queue、M3C01–M3C07 archive leaf、M3C07 report、receipt 与提交记录 |
 | 当前授权记录 | `USER-SYN-M3-AUTONOMOUS-STAGE-05-20260809`；真实 provider / 消息、真实项目 / 账号、凭据、connector、远端、部署、发布、merge、push 和 M4–M10 实现均不在范围 |
-| 本报告的终态边界 | 回归命令与 P0/P1/P2 已记录；产品 / 内容终态提交、最终 HEAD / clean tree 核对和 Harness stage close 由主线程随后执行 |
+| 本报告的终态边界 | 回归命令与 P0/P1/P2 已记录；终态控制提交执行并归档 M3C08 `done` 与 stage-05 `close-stage`，不猜测该控制提交 hash，不声称 push、merge 或 release |
 
 ## 2. M3C01–M3C07 提交清单
 
@@ -54,11 +55,11 @@ M3C01 同时冻结了 M3 阶段计划的历史输入快照 `9403851ece470c32bac5
 | server read model 与 cache 退位 | M3C06 archive leaf | 已实现主线范围 | cache 只作 display fallback |
 | Agent / Jiaoban 隔离桌面验收 | M3C07 report 与 6 份 launcher receipt | 已归档 synthetic evidence | 仅 acceptance-only host；截图不在仓库 |
 | legacy 回切 | M3C01 rollback、M3C06 / M3C07 archive | 旧 UI / read fallback 保留 | M3C07 隔离 global invoke allowlist 会拒绝 legacy transport |
-| 完整主线合同、Rust、schema、fake provider、前端和 non-test build 回归 | 主线程最终输出 | `MAINLINE_REGRESSION_PASS`；命令与初次红灯见 §5 | 不将 host-environment 结果升级为真实 provider 结论 |
-| 最终 HEAD 与工作树状态 | 主线程终态控制 | 产品 / 内容提交与最终 clean tree 核对随后执行 | 文档 writer 不代替该检查 |
+| 完整主线合同、Rust、schema、fake provider、前端和 non-test build 回归 | 主线程最终输出 | `COMPLETED / MAINLINE`；命令与初次红灯见 §5 | 不将 host-environment 结果升级为真实 provider 结论 |
+| M3C08 内容提交 | `fa8e392` | 已提交（`fix(m3): close integration regression [catch:none]`） | 不推测终态控制提交 hash |
 | 真实 provider、真实 Codex、真实项目 / 账号、connector、发布 | 授权与 M3C07 evidence boundary | `NOT_ENTERED` | 不可由 synthetic 结果升级 |
 | M4 / M5 / M6+ 实现 | plan、stage、当前用户指令 | `PLANNED / NOT_ACTIVE` | 本报告不授予实现权 |
-| stage-05 / M3C08 关闭 | 主线程终态控制与单独 Harness 流程 | 主线回归通过；stage close 随后由主线程执行 | 本报告不执行 `done` / `close-stage` |
+| stage-05 / M3C08 关闭 | 与本次状态回写同批的终态控制提交 | `COMPLETED / MAINLINE / STAGE-05 CLOSED`；执行并归档 `done` / `close-stage` | 本报告不执行 Git 或 Harness 控制操作 |
 
 ## 5. M3C08 主线命令与结果回填表
 
@@ -78,7 +79,7 @@ M3C01 同时冻结了 M3 阶段计划的历史输入快照 `9403851ece470c32bac5
 | 离线前端交互（启动器纠偏后直接复跑） | `npm --prefix prototypes/productized-desktop-shell run test:offline-interaction` | exit 0；runner 遍历 39 entrypoint；摘要 `offline interaction tests passed: 15` | 使用既有 ignored `node_modules` |
 | 前端生产构建（启动器纠偏后直接复跑） | `npm --prefix prototypes/productized-desktop-shell run build` | exit 0；306 modules；built in 955ms；仅既有 Vite `>500k` chunk warning | 使用既有 ignored `node_modules` |
 | isolated launcher syntax（启动器纠偏后直接复跑） | `node --check prototypes/productized-desktop-shell/scripts/run-r4-isolated-app-preflight.mjs` | exit 0 | 不包含 `npm ci --offline` |
-| 最终 HEAD / clean tree | 主线程终态控制 | 产品 / 内容提交与最终核对随后执行 | 本报告不代替该操作 |
+| M3C08 内容提交与终态控制 | `fa8e392`；终态控制提交 | 内容提交已完成；终态控制提交执行并归档 `done` / `close-stage` | 不推测终态控制提交 hash；不声称 push、merge 或 release |
 
 ### 5.1 完整 `--lib` 初次红灯、修复与最终绿灯
 
@@ -132,6 +133,6 @@ M3C01 同时冻结了 M3 阶段计划的历史输入快照 `9403851ece470c32bac5
 
 ## 10. 主线程回填清单与停止条件
 
-主线回归与 P0/P1/P2 已填实。仍由主线程随后执行的终态控制只有：产品 / 内容终态提交、最终 HEAD / `git status --short` / `git diff --check` 核对，以及按单独 Harness 流程的 stage close。本报告不执行这些动作。
+主线回归与 P0/P1/P2 已填实，M3C08 内容提交为 `fa8e392`。终态控制提交执行并归档 M3C08 `done`、stage-05 `close-stage`；该控制提交 hash 不在本报告猜测。本报告不执行 Git 或 Harness 控制操作，也不声称 push、merge 或 release。
 
-M4/M5/M6+ 不激活；终态控制完成后任务队列停止，后续实现需要新的明确用户指令和匹配授权。
+M3 / stage-05 已收口，当前没有活动工程任务。M4/M5/M6+ 不激活；后续实现需要新的明确用户指令、匹配的新 stage、唯一 leaf 和授权。

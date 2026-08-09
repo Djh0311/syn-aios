@@ -1,15 +1,15 @@
 # Syn M3 收口至 M4 / M5 指引 v1
 
 日期：2026-08-10<br>
-状态：`GUIDANCE_ONLY / NOT_EXECUTION_AUTHORITY / MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD`
+状态：`GUIDANCE_ONLY / M3_COMPLETED / NOT_EXECUTION_AUTHORITY`
 
-这是一份 5 分钟接手指引，不是 M4、M5、M6+ 的激活、实现或授权文件。当前唯一活动叶仍是 `stage-05 / M3C08-integration-regression-closeout`；M3C08 主线回归已通过，产品 / 内容终态提交、最终工作树核对和 Harness stage close 由主线程随后执行。
+这是一份 5 分钟接手指引，不是 M4、M5、M6+ 的激活、实现或授权文件。M3C08 内容提交为 `fa8e392`，M3 状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`；当前没有活动 stage 或 leaf。与本次状态回写同批的终态控制提交执行并归档 M3C08 `done` 与 stage-05 `close-stage`，不在此猜测该控制提交 hash。
 
 ## 5 分钟接手顺序
 
-1. 读取当前用户指令、`AGENTS.md`、`docs/harness/plan.md`、`docs/harness/stages/stage-05.md`、唯一活动 leaf 与 `docs/harness/authorization.json`。
-2. 读取 `docs/current-state.md`，确认 M3C08 为 `MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD`，而非已关闭阶段。
-3. 读取 `docs/harness/reports/M3C08-mainline-integration-and-acceptance.md` 的退出矩阵、主线程回填表、receipt SHA-256、未进入边界和 P0/P1/P2。
+1. 读取当前用户指令、`AGENTS.md` 与 `docs/harness/plan.md`，先确认 Harness 没有活动 stage 或 leaf。
+2. 读取 `docs/current-state.md`，确认 M3 为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`，M3C08 内容提交为 `fa8e392`。
+3. 读取 stage-05 / M3C08 的 done 归档以及 `docs/harness/reports/M3C08-mainline-integration-and-acceptance.md` 的退出矩阵、receipt SHA-256、未进入边界和 P0/P1/P2。
 4. 如需理解已实现的 M3 边界，读取 `docs/contracts/m3-role-session-turn-handoff-resolution-v1.md` 与 M3C01–M3C07 archive leaf / M3C07 report；不要把 archive 直接当作新的执行授权。
 
 ## 已可依赖的 M3 事实
@@ -30,13 +30,13 @@
 
 ## M4 / M5 的进入条件
 
-M4 与 M5 在本文件中均为 `PLANNED / NOT_ACTIVE`。M3 阶段计划要求先满足 RoleSession / Turn / ProviderHandle / Handoff 持久恢复、spawn 前 fail-closed、Handoff 幂等回源、frontend cache 非 owner、最小上下文边界、隔离证据及 current-state 回写等退出条件；M3C08 主线回归已通过，但终态提交和 stage close 尚由主线程控制。
+M4 与 M5 在本文件中均为 `PLANNED / NOT_ACTIVE`。M3 已完成 RoleSession / Turn / ProviderHandle / Handoff 持久恢复、spawn 前 fail-closed、Handoff 幂等回源、frontend cache 非 owner、最小上下文边界、隔离证据及 current-state 回写等退出条件；M3C08 内容提交为 `fa8e392`，但这不激活任何下游实现。
 
-即使 M3C08 被后续确认，本交接也不授予 M4/M5 实现权。任何 M4、M5 或 M6+ 实现都需要新的明确用户指令、匹配的 Harness 活动阶段、唯一活动叶和授权；不得由计划、提交、报告或本指引自动推导。
+本交接不授予 M4/M5 实现权。任何 M4、M5 或 M6+ 实现都需要新的明确用户指令、匹配的新 Harness stage、唯一 leaf 和授权；不得由计划、提交、报告或本指引自动推导。
 
-## 未完成项与接手回报
+## 已完成状态与接手回报
 
 - 主线回归通过：M1 四合同和 `29085cc` diff exact；`m3c07_` exit 0、11/11，`m3c0` exit 0、123/123；最终主机权限 `--lib` exit 0、1524 通过 / 0 失败 / 45 忽略、72.83s。启动器纠偏后主线程再次直接复跑 typecheck、offline interaction、launcher check 与 build，均 exit 0；offline 实际 39 entrypoint、摘要 15，build 306 modules、955ms，仅有既有 `>500k` chunk warning。受限 sandbox 的初次 1520 / 4 / 45 红灯、3 个 source-string collision、1 个 PID `lstart` EPERM、脚本消歧与 host exact rerun 均见 M3C08 验收报告。
-- 主线程随后执行产品 / 内容终态提交、最终 HEAD / clean tree 核对和 Harness stage close；这不授予 M4/M5 实现权。
+- M3C08 内容提交为 `fa8e392`；终态控制提交执行并归档 M3C08 `done` 与 stage-05 `close-stage`，不猜测该控制提交 hash，也不声称 push、merge 或 release。这不授予 M4/M5 实现权。
 - 若出现失败、范围漂移或缺失证据，只报告事实、影响、现有回切状态和所需新决定；不要自行扩大范围。
-- M3C08 收口后任务队列停止。接手人应明确报告读取入口、实际结果、改动位置、验证材料、未进入边界和下一步所需的用户授权。
+- M3 / stage-05 已收口，当前没有活动工程任务。接手人应明确报告读取入口、实际结果、改动位置、验证材料、未进入边界和下一步所需的用户授权。

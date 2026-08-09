@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-10，已提交主线 HEAD 为 `0a6507c8ce2dddee6a0f99b2d806c6e2bdf0b4a1`。M3C01–M3C07 已分别由 `29085cc`、`17933ea`、`0769dc5`、`089d36e`、`b953939`、`3472262`、`0a6507c` 进入主线；唯一活动叶仍是 `stage-05 / M3C08-integration-regression-closeout`。M3C08 主线回归已通过，状态为 `MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD`：M3C08 的产品 / 内容终态提交、最终 HEAD / clean tree 核对和 Harness stage close 由主线程随后执行，本文件不把它们写成已发生。
+截至 2026-08-10，M3C01–M3C08 已完成并进入主线；M3C08 内容提交为 `fa8e392`（`fix(m3): close integration regression [catch:none]`），其回归证据在本文件和 M3C08 验收报告中结算。状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`：M3C08 `done` 与 stage-05 `close-stage` 由与本次状态回写同批的终态控制提交执行并归档，不在此猜测该控制提交自身 hash。当前没有活动 stage 或 leaf。
 
 ## 现在分别看哪里
 
@@ -9,7 +9,7 @@
 3. `docs/product/authority-register-v1.md`：决定各类文件当前有什么效力；
 4. `docs/workbench-system-architecture-v1.md`：决定现行系统边界；
 5. 本文件、源码与新鲜验证：说明已实现事实、未知和证据上限；
-6. `AGENTS.md`、`docs/harness/plan.md`、`docs/harness/stages/stage-05.md`、唯一活动叶及 `docs/harness/authorization.json`：决定本轮如何施工。
+6. `AGENTS.md`、`docs/harness/plan.md`、stage-05 / M3C08 的 done 归档与 `docs/harness/authorization.json`：确认已关闭阶段的证据边界；新的工程施工必须重新取得用户指令、stage、leaf 和授权。
 
 验收报告、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
 
@@ -44,7 +44,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M4、M5、M6 及之后阶段均为 `PLANNED / NOT_ACTIVE`。M3C08 的主线回归已通过，但本任务不自动激活 M4/M5，也不授予 M4/M5/M6+ 的实现权限。主线程完成终态提交、最终工作树核对和 stage close 后任务队列必须停止；任何下一步均需新的明确用户指令、匹配的活动阶段 / 唯一叶和授权。
+M3 已完成，stage-05 已关闭，当前没有活动工程任务。M4、M5、M6 及之后阶段均为 `PLANNED / NOT_ACTIVE`；M3 收口不自动激活它们，也不授予实现权限。任何下一步均需新的明确用户指令、匹配的新 stage、唯一 leaf 和授权。
 
 ## 保全
 
