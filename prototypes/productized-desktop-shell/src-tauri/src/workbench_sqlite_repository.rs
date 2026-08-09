@@ -1,10 +1,11 @@
 use crate::utils::hash::sha256_hex;
 use crate::workbench_sqlite_schema::{
-    initialize_confirmed_workbench_sqlite_db, initialize_temp_workbench_sqlite_db,
+    admit_temp_or_fixture_sqlite_path, initialize_confirmed_workbench_sqlite_db,
+    initialize_temp_workbench_sqlite_db,
 };
 use rusqlite::{
-    params, Connection, Error as SqlError, ErrorCode, OptionalExtension, Transaction,
-    TransactionBehavior,
+    params, Connection, Error as SqlError, ErrorCode, OpenFlags, OptionalExtension,
+    Transaction, TransactionBehavior,
 };
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -57,6 +58,13 @@ pub(crate) const CONFIRMED_DB_DENIED_PATH_MARKERS: &[&str] = &[
 #[derive(Clone, Debug)]
 pub(crate) struct WorkbenchSqliteRepository {
     db_path: PathBuf,
+    path_policy: WorkbenchSqlitePathPolicy,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WorkbenchSqlitePathPolicy {
+    Rehearsal,
+    Confirmed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -233,12 +241,17 @@ pub(crate) fn supervisor_action_idempotency_key(identity: SupervisorActionIdenti
 }
 
 impl WorkbenchSqliteRepository {
-    // This constructor is intentionally the only repository entrypoint. Schema initialization
-    // rejects non-temp/non-fixture paths before SQLite can create a file.
+    // This constructor is intentionally the only rehearsal entrypoint. Schema
+    // initialization rejects direct non-temp/non-fixture paths before SQLite
+    // can create a file; configured_connection repeats admission before every
+    // later write. The pathname API still does not claim to defeat a same-UID
+    // check-to-open race without an fd-anchored SQLite VFS.
     pub(crate) fn open_rehearsal(path: &Path) -> Result<Self, String> {
-        initialize_temp_workbench_sqlite_db(path)?;
+        let canonical_path = admit_temp_or_fixture_sqlite_path(path)?;
+        initialize_temp_workbench_sqlite_db(&canonical_path)?;
         let repository = Self {
-            db_path: path.to_path_buf(),
+            db_path: canonical_path,
+            path_policy: WorkbenchSqlitePathPolicy::Rehearsal,
         };
         repository.configured_connection()?;
         Ok(repository)
@@ -253,6 +266,7 @@ impl WorkbenchSqliteRepository {
         initialize_confirmed_workbench_sqlite_db(&config.db_path, &config.confirmed_db_path)?;
         let repository = Self {
             db_path: config.db_path.clone(),
+            path_policy: WorkbenchSqlitePathPolicy::Confirmed,
         };
         repository.configured_connection()?;
         Ok(repository)
@@ -1457,8 +1471,23 @@ impl WorkbenchSqliteRepository {
     }
 
     fn configured_connection(&self) -> Result<Connection, String> {
-        let connection = Connection::open(&self.db_path).map_err(|error| {
-            format!("repository_open_failed:{}:{error}", self.db_path.display())
+        let admitted_path = match self.path_policy {
+            WorkbenchSqlitePathPolicy::Rehearsal => {
+                let admitted = admit_temp_or_fixture_sqlite_path(&self.db_path)
+                    .map_err(|_| "m3_rehearsal_path_revalidation_failed".to_string())?;
+                if admitted != self.db_path {
+                    return Err("m3_rehearsal_path_identity_changed".to_string());
+                }
+                admitted
+            }
+            WorkbenchSqlitePathPolicy::Confirmed => self.db_path.clone(),
+        };
+        let connection = Connection::open_with_flags(
+            &admitted_path,
+            OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW,
+        )
+        .map_err(|error| {
+            format!("repository_open_failed:{}:{error}", admitted_path.display())
         })?;
         connection
             .pragma_update(None, "journal_mode", "WAL")

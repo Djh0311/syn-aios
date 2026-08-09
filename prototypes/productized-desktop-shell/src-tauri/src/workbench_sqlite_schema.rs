@@ -1,6 +1,7 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io::ErrorKind;
+use std::path::{Component, Path, PathBuf};
 
 pub(crate) const WORKBENCH_SQLITE_SCHEMA_VERSION: &str = "workbench_sqlite_schema_v0";
 
@@ -162,13 +163,8 @@ pub(crate) const WORKBENCH_SQLITE_SCHEMA_DDL: &[&str] = &[
 ];
 
 pub(crate) fn initialize_temp_workbench_sqlite_db(path: &Path) -> Result<(), String> {
-    if !is_allowed_temp_or_fixture_path(path) {
-        return Err(format!(
-            "temp_or_fixture_path_required: refusing to initialize workbench sqlite outside temp or R3 fixture paths: {}",
-            path.display()
-        ));
-    }
-    initialize_workbench_sqlite_db(path, "temp")
+    let canonical_path = admit_temp_or_fixture_sqlite_path(path)?;
+    initialize_workbench_sqlite_db(&canonical_path, "temp")
 }
 
 pub(crate) fn initialize_confirmed_workbench_sqlite_db(
@@ -202,7 +198,11 @@ fn initialize_workbench_sqlite_db(path: &Path, path_kind: &str) -> Result<(), St
         )
     })?;
 
-    let connection = Connection::open(path).map_err(|error| {
+    let connection = Connection::open_with_flags(
+        path,
+        OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW,
+    )
+    .map_err(|error| {
         format!(
             "open {path_kind} workbench sqlite failed {}: {error}",
             path.display()
@@ -229,13 +229,67 @@ fn initialize_workbench_sqlite_db(path: &Path, path_kind: &str) -> Result<(), St
     Ok(())
 }
 
-fn is_allowed_temp_or_fixture_path(path: &Path) -> bool {
+pub(crate) fn admit_temp_or_fixture_sqlite_path(path: &Path) -> Result<PathBuf, String> {
+    let reject = || {
+        format!(
+            "temp_or_fixture_path_required: refusing to initialize workbench sqlite outside temp or R3 fixture paths: {}",
+            path.display()
+        )
+    };
     if !path.is_absolute() {
-        return false;
+        return Err(reject());
     }
-    let temp_dir = std::env::temp_dir();
-    let fixture_dir = manifest_fixture_root();
-    path.starts_with(&temp_dir) || path.starts_with(&fixture_dir)
+    if path.components().any(|component| {
+        matches!(component, Component::CurDir | Component::ParentDir)
+    }) {
+        return Err(reject());
+    }
+
+    // The rehearsal gate runs before SQLite or `create_dir_all`: only an
+    // existing, canonical parent may be admitted.  That keeps lexical `..`
+    // aliases and symlinked directories from escaping the scratch roots.
+    let Some(parent) = path.parent() else {
+        return Err(reject());
+    };
+    let Ok(canonical_parent) = fs::canonicalize(parent) else {
+        return Err(reject());
+    };
+    let roots = [std::env::temp_dir(), manifest_fixture_root()]
+        .into_iter()
+        .filter_map(|root| fs::canonicalize(root).ok())
+        .collect::<Vec<_>>();
+    if !roots.iter().any(|root| canonical_parent.starts_with(root)) {
+        return Err(reject());
+    }
+
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if !metadata.file_type().is_symlink() && metadata.is_file() => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                if metadata.nlink() != 1 {
+                    return Err(reject());
+                }
+            }
+            let canonical_target = fs::canonicalize(path).map_err(|_| reject())?;
+            roots
+                .iter()
+                .any(|root| canonical_target.starts_with(root))
+                .then_some(canonical_target)
+                .ok_or_else(reject)
+        }
+        Ok(_) => Err(reject()),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            let file_name = path.file_name().ok_or_else(&reject)?;
+            let canonical_target = canonical_parent.join(file_name);
+            roots
+                .iter()
+                .any(|root| canonical_target.starts_with(root))
+                .then_some(canonical_target)
+                .ok_or_else(reject)
+        }
+        Err(_) => Err(reject()),
+    }
 }
 
 fn manifest_fixture_root() -> PathBuf {
@@ -290,6 +344,57 @@ mod tests {
         let err = initialize_temp_workbench_sqlite_db(Path::new("/var/workbench.sqlite"))
             .expect_err("non temp path must be rejected");
         assert!(err.contains("temp_or_fixture_path_required"));
+    }
+
+    #[test]
+    fn sqlite_schema_rejects_parent_aliases_and_symlink_escape_before_writing() {
+        let dir = temp_dir("sqlite-schema-path-gate");
+        let scratch = dir.join("scratch");
+        fs::create_dir_all(&scratch).expect("create scratch path fixture");
+
+        let escaped = scratch.join("..").join("escaped.sqlite");
+        let error = initialize_temp_workbench_sqlite_db(&escaped)
+            .expect_err("parent alias must fail before sqlite opens");
+        assert!(error.contains("temp_or_fixture_path_required"));
+        assert!(!dir.join("escaped.sqlite").exists());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+
+            let outside = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let linked_parent = scratch.join("linked-parent");
+            symlink(&outside, &linked_parent).expect("create parent symlink fixture");
+            let through_parent = linked_parent.join("m3-path-gate-escaped.sqlite");
+            let error = initialize_temp_workbench_sqlite_db(&through_parent)
+                .expect_err("symlinked parent must fail before sqlite opens");
+            assert!(error.contains("temp_or_fixture_path_required"));
+            assert!(!outside.join("m3-path-gate-escaped.sqlite").exists());
+
+            let real_db = scratch.join("real.sqlite");
+            fs::write(&real_db, b"not-a-database").expect("create target fixture");
+            let linked_db = scratch.join("linked.sqlite");
+            symlink(&real_db, &linked_db).expect("create target symlink fixture");
+            let error = initialize_temp_workbench_sqlite_db(&linked_db)
+                .expect_err("symlinked target must fail before sqlite opens");
+            assert!(error.contains("temp_or_fixture_path_required"));
+            assert_eq!(
+                fs::read(&real_db).expect("read untouched target fixture"),
+                b"not-a-database"
+            );
+
+            let hard_linked_db = scratch.join("hard-linked.sqlite");
+            fs::hard_link(&real_db, &hard_linked_db).expect("create target hard-link fixture");
+            let error = initialize_temp_workbench_sqlite_db(&hard_linked_db)
+                .expect_err("multiply-linked target must fail before sqlite opens");
+            assert!(error.contains("temp_or_fixture_path_required"));
+            assert_eq!(
+                fs::read(&real_db).expect("read hard-link target after rejection"),
+                b"not-a-database"
+            );
+        }
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

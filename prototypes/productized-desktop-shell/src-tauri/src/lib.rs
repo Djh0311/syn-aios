@@ -65,6 +65,12 @@ mod m2_projector;
 mod m2_r4_reference_slice_driver;
 mod m2_update_work_item_state;
 mod m2_workflow_state;
+// M3 owns its role-session domain, scratch schema, and repository.  These
+// modules may reuse the ordinary SQLite immediate-transaction primitive, but
+// never the M2 workflow-state sidecar or its R4 command gate.
+mod m3_role_session;
+mod m3_role_session_repository;
+mod m3_role_session_schema;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;

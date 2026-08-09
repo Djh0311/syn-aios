@@ -60,7 +60,7 @@
 
 - [x] M3C01 RoleSession / Turn / Handoff 实施合同与迁移矩阵
 - [x] M3C02 Agent existing-thread owner / scope 后端守卫
-- [ ] M3C03 RoleSession repository、schema 与 shadow import
+- [x] M3C03 RoleSession repository、schema 与 shadow import
 - [ ] M3C04 ConversationTransportPort 与 fake provider 重启语义
 - [ ] M3C05 显式 Handoff 状态机与结果回源
 - [ ] M3C06 会话读模型与前端缓存退位
