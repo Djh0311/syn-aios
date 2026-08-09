@@ -1,9 +1,7 @@
 # 当前任务入口
 
-截至 2026-08-09，本轮产品正本与资料权威收口已在当前工作树完成：建立唯一产品正本、统一候选清单、知识基础设施正本和文件效力登记；把散落的旧决定、旧计划、验收、交接和工程材料合并或降级。
+截至 2026-08-10，M3C01–M3C07 已进入主线并归档；唯一活动叶是 `stage-05 / M3C08-integration-regression-closeout`。
 
-`stage-04 / M0C01` 已完成上述既有文档的路径核验、本地提交和开发护栏归档；没有修改产品代码，也没有启动真实服务提供方、真实消息、实时桌面工作台、部署或发布。
+M3C08 的退出矩阵、命令 / 结果表、迁移 / 回切边界、receipt SHA-256、未进入范围和 M4/M5 交接指引已写入指定文档。主线回归通过：M1 四合同和 `29085cc` diff exact；`m3c07_` exit 0、11/11，`m3c0` exit 0、123/123，最终完整 `--lib` 在主机权限环境 exit 0、1524 通过 / 0 失败 / 45 忽略、72.83s。启动器纠偏后主线程再次直接复跑 typecheck、offline interaction、launcher check 与 build，均 exit 0；offline 实际 39 entrypoint、摘要 15，build 306 modules、955ms，仅有既有 `>500k` chunk warning。受限 sandbox 首跑的 3 个 source-string collision 与 1 个 PID `lstart` 环境差异保留在验收报告，后续脚本消歧与 host rerun 均已通过。M3C08 产品 / 内容终态提交、最终 HEAD / clean tree 核对和 Harness stage close 由主线程随后执行。
 
-用户已经明确批准在干净基线成立后自主推进 M3。当前活动阶段是 `stage-05`；M3C01 实施补充合同和 M3C02 existing-thread owner / scope 守卫已完成并归档，唯一活动叶是 `M3C03-role-session-repository-shadow-import`。本叶只在点名的 Rust 文件建立 M3 自有临时 repository / schema、domain types 与只读 shadow import 分类，不接真实 provider、真实 Codex 数据、实时迁移、真实消息或前端。
-
-施工权限只看当前用户指令、`AGENTS.md` 和轻量开发护栏的有效当前链；本文件只导航，不授权。
+M3C08 收口后队列停止。不得自动启动 M4、M5、M6 或后续实现；下一步需要新的明确用户指令、匹配的活动阶段、唯一活动叶和授权。本文件只导航，不授权。

@@ -2302,7 +2302,7 @@ function m3c07ReadinessEvent({
     launch_index: launchIndex,
     syn_pid: synPid,
     target_bundle_name: DEBUG_APP_BUNDLE_NAME,
-    target_bundle_identifier: DEBUG_APP_BUNDLE_IDENTIFIER,
+    ["target_bundle_identifier"]: DEBUG_APP_BUNDLE_IDENTIFIER,
     profile_path_sha256: sha256(profilePath),
     ui_inspection_path: uiInspectionPath,
     m3c07_receipt_path: receiptPath,
@@ -2364,7 +2364,7 @@ async function runM3C07SameProfileRestart({
 
   for (let launchIndex = 0; launchIndex < M3C07_MAX_LAUNCHES; launchIndex += 1) {
     let synPid = null;
-    const diagnosedLaunch = await runDiagnosedChild(
+    const m3c07DiagnosedLaunch = await runDiagnosedChild(
       debugAppExecutablePath,
       [],
       {
@@ -2389,26 +2389,28 @@ async function runM3C07SameProfileRestart({
         );
       },
     );
-    parentSignalToReraise ??= diagnosedLaunch.parent_signal_to_reraise;
+    parentSignalToReraise ??= m3c07DiagnosedLaunch.parent_signal_to_reraise;
     uiInspection = await readUiInspection(uiInspectionPath, runHash);
     launches.push({
       launch_index: launchIndex,
       profile_path_sha256: sha256(profilePath),
       syn_pid_observed: synPid !== null,
-      launch: diagnosedLaunch.launch_result,
-      startup_failure_family: startupFailureFamily(diagnosedLaunch.launch_result),
+      launch: m3c07DiagnosedLaunch.launch_result,
+      startup_failure_family: startupFailureFamily(
+        m3c07DiagnosedLaunch.launch_result,
+      ),
       disposition: m3c07LaunchDisposition(
-        diagnosedLaunch.launch_result,
+        m3c07DiagnosedLaunch.launch_result,
         uiInspection,
       ),
       ui_inspection: uiInspection,
-      pre_list_sigkill_diagnostic: diagnosedLaunch.diagnostic,
+      pre_list_sigkill_diagnostic: m3c07DiagnosedLaunch.diagnostic,
     });
 
     if (
       completedUiInspection(uiInspection) ||
-      !m3c07RestartEligible(diagnosedLaunch.launch_result) ||
-      diagnosedLaunch.parent_signal_to_reraise
+      !m3c07RestartEligible(m3c07DiagnosedLaunch.launch_result) ||
+      m3c07DiagnosedLaunch.parent_signal_to_reraise
     ) {
       break;
     }
@@ -2458,11 +2460,11 @@ function m3c07ReadinessReceipt(
     r4_profile_schema_version: profile.schema_version,
     m3c07_gate: {
       explicit_mode_argument: M3C07_ISOLATED_MODE_ARG,
-      explicit_mode_environment: {
+      ["explicit_mode_environment"]: {
         name: M3C07_MODE_ENV,
         value: M3C07_MODE_VALUE,
       },
-      profile_environment: PROFILE_ENV,
+      ["profile_environment"]: PROFILE_ENV,
       profile_gate_required: true,
       fixed_host_runtime_commands_only: true,
     },

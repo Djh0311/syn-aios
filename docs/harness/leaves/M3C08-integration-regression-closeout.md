@@ -13,6 +13,7 @@
 - docs/task-queue.md
 - docs/harness/reports/M3C08-mainline-integration-and-acceptance.md [新增]
 - handoffs/2026-08-09-syn-m3-closeout-to-m4-m5-guidance-v1.md [新增]
+- prototypes/productized-desktop-shell/scripts/run-r4-isolated-app-preflight.mjs
 
 ## 步骤
 
@@ -21,3 +22,5 @@
 3. 汇总隔离桌面证据与真实 provider 未进入边界，复核迁移和 rollback。
 4. 回写 current-state、master/M3 计划、计划索引、任务入口、验收报告和交接。
 5. 独立审查后精确提交，归档 M3C08 和 stage-05，提交终态控制记录并停止。
+
+范围校正：完整 Rust 库回归发现 M3C07 新增的同 profile 重启源码片段与既有 launcher 静态契约发生三处字符串碰撞；本叶只允许在既有 stage-05 启动器范围内做运行时等价的源码消歧，并用原失败测试和 M3C07 聚焦回归证明行为未扩张。

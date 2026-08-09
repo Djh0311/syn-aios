@@ -18,8 +18,7 @@
 - 该计划完整覆盖公共底座重构到首个全日试点和发布候选；M10 之后五类长期业务、个人服务器备份、开源成本工具和高级检索按真实需求另建路线，不伪装成已经排完的终身计划。
 - M0 产品正本、权威分级、候选收口和文档入口整理已经完成；它是文档收口，不是产品代码阶段。
 - M1、M2 已完成主线收口。
-- M3 已由用户授权并通过 `stage-05` 激活；M4-M10 仍是计划中、未激活。
-- 文档基线收口 `stage-04 / M0C01`、M3C01 合同冻结和 M3C02 existing-thread owner / scope 守卫均已完成并归档；当前唯一活动叶是 `M3C03-role-session-repository-shadow-import`。
+- M3 已由用户授权并通过 `stage-05` 激活；M3C01–M3C07 已进入主线并归档，当前唯一活动叶是 `M3C08-integration-regression-closeout`，主线回归结论为 `MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD`；M4-M10 仍是计划中、未激活。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
 
 ## M1-M10 独立阶段计划
@@ -28,7 +27,7 @@
 |---|---|---|
 | M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE`；关闭验收只证明 M1 |
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE`；真实工作台切换未进入 |
-| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `ACTIVE / USER_AUTHORIZED / STAGE-05` |
+| M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `ACTIVE / USER_AUTHORIZED / STAGE-05 / M3C08 CURRENT / MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD` |
 | M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |
@@ -70,6 +69,7 @@
 - `HISTORICAL / SUPERSEDED`：历史或已被后稿取代。
 - `STOPPED_BEFORE_ACTIVATION`：激活前停止，没有产生施工授权。
 - `CANDIDATE_SOURCE`：候选来源材料；开放状态只看候选登记。
+- `MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD`：主线回归已通过；终态提交、最终工作树核对和 Harness stage close 仍由主线程执行，且不得据此激活下游实现。
 
 正文内旧的“当前”“下一步”“唯一”只在文件状态与本索引一致时有效。
 

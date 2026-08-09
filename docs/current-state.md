@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-09，当前主线以 M2 收口 `a8c6381dd33c3098e343a2b6a7f2ec9b94b6cce9` 为底，M0 文档正本基线由 `cfdbbf7cbd2018c1f1b70e7940bc08a9d24d6167` 收口、护栏于 `0a598d0` 归档。用户随后明确批准自主推进 M3；stage-05 已激活，M3C01 实施补充合同由 `29085cc` 冻结，M3C02 existing-thread owner / scope 守卫由 `17933ea` 进入主线，当前进入 M3C03 临时 repository / schema / shadow import。局部实现不等于完整角色会话底座已成立，也没有进入真实服务提供方、真实消息、部署或发布。
+截至 2026-08-10，已提交主线 HEAD 为 `0a6507c8ce2dddee6a0f99b2d806c6e2bdf0b4a1`。M3C01–M3C07 已分别由 `29085cc`、`17933ea`、`0769dc5`、`089d36e`、`b953939`、`3472262`、`0a6507c` 进入主线；唯一活动叶仍是 `stage-05 / M3C08-integration-regression-closeout`。M3C08 主线回归已通过，状态为 `MAINLINE_REGRESSION_PASS / TERMINAL_CLOSEOUT_BY_MAIN_THREAD`：M3C08 的产品 / 内容终态提交、最终 HEAD / clean tree 核对和 Harness stage close 由主线程随后执行，本文件不把它们写成已发生。
 
 ## 现在分别看哪里
 
@@ -8,46 +8,43 @@
 2. `docs/product/syn-product-canon-v1.md`：决定 Syn 长期是什么；
 3. `docs/product/authority-register-v1.md`：决定各类文件当前有什么效力；
 4. `docs/workbench-system-architecture-v1.md`：决定现行系统边界；
-5. `docs/current-state.md`、源码和新鲜验证：说明现在实际做到了什么；
-6. `AGENTS.md` 与当前轻量开发护栏链：决定本轮怎样安全施工。
+5. 本文件、源码与新鲜验证：说明已实现事实、未知和证据上限；
+6. `AGENTS.md`、`docs/harness/plan.md`、`docs/harness/stages/stage-05.md`、唯一活动叶及 `docs/harness/authorization.json`：决定本轮如何施工。
 
-验收、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
+验收报告、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
 
-## 本轮文档收口结果
+## M3C01–M3C07 已证实的主线事实
 
-- 已建立完整产品正本、所有智能体共用的知识基础设施正本、精确权威登记和唯一活动候选登记。
-- 当前决定改为精确清单；`decisions/` 其余文件统一降为历史、来源、验收或过期授权，不再因为目录名恢复效力。
-- 旧待办、旧开发线和旧重型多智能体协议已缩成历史桥接页；旧根部设计加了现行替代指针。
-- 计划已明确：M3 只冻结角色会话需要的最小知识上下文接口；M7 承接完整知识、记忆、个人模型与技能治理；M8 只接外部知识来源适配器，不把知识核心再次外置。
-- 产品候选已按用户逐项确认收缩：第一批角色、多视角咨询、用户知识深度、项目摘要位置、技能首版、后期个人服务器备份和开源成本工具均已有去向；活动候选只保留自动换智能体 / 模型、高级检索时机和自动优化器。
-- 当前产品定义与 M0-M10 公共底座重构路线已经完整；逐阶段动态施工包仍在进入对应阶段前结合当时源码生成，M10 后五类业务扩展不冒充已经排完的终身计划。
-- 证据、交接、研究、设计、合同和归档已有目录级效力说明。因历史交叉引用很多，本轮没有批量移动既有证据和交接文件。
-- 用户在前端的明确修改被定义为正式输入，写回原事实所有者；用户明确指定外部项目时可以建立本次范围，不作永久跨项目禁止。
+- M3C01 冻结了 RoleSession、Turn、ProviderHandle、ConversationContext 与 Handoff 的实施解释、迁移矩阵、默认 fail-closed 规则和回切边界；M1 四份冻结合同保持原样。
+- M3C02 在 provider spawn 前为 shared Agent existing、legacy raw existing 和 GUI-direct existing 接入 server index、canonical thread owner、Station 3b 与固定 permission envelope 守卫。
+- M3C03 建立了 M3 自有、版本化的 RoleSession / Turn / ProviderHandle / ConversationContext repository、schema 与只读 shadow import 分类；raw transcript 与前端 cache 不成为迁移真源。
+- M3C04 建立 start / continue / poll / stop / resume transport port 与 fake provider 的重启、receipt 和不重复 effect 语义。
+- M3C05 建立显式 Handoff 状态机、幂等 receipt 与由 source owner 回写结果的边界。
+- M3C06 建立 server-owned RoleSession read model；Agent Center 与 Jiaoban 的 React / module cache 已退为兼容显示 fallback，不再决定恢复身份、role、scope 或 permission 真值。
+- M3C07 在 debug build、隔离 profile 和 fake provider 的三重 gate 内完成 Agent / Jiaoban synthetic host 的分层验收。旧路保留受守卫的回切入口；但 M3C07 隔离子进程的全局 `invoke_handler` allowlist 会在 wrapper、binding、provider 与 effect 之前拒绝 legacy Agent / Jiaoban transport。该隔离限制不等于普通模式的产品退役。
 
-## 已经成立的代码事实
+M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P1/P2 和桌面观察边界见 `docs/harness/reports/M3C07-isolated-desktop-layered-acceptance.md`。这些是 M3C07 隔离证据，不是 M3C08 的新鲜主线回归结果。
 
-- M1 合同、安全和作用域基础已经进入主线。
-- M2 的具名 `workflow-state-sidecar`（工作流状态旁路存储）参考切片已经进入主线，覆盖工作单元、拒绝审计、回执、快照、发件箱、投影与检查点、同等性与恢复，以及隔离崩溃和重启验收。
-- M2 完整 Rust（系统实现语言）库测试结果为 1385 通过、0 失败、45 忽略。
-- 干净主线隔离 R4（第四轮恢复演练）为 7 项全部通过，回执哈希为 `fbd799a347934225f5e2eb652d286b690d8137c69c7baa55b4835fbebfc3ac13`。
-- M3C02 已为 shared Agent existing、legacy raw existing 和 GUI-direct existing 增加 provider spawn 前的 server index、canonical thread owner、Station 3b 与固定权限 envelope 守卫；聚焦离线测试 5 项通过，非测试库构建通过。它是 repository 前的止血层，不是 durable RoleSession / permission 真源，也不证明真实 provider 或桌面应用通过。
+## 冻结、迁移与证据边界
 
-这些结论的证据边界见 `docs/harness/reports/M2C02-mainline-integration-and-acceptance.md` 与 `docs/harness/reports/M2C03-lite-closeout-and-guidance-handoff.md`；报告不扩大它们点名的版本和场景。
+- 2026-08-10 的静态核对确认四份 M1 冻结合同仍与 M3C01 frozen inputs 相符：`role-session-v1`、`handoff-v1`、`identity-scope-v1`、`event-audit-outbox-v1`。完整 SHA-256 记录在 `docs/harness/reports/M3C08-mainline-integration-and-acceptance.md`。
+- M3C01 冻结的 M3 计划快照是 `9403851ece470c32bac5071e2613495a6f0e525214dbd6990a1cd2d28d1ce013`。该快照并非第四个 M1 合同；在 M3C08 前，现行 M3 计划文件已因状态型回写而为 `d584cc19592095cbeb521b483319ab77b61ecc3276351220ef5b94c0c9dae25c`。M3C08 的状态型回写还会再次改变现行计划文件，不得声称“所有 frozen hash 均相等”。
+- 迁移只允许 shadow / provenance / bounded references；无法精确绑定的记录保留为 orphaned 或 ambiguous，不自动分配项目。前端 cache 只可显示，不能升格为真源。
+- rollback 只可切换旧 UI / read fallback 或关闭新 M3 read projection；不得移除 M1 thread-owner、scope 或 Station 3b 守卫，不得重放 provider effect，不得恢复跨项目 bypass，也不得删除未解决 orphan。
 
-## 仍未成立
+## 尚未成立或未进入
 
-- M3C01 已冻结 RoleSession / Turn / ProviderHandle / ConversationContext / Handoff 的实施解释和迁移矩阵，M3C02 只补了 existing-thread 启动前守卫；对应 durable repository、schema、transport、状态机、读模型和前端接线仍未成立。
-- 评审、决定和来源所有者的应用结果尚未形成完整产品闭环。
-- 实时桌面工作台数据没有迁移或切换；`DAT-007` 仍是“未迁移、未切换”。
-- 真实服务提供方、真实账号、真实消息、部署、发布和完整桌面应用验收均未进入。
-- 知识基础设施本轮形成产品与架构正本，不表示对应全部代码已经实现。
-- 角色身份与模型、服务提供方和线程分离、多视角咨询、用户知识深度以及常驻角色恢复“用户是谁、近期、长期和未闭环事项”都是目标要求，当前代码尚未因文档确认自动具备。
+- M1 四份 frozen contract SHA 和相对 `29085cc` 的 diff 均 exact；Rust `m3c07_` 为 exit 0、11/11 通过（Cargo 4.92s），`m3c0` 为 exit 0、123/123 通过（Cargo 40.29s），`m3c07_ --no-run` 为 exit 0。
+- 完整 `--lib` 的受限 sandbox 首跑为 exit 101、1520 通过 / 4 失败 / 45 忽略：3 个失败是 M3C07 launcher source-string 与既有 `acceptance_runtime_profile` helper 的静态契约 collision，不是 runtime 或 sandbox 行为失败；第 4 个是 resident-session test 读取 PID `lstart` 的 EPERM 环境差异。该首跑保留为红灯证据，不从记录中抹去。
+- current leaf 已按 stage 范围只扩充 `prototypes/productized-desktop-shell/scripts/run-r4-isolated-app-preflight.mjs`，以运行时等价源码消歧修复 3 个静态 collision；`node --check` 通过、launcher focused 5/5 通过、`m3c07_` 11/11 通过。resident-session exact test 在主机权限环境为 exit 0、1/1 通过、3.27s。最终完整 `--lib` 在主机权限环境为 exit 0、1524 通过 / 0 失败 / 45 忽略、72.83s；仅保留 141 条既有 `unused` / `dead_code` / `private_interfaces` warning，无新增失败。
+- 启动器纠偏后主线程再次直接复跑前端 / 构建：`npm run typecheck`、`npm run test:offline-interaction`、`node --check scripts/run-r4-isolated-app-preflight.mjs` 和 `npm run build` 均 exit 0；offline runner 实际遍历 39 个 entrypoint，脚本摘要为 `offline interaction tests passed: 15`；build 转换 306 modules、955ms 完成，只有既有 Vite `>500k` chunk warning。npm 使用既有 ignored `node_modules`，未将曾因缺少 `zustand` 失败的 `npm ci --offline` 写成 clean install 成功。
+- 真实 provider、真实 Codex 消息、真实用户项目、真实账号、凭据、外部 connector、部署、发布、merge、push 与真实数据迁移均未进入。
+- 桌面证据只覆盖 Agent / Jiaoban synthetic host；窗口截图只保存在 Codex 主任务 `019fe53e-c4c2-7ab0-a965-0e231075df57` 的线程内，仓库持久证据只有 `docs/harness/reports/M3C07-isolated-desktop-evidence/` 的 6 份脱敏 launcher JSON receipt。
+- 完整知识检索、同步、记忆治理、connector、Secretary、项目主管和全局主管实现均不属于 M3 已完成范围。
 
-## 当前开发状态
+## 当前开发状态与停止点
 
-轻量开发护栏的前四个阶段均已完成并归档。当前活动阶段是 `stage-05 / M3`；M3C01、M3C02 已完成并归档，唯一活动叶是 `M3C03-role-session-repository-shadow-import`，业务写入面仅限该叶点名的 M3 Rust domain / repository / schema 和必要接线文件。`docs/harness/authorization.json` 已记录本轮用户给出的 M3 持续授权和外部动作禁止项。
-
-M0 文档内容、路径核验、本地提交和护栏归档已经完成。M3 现在按窄叶连续推进；工程拆分、实现和离线验证由阶段主管收口，产品正本变更、真实 provider/账号/消息、merge、push、发布和破坏性动作仍需停下请示或保持排除。
+M4、M5、M6 及之后阶段均为 `PLANNED / NOT_ACTIVE`。M3C08 的主线回归已通过，但本任务不自动激活 M4/M5，也不授予 M4/M5/M6+ 的实现权限。主线程完成终态提交、最终工作树核对和 stage close 后任务队列必须停止；任何下一步均需新的明确用户指令、匹配的活动阶段 / 唯一叶和授权。
 
 ## 保全
 
