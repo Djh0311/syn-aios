@@ -29,6 +29,7 @@ import type {
   WorkflowStateSnapshot,
 } from "../lib/types";
 import { AgentSessionCenter, softwareKeyOf, softwareLabelOf } from "./agent/AgentConversationShell";
+import { M3AcceptancePanel } from "./agent/M3AcceptancePanel";
 import { AgentSoftwareFilterBar } from "./agent/AgentSoftwareFilterBar";
 import { useAgentSessionPage } from "./agent/useAgentSessionPage";
 import { useAgentTranscriptLoader } from "./agent/useAgentTranscriptLoader";
@@ -186,6 +187,7 @@ export function AgentView({
 
   return (
     <section className="view-stack agent-view-root">
+      <M3AcceptancePanel host="agent" />
       <AgentSessionCenter
         sessions={filteredSessions}
         selectedThreadId={selectedThreadId}

@@ -1,0 +1,66 @@
+{
+  "schema_version": "syn_r4_isolated_preflight_receipt.v3",
+  "run_hash": "6271709f930335f23d7fdc22bf8d1cd51df83845a2b5d92663703c1e4e14b93f",
+  "declared_fixture_path_containment": {
+    "app_data": true,
+    "canvas": true,
+    "codex_db": true,
+    "index": true,
+    "logs": true,
+    "project": true,
+    "recovery_backups": true,
+    "tasks": true,
+    "vault": true,
+    "workflow_state": true
+  },
+  "fixture_path_containment_provenance": "launcher_declared_fixture_path_projection",
+  "fixture_synthetic_identity_hash": "cc969b4d96ac227fbe70d076135c3dd2ae3c7871ea553a7a4ba37d660db610d3",
+  "profile_declared_session_source": "IndexOnly",
+  "build": {
+    "exit_code": 0,
+    "launched": true,
+    "signal": null
+  },
+  "syn": {
+    "exit_code": null,
+    "launched": true,
+    "signal": "SIGTERM"
+  },
+  "syn_exit_disposition": "terminated_after_completed_ui_inspection",
+  "ui_inspection_attempted": true,
+  "ui_inspection_completed": true,
+  "synthetic_home_verified": true,
+  "screenshot_saved": true,
+  "ui_inspection_failure_family": null,
+  "ui_inspection_provenance": "external_computer_use_ui_observation",
+  "pre_list_sigkill_diagnostic": {
+    "schema_version": 1,
+    "launcher_child_kill_attempted": false,
+    "launcher_self_signal_reraise_after_receipt": false,
+    "parent_signal_reraise_after_receipt": null,
+    "parent_received_signals": {
+      "SIGTERM": false,
+      "SIGINT": false,
+      "SIGHUP": false
+    },
+    "child_exit": {
+      "observed": true,
+      "exit_code": null,
+      "signal": "SIGTERM"
+    },
+    "child_close": {
+      "observed": true,
+      "exit_code": null,
+      "signal": "SIGTERM"
+    },
+    "process_relation": {
+      "observed": true,
+      "child_parent_is_launcher": true,
+      "same_process_group": true,
+      "same_session": true,
+      "observation_failure_family": null
+    }
+  },
+  "environment_unchanged": true,
+  "home_initial_view_config_pinned": true
+}

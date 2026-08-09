@@ -55,8 +55,8 @@ mod supervisor_action_protocol;
 mod supervisor_session_launcher;
 
 macro_rules! workbench_command_handler {
-    () => {
-        tauri::generate_handler![
+    () => {{
+        let workbench_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             load_workbench_snapshot,
             query_workbench_page_read_model,
             record_operation_control_decision,
@@ -77,6 +77,10 @@ macro_rules! workbench_command_handler {
             load_jiaoban_role_session_detail,
             start_agent_role_session_continuation,
             start_jiaoban_role_session_continuation,
+            load_agent_m3c07_acceptance_status,
+            operate_agent_m3c07_acceptance,
+            load_jiaoban_m3c07_acceptance_status,
+            operate_jiaoban_m3c07_acceptance,
             load_codex_session_transcript,
             load_codex_session_transcript_page,
             load_codex_session_page,
@@ -234,6 +238,16 @@ macro_rules! workbench_command_handler {
             mcp::commands::load_workflow_template,
             mcp::commands::delete_workflow_template,
             store_hygiene::sweep_canvas_run_residue
-        ]
-    };
+        ];
+        move |invoke| {
+            let command = invoke.message.command().to_owned();
+            match crate::m3_acceptance::reject_unapproved_tauri_command(&command) {
+                Ok(()) => workbench_handler(invoke),
+                Err(error) => {
+                    invoke.resolver.reject(error);
+                    true
+                }
+            }
+        }
+    }};
 }

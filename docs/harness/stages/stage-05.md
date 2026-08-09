@@ -48,9 +48,14 @@
 - prototypes/productized-desktop-shell/tests/jiaoban-conversation-center.test.tsx
 - prototypes/productized-desktop-shell/tests/offline-permission-dialog.test.tsx
 - prototypes/productized-desktop-shell/tests/helpers/offlineConversationEngineScenario.tsx
+- prototypes/productized-desktop-shell/tests/m3-isolated-desktop-acceptance.test.tsx
 - prototypes/productized-desktop-shell/scripts/run-offline-interaction-test.mjs
+- prototypes/productized-desktop-shell/scripts/run-r4-isolated-app-preflight.mjs
 - refs/heads/main
 - /private/tmp/product-line-syn-m3-
+- /private/tmp/syn-r4-acceptance-
+
+M3C07 可在上述临时根内启动、强退和重启本仓库自己构建的 debug App bundle，并保存合成 profile 的截图、交互记录和脱敏 receipt；该窄授权不包含真实 provider、真实消息、真实项目数据或外部 connector。
 
 只读：
 
@@ -75,5 +80,5 @@
 - [x] M3C04 ConversationTransportPort 与 fake provider 重启语义
 - [x] M3C05 显式 Handoff 状态机与结果回源
 - [x] M3C06 会话读模型与前端缓存退位
-- [ ] M3C07 隔离桌面分层验收与迁移回切证据
+- [x] M3C07 隔离桌面分层验收与迁移回切证据
 - [ ] M3C08 M3 集成回归、现状回写与阶段收口

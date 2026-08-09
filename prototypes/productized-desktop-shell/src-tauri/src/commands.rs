@@ -4467,6 +4467,36 @@ fn start_jiaoban_role_session_continuation(
     )
 }
 
+// M3C07 acceptance-only controls.  The command names permanently select the
+// host; request payloads carry only a finite action and nonce.  These commands
+// reach the isolated M3 runtime only after the R4 profile + explicit M3C07
+// mode gate installed it, otherwise they return M3_BINDING_UNAVAILABLE.
+#[tauri::command]
+fn load_agent_m3c07_acceptance_status(
+) -> Result<crate::m3_acceptance::M3C07AcceptanceStatusDto, String> {
+    crate::m3_acceptance::load_agent_acceptance_status()
+}
+
+#[tauri::command]
+fn operate_agent_m3c07_acceptance(
+    request: crate::m3_acceptance::M3C07AcceptanceActionRequest,
+) -> Result<crate::m3_acceptance::M3C07AcceptanceStatusDto, String> {
+    crate::m3_acceptance::operate_agent_acceptance(&request)
+}
+
+#[tauri::command]
+fn load_jiaoban_m3c07_acceptance_status(
+) -> Result<crate::m3_acceptance::M3C07AcceptanceStatusDto, String> {
+    crate::m3_acceptance::load_jiaoban_acceptance_status()
+}
+
+#[tauri::command]
+fn operate_jiaoban_m3c07_acceptance(
+    request: crate::m3_acceptance::M3C07AcceptanceActionRequest,
+) -> Result<crate::m3_acceptance::M3C07AcceptanceStatusDto, String> {
+    crate::m3_acceptance::operate_jiaoban_acceptance(&request)
+}
+
 fn load_role_session_directory_for_host(
     state: &AppState,
     host: crate::m3_role_session_read_model::M3RoleSessionReadHost,

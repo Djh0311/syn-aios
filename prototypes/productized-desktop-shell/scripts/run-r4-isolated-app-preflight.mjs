@@ -18,16 +18,37 @@ import { fileURLToPath } from "node:url";
 
 const PROFILE_ENV = "SYN_R4_ACCEPTANCE_PROFILE";
 const REENTRY_CAPABILITY_ENV = "SYN_R4_REENTRY_CAPABILITY";
+const M3C07_MODE_ENV = "SYN_M3C07_ISOLATED_ACCEPTANCE";
+const M3C07_MODE_VALUE = "1";
+const M3C07_ISOLATED_MODE_ARG = "--m3c07-isolated-acceptance";
+const M3C07_READINESS_RECEIPT_FILE_NAME =
+  "m3c07-isolated-readiness-receipt.json";
+const M3C07_READINESS_EVENT_SCHEMA_VERSION = "syn_m3c07_ui_inspection_ready.v1";
+const M3C07_READINESS_RECEIPT_SCHEMA_VERSION =
+  "syn_m3c07_isolated_desktop_launcher_receipt.v1";
+const M3C07_REAL_PROVIDER_ATTEMPTS = 0;
+const M3C07_MAX_LAUNCHES = 8;
 const M2_REFERENCE_SLICE_DRIVER_ENV = "SYN_M2_R4_REFERENCE_SLICE_DRIVER";
 const M2_REFERENCE_SLICE_ATTEMPT_ENV = "SYN_M2_R4_REFERENCE_SLICE_ATTEMPT";
 const M2_REFERENCE_SLICE_PHASE_ENV = "SYN_M2_R4_REFERENCE_SLICE_PHASE";
 const M2_REFERENCE_SLICE_NONCE_ENV = "SYN_M2_R4_REFERENCE_SLICE_NONCE";
 const M2_REFERENCE_SLICE_EXTERNAL_EFFECT_ENV =
   "SYN_M2_R4_REFERENCE_SLICE_EXTERNAL_EFFECT";
+const M2_REFERENCE_SLICE_MARKER_ENV_NAMES = [
+  M2_REFERENCE_SLICE_DRIVER_ENV,
+  M2_REFERENCE_SLICE_ATTEMPT_ENV,
+  M2_REFERENCE_SLICE_PHASE_ENV,
+  M2_REFERENCE_SLICE_NONCE_ENV,
+  M2_REFERENCE_SLICE_EXTERNAL_EFFECT_ENV,
+];
 const M2_REFERENCE_SLICE_DRIVER_VALUE = "workflow-state-reference-slice-v1";
 const M2_REFERENCE_SLICE_EXTERNAL_EFFECT_VALUE =
   "workflow-state-external-effect-v1";
 const M2_REFERENCE_SLICE_MODE_ARG = "--m2-reference-slice";
+const M3C07_M2_REFERENCE_SLICE_MODE_CONFLICT =
+  "m3c07_m2_reference_slice_mode_conflict";
+const M2_REFERENCE_SLICE_M3C07_MODE_CONFLICT =
+  "m2_reference_slice_m3c07_mode_conflict";
 const PROFILE_PURPOSE = "syn-r4-isolated-runtime-profile";
 const PROFILE_SCHEMA_VERSION = 1;
 const ROOT_PREFIX = "syn-r4-acceptance-";
@@ -2247,9 +2268,276 @@ function redactedReceipt(
   };
 }
 
+function m3c07FinalLaunchEnvironment(
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+) {
+  const environment = {
+    ...normalBuildEnvironment,
+    [PROFILE_ENV]: profilePath,
+    [REENTRY_CAPABILITY_ENV]: reentryCapability,
+    [M3C07_MODE_ENV]: M3C07_MODE_VALUE,
+  };
+  if (
+    environment[PROFILE_ENV] !== profilePath ||
+    environment[M3C07_MODE_ENV] !== M3C07_MODE_VALUE
+  ) {
+    throw new Error("m3c07 launch gate environment was not sealed");
+  }
+  return environment;
+}
+
+function m3c07ReadinessEvent({
+  launchIndex,
+  profilePath,
+  receiptPath,
+  runHash,
+  synPid,
+  uiInspectionPath,
+}) {
+  return {
+    schema_version: M3C07_READINESS_EVENT_SCHEMA_VERSION,
+    run_hash: runHash,
+    launch_index: launchIndex,
+    syn_pid: synPid,
+    target_bundle_name: DEBUG_APP_BUNDLE_NAME,
+    target_bundle_identifier: DEBUG_APP_BUNDLE_IDENTIFIER,
+    profile_path_sha256: sha256(profilePath),
+    ui_inspection_path: uiInspectionPath,
+    m3c07_receipt_path: receiptPath,
+    r4_profile_usage: "r4_profile_filesystem_isolation_base_only",
+    profile_gate_required: true,
+    explicit_m3c07_mode_gate_required: true,
+    fixed_host_runtime_commands_only: true,
+    fake_provider_only: true,
+    // This is deliberately scoped to launcher behavior. Runtime operation
+    // receipts independently report their own persisted fake-ledger counts.
+    real_provider_attempts: M3C07_REAL_PROVIDER_ATTEMPTS,
+    runtime_action_evidence: "runtime_status_and_action_receipts_pending",
+    restart_same_profile_required: true,
+  };
+}
+
+function m3c07RestartEligible(launchResult) {
+  return (
+    launchResult.launched &&
+    !startupFailureFamily(launchResult) &&
+    (launchResult.signal === "SIGKILL" ||
+      launchResult.signal === "SIGTERM" ||
+      launchResult.exit_code === 0)
+  );
+}
+
+function m3c07LaunchDisposition(launchResult, uiInspection) {
+  if (!launchResult.launched) {
+    return "not_launched";
+  }
+  if (startupFailureFamily(launchResult)) {
+    return "startup_failure";
+  }
+  if (completedUiInspection(uiInspection)) {
+    return "completed_ui_inspection";
+  }
+  if (m3c07RestartEligible(launchResult)) {
+    return "same_profile_relaunch_pending";
+  }
+  return "unexpected_exit_before_ui_inspection";
+}
+
+async function runM3C07SameProfileRestart({
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  receiptPath,
+  runHash,
+  uiInspectionPath,
+}) {
+  const finalSynEnvironment = m3c07FinalLaunchEnvironment(
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+  );
+  const launches = [];
+  let parentSignalToReraise = null;
+  let uiInspection = pendingUiInspection(runHash);
+
+  for (let launchIndex = 0; launchIndex < M3C07_MAX_LAUNCHES; launchIndex += 1) {
+    let synPid = null;
+    const diagnosedLaunch = await runDiagnosedChild(
+      debugAppExecutablePath,
+      [],
+      {
+        cwd: desktopRoot,
+        env: finalSynEnvironment,
+        shell: false,
+        stdio: "ignore",
+      },
+      (child) => {
+        synPid = child.pid ?? null;
+        process.stdout.write(
+          `${JSON.stringify(
+            m3c07ReadinessEvent({
+              launchIndex,
+              profilePath,
+              receiptPath,
+              runHash,
+              synPid,
+              uiInspectionPath,
+            }),
+          )}\n`,
+        );
+      },
+    );
+    parentSignalToReraise ??= diagnosedLaunch.parent_signal_to_reraise;
+    uiInspection = await readUiInspection(uiInspectionPath, runHash);
+    launches.push({
+      launch_index: launchIndex,
+      profile_path_sha256: sha256(profilePath),
+      syn_pid_observed: synPid !== null,
+      launch: diagnosedLaunch.launch_result,
+      startup_failure_family: startupFailureFamily(diagnosedLaunch.launch_result),
+      disposition: m3c07LaunchDisposition(
+        diagnosedLaunch.launch_result,
+        uiInspection,
+      ),
+      ui_inspection: uiInspection,
+      pre_list_sigkill_diagnostic: diagnosedLaunch.diagnostic,
+    });
+
+    if (
+      completedUiInspection(uiInspection) ||
+      !m3c07RestartEligible(diagnosedLaunch.launch_result) ||
+      diagnosedLaunch.parent_signal_to_reraise
+    ) {
+      break;
+    }
+  }
+
+  return {
+    profile_path_sha256: sha256(profilePath),
+    launches,
+    same_profile:
+      launches.length > 0 &&
+      launches.every(
+        (launch) => launch.profile_path_sha256 === sha256(profilePath),
+      ),
+    same_profile_reused:
+      launches.length > 1 &&
+      launches.every(
+        (launch) => launch.profile_path_sha256 === sha256(profilePath),
+      ),
+    ui_inspection: uiInspection,
+    ui_inspection_completed: completedUiInspection(uiInspection),
+    relaunch_limit_reached:
+      launches.length === M3C07_MAX_LAUNCHES &&
+      !completedUiInspection(uiInspection),
+    parent_signal_to_reraise: parentSignalToReraise,
+  };
+}
+
+function m3c07ReadinessReceipt(
+  identity,
+  profile,
+  runHash,
+  buildResult,
+  m3c07Restart,
+) {
+  const launches = m3c07Restart?.launches ?? [];
+  const startupFailure = launches.find(
+    (launch) => launch.startup_failure_family !== null,
+  );
+  return {
+    schema_version: M3C07_READINESS_RECEIPT_SCHEMA_VERSION,
+    receipt_scope: "launcher_gate_and_same_profile_restart_readiness_only",
+    run_hash: runHash,
+    fixture_synthetic_identity_hash: sha256(
+      `${identity.projectId}\u0000${identity.workflowId}`,
+    ),
+    r4_profile_usage: "r4_profile_filesystem_isolation_base_only",
+    r4_profile_schema_version: profile.schema_version,
+    m3c07_gate: {
+      explicit_mode_argument: M3C07_ISOLATED_MODE_ARG,
+      explicit_mode_environment: {
+        name: M3C07_MODE_ENV,
+        value: M3C07_MODE_VALUE,
+      },
+      profile_environment: PROFILE_ENV,
+      profile_gate_required: true,
+      fixed_host_runtime_commands_only: true,
+    },
+    fake_provider_boundary: {
+      fake_provider_only: true,
+      real_provider_attempts: M3C07_REAL_PROVIDER_ATTEMPTS,
+      attempt_count_scope: "launcher_process_never_calls_a_provider",
+    },
+    real_provider_attempts: M3C07_REAL_PROVIDER_ATTEMPTS,
+    same_profile_restart: {
+      profile_path_sha256: m3c07Restart?.profile_path_sha256 ?? null,
+      launch_count: launches.length,
+      same_profile: m3c07Restart?.same_profile ?? false,
+      same_profile_reused: m3c07Restart?.same_profile_reused ?? false,
+      ui_inspection_completed: m3c07Restart?.ui_inspection_completed ?? false,
+      relaunch_limit_reached: m3c07Restart?.relaunch_limit_reached ?? false,
+      initial_restart_eligible:
+        launches[0] ? m3c07RestartEligible(launches[0].launch) : false,
+      startup_failure_family: startupFailure?.startup_failure_family ?? null,
+      launches,
+    },
+    ui_inspection: m3c07Restart?.ui_inspection ?? pendingUiInspection(runHash),
+    runtime_action_evidence: "not_observed_by_launcher",
+    runtime_receipt_contract:
+      "M3 runtime receipt and persistent fake-provider ledger are separate evidence",
+    build: buildResult,
+  };
+}
+
+// This policy is intentionally pure: it runs before the launcher creates a
+// root, scrubs inherited environment, builds, or spawns a child.  Values are
+// never returned or logged; marker names are normalized only as a fixed
+// server-owned mode-boundary input.
+function normalizeInheritedMarkerNames(environment, markerNames) {
+  return markerNames
+    .filter((name) => Object.hasOwn(environment, name))
+    .sort();
+}
+
+function resolveLauncherModeConflict({
+  m2ReferenceSliceMode,
+  m3c07IsolatedMode,
+  inheritedM2ReferenceSliceMarkers,
+  inheritedM3C07ModeMarker,
+}) {
+  if (m2ReferenceSliceMode && m3c07IsolatedMode) {
+    return "mode_argument";
+  }
+  if (m3c07IsolatedMode && inheritedM2ReferenceSliceMarkers.length > 0) {
+    return M3C07_M2_REFERENCE_SLICE_MODE_CONFLICT;
+  }
+  if (m2ReferenceSliceMode && inheritedM3C07ModeMarker) {
+    return M2_REFERENCE_SLICE_M3C07_MODE_CONFLICT;
+  }
+  return null;
+}
+
 const initialHome = process.env.HOME;
 const initialCodexHome = process.env.CODEX_HOME;
-const m2ReferenceSliceMode = process.argv.slice(2).includes(M2_REFERENCE_SLICE_MODE_ARG);
+const launcherArguments = process.argv.slice(2);
+const m2ReferenceSliceMode = launcherArguments.includes(M2_REFERENCE_SLICE_MODE_ARG);
+const m3c07IsolatedMode = launcherArguments.includes(M3C07_ISOLATED_MODE_ARG);
+const inheritedM2ReferenceSliceMarkers = normalizeInheritedMarkerNames(
+  process.env,
+  M2_REFERENCE_SLICE_MARKER_ENV_NAMES,
+);
+const inheritedM3C07ModeMarker = Object.hasOwn(process.env, M3C07_MODE_ENV);
+const launcherModeConflict = resolveLauncherModeConflict({
+  m2ReferenceSliceMode,
+  m3c07IsolatedMode,
+  inheritedM2ReferenceSliceMarkers,
+  inheritedM3C07ModeMarker,
+});
+const launcherModeArgumentsValid =
+  !(m2ReferenceSliceMode && m3c07IsolatedMode);
 const homeInitialViewConfigPinned =
   !Object.hasOwn(process.env, "VITE_STAGE_K_INITIAL_VIEW") ||
   process.env.VITE_STAGE_K_INITIAL_VIEW === "home";
@@ -2266,9 +2554,20 @@ let parentSignalToReraise = null;
 let failureStage = null;
 let uiInspection = pendingUiInspection("");
 let m2ReferenceSliceSuite = null;
+let m3c07Restart = null;
 
 try {
-  if (!homeInitialViewConfigPinned) {
+  if (!launcherModeArgumentsValid) {
+    failureStage = "mode_argument";
+    process.exitCode = 1;
+  } else if (launcherModeConflict) {
+    // No root exists yet, so this fixed diagnostic has zero fixture, build,
+    // child, and receipt side effects. It intentionally reveals no inherited
+    // marker value or other parent-environment data.
+    failureStage = launcherModeConflict;
+    process.stderr.write(`${launcherModeConflict}\n`);
+    process.exitCode = 1;
+  } else if (!homeInitialViewConfigPinned) {
     failureStage = "initial_view";
     process.exitCode = 1;
   } else {
@@ -2287,6 +2586,12 @@ try {
     normalBuildEnvironment.VITE_STAGE_K_INITIAL_VIEW = "home";
     normalBuildEnvironment.CARGO_HOME ??= tauriCargoHome;
     delete normalBuildEnvironment[PROFILE_ENV];
+    delete normalBuildEnvironment[M3C07_MODE_ENV];
+    delete normalBuildEnvironment[M2_REFERENCE_SLICE_DRIVER_ENV];
+    delete normalBuildEnvironment[M2_REFERENCE_SLICE_ATTEMPT_ENV];
+    delete normalBuildEnvironment[M2_REFERENCE_SLICE_PHASE_ENV];
+    delete normalBuildEnvironment[M2_REFERENCE_SLICE_NONCE_ENV];
+    delete normalBuildEnvironment[M2_REFERENCE_SLICE_EXTERNAL_EFFECT_ENV];
     const bundleBuildStartedAtMs = Date.now();
     buildResult = await runChild(
       tauriCliPath,
@@ -2359,6 +2664,45 @@ try {
                   : "unclassified",
             };
             failureStage = "m2_reference_slice";
+            process.exitCode = 1;
+          }
+        } else if (m3c07IsolatedMode) {
+          try {
+            m3c07Restart = await runM3C07SameProfileRestart({
+              normalBuildEnvironment,
+              profilePath: join(root, PROFILE_FILE_NAME),
+              reentryCapability,
+              receiptPath: join(root, M3C07_READINESS_RECEIPT_FILE_NAME),
+              runHash,
+              uiInspectionPath: fixture.uiInspectionPath,
+            });
+            const finalLaunch = m3c07Restart.launches.at(-1);
+            launchResult = finalLaunch?.launch ?? launchResult;
+            preListSigkillDiagnostic =
+              finalLaunch?.pre_list_sigkill_diagnostic ?? preListSigkillDiagnostic;
+            parentSignalToReraise = m3c07Restart.parent_signal_to_reraise;
+            uiInspection = m3c07Restart.ui_inspection;
+            const failedLaunch = m3c07Restart.launches.find(
+              (launch) =>
+                !launch.launch.launched ||
+                launch.startup_failure_family !== null ||
+                launch.disposition === "unexpected_exit_before_ui_inspection",
+            );
+            if (!finalLaunch || failedLaunch) {
+              failureStage = "m3c07_launch";
+              process.exitCode = 1;
+            } else if (!m3c07Restart.same_profile_reused) {
+              failureStage = "m3c07_same_profile_relaunch";
+              process.exitCode = 1;
+            } else if (!m3c07Restart.ui_inspection_completed) {
+              failureStage = "m3c07_ui_inspection";
+              process.exitCode = 1;
+            } else if (!m3c07RestartEligible(finalLaunch.launch)) {
+              failureStage = "m3c07_final_exit";
+              process.exitCode = 1;
+            }
+          } catch {
+            failureStage = "m3c07_launcher";
             process.exitCode = 1;
           }
         } else {
@@ -2436,6 +2780,21 @@ try {
             process.env.HOME === initialHome && process.env.CODEX_HOME === initialCodexHome,
           home_initial_view_config_pinned: homeInitialViewConfigPinned,
         }
+      : m3c07IsolatedMode
+        ? {
+            ...m3c07ReadinessReceipt(
+              identity,
+              profile,
+              runHash,
+              buildResult,
+              m3c07Restart,
+            ),
+            ...(failureStage ? { failure_stage: failureStage } : {}),
+            environment_unchanged:
+              process.env.HOME === initialHome &&
+              process.env.CODEX_HOME === initialCodexHome,
+            home_initial_view_config_pinned: homeInitialViewConfigPinned,
+          }
       : {
       ...redactedReceipt(
         identity,
@@ -2457,6 +2816,8 @@ try {
         root,
         m2ReferenceSliceMode
           ? "m2-reference-slice-suite-receipt.json"
+          : m3c07IsolatedMode
+            ? M3C07_READINESS_RECEIPT_FILE_NAME
           : RECEIPT_FILE_NAME,
       ),
       receipt,

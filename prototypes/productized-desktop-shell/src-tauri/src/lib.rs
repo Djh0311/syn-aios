@@ -69,6 +69,7 @@ mod m2_workflow_state;
 // modules may reuse the ordinary SQLite immediate-transaction primitive, but
 // never the M2 workflow-state sidecar or its R4 command gate.
 mod m3_conversation_transport;
+mod m3_acceptance;
 mod m3_handoff;
 mod m3_role_session;
 mod m3_role_session_repository;
@@ -121,11 +122,13 @@ impl AppState {
 
     fn try_new() -> Result<Self, String> {
         if let Some(paths) = acceptance_runtime_profile::active_paths()? {
+            let m3_role_session_read_runtime =
+                m3_acceptance::install_for_validated_profile(&paths)?.unwrap_or_default();
             return Ok(Self {
                 index_path: paths.index_path,
                 tasks_path: paths.tasks_path,
                 workflow_state_path: paths.workflow_state_path,
-                m3_role_session_read_runtime: Default::default(),
+                m3_role_session_read_runtime,
             });
         }
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

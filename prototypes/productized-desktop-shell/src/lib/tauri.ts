@@ -1768,6 +1768,127 @@ export function startJiaobanRoleSessionContinuation(
   return invoke<void>("start_jiaoban_role_session_continuation", { request: safeRequest });
 }
 
+// M3C07 isolated acceptance surface -----------------------------------------
+//
+// This surface has no legacy thread/user-message transport.  The host is fixed
+// by each wrapper and the only renderer-controlled values are an enum action
+// and a bounded nonce.
+export type M3C07AcceptanceAction =
+  | "observe"
+  | "new"
+  | "continue"
+  | "stop"
+  | "stage_create_pending"
+  | "stage_start_pending"
+  | "stage_stop_pending"
+  | "restart_readback"
+  | "failure_injection_rollback"
+  | "handoff_exact_replay"
+  | "object_navigation";
+
+export type M3C07AcceptanceStatus = Readonly<{
+  runtimeVersion: string;
+  host: "agent" | "jiaoban";
+  lifecycleState: string;
+  sessionState: string;
+  turnState: string;
+  labels: Readonly<{
+    role: string;
+    project: string;
+    object: string;
+    channel: string;
+    permission: string;
+  }>;
+  ledger: Readonly<{
+    fakeDispatches: number;
+    fakeReadbacks: number;
+    realProviderAttempts: number;
+    persistentLedger: boolean;
+  }>;
+  receipt: Readonly<{
+    schemaVersion: string;
+    receiptId: string;
+    host: "agent" | "jiaoban";
+    action: string;
+    outcome: string;
+    replayed: boolean;
+    rollbackApplied: boolean;
+    realProviderAttempts: number;
+    redaction: string;
+  }>;
+  recovery: Readonly<{
+    state: string;
+    restartReadbacks: number;
+    dispatchesAfterRestart: number;
+  }>;
+  objectNavigation: Readonly<{
+    available: boolean;
+    state: string;
+  }>;
+}>;
+
+function createM3C07AcceptanceActionRequest(
+  action: M3C07AcceptanceAction,
+  requestNonce: string,
+): Readonly<{ action: M3C07AcceptanceAction; requestNonce: string }> {
+  if (!requestNonce.trim() || utf8ByteLength(requestNonce) > 160 || /[\u0000-\u001f\u007f]/.test(requestNonce)) {
+    throw new Error("m3c07_acceptance_nonce_invalid");
+  }
+  return Object.freeze({ action, requestNonce });
+}
+
+function assertM3C07AcceptanceHost(
+  status: M3C07AcceptanceStatus,
+  host: "agent" | "jiaoban",
+): M3C07AcceptanceStatus {
+  if (status.host !== host || status.receipt.host !== host || status.ledger.realProviderAttempts !== 0) {
+    throw new Error("m3c07_acceptance_response_invalid");
+  }
+  return status;
+}
+
+export async function loadAgentM3C07AcceptanceStatus(): Promise<M3C07AcceptanceStatus> {
+  ensureTauriRuntime();
+  return assertM3C07AcceptanceHost(
+    await invoke<M3C07AcceptanceStatus>("load_agent_m3c07_acceptance_status"),
+    "agent",
+  );
+}
+
+export async function operateAgentM3C07Acceptance(
+  action: M3C07AcceptanceAction,
+  requestNonce: string,
+): Promise<M3C07AcceptanceStatus> {
+  ensureTauriRuntime();
+  return assertM3C07AcceptanceHost(
+    await invoke<M3C07AcceptanceStatus>("operate_agent_m3c07_acceptance", {
+      request: createM3C07AcceptanceActionRequest(action, requestNonce),
+    }),
+    "agent",
+  );
+}
+
+export async function loadJiaobanM3C07AcceptanceStatus(): Promise<M3C07AcceptanceStatus> {
+  ensureTauriRuntime();
+  return assertM3C07AcceptanceHost(
+    await invoke<M3C07AcceptanceStatus>("load_jiaoban_m3c07_acceptance_status"),
+    "jiaoban",
+  );
+}
+
+export async function operateJiaobanM3C07Acceptance(
+  action: M3C07AcceptanceAction,
+  requestNonce: string,
+): Promise<M3C07AcceptanceStatus> {
+  ensureTauriRuntime();
+  return assertM3C07AcceptanceHost(
+    await invoke<M3C07AcceptanceStatus>("operate_jiaoban_m3c07_acceptance", {
+      request: createM3C07AcceptanceActionRequest(action, requestNonce),
+    }),
+    "jiaoban",
+  );
+}
+
 // Shared Conversation Transport -------------------------------------------------
 //
 // The profile remains a local controller contract so each page can select only

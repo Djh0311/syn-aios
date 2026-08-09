@@ -199,6 +199,18 @@ impl Default for M3RoleSessionReadRuntimeSlot {
 }
 
 impl M3RoleSessionReadRuntimeSlot {
+    /// Creates the one production-capable read runtime.  Its deliberately
+    /// specific name prevents profile/cache/thread callers from treating this
+    /// as a generic authority injector; only `m3_acceptance` can mint the
+    /// required bindings after the M3C07 gate has passed.
+    pub(crate) fn from_m3c07_isolated_acceptance(
+        bindings: Vec<M3C07IsolatedReadBinding>,
+    ) -> Self {
+        Self {
+            runtime: Some(M3RoleSessionReadRuntime::m3c07_isolated(bindings)),
+        }
+    }
+
     pub(crate) fn directory(
         &self,
         host: M3RoleSessionReadHost,
@@ -233,11 +245,14 @@ impl M3RoleSessionReadRuntimeSlot {
     }
 }
 
-/// Test-only isolated evidence.  There is no equivalent production
-/// constructor in this leaf: M3C07 must define and prove the injection path.
-#[cfg(test)]
+/// A binding minted exclusively by the M3C07 acceptance runtime after it has
+/// verified both the R4 isolated profile and the explicit M3C07 mode gate.
+///
+/// This is intentionally not a renderer-facing type and it is not a general
+/// runtime setter.  Normal production startup has no constructor for it, so
+/// the regular M3 commands remain `M3_BINDING_UNAVAILABLE`.
 #[derive(Clone)]
-pub(crate) struct M3IsolatedReadBinding {
+pub(crate) struct M3C07IsolatedReadBinding {
     pub(crate) host: M3RoleSessionReadHost,
     pub(crate) project_locator: String,
     pub(crate) repository: M3RoleSessionSqliteRepository,
@@ -260,8 +275,7 @@ struct M3ReadRepositoryBinding {
 }
 
 impl M3RoleSessionReadRuntime {
-    #[cfg(test)]
-    fn isolated_fixture(bindings: Vec<M3IsolatedReadBinding>) -> Self {
+    fn m3c07_isolated(bindings: Vec<M3C07IsolatedReadBinding>) -> Self {
         let mut by_host_project = BTreeMap::new();
         for entry in bindings {
             // Test fixture setup is still forced through the same canonical
@@ -285,6 +299,11 @@ impl M3RoleSessionReadRuntime {
             selector_counter: Arc::new(AtomicU64::new(0)),
             selector_namespace: selector_runtime_namespace(),
         }
+    }
+
+    #[cfg(test)]
+    fn isolated_fixture(bindings: Vec<M3C07IsolatedReadBinding>) -> Self {
+        Self::m3c07_isolated(bindings)
     }
 
     fn directory(
@@ -899,7 +918,7 @@ mod tests {
             project_locator: &str,
             binding: ServerResolvedBinding,
         ) -> M3RoleSessionReadRuntime {
-            M3RoleSessionReadRuntime::isolated_fixture(vec![M3IsolatedReadBinding {
+            M3RoleSessionReadRuntime::isolated_fixture(vec![M3C07IsolatedReadBinding {
                 host,
                 project_locator: project_locator.to_string(),
                 repository: self.repository.clone(),

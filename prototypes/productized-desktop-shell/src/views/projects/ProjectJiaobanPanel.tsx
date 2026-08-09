@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Pill } from "../../components/SpecPrimitives";
+import { M3AcceptancePanel } from "../agent/M3AcceptancePanel";
 import {
   JiaobanBlockedState,
   JiaobanNeedsReworkDisposal,
@@ -83,6 +84,7 @@ import {
   runGlobalSupervisorBoundaryReview,
   runGlobalSupervisorReview,
   stopProjectWorkflowChain,
+  type M3C07AcceptanceStatus,
 } from "../../lib/tauri";
 import type {
   AutoAdvanceRoleLoopOutcome,
@@ -157,6 +159,81 @@ export type ProjectJiaobanPanelProps = {
   // M2：只把已有历史/五态内容交给 Shell 排版，面板自身仍拥有数据、状态与命令。
   renderLayout?: (content: ProjectJiaobanPanelLayout) => ReactNode;
 };
+
+/**
+ * Browser-only fallback for projects outside the legacy workflow rollout.
+ * The acceptance panel is deliberately colocated with this branch: when the
+ * explicit M3C07 runtime gate resolves it must remain inspectable even though
+ * the ordinary Jiaoban workflow is unavailable for this project.
+ */
+export function JiaobanNonTestProjectFallback({
+  latestSession,
+  onOpenAgentSession,
+  initialM3AcceptanceStatus,
+}: {
+  latestSession: SessionRecord | null;
+  onOpenAgentSession: (threadId: string) => void;
+  initialM3AcceptanceStatus?: M3C07AcceptanceStatus | null;
+}) {
+  return (
+    <section className="project-jiaoban" aria-label="交办">
+      <M3AcceptancePanel host="jiaoban" initialStatus={initialM3AcceptanceStatus} />
+      <div className="project-canvas-detail-card" aria-label="交办 · 这个项目暂不能自动干">
+        <div className="panel-heading">
+          <div>
+            <h3>这个项目现在用智能体直连</h3>
+          </div>
+          <Pill tone="unknown">未开通自动干</Pill>
+        </div>
+        <div className="role-loop-plain" aria-label="老实说明">
+          <p className="role-loop-plain-lead">
+            自动干目前只在固定测试项目开通；这个项目现在可用智能体直连——你自己一步步来。
+          </p>
+          <p className="role-loop-plain-note">
+            交办 = 说一句、批一次、AI 自动跑一串；智能体 = 手动直连一个对话。这个项目走后者。
+          </p>
+        </div>
+        <div className="workflow-state-actions">
+          <button
+            className="primary-button"
+            type="button"
+            disabled={!latestSession}
+            onClick={() => latestSession && onOpenAgentSession(latestSession.thread_id)}
+          >
+            去智能体直连
+          </button>
+        </div>
+        {!latestSession ? <p className="muted small-note">这个项目还没有可打开的对话。</p> : null}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Browser-only fallback for a project without a workflow.  It shares the
+ * exact M3C07 gate surface with every other Jiaoban branch; the normal
+ * unavailable and unresolved states render no placeholder through the panel.
+ */
+export function JiaobanNoWorkflowFallback({
+  initialM3AcceptanceStatus,
+}: {
+  initialM3AcceptanceStatus?: M3C07AcceptanceStatus | null;
+}) {
+  return (
+    <section className="project-jiaoban" aria-label="交办">
+      <M3AcceptancePanel host="jiaoban" initialStatus={initialM3AcceptanceStatus} />
+      <div className="project-canvas-detail-card">
+        <div className="panel-heading">
+          <div>
+            <h3>这个项目还没准备好交办</h3>
+          </div>
+          <Pill tone="warn">缺项目工作流</Pill>
+        </div>
+        <p className="muted small-note">先在右侧画布建起这个项目的工作流，再回来交办。</p>
+      </div>
+    </section>
+  );
+}
 
 export type { JiaobanCanvasViewSpec, JiaobanPhase } from "./jiaoban/JiaobanArtifactViews";
 
@@ -1324,53 +1401,16 @@ function ProjectJiaobanPanelBrowser({
     const latestSession =
       projectSessions.sort((a, b) => (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0))[0] ?? null;
     return (
-      <section className="project-jiaoban" aria-label="交办">
-        <div className="project-canvas-detail-card" aria-label="交办 · 这个项目暂不能自动干">
-          <div className="panel-heading">
-            <div>
-              <h3>这个项目现在用智能体直连</h3>
-            </div>
-            <Pill tone="unknown">未开通自动干</Pill>
-          </div>
-          <div className="role-loop-plain" aria-label="老实说明">
-            <p className="role-loop-plain-lead">
-              自动干目前只在固定测试项目开通；这个项目现在可用智能体直连——你自己一步步来。
-            </p>
-            <p className="role-loop-plain-note">
-              交办 = 说一句、批一次、AI 自动跑一串；智能体 = 手动直连一个对话。这个项目走后者。
-            </p>
-          </div>
-          <div className="workflow-state-actions">
-            <button
-              className="primary-button"
-              type="button"
-              disabled={!latestSession}
-              onClick={() => latestSession && onOpenAgentSession(latestSession.thread_id)}
-            >
-              去智能体直连
-            </button>
-          </div>
-          {!latestSession ? <p className="muted small-note">这个项目还没有可打开的对话。</p> : null}
-        </div>
-      </section>
+      <JiaobanNonTestProjectFallback
+        latestSession={latestSession}
+        onOpenAgentSession={onOpenAgentSession}
+      />
     );
   }
 
   // 没有本项目工作流：交办跑不起来（说态也要有工作流才能出方案）。给老实提示 + 跳智能体，永不冻。
   if (!projectWorkflow) {
-    return (
-      <section className="project-jiaoban" aria-label="交办">
-        <div className="project-canvas-detail-card">
-          <div className="panel-heading">
-            <div>
-              <h3>这个项目还没准备好交办</h3>
-            </div>
-            <Pill tone="warn">缺项目工作流</Pill>
-          </div>
-          <p className="muted small-note">先在右侧画布建起这个项目的工作流，再回来交办。</p>
-        </div>
-      </section>
-    );
+    return <JiaobanNoWorkflowFallback />;
   }
 
   // B2 展示门控：意见永远跟着当前这份方案（proposalId 对上才显·防旧方案意见冒充新方案）。
@@ -1653,6 +1693,7 @@ function ProjectJiaobanPanelBrowser({
   const mainContent = (
     <div className="project-jiaoban-main">
       <div className="project-jiaoban-col" data-conversation-phase={conversationPhaseKind}>
+        <M3AcceptancePanel host="jiaoban" />
         <JiaobanRoleSessionReadBoundary
           roleSessionRead={roleSessionRead}
           blockedReason={roleSessionBlockedReason}
