@@ -1,42 +1,48 @@
 {
   "version": 1,
-  "id": "USER-SYN-M3-AUTONOMOUS-STAGE-05-20260809",
+  "id": "USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810",
   "issuedBy": "user",
   "scope": {
     "kind": "stage",
-    "id": "stage-05"
+    "id": "stage-06"
   },
-  "summary": "用户明确批准在 M0C01 干净基线完成后自主推进 M3，并允许任务包内文件修改、离线测试、精确暂存和本地提交；禁止 merge、push、发布、真实 provider/消息及破坏性操作。当前 M0C01 已完成，本记录覆盖 stage-05 的窄叶连续推进。",
+  "summary": "用户明确授权整个 M4 本地开发阶段，并允许模型代为落盘授权记录；授权覆盖 stage-06 内窄任务包连续推进、任务包写域内的合同/文档/Rust/前端/测试/本地隔离脚本、离线测试与构建、临时或隔离数据库迁移、假模型/假 provider、隔离调试 App 启停/强退/重启、脱敏证据、精确暂存与本地提交。任务叶完成后自动进入下一叶，直到 M4 验收和收口。",
   "grants": [
     {
-      "id": "M3-CONTEXT",
+      "id": "M4-CONTEXT",
       "category": "context",
       "operations": ["change"],
-      "targets": ["M3C*", "docs/harness/stages/stage-05.md"]
+      "targets": ["M4C*", "docs/harness/stages/stage-06.md"]
     },
     {
-      "id": "M3-CONTROL",
+      "id": "M4-CONTROL",
       "category": "control",
       "operations": ["modify"],
       "targets": ["docs/harness/"]
     }
   ],
   "exclusions": [
-    "push",
-    "merge",
-    "remote",
-    "deploy",
-    "release",
-    "provider",
-    "live-database",
-    "live-migration",
+    "real-personal-data",
+    "real-user-project-write",
+    "real-model",
     "real-provider-process",
-    "real-project-data",
+    "real-codex-message",
     "real-account",
-    "real-message",
     "credential",
     "external-connector",
-    "destructive-cleanup",
-    "M4-M10-implementation"
+    "network-external-write",
+    "remote",
+    "push",
+    "merge",
+    "rebase",
+    "deploy",
+    "release",
+    "reset",
+    "clean",
+    "stash",
+    "destructive-delete",
+    "overwrite-existing-work",
+    "M5-M10-implementation",
+    "outside-current-leaf-write-surface"
   ]
 }
