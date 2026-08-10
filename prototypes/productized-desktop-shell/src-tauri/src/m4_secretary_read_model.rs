@@ -4,10 +4,11 @@
 //! supplies already-validated rows; ordering is repeated mechanically in Rust
 //! so SQLite collation or renderer order never becomes priority authority.
 
-use crate::m4_secretary_domain::m4_parse_rfc3339_utc_key;
+use crate::m4_secretary_domain::{m4_is_opaque_reference, m4_parse_rfc3339_utc_key};
+use serde::Serialize;
 use std::cmp::Ordering;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct M4SourceLinkRead {
     pub(crate) link_kind: String,
     pub(crate) source_owner_ref: String,
@@ -17,7 +18,7 @@ pub(crate) struct M4SourceLinkRead {
     pub(crate) opaque_route_ref: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct M4InboxItemRead {
     pub(crate) inbox_item_id: String,
     pub(crate) source_identity_key: String,
@@ -36,7 +37,7 @@ pub(crate) struct M4InboxItemRead {
     pub(crate) revision: i64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct M4OpenLoopRead {
     pub(crate) open_loop_id: String,
     pub(crate) source_identity_key: String,
@@ -57,12 +58,401 @@ pub(crate) struct M4OpenLoopRead {
     pub(crate) revision: i64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct M4AttentionSnapshot {
     pub(crate) scope_ref: String,
     pub(crate) scope_source_watermark: String,
     pub(crate) inbox_items: Vec<M4InboxItemRead>,
     pub(crate) open_loops: Vec<M4OpenLoopRead>,
+}
+
+/// M4C04's standalone, explicitly user-created personal todo read shape.
+///
+/// This is deliberately stringly typed at the read boundary so it does not
+/// become coupled to M4C04 write-side aggregate types.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4PersonalActionRead {
+    pub(crate) personal_action_id: String,
+    pub(crate) explicit_user_command_ref: String,
+    pub(crate) title: String,
+    pub(crate) status: String,
+    pub(crate) due_at_utc: Option<String>,
+    pub(crate) revision: String,
+}
+
+/// M4C04's in-app delivery/read/dismiss projection only.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4NotificationRead {
+    pub(crate) notification_id: String,
+    pub(crate) source_ref: M4SourceLinkRead,
+    pub(crate) subject_ref: String,
+    pub(crate) notification_purpose_code: String,
+    pub(crate) delivery_channel: String,
+    pub(crate) status: String,
+    pub(crate) created_at_utc: String,
+    pub(crate) delivered_at_utc: Option<String>,
+    pub(crate) read_at_utc: Option<String>,
+    pub(crate) dismissed_at_utc: Option<String>,
+    pub(crate) revision: String,
+}
+
+/// M4C04's local schedule and delivery state projection.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4ReminderRead {
+    pub(crate) reminder_id: String,
+    pub(crate) owner_ref: String,
+    pub(crate) explicit_schedule_command_id: String,
+    pub(crate) scheduled_for_utc: String,
+    pub(crate) iana_timezone: String,
+    pub(crate) status: String,
+    pub(crate) last_fired_at_utc: Option<String>,
+    pub(crate) snoozed_until_utc: Option<String>,
+    pub(crate) revision: String,
+}
+
+/// The only owner-writeback facts that M4C04 may expose.
+///
+/// In particular, this type contains neither source owner state nor a raw
+/// callback, executable payload, credential, URL, or filesystem path.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4OwnerWritebackReceiptRead {
+    pub(crate) source_ref: M4SourceLinkRead,
+    pub(crate) expected_source_revision: u64,
+    pub(crate) explicit_intent_code: String,
+    pub(crate) status: String,
+    pub(crate) scrubbed_owner_receipt_ref: Option<String>,
+    pub(crate) error_code: Option<String>,
+}
+
+/// Complete M4C04 coordination read snapshot.
+///
+/// It deliberately stops at M4C04 coordination data: there is no session,
+/// conversation, handoff, daily brief, or daily report state here.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4CoordinationSnapshot {
+    pub(crate) scope_ref: String,
+    pub(crate) scope_source_watermark: String,
+    pub(crate) inbox_items: Vec<M4InboxItemRead>,
+    pub(crate) open_loops: Vec<M4OpenLoopRead>,
+    pub(crate) personal_actions: Vec<M4PersonalActionRead>,
+    pub(crate) notifications: Vec<M4NotificationRead>,
+    pub(crate) reminders: Vec<M4ReminderRead>,
+    pub(crate) owner_writeback_receipts: Vec<M4OwnerWritebackReceiptRead>,
+}
+
+pub(crate) fn validate_m4c04_coordination_snapshot(
+    snapshot: &M4CoordinationSnapshot,
+) -> Result<(), String> {
+    if !m4c04_is_safe_typed_ref(&snapshot.scope_ref)
+        || !m4c04_is_lower_hex_digest(&snapshot.scope_source_watermark)
+    {
+        return Err("m4c04_snapshot_scope_invalid".to_string());
+    }
+
+    for action in &snapshot.personal_actions {
+        validate_m4c04_personal_action(action)?;
+    }
+    for notification in &snapshot.notifications {
+        validate_m4c04_notification(notification)?;
+    }
+    for reminder in &snapshot.reminders {
+        validate_m4c04_reminder(reminder)?;
+    }
+    for receipt in &snapshot.owner_writeback_receipts {
+        validate_m4c04_owner_writeback_receipt(receipt)?;
+    }
+    Ok(())
+}
+
+/// Validates the complete M4C04 snapshot before applying only mechanical,
+/// identifier-based ordering to the new local coordination collections.
+pub(crate) fn sort_m4c04_coordination_snapshot(
+    snapshot: &mut M4CoordinationSnapshot,
+) -> Result<(), String> {
+    validate_m4c04_coordination_snapshot(snapshot)?;
+    sort_m4_inbox_items(&mut snapshot.inbox_items)?;
+    sort_m4_open_loops(&mut snapshot.open_loops)?;
+    snapshot
+        .personal_actions
+        .sort_by(|left, right| left.personal_action_id.cmp(&right.personal_action_id));
+    snapshot
+        .notifications
+        .sort_by(|left, right| left.notification_id.cmp(&right.notification_id));
+    snapshot
+        .reminders
+        .sort_by(|left, right| left.reminder_id.cmp(&right.reminder_id));
+    snapshot.owner_writeback_receipts.sort_by(|left, right| {
+        (
+            &left.source_ref.source_owner_ref,
+            &left.source_ref.object_type,
+            &left.source_ref.canonical_source_object_id,
+            left.expected_source_revision,
+            &left.explicit_intent_code,
+            &left.status,
+            &left.scrubbed_owner_receipt_ref,
+            &left.error_code,
+        )
+            .cmp(&(
+                &right.source_ref.source_owner_ref,
+                &right.source_ref.object_type,
+                &right.source_ref.canonical_source_object_id,
+                right.expected_source_revision,
+                &right.explicit_intent_code,
+                &right.status,
+                &right.scrubbed_owner_receipt_ref,
+                &right.error_code,
+            ))
+    });
+    Ok(())
+}
+
+fn validate_m4c04_personal_action(action: &M4PersonalActionRead) -> Result<(), String> {
+    if !m4c04_has_deterministic_id(&action.personal_action_id, "personal-action:")
+        || !m4_is_opaque_reference(&action.explicit_user_command_ref)
+        || !m4c04_is_title(&action.title)
+        || !matches!(action.status.as_str(), "OPEN" | "COMPLETED" | "CANCELLED")
+        || action
+            .due_at_utc
+            .as_deref()
+            .is_some_and(|value| m4_parse_rfc3339_utc_key(value).is_none())
+        || !m4c04_is_canonical_u64(&action.revision)
+    {
+        return Err("m4c04_personal_action_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn validate_m4c04_notification(notification: &M4NotificationRead) -> Result<(), String> {
+    let created_at = m4_parse_rfc3339_utc_key(&notification.created_at_utc)
+        .ok_or_else(|| "m4c04_notification_timestamp_invalid".to_string())?;
+    let delivered_at = m4c04_optional_utc_key(notification.delivered_at_utc.as_deref())?;
+    let read_at = m4c04_optional_utc_key(notification.read_at_utc.as_deref())?;
+    let dismissed_at = m4c04_optional_utc_key(notification.dismissed_at_utc.as_deref())?;
+
+    if !m4c04_has_deterministic_id(&notification.notification_id, "notification:")
+        || !validate_m4c04_source_link(&notification.source_ref)
+        || !m4c04_is_typed_reference(&notification.subject_ref)
+        || !m4c04_is_code(&notification.notification_purpose_code)
+        || notification.delivery_channel != "IN_APP"
+        || !m4c04_is_canonical_u64(&notification.revision)
+        || delivered_at.is_some_and(|value| value < created_at)
+        || read_at.is_some_and(|value| value < created_at)
+        || dismissed_at.is_some_and(|value| value < created_at)
+        || matches!((delivered_at, read_at), (None, Some(_)))
+        || matches!((delivered_at, read_at), (Some(delivered), Some(read)) if read < delivered)
+    {
+        return Err("m4c04_notification_invalid".to_string());
+    }
+
+    let state_is_consistent = match notification.status.as_str() {
+        "PENDING" => delivered_at.is_none() && read_at.is_none() && dismissed_at.is_none(),
+        "DELIVERED" => delivered_at.is_some() && read_at.is_none() && dismissed_at.is_none(),
+        "READ" => delivered_at.is_some() && read_at.is_some() && dismissed_at.is_none(),
+        "DISMISSED" => dismissed_at.is_some(),
+        _ => false,
+    };
+    if !state_is_consistent {
+        return Err("m4c04_notification_state_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn validate_m4c04_reminder(reminder: &M4ReminderRead) -> Result<(), String> {
+    let scheduled_for = m4_parse_rfc3339_utc_key(&reminder.scheduled_for_utc)
+        .ok_or_else(|| "m4c04_reminder_timestamp_invalid".to_string())?;
+    let last_fired_at = m4c04_optional_utc_key(reminder.last_fired_at_utc.as_deref())?;
+    let snoozed_until = m4c04_optional_utc_key(reminder.snoozed_until_utc.as_deref())?;
+
+    if !m4c04_has_deterministic_id(&reminder.reminder_id, "reminder:")
+        || !m4c04_is_typed_reference(&reminder.owner_ref)
+        || !m4_is_opaque_reference(&reminder.explicit_schedule_command_id)
+        || !m4c04_is_iana_timezone(&reminder.iana_timezone)
+        || !m4c04_is_canonical_u64(&reminder.revision)
+        || last_fired_at.is_some_and(|value| value < scheduled_for)
+        || snoozed_until.is_some_and(|value| value < scheduled_for)
+    {
+        return Err("m4c04_reminder_invalid".to_string());
+    }
+
+    let state_is_consistent = match reminder.status.as_str() {
+        "SCHEDULED" => last_fired_at.is_none() && snoozed_until.is_none(),
+        "FIRED" => last_fired_at.is_some() && snoozed_until.is_none(),
+        "SNOOZED" => snoozed_until.is_some(),
+        "DISMISSED" | "CANCELLED" => snoozed_until.is_none(),
+        _ => false,
+    };
+    if !state_is_consistent {
+        return Err("m4c04_reminder_state_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn validate_m4c04_owner_writeback_receipt(
+    receipt: &M4OwnerWritebackReceiptRead,
+) -> Result<(), String> {
+    if !validate_m4c04_source_link(&receipt.source_ref)
+        || receipt.expected_source_revision != receipt.source_ref.expected_source_revision
+        || !m4c04_is_code(&receipt.explicit_intent_code)
+    {
+        return Err("m4c04_owner_writeback_reference_invalid".to_string());
+    }
+
+    match receipt.status.as_str() {
+        "PENDING"
+            if receipt.scrubbed_owner_receipt_ref.is_none() && receipt.error_code.is_none() =>
+        {
+            Ok(())
+        }
+        "SUCCEEDED"
+            if receipt
+                .scrubbed_owner_receipt_ref
+                .as_deref()
+                .is_some_and(m4_is_opaque_reference)
+                && receipt.error_code.is_none() =>
+        {
+            Ok(())
+        }
+        "FAILED"
+            if receipt
+                .scrubbed_owner_receipt_ref
+                .as_deref()
+                .is_some_and(m4_is_opaque_reference)
+                && receipt.error_code.as_deref().is_some_and(m4c04_is_code) =>
+        {
+            Ok(())
+        }
+        _ => Err("m4c04_owner_writeback_state_invalid".to_string()),
+    }
+}
+
+fn validate_m4c04_source_link(source_ref: &M4SourceLinkRead) -> bool {
+    matches!(
+        source_ref.link_kind.as_str(),
+        "INTERNAL_ROUTE" | "HANDOFF_REF" | "OWNER_COMMAND_REF"
+    ) && m4c04_is_safe_typed_ref(&source_ref.source_owner_ref)
+        && m4c04_is_safe_typed_ref(&source_ref.object_type)
+        && m4c04_is_safe_typed_ref(&source_ref.canonical_source_object_id)
+        && m4_is_opaque_reference(&source_ref.opaque_route_ref)
+}
+
+fn m4c04_optional_utc_key(
+    value: Option<&str>,
+) -> Result<Option<crate::m4_secretary_domain::M4UtcSortKey>, String> {
+    value
+        .map(|value| {
+            m4_parse_rfc3339_utc_key(value).ok_or_else(|| "m4c04_timestamp_invalid".to_string())
+        })
+        .transpose()
+}
+
+fn m4c04_has_deterministic_id(value: &str, prefix: &str) -> bool {
+    value
+        .strip_prefix(prefix)
+        .is_some_and(m4c04_is_lower_hex_digest)
+}
+
+fn m4c04_is_code(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 96
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || matches!(byte, b'_'))
+}
+
+fn m4c04_is_safe_typed_ref(value: &str) -> bool {
+    m4c04_is_reference_text(value) && !m4c04_looks_like_raw_reference(value)
+}
+
+fn m4c04_is_typed_reference(value: &str) -> bool {
+    m4c04_is_reference_text(value)
+        && (m4_is_opaque_reference(value) || m4c04_is_m4_deterministic_id(value))
+}
+
+fn m4c04_is_m4_deterministic_id(value: &str) -> bool {
+    let Some((prefix, digest)) = value.split_once(':') else {
+        return false;
+    };
+    matches!(
+        prefix,
+        "source"
+            | "source-event"
+            | "inbox"
+            | "open-loop"
+            | "personal-action"
+            | "notification"
+            | "reminder"
+            | "decision-projection"
+    ) && m4c04_is_lower_hex_digest(digest)
+}
+
+fn m4c04_is_title(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    !value.is_empty()
+        && value.chars().count() <= 160
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
+        && !value.starts_with('/')
+        && !value.contains('\\')
+        && !lower.starts_with("http://")
+        && !lower.starts_with("https://")
+}
+
+fn m4c04_is_reference_text(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 512
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
+}
+
+fn m4c04_is_canonical_u64(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 20
+        && value.bytes().all(|byte| byte.is_ascii_digit())
+        && (value == "0" || !value.starts_with('0'))
+        && value.parse::<u64>().is_ok()
+}
+
+fn m4c04_is_iana_timezone(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value.contains('/')
+        && !value.starts_with('/')
+        && !value.ends_with('/')
+        && value.split('/').all(|segment| {
+            !segment.is_empty()
+                && segment
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'+'))
+        })
+}
+
+fn m4c04_is_lower_hex_digest(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn m4c04_looks_like_raw_reference(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    value.contains('@')
+        || value.starts_with('/')
+        || value.starts_with("./")
+        || value.starts_with("../")
+        || value.contains("/./")
+        || value.contains("/../")
+        || lower.contains("://")
+        || [
+            "password",
+            "credential",
+            "api_key",
+            "apikey",
+            "access_token",
+            "refresh_token",
+            "bearer",
+        ]
+        .into_iter()
+        .any(|marker| lower.contains(marker))
 }
 
 pub(crate) fn m4_priority_reason_text(code: &str) -> Result<&'static str, String> {
@@ -252,5 +642,235 @@ mod tests {
         ];
         sort_m4_inbox_items(&mut items).expect("sort fractional M4 instants");
         assert_eq!(items[0].inbox_item_id, "later");
+    }
+
+    fn opaque(namespace: &str, digit: char) -> String {
+        format!("{namespace}:sha256:{}", digit.to_string().repeat(64))
+    }
+
+    fn deterministic(prefix: &str, digit: char) -> String {
+        format!("{prefix}:{}", digit.to_string().repeat(64))
+    }
+
+    fn m4c04_source_link(object_id: &str, expected_revision: u64) -> M4SourceLinkRead {
+        M4SourceLinkRead {
+            link_kind: "INTERNAL_ROUTE".to_string(),
+            source_owner_ref: "workflow-owner".to_string(),
+            object_type: "workflow_attention".to_string(),
+            canonical_source_object_id: object_id.to_string(),
+            expected_source_revision: expected_revision,
+            opaque_route_ref: opaque("route", 'a'),
+        }
+    }
+
+    fn m4c04_personal_action(digit: char) -> M4PersonalActionRead {
+        M4PersonalActionRead {
+            personal_action_id: deterministic("personal-action", digit),
+            explicit_user_command_ref: opaque("command", 'b'),
+            title: "整理本周计划".to_string(),
+            status: "OPEN".to_string(),
+            due_at_utc: Some("2026-08-10T10:00:00Z".to_string()),
+            revision: "0".to_string(),
+        }
+    }
+
+    fn m4c04_notification(digit: char) -> M4NotificationRead {
+        M4NotificationRead {
+            notification_id: deterministic("notification", digit),
+            source_ref: m4c04_source_link("work-item-a", 7),
+            subject_ref: deterministic("open-loop", 'c'),
+            notification_purpose_code: "ATTENTION_DUE".to_string(),
+            delivery_channel: "IN_APP".to_string(),
+            status: "PENDING".to_string(),
+            created_at_utc: "2026-08-10T09:00:00Z".to_string(),
+            delivered_at_utc: None,
+            read_at_utc: None,
+            dismissed_at_utc: None,
+            revision: "0".to_string(),
+        }
+    }
+
+    fn m4c04_reminder(digit: char) -> M4ReminderRead {
+        M4ReminderRead {
+            reminder_id: deterministic("reminder", digit),
+            owner_ref: deterministic("personal-action", 'd'),
+            explicit_schedule_command_id: opaque("command", 'e'),
+            scheduled_for_utc: "2026-08-10T10:00:00Z".to_string(),
+            iana_timezone: "Asia/Shanghai".to_string(),
+            status: "SCHEDULED".to_string(),
+            last_fired_at_utc: None,
+            snoozed_until_utc: None,
+            revision: "0".to_string(),
+        }
+    }
+
+    fn m4c04_owner_writeback(status: &str) -> M4OwnerWritebackReceiptRead {
+        let (scrubbed_owner_receipt_ref, error_code) = match status {
+            "PENDING" => (None, None),
+            "SUCCEEDED" => (Some(opaque("owner-receipt", 'f')), None),
+            "FAILED" => (
+                Some(opaque("owner-receipt", 'f')),
+                Some("OWNER_REVISION_CONFLICT".to_string()),
+            ),
+            _ => (None, None),
+        };
+        M4OwnerWritebackReceiptRead {
+            source_ref: m4c04_source_link("work-item-a", 7),
+            expected_source_revision: 7,
+            explicit_intent_code: "CLOSE_SOURCE_ITEM".to_string(),
+            status: status.to_string(),
+            scrubbed_owner_receipt_ref,
+            error_code,
+        }
+    }
+
+    fn m4c04_snapshot() -> M4CoordinationSnapshot {
+        M4CoordinationSnapshot {
+            scope_ref: "scope:personal:primary".to_string(),
+            scope_source_watermark: "a".repeat(64),
+            inbox_items: Vec::new(),
+            open_loops: Vec::new(),
+            personal_actions: vec![m4c04_personal_action('a')],
+            notifications: vec![m4c04_notification('b')],
+            reminders: vec![m4c04_reminder('c')],
+            owner_writeback_receipts: vec![m4c04_owner_writeback("PENDING")],
+        }
+    }
+
+    #[test]
+    fn m4c04_rejects_invalid_state_time_revision_sensitive_ref_and_title() {
+        let mut invalid_status = m4c04_snapshot();
+        invalid_status.personal_actions[0].status = "DISMISSED".to_string();
+        assert!(validate_m4c04_coordination_snapshot(&invalid_status).is_err());
+
+        let mut invalid_time = m4c04_snapshot();
+        invalid_time.notifications[0].created_at_utc = "2026-08-10T09:00:00+08:00".to_string();
+        assert!(validate_m4c04_coordination_snapshot(&invalid_time).is_err());
+
+        let mut invalid_revision = m4c04_snapshot();
+        invalid_revision.reminders[0].revision = "01".to_string();
+        assert!(validate_m4c04_coordination_snapshot(&invalid_revision).is_err());
+
+        let mut sensitive_ref = m4c04_snapshot();
+        sensitive_ref.owner_writeback_receipts[0].status = "SUCCEEDED".to_string();
+        sensitive_ref.owner_writeback_receipts[0].scrubbed_owner_receipt_ref =
+            Some("https://owner.example/callback".to_string());
+        assert!(validate_m4c04_coordination_snapshot(&sensitive_ref).is_err());
+
+        let mut invalid_title = m4c04_snapshot();
+        invalid_title.personal_actions[0].title = " 整理本周计划 ".to_string();
+        assert!(validate_m4c04_coordination_snapshot(&invalid_title).is_err());
+    }
+
+    #[test]
+    fn m4c04_title_matches_local_personal_action_constraints() {
+        let mut longest_valid = m4c04_snapshot();
+        longest_valid.personal_actions[0].title = "测".repeat(160);
+        validate_m4c04_coordination_snapshot(&longest_valid)
+            .expect("160-character local personal-action title is valid");
+
+        for invalid_title in [
+            String::new(),
+            "测".repeat(161),
+            "https://example.test/todo".to_string(),
+            "/absolute/path/to/todo".to_string(),
+            "C:\\Users\\todo".to_string(),
+            "todo\nnext".to_string(),
+        ] {
+            let mut snapshot = m4c04_snapshot();
+            snapshot.personal_actions[0].title = invalid_title;
+            assert!(validate_m4c04_coordination_snapshot(&snapshot).is_err());
+        }
+    }
+
+    #[test]
+    fn m4c04_accepts_typed_subject_owner_refs_and_all_writeback_outcomes() {
+        for status in ["PENDING", "SUCCEEDED", "FAILED"] {
+            let mut snapshot = m4c04_snapshot();
+            snapshot.owner_writeback_receipts = vec![m4c04_owner_writeback(status)];
+            validate_m4c04_coordination_snapshot(&snapshot)
+                .expect("M4C04 typed refs and writeback outcome are valid");
+        }
+
+        let mut pending_with_receipt = m4c04_snapshot();
+        pending_with_receipt.owner_writeback_receipts[0].scrubbed_owner_receipt_ref =
+            Some(opaque("owner-receipt", 'f'));
+        assert!(validate_m4c04_coordination_snapshot(&pending_with_receipt).is_err());
+    }
+
+    #[test]
+    fn m4c04_snapshot_sort_is_stable_and_owner_writeback_never_claims_owner_state() {
+        let mut snapshot = m4c04_snapshot();
+        snapshot.personal_actions = vec![m4c04_personal_action('b'), m4c04_personal_action('a')];
+        snapshot.notifications = vec![m4c04_notification('d'), m4c04_notification('c')];
+        snapshot.reminders = vec![m4c04_reminder('f'), m4c04_reminder('e')];
+        let mut receipt_b = m4c04_owner_writeback("SUCCEEDED");
+        receipt_b.source_ref = m4c04_source_link("work-item-b", 7);
+        let mut receipt_a = m4c04_owner_writeback("SUCCEEDED");
+        receipt_a.source_ref = m4c04_source_link("work-item-a", 7);
+        snapshot.owner_writeback_receipts = vec![receipt_b, receipt_a];
+
+        sort_m4c04_coordination_snapshot(&mut snapshot)
+            .expect("sort valid M4C04 coordination snapshot");
+        assert_eq!(
+            snapshot
+                .personal_actions
+                .iter()
+                .map(|item| item.personal_action_id.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                deterministic("personal-action", 'a'),
+                deterministic("personal-action", 'b'),
+            ]
+        );
+        assert_eq!(
+            snapshot
+                .notifications
+                .iter()
+                .map(|item| item.notification_id.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                deterministic("notification", 'c'),
+                deterministic("notification", 'd'),
+            ]
+        );
+        assert_eq!(
+            snapshot
+                .reminders
+                .iter()
+                .map(|item| item.reminder_id.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                deterministic("reminder", 'e'),
+                deterministic("reminder", 'f')
+            ]
+        );
+        assert_eq!(
+            snapshot.owner_writeback_receipts[0]
+                .source_ref
+                .canonical_source_object_id,
+            "work-item-a"
+        );
+
+        let receipt_json = serde_json::to_value(&snapshot.owner_writeback_receipts[0])
+            .expect("serialize scrubbed owner writeback receipt");
+        let receipt_fields = receipt_json
+            .as_object()
+            .expect("owner writeback receipt serializes as object");
+        assert_eq!(receipt_fields.len(), 6);
+        for forbidden in [
+            "owner_state",
+            "owner_status",
+            "callback",
+            "executable_payload",
+            "credential",
+            "url",
+            "path",
+        ] {
+            assert!(
+                receipt_fields.get(forbidden).is_none(),
+                "forbidden: {forbidden}"
+            );
+        }
     }
 }
