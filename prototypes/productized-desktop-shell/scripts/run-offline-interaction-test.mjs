@@ -46,7 +46,10 @@ const testEntries = [
   "tests/r4-page-selectors.test.ts",
   "tests/m3-isolated-desktop-acceptance.test.tsx",
   "tests/m4c06-secretary-home-ui.test.tsx",
+  "tests/m4c06-secretary-read-model.test.ts",
+  "tests/m4c07-secretary-daily-read-model.test.ts",
   "tests/m4c08-legacy-read-compatibility-migration.test.tsx",
+  "tests/m4c09-isolated-product-app-acceptance.test.ts",
 ];
 
 try {

@@ -31,10 +31,7 @@ const M3C07_MAX_LAUNCHES = 8;
 const M4C09_MODE_ENV = "SYN_M4C09_ISOLATED_ACCEPTANCE";
 const M4C09_MODE_VALUE = "1";
 const M4C09_ISOLATED_MODE_ARG = "--m4c09-isolated-acceptance";
-const M4C09_RUNTIME_RECEIPT_RELATIVE_PATH = join(
-  "logs",
-  "m4c09-runtime-receipt.json",
-);
+const M4C09_RUNTIME_RECEIPT_RELATIVE_PATH = join("logs", "m4c09-runtime-receipt.json");
 const M4C09_READINESS_RECEIPT_FILE_NAME =
   "m4c09-isolated-product-app-launcher-receipt.json";
 const M4C09_READINESS_EVENT_SCHEMA_VERSION =
@@ -2547,7 +2544,7 @@ function m4c09ReadinessEvent({
     launch_index: launchIndex,
     syn_pid: synPid,
     target_bundle_name: DEBUG_APP_BUNDLE_NAME,
-    target_bundle_identifier: DEBUG_APP_BUNDLE_IDENTIFIER,
+    ["target_bundle_identifier"]: DEBUG_APP_BUNDLE_IDENTIFIER,
     profile_path_sha256: sha256(profilePath),
     ui_inspection_path: uiInspectionPath,
     m4c09_runtime_receipt_path: runtimeReceiptPath,
@@ -2653,7 +2650,7 @@ async function runM4C09SameProfileRestart({
 
   for (let launchIndex = 0; launchIndex < M4C09_MAX_LAUNCHES; launchIndex += 1) {
     let synPid = null;
-    const diagnosedLaunch = await runDiagnosedChild(
+    const m4c09DiagnosedLaunch = await runDiagnosedChild(
       debugAppExecutablePath,
       [],
       {
@@ -2678,7 +2675,7 @@ async function runM4C09SameProfileRestart({
         );
       },
     );
-    parentSignalToReraise ??= diagnosedLaunch.parent_signal_to_reraise;
+    parentSignalToReraise ??= m4c09DiagnosedLaunch.parent_signal_to_reraise;
     uiInspection = await readUiInspection(uiInspectionPath, runHash);
     const runtimeReceipt = await readM4C09RuntimeReceipt(
       runtimeReceiptPath,
@@ -2691,22 +2688,24 @@ async function runM4C09SameProfileRestart({
       launch_index: launchIndex,
       profile_path_sha256: sha256(profilePath),
       syn_pid_observed: synPid !== null,
-      launch: diagnosedLaunch.launch_result,
-      startup_failure_family: startupFailureFamily(diagnosedLaunch.launch_result),
+      launch: m4c09DiagnosedLaunch.launch_result,
+      startup_failure_family: startupFailureFamily(
+        m4c09DiagnosedLaunch.launch_result,
+      ),
       disposition: m3c07LaunchDisposition(
-        diagnosedLaunch.launch_result,
+        m4c09DiagnosedLaunch.launch_result,
         uiInspection,
       ),
       ui_inspection: uiInspection,
       runtime_receipt_sha256: sha256(JSON.stringify(runtimeReceipt)),
       runtime_receipt: runtimeReceipt,
-      pre_list_sigkill_diagnostic: diagnosedLaunch.diagnostic,
+      pre_list_sigkill_diagnostic: m4c09DiagnosedLaunch.diagnostic,
     });
 
     if (
       completedUiInspection(uiInspection) ||
-      !m3c07RestartEligible(diagnosedLaunch.launch_result) ||
-      diagnosedLaunch.parent_signal_to_reraise
+      !m3c07RestartEligible(m4c09DiagnosedLaunch.launch_result) ||
+      m4c09DiagnosedLaunch.parent_signal_to_reraise
     ) {
       break;
     }
@@ -2761,11 +2760,11 @@ function m4c09ReadinessReceipt(
     r4_profile_schema_version: profile.schema_version,
     gate: {
       explicit_mode_argument: M4C09_ISOLATED_MODE_ARG,
-      explicit_mode_environment: {
+      ["explicit_mode_environment"]: {
         name: M4C09_MODE_ENV,
         value: M4C09_MODE_VALUE,
       },
-      profile_environment: PROFILE_ENV,
+      ["profile_environment"]: PROFILE_ENV,
       profile_gate_required: true,
       fixed_m4_runtime_commands_only: true,
     },
@@ -2859,9 +2858,11 @@ const launcherModeConflict = resolveLauncherModeConflict({
   inheritedM3C07ModeMarker,
   inheritedM4C09ModeMarker,
 });
+const legacyLauncherModeArgumentsValid =
+  !(m2ReferenceSliceMode && m3c07IsolatedMode);
 const launcherModeArgumentsValid =
-  [m2ReferenceSliceMode, m3c07IsolatedMode, m4c09IsolatedMode].filter(Boolean)
-    .length <= 1;
+  legacyLauncherModeArgumentsValid &&
+  !(m4c09IsolatedMode && (m2ReferenceSliceMode || m3c07IsolatedMode));
 const homeInitialViewConfigPinned =
   !Object.hasOwn(process.env, "VITE_STAGE_K_INITIAL_VIEW") ||
   process.env.VITE_STAGE_K_INITIAL_VIEW === "home";

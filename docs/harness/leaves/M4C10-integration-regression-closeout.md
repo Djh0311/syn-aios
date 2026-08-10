@@ -16,7 +16,12 @@
 - handoffs/2026-08-10-syn-m4-to-m5-m6-m7-handoff-v1.md [新增]
 - prototypes/productized-desktop-shell/scripts/run-offline-interaction-test.mjs
 - prototypes/productized-desktop-shell/scripts/run-m4-isolated-app-acceptance.mjs
+- prototypes/productized-desktop-shell/scripts/run-r4-isolated-app-preflight.mjs
 - refs/heads/main
+
+范围校正：C10 完整 `cargo test --lib` 首跑暴露 C09 在共享 R4 launcher 中新增的
+五处 source-string 静态契约碰撞。该文件只允许做保持运行时语义不变的 C09 局部
+消歧，并复跑旧 R4/M3 与 M4 验收；不借此扩展隔离能力或修改 M1-M3 产品语义。
 
 ## 步骤
 
