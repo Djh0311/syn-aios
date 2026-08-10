@@ -1,9 +1,11 @@
 //! M3-owned RoleSession persistence boundary.
 //!
-//! This module deliberately owns only the offline/scratch SQLite adapter.  It
-//! reuses `WorkbenchSqliteRepository`'s *ordinary* immediate-transaction
-//! primitive for locking and retry, but never routes M3 state through the M2
-//! workflow-sidecar, projector, reference transaction, or R4 driver.
+//! This module owns both the guarded scratch adapter used by M3 acceptance and
+//! the ordinary-product adapter admitted from one exact server-resolved app
+//! data root. Both reuse `WorkbenchSqliteRepository`'s ordinary
+//! immediate-transaction primitive for locking and retry, but never route M3
+//! state through the M2 workflow-sidecar, projector, reference transaction, or
+//! R4 driver.
 //!
 //! The public command DTOs below are intentionally metadata-only.  Raw
 //! transcripts, prompts, provider responses, tool arguments, credentials, and
@@ -33,16 +35,29 @@ use crate::m3_role_session_schema::{
     ensure_m3_schema_v1, verify_m3_schema_v1, M3_ROLE_SESSION_SCHEMA_MARKER,
     M3_ROLE_SESSION_SCHEMA_VERSION,
 };
-use crate::workbench_sqlite_repository::{RepositoryMutationError, WorkbenchSqliteRepository};
+use crate::workbench_sqlite_repository::{
+    M3OrdinaryProductWorkbenchSqliteRepositoryConfig, RepositoryMutationError,
+    WorkbenchSqliteRepository,
+};
 use crate::workbench_sqlite_schema::admit_temp_or_fixture_sqlite_path;
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::Component;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) const M3_ROLE_SESSION_REPOSITORY_PORT_VERSION: &str = "m3.role-session.repository.v1";
 pub(crate) const M3_ROLE_SESSION_REPOSITORY_SOURCE_ID: &str = "m3_role_session_repository_scratch";
+pub(crate) const M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH: &str =
+    "conversation/m3-role-session-v1.sqlite3";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M3OrdinaryRoleSessionRepositoryConfig {
+    pub(crate) app_data_root: PathBuf,
+    pub(crate) db_path: PathBuf,
+}
 
 /// A repository-specific, scrubbed failure.  Messages are stable machine
 /// codes; neither a database error nor a rejected payload is allowed to echo
@@ -78,13 +93,23 @@ impl std::error::Error for M3RoleSessionRepositoryError {}
 #[derive(Clone, Debug)]
 pub(crate) struct M3RoleSessionSqliteRepository {
     workbench: WorkbenchSqliteRepository,
-    scratch_db_path: PathBuf,
+    db_path: PathBuf,
+    path_policy: M3RoleSessionPathPolicy,
     handoff_clock: M3RepositoryClock,
     /// A REGISTERED effect may be dispatched only by the repository instance
     /// that just committed it. This process-local capability is deliberately
     /// absent after reopen, so restart inventory converges the effect through
     /// orphan/recovery instead of silently sending it for the first time.
     fresh_dispatch_permits: Arc<Mutex<BTreeSet<String>>>,
+}
+
+#[derive(Clone, Debug)]
+enum M3RoleSessionPathPolicy {
+    Rehearsal,
+    OrdinaryProduct {
+        canonical_app_data_root: PathBuf,
+        expected_db_path: PathBuf,
+    },
 }
 
 #[derive(Clone, Debug, Default)]
@@ -347,6 +372,74 @@ impl M3RoleSessionRepositoryPort for M3RoleSessionSqliteRepository {
     }
 }
 
+fn admit_ordinary_product_config(
+    config: &M3OrdinaryRoleSessionRepositoryConfig,
+) -> Result<(PathBuf, PathBuf), M3RoleSessionRepositoryError> {
+    if !config.app_data_root.is_absolute()
+        || !config.db_path.is_absolute()
+        || config
+            .app_data_root
+            .components()
+            .chain(config.db_path.components())
+            .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_ordinary_repository_clean_absolute_path_required",
+        ));
+    }
+    let canonical_app_data_root = fs::canonicalize(&config.app_data_root)
+        .map_err(|_| M3RoleSessionRepositoryError::new("m3_ordinary_app_data_root_unavailable"))?;
+    if canonical_app_data_root != config.app_data_root {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_ordinary_app_data_root_identity_changed",
+        ));
+    }
+    let expected_db_path = canonical_app_data_root.join(M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH);
+    if config.db_path != expected_db_path {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_ordinary_repository_path_mismatch",
+        ));
+    }
+    Ok((canonical_app_data_root, expected_db_path))
+}
+
+fn admit_ordinary_product_existing_db_path(
+    canonical_app_data_root: &Path,
+    expected_db_path: &Path,
+) -> Result<PathBuf, M3RoleSessionRepositoryError> {
+    if !expected_db_path.starts_with(canonical_app_data_root) {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_ordinary_repository_root_escape",
+        ));
+    }
+    let metadata = fs::symlink_metadata(expected_db_path).map_err(|_| {
+        M3RoleSessionRepositoryError::new("m3_ordinary_repository_path_unavailable")
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_ordinary_repository_regular_file_required",
+        ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if metadata.nlink() != 1 {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_ordinary_repository_single_link_required",
+            ));
+        }
+    }
+    let canonical_db_path = fs::canonicalize(expected_db_path).map_err(|_| {
+        M3RoleSessionRepositoryError::new("m3_ordinary_repository_canonicalize_failed")
+    })?;
+    if canonical_db_path != expected_db_path {
+        return Err(M3RoleSessionRepositoryError::new(
+            "m3_ordinary_repository_path_identity_changed",
+        ));
+    }
+    Ok(canonical_db_path)
+}
+
 impl M3RoleSessionSqliteRepository {
     /// Open an M3 scratch/fixture store and install/verify only the M3-owned
     /// schema.  `open_rehearsal` remains the sole path gate; direct `Connection`
@@ -356,9 +449,65 @@ impl M3RoleSessionSqliteRepository {
             .map_err(|_| M3RoleSessionRepositoryError::new("m3_rehearsal_open_failed"))?;
         let workbench = WorkbenchSqliteRepository::open_rehearsal(&canonical_path)
             .map_err(|_| M3RoleSessionRepositoryError::new("m3_rehearsal_open_failed"))?;
+        Self::finish_open(
+            workbench,
+            canonical_path,
+            M3RoleSessionPathPolicy::Rehearsal,
+        )
+    }
+
+    /// Opens the one ordinary-product M3 store below a server-resolved app
+    /// data root. This path is deliberately distinct from `open_rehearsal`:
+    /// callers cannot turn a scratch/acceptance permit into product authority,
+    /// and no frontend path, cwd, or project locator enters the constructor.
+    pub(crate) fn open_ordinary_product(
+        config: &M3OrdinaryRoleSessionRepositoryConfig,
+    ) -> Result<Self, M3RoleSessionRepositoryError> {
+        let (canonical_app_data_root, expected_db_path) = admit_ordinary_product_config(config)?;
+        let parent = expected_db_path.parent().ok_or_else(|| {
+            M3RoleSessionRepositoryError::new("m3_ordinary_repository_parent_required")
+        })?;
+        fs::create_dir_all(parent).map_err(|_| {
+            M3RoleSessionRepositoryError::new("m3_ordinary_repository_parent_create_failed")
+        })?;
+        let canonical_parent = fs::canonicalize(parent).map_err(|_| {
+            M3RoleSessionRepositoryError::new("m3_ordinary_repository_parent_invalid")
+        })?;
+        if canonical_parent != parent {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_ordinary_repository_parent_identity_changed",
+            ));
+        }
+        if expected_db_path.exists() {
+            admit_ordinary_product_existing_db_path(&canonical_app_data_root, &expected_db_path)?;
+        }
+        let workbench = WorkbenchSqliteRepository::open_m3_ordinary_product_confirmed(
+            &M3OrdinaryProductWorkbenchSqliteRepositoryConfig {
+                canonical_app_data_root: canonical_app_data_root.clone(),
+                db_path: expected_db_path.clone(),
+            },
+        )
+        .map_err(|_| M3RoleSessionRepositoryError::new("m3_ordinary_repository_open_failed"))?;
+        admit_ordinary_product_existing_db_path(&canonical_app_data_root, &expected_db_path)?;
+        Self::finish_open(
+            workbench,
+            expected_db_path.clone(),
+            M3RoleSessionPathPolicy::OrdinaryProduct {
+                canonical_app_data_root,
+                expected_db_path,
+            },
+        )
+    }
+
+    fn finish_open(
+        workbench: WorkbenchSqliteRepository,
+        db_path: PathBuf,
+        path_policy: M3RoleSessionPathPolicy,
+    ) -> Result<Self, M3RoleSessionRepositoryError> {
         let repository = Self {
             workbench,
-            scratch_db_path: canonical_path,
+            db_path,
+            path_policy,
             handoff_clock: M3RepositoryClock::default(),
             fresh_dispatch_permits: Arc::new(Mutex::new(BTreeSet::new())),
         };
@@ -374,7 +523,22 @@ impl M3RoleSessionSqliteRepository {
     }
 
     pub(crate) fn scratch_db_path(&self) -> &Path {
-        &self.scratch_db_path
+        &self.db_path
+    }
+
+    /// Captures a UTC command time from the M3-owned server clock. Product
+    /// composition may use this only for command metadata; it never supplies a
+    /// client or renderer clock to M3.
+    pub(crate) fn capture_server_utc_now(&self) -> Result<String, M3RoleSessionRepositoryError> {
+        self.handoff_clock.capture_now()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_test_server_utc_now(
+        &self,
+        fixed_now: &str,
+    ) -> Result<(), M3RoleSessionRepositoryError> {
+        self.handoff_clock.set_fixed_now(fixed_now)
     }
 
     fn remember_fresh_dispatch_permit(&self, outcome: &M3RepositoryCommandOutcome) {
@@ -429,6 +593,16 @@ impl M3RoleSessionSqliteRepository {
         operation_name: &str,
         operation: impl Fn(&Transaction<'_>) -> Result<T, M3RoleSessionRepositoryError>,
     ) -> Result<(T, M3RoleSessionRepositoryWriteReceipt), M3RoleSessionRepositoryError> {
+        // The confirmed Workbench adapter owns transaction mechanics, while
+        // M3 owns the narrower ordinary-product path policy. Revalidate that
+        // exact product policy before every write just as we do before every
+        // read. Rehearsal keeps its existing Workbench guard and error code.
+        if matches!(
+            &self.path_policy,
+            M3RoleSessionPathPolicy::OrdinaryProduct { .. }
+        ) {
+            self.revalidated_db_path()?;
+        }
         self.workbench
             .with_immediate_transaction(operation_name, None, |transaction| {
                 operation(transaction).map_err(|error| RepositoryMutationError::Message(error.code))
@@ -450,19 +624,10 @@ impl M3RoleSessionSqliteRepository {
     }
 
     /// Read-only diagnostics are deliberately scoped to the already-admitted
-    /// scratch file.  Callers receive no connection handle.
+    /// repository file. Callers receive no connection handle, and the path is
+    /// revalidated under the constructor-specific policy before every open.
     fn read_connection(&self) -> Result<Connection, M3RoleSessionRepositoryError> {
-        let canonical_path =
-            admit_temp_or_fixture_sqlite_path(&self.scratch_db_path).map_err(|_| {
-                M3RoleSessionRepositoryError::new(
-                    "m3_role_session_repository_path_revalidation_failed",
-                )
-            })?;
-        if canonical_path != self.scratch_db_path {
-            return Err(M3RoleSessionRepositoryError::new(
-                "m3_role_session_repository_path_identity_changed",
-            ));
-        }
+        let canonical_path = self.revalidated_db_path()?;
         let connection = Connection::open_with_flags(
             &canonical_path,
             OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW,
@@ -479,6 +644,38 @@ impl M3RoleSessionSqliteRepository {
                 )
             })?;
         Ok(connection)
+    }
+
+    fn revalidated_db_path(&self) -> Result<PathBuf, M3RoleSessionRepositoryError> {
+        match &self.path_policy {
+            M3RoleSessionPathPolicy::Rehearsal => {
+                let canonical = admit_temp_or_fixture_sqlite_path(&self.db_path).map_err(|_| {
+                    M3RoleSessionRepositoryError::new(
+                        "m3_role_session_repository_path_revalidation_failed",
+                    )
+                })?;
+                if canonical != self.db_path {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_role_session_repository_path_identity_changed",
+                    ));
+                }
+                Ok(canonical)
+            }
+            M3RoleSessionPathPolicy::OrdinaryProduct {
+                canonical_app_data_root,
+                expected_db_path,
+            } => {
+                if expected_db_path != &self.db_path {
+                    return Err(M3RoleSessionRepositoryError::new(
+                        "m3_ordinary_repository_path_identity_changed",
+                    ));
+                }
+                Ok(admit_ordinary_product_existing_db_path(
+                    canonical_app_data_root,
+                    expected_db_path,
+                )?)
+            }
+        }
     }
 }
 
@@ -979,6 +1176,18 @@ pub(crate) struct ResumeRoleSessionCommand {
     pub(crate) metadata: M3CommandMetadata,
 }
 
+/// Moves one live server-authorized RoleSession to the existing quarantined
+/// state through the normal M3 command ledger. It is intentionally narrower
+/// than resume/start: callers may only use it after detecting an ambiguous or
+/// mismatched server-side candidate and must provide the observed revision.
+#[derive(Clone, Debug)]
+pub(crate) struct QuarantineRoleSessionCommand {
+    pub(crate) role_session_id: RoleSessionId,
+    pub(crate) binding: ServerResolvedBinding,
+    pub(crate) expected_session_revision: u64,
+    pub(crate) metadata: M3CommandMetadata,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct StartRoleTurnCommand {
     pub(crate) turn_id: TurnId,
@@ -1454,6 +1663,108 @@ impl M3RoleSessionSqliteRepository {
                     transaction,
                     &command.role_session_id,
                 )?),
+                provider_effect: None,
+            })
+        })
+        .map(|(outcome, _)| outcome)
+    }
+
+    /// Records a fail-closed candidate-resolution quarantine through M3's
+    /// normal state machine and command ledger. The caller never receives a
+    /// writable SQLite handle and a stale or non-matching candidate is rejected
+    /// rather than being quarantined by guessed identity.
+    pub(crate) fn quarantine_role_session(
+        &self,
+        command: &QuarantineRoleSessionCommand,
+    ) -> Result<M3RepositoryCommandOutcome, M3RoleSessionRepositoryError> {
+        command.metadata.validate()?;
+        validate_reference_fields(&[("role_session_id", command.role_session_id.as_str())])?;
+        validate_server_binding_metadata_only(&command.binding)?;
+        command
+            .binding
+            .verify_owner_fingerprint()
+            .map_err(domain_error)?;
+        let identity = quarantine_role_session_idempotency_identity(command)?;
+        let command = command.clone();
+        self.with_immediate_transaction("m3_quarantine_role_session", |transaction| {
+            if let Some(receipt) = find_exact_or_divergent_receipt(transaction, &identity)? {
+                return receipt_to_server_authorized_replay_outcome(
+                    receipt,
+                    transaction,
+                    &command.binding,
+                );
+            }
+
+            let mut session =
+                load_required_role_session_in_transaction(transaction, &command.role_session_id)?;
+            if session.revision != command.expected_session_revision {
+                return Err(stale_session_error(
+                    command.expected_session_revision,
+                    session.revision,
+                ));
+            }
+            if !session.matches_binding_identity(&command.binding) {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_quarantine_role_session_binding_mismatch",
+                ));
+            }
+            if !matches!(
+                session.status,
+                RoleSessionState::Created | RoleSessionState::Active | RoleSessionState::Suspended
+            ) {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_quarantine_role_session_state_not_live",
+                ));
+            }
+
+            session
+                .apply_resolution_reason(
+                    command.expected_session_revision,
+                    SessionResolutionReason::OwnerScopeOrHandleMappingAmbiguous,
+                    command.metadata.occurred_at.clone(),
+                )
+                .map_err(domain_error)?;
+            update_role_session_in_transaction(
+                transaction,
+                &session,
+                command.expected_session_revision,
+            )?;
+            let receipt = new_receipt(
+                &command.metadata,
+                &identity,
+                "ROLE_SESSION",
+                command.role_session_id.as_str(),
+                Some(command.role_session_id.clone()),
+                None,
+                None,
+                Some(session.owner_fingerprint.clone()),
+                Some(command.expected_session_revision),
+                None,
+                None,
+                command.role_session_id.as_str(),
+                M3CommandReceiptStatus::Quarantined,
+            )?;
+            persist_receipt_event_audit_in_transaction(
+                transaction,
+                &receipt,
+                &command.metadata,
+                "RoleSessionQuarantined",
+                "ROLE_SESSION",
+                command.role_session_id.as_str(),
+                "QUARANTINE",
+                "QUARANTINED",
+                "OWNER_SCOPE_OR_HANDLE_MAPPING_AMBIGUOUS",
+                Some(&session.owner_fingerprint),
+            )?;
+            Ok(M3RepositoryCommandOutcome {
+                receipt,
+                replayed: false,
+                role_session: Some(session),
+                turn: None,
+                session_binding: load_session_binding_in_transaction(
+                    transaction,
+                    &command.role_session_id,
+                )?,
                 provider_effect: None,
             })
         })
@@ -12079,6 +12390,37 @@ fn resume_idempotency_identity(
     )
 }
 
+fn quarantine_role_session_idempotency_identity(
+    command: &QuarantineRoleSessionCommand,
+) -> Result<M3IdempotencyIdentity, M3RoleSessionRepositoryError> {
+    let expected_revision = command.expected_session_revision.to_string();
+    let fingerprint = request_fingerprint_for_fields(
+        // Candidate quarantine is the fail-closed outcome of the existing
+        // server-side resume/bootstrap resolution. M3 v1 deliberately freezes
+        // its receipt operation vocabulary, so retain RESUME_ROLE_SESSION here
+        // while the receipt's status/event/audit action record QUARANTINED.
+        M3RequestOperation::ResumeRoleSession,
+        &[
+            command.role_session_id.as_str(),
+            command.binding.actor_id.as_str(),
+            command.binding.role_ref.as_str(),
+            command.binding.scope_ref.as_str(),
+            command.binding.current_object_ref.as_str(),
+            command.binding.execution_channel.as_str(),
+            command.binding.permission_snapshot_ref.as_str(),
+            command.binding.owner_fingerprint.as_str(),
+            expected_revision.as_str(),
+        ],
+    )
+    .map_err(domain_error)?;
+    generic_idempotency_identity(
+        M3RequestOperation::ResumeRoleSession.as_str(),
+        command.role_session_id.as_str(),
+        command.metadata.request_idempotency_key.clone(),
+        fingerprint,
+    )
+}
+
 fn bind_provider_handle_idempotency_identity(
     command: &BindProviderHandleCommand,
 ) -> Result<M3IdempotencyIdentity, M3RoleSessionRepositoryError> {
@@ -15726,6 +16068,138 @@ mod tests {
         }
     }
 
+    struct OrdinaryRepositoryFixture {
+        fixture_root: PathBuf,
+        root: PathBuf,
+        db_path: PathBuf,
+    }
+
+    impl OrdinaryRepositoryFixture {
+        fn new(label: &str) -> Self {
+            let sequence = REPOSITORY_FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let fixture_root = std::env::temp_dir().join(format!(
+                "syn-m4c02-ordinary-{label}-{}-{sequence}",
+                std::process::id()
+            ));
+            let requested_root = fixture_root.join("local.codex.governance.workbench");
+            fs::create_dir_all(&requested_root).expect("create M4C02 ordinary app-data root");
+            let root = fs::canonicalize(&requested_root)
+                .expect("canonicalize M4C02 ordinary app-data root");
+            let db_path = root.join(M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH);
+            Self {
+                fixture_root,
+                root,
+                db_path,
+            }
+        }
+
+        fn config(&self) -> M3OrdinaryRoleSessionRepositoryConfig {
+            M3OrdinaryRoleSessionRepositoryConfig {
+                app_data_root: self.root.clone(),
+                db_path: self.db_path.clone(),
+            }
+        }
+    }
+
+    impl Drop for OrdinaryRepositoryFixture {
+        fn drop(&mut self) {
+            for suffix in ["", "-wal", "-shm"] {
+                let _ =
+                    fs::remove_file(PathBuf::from(format!("{}{suffix}", self.db_path.display())));
+            }
+            let _ = fs::remove_dir_all(&self.fixture_root);
+        }
+    }
+
+    #[test]
+    fn m4c02_ordinary_repository_opens_real_tauri_bundle_id_path_and_reopens() {
+        let fixture = OrdinaryRepositoryFixture::new("reopen");
+        assert_eq!(
+            fixture
+                .root
+                .file_name()
+                .and_then(|component| component.to_str()),
+            Some("local.codex.governance.workbench")
+        );
+        let first = M3RoleSessionSqliteRepository::open_ordinary_product(&fixture.config())
+            .expect("open exact ordinary-product M3 repository");
+        assert_eq!(first.scratch_db_path(), fixture.db_path);
+        first
+            .verify_schema()
+            .expect("verify ordinary-product M3 schema");
+
+        let reopened = M3RoleSessionSqliteRepository::open_ordinary_product(&fixture.config())
+            .expect("reopen exact ordinary-product M3 repository");
+        assert_eq!(reopened.scratch_db_path(), fixture.db_path);
+        reopened
+            .verify_schema()
+            .expect("verify reopened ordinary-product M3 schema");
+    }
+
+    #[test]
+    fn m4c02_ordinary_repository_rejects_non_exact_path_before_creation() {
+        let fixture = OrdinaryRepositoryFixture::new("wrong-path");
+        let wrong_path = fixture.root.join("conversation/not-the-m3-store.sqlite3");
+        let error = M3RoleSessionSqliteRepository::open_ordinary_product(
+            &M3OrdinaryRoleSessionRepositoryConfig {
+                app_data_root: fixture.root.clone(),
+                db_path: wrong_path.clone(),
+            },
+        )
+        .expect_err("ordinary product path is server-fixed");
+        assert_eq!(error.code, "m3_ordinary_repository_path_mismatch");
+        assert!(!wrong_path.exists());
+        assert!(!fixture.db_path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn m4c02_ordinary_repository_rejects_symlink_store_before_open() {
+        use std::os::unix::fs::symlink;
+
+        let fixture = OrdinaryRepositoryFixture::new("symlink");
+        let db_parent = fixture
+            .db_path
+            .parent()
+            .expect("ordinary M3 database parent");
+        fs::create_dir_all(db_parent).expect("create ordinary M3 database parent");
+        let target_path = fixture.fixture_root.join("m3-role-session-target.sqlite3");
+        fs::write(&target_path, b"not an admitted M3 database")
+            .expect("create symlink target fixture");
+        symlink(&target_path, &fixture.db_path).expect("replace M3 database path with symlink");
+
+        let error = M3RoleSessionSqliteRepository::open_ordinary_product(&fixture.config())
+            .expect_err("ordinary product must reject a symlink store before opening SQLite");
+        assert_eq!(error.code, "m3_ordinary_repository_regular_file_required");
+
+        fs::remove_file(&fixture.db_path).expect("remove symlink fixture");
+        fs::remove_file(target_path).expect("remove symlink target fixture");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn m4c02_ordinary_repository_revalidation_rejects_hard_link_swap() {
+        let fixture = OrdinaryRepositoryFixture::new("hard-link");
+        let repository = M3RoleSessionSqliteRepository::open_ordinary_product(&fixture.config())
+            .expect("open exact ordinary-product M3 repository");
+        let alias_path = fixture.root.join("m3-role-session-alias.sqlite3");
+        fs::hard_link(&fixture.db_path, &alias_path).expect("create fixture hard link");
+
+        let write_error = repository
+            .with_immediate_transaction("m4c02_hard_link_write_probe", |_| Ok(()))
+            .expect_err("a second link must block ordinary writes too");
+        assert_eq!(
+            write_error.code,
+            "m3_ordinary_repository_single_link_required"
+        );
+        let error = repository
+            .verify_schema()
+            .expect_err("a second link invalidates ordinary path identity");
+        assert_eq!(error.code, "m3_ordinary_repository_single_link_required");
+
+        fs::remove_file(alias_path).expect("remove fixture hard link");
+    }
+
     #[derive(Clone)]
     struct BoundSessionSeed {
         role_session_id: RoleSessionId,
@@ -16764,6 +17238,95 @@ mod tests {
                 fixture.count("m3_audit_records"),
             ],
             before_counts
+        );
+    }
+
+    #[test]
+    fn m4c02_candidate_quarantine_uses_m3_state_receipt_event_and_audit_ledgers() {
+        let fixture = RepositoryFixture::new("m4c02-candidate-quarantine");
+        let binding = server_binding(
+            "m4c02-candidate-quarantine",
+            "permission:m4c02-candidate-quarantine:v1",
+        );
+        let role_session_id = role_session_id("session:m4c02-candidate-quarantine");
+        fixture
+            .repository
+            .create_role_session(&CreateRoleSessionCommand {
+                role_session_id: role_session_id.clone(),
+                binding: binding.clone(),
+                metadata: metadata("m4c02-candidate-quarantine:create"),
+            })
+            .expect("create candidate through the M3 write surface");
+        let command = QuarantineRoleSessionCommand {
+            role_session_id: role_session_id.clone(),
+            binding: binding.clone(),
+            expected_session_revision: 1,
+            metadata: metadata("m4c02-candidate-quarantine:quarantine"),
+        };
+
+        let quarantined = fixture
+            .repository
+            .quarantine_role_session(&command)
+            .expect("quarantine candidate through the M3 write surface");
+        let session = quarantined
+            .role_session
+            .expect("quarantine returns the durable session");
+        assert_eq!(session.status, RoleSessionState::Quarantined);
+        assert_eq!(
+            session.resolution_reason,
+            Some(SessionResolutionReason::OwnerScopeOrHandleMappingAmbiguous)
+        );
+        assert_eq!(
+            quarantined.receipt.operation_kind,
+            M3RequestOperation::ResumeRoleSession.as_str(),
+            "M3 v1 receipt vocabulary records candidate resolution under resume"
+        );
+        assert_eq!(
+            quarantined.receipt.status,
+            M3CommandReceiptStatus::Quarantined
+        );
+        let (event_type, action, decision, reason_code): (String, String, String, String) = fixture
+            .repository
+            .read_connection()
+            .expect("open candidate-quarantine ledger fixture")
+            .query_row(
+                "SELECT event.event_type, audit.action, audit.decision, audit.reason_code
+                 FROM m3_events AS event
+                 JOIN m3_audit_records AS audit ON audit.receipt_id = event.receipt_id
+                 WHERE event.receipt_id = ?1",
+                [quarantined.receipt.receipt_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("candidate quarantine has the existing M3 ledger triple");
+        assert_eq!(event_type, "RoleSessionQuarantined");
+        assert_eq!(action, "QUARANTINE");
+        assert_eq!(decision, "QUARANTINED");
+        assert_eq!(reason_code, "OWNER_SCOPE_OR_HANDLE_MAPPING_AMBIGUOUS");
+        assert_eq!(
+            fixture.counts([
+                "m3_role_sessions",
+                "m3_command_receipts",
+                "m3_provider_effect_attempts",
+                "m3_events",
+                "m3_audit_records",
+            ]),
+            [1, 2, 1, 2, 2]
+        );
+
+        let replay = fixture
+            .repository
+            .quarantine_role_session(&command)
+            .expect("exact quarantine replay");
+        assert!(replay.replayed);
+        assert_eq!(
+            fixture.counts([
+                "m3_role_sessions",
+                "m3_command_receipts",
+                "m3_provider_effect_attempts",
+                "m3_events",
+                "m3_audit_records",
+            ]),
+            [1, 2, 1, 2, 2]
         );
     }
 

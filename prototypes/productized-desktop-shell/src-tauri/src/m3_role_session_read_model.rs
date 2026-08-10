@@ -2,15 +2,15 @@
 //!
 //! This module is intentionally a *read* boundary.  It does not manufacture a
 //! RoleSession binding from a renderer hint, a legacy thread, a frontend cache,
-//! or an Agent/Supervisor profile.  A production `AppState` starts without an
-//! M3 runtime, so its Tauri commands fail closed with
-//! `M3_BINDING_UNAVAILABLE`.  M3C07 owns any future isolated-runtime injection
-//! and desktop acceptance; the test-only constructor below is deliberately not
-//! compiled into a production binary.
+//! or an Agent/Supervisor profile. M3C07 keeps its isolated acceptance
+//! constructor, while M4C02 adds a separate ordinary-product Secretary host
+//! whose PersonalScope binding is constructed only by the backend. Existing
+//! Agent/Jiaoban commands stay project-scoped and fail closed when only the
+//! Secretary runtime is installed.
 
 use crate::m3_role_session::{
     ConversationContextRef, OpaqueRef, ProviderHandleRef, RoleSession, RoleSessionId,
-    ServerResolvedBinding, Sha256Digest,
+    RoleSessionState, ServerResolvedBinding, Sha256Digest,
 };
 use crate::m3_role_session_repository::{
     M3ConversationContextReadDto, M3ConversationContextReadState, M3ReadPermissionDisposition,
@@ -40,6 +40,22 @@ static NEXT_SELECTOR_RUNTIME: AtomicU64 = AtomicU64::new(0);
 pub(crate) enum M3RoleSessionReadHost {
     Agent,
     Jiaoban,
+}
+
+/// The ordinary-product Secretary is a distinct server-only host. Keeping it
+/// out of `M3RoleSessionReadHost` prevents a personal scope from being routed
+/// through the project-locator commands or from changing M3C07 host semantics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct M3SecretaryReadHost;
+
+impl M3SecretaryReadHost {
+    pub(crate) fn server_fixed() -> Self {
+        Self
+    }
+
+    fn as_str(self) -> &'static str {
+        "SECRETARY"
+    }
 }
 
 /// Renderer input for a host-fixed directory endpoint.  `project_locator` is
@@ -173,6 +189,22 @@ pub(crate) struct M3RoleSessionDetailDto {
     pub(crate) continuation: M3RoleSessionContinuationDto,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct M3SecretaryRoleSessionStatusDto {
+    pub(crate) host: String,
+    pub(crate) role_session_id: String,
+    pub(crate) session_revision: u64,
+    pub(crate) session_state: String,
+    pub(crate) actor_id: String,
+    pub(crate) role_ref: String,
+    pub(crate) scope_ref: String,
+    pub(crate) current_object_ref: String,
+    pub(crate) execution_channel: String,
+    pub(crate) permission_snapshot_ref: String,
+    pub(crate) owner_fingerprint: String,
+}
+
 /// This crate-private value crosses only from the read-model authorization
 /// gate to the guarded M3 transport adapter.  It is never serialized to a
 /// renderer and intentionally keeps the provider handle out of all DTOs.
@@ -203,12 +235,29 @@ impl M3RoleSessionReadRuntimeSlot {
     /// specific name prevents profile/cache/thread callers from treating this
     /// as a generic authority injector; only `m3_acceptance` can mint the
     /// required bindings after the M3C07 gate has passed.
-    pub(crate) fn from_m3c07_isolated_acceptance(
-        bindings: Vec<M3C07IsolatedReadBinding>,
-    ) -> Self {
+    pub(crate) fn from_m3c07_isolated_acceptance(bindings: Vec<M3C07IsolatedReadBinding>) -> Self {
         Self {
             runtime: Some(M3RoleSessionReadRuntime::m3c07_isolated(bindings)),
         }
+    }
+
+    /// Installs the ordinary-product Secretary runtime after M4 has resolved
+    /// and bootstrapped one exact PersonalScope RoleSession. This constructor
+    /// cannot install Agent/Jiaoban project bindings and does not accept a
+    /// project locator, cwd, renderer profile, or acceptance permit.
+    pub(crate) fn from_ordinary_product_secretary(
+        entry: M3OrdinarySecretaryReadBinding,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            runtime: Some(M3RoleSessionReadRuntime::ordinary_product_secretary(entry)?),
+        })
+    }
+
+    pub(crate) fn secretary_status(&self) -> Result<M3SecretaryRoleSessionStatusDto, String> {
+        self.runtime
+            .as_ref()
+            .ok_or_else(|| M3_BINDING_UNAVAILABLE.to_string())?
+            .secretary_status()
     }
 
     pub(crate) fn directory(
@@ -260,9 +309,18 @@ pub(crate) struct M3C07IsolatedReadBinding {
 }
 
 #[derive(Clone)]
+pub(crate) struct M3OrdinarySecretaryReadBinding {
+    pub(crate) host: M3SecretaryReadHost,
+    pub(crate) repository: M3RoleSessionSqliteRepository,
+    pub(crate) binding: ServerResolvedBinding,
+    pub(crate) role_session_id: RoleSessionId,
+}
+
+#[derive(Clone)]
 struct M3RoleSessionReadRuntime {
     repository_by_host_project:
         Arc<BTreeMap<(M3RoleSessionReadHost, String), M3ReadRepositoryBinding>>,
+    secretary: Option<M3SecretaryReadRepositoryBinding>,
     selectors: Arc<Mutex<M3SelectorStore>>,
     selector_counter: Arc<AtomicU64>,
     selector_namespace: String,
@@ -272,6 +330,14 @@ struct M3RoleSessionReadRuntime {
 struct M3ReadRepositoryBinding {
     repository: M3RoleSessionSqliteRepository,
     binding: ServerResolvedBinding,
+}
+
+#[derive(Clone)]
+struct M3SecretaryReadRepositoryBinding {
+    host: M3SecretaryReadHost,
+    repository: M3RoleSessionSqliteRepository,
+    binding: ServerResolvedBinding,
+    role_session_id: RoleSessionId,
 }
 
 impl M3RoleSessionReadRuntime {
@@ -295,10 +361,48 @@ impl M3RoleSessionReadRuntime {
         }
         Self {
             repository_by_host_project: Arc::new(by_host_project),
+            secretary: None,
             selectors: Arc::new(Mutex::new(M3SelectorStore::default())),
             selector_counter: Arc::new(AtomicU64::new(0)),
             selector_namespace: selector_runtime_namespace(),
         }
+    }
+
+    fn ordinary_product_secretary(entry: M3OrdinarySecretaryReadBinding) -> Result<Self, String> {
+        let M3OrdinarySecretaryReadBinding {
+            host,
+            repository,
+            binding,
+            role_session_id,
+        } = entry;
+        binding
+            .verify_owner_fingerprint()
+            .map_err(|_| M3_BINDING_UNAVAILABLE.to_string())?;
+        let snapshot = repository
+            .load_authorized_role_session_snapshot(&M3RoleSessionSnapshotQuery {
+                role_session_id: role_session_id.clone(),
+                binding: binding.clone(),
+            })
+            .map_err(read_repository_error)?
+            .ok_or_else(|| M3_BINDING_UNAVAILABLE.to_string())?;
+        if snapshot.session.status != RoleSessionState::Active
+            || !snapshot.session.matches_binding_identity(&binding)
+            || snapshot.session.permission_snapshot_ref != binding.permission_snapshot_ref
+        {
+            return Err(M3_BINDING_UNAVAILABLE.to_string());
+        }
+        Ok(Self {
+            repository_by_host_project: Arc::new(BTreeMap::new()),
+            secretary: Some(M3SecretaryReadRepositoryBinding {
+                host,
+                repository,
+                binding,
+                role_session_id,
+            }),
+            selectors: Arc::new(Mutex::new(M3SelectorStore::default())),
+            selector_counter: Arc::new(AtomicU64::new(0)),
+            selector_namespace: selector_runtime_namespace(),
+        })
     }
 
     #[cfg(test)]
@@ -442,6 +546,47 @@ impl M3RoleSessionReadRuntime {
             return Err("m3_role_session_continuation_stale".to_string());
         }
         continuation_guard_for_snapshot(&snapshot, read_binding.binding.clone())
+    }
+
+    fn secretary_status(&self) -> Result<M3SecretaryRoleSessionStatusDto, String> {
+        let read_binding = self
+            .secretary
+            .as_ref()
+            .ok_or_else(|| M3_BINDING_UNAVAILABLE.to_string())?;
+        let snapshot = read_binding
+            .repository
+            .load_authorized_role_session_snapshot(&M3RoleSessionSnapshotQuery {
+                role_session_id: read_binding.role_session_id.clone(),
+                binding: read_binding.binding.clone(),
+            })
+            .map_err(read_repository_error)?
+            .ok_or_else(|| M3_BINDING_UNAVAILABLE.to_string())?;
+        if snapshot.session.status != RoleSessionState::Active
+            || !snapshot
+                .session
+                .matches_binding_identity(&read_binding.binding)
+            || snapshot.session.permission_snapshot_ref
+                != read_binding.binding.permission_snapshot_ref
+        {
+            return Err(M3_BINDING_UNAVAILABLE.to_string());
+        }
+        Ok(M3SecretaryRoleSessionStatusDto {
+            host: read_binding.host.as_str().to_string(),
+            role_session_id: snapshot.session.role_session_id.as_str().to_string(),
+            session_revision: snapshot.session.revision,
+            session_state: snapshot.session.status.as_str().to_string(),
+            actor_id: snapshot.session.actor_id.as_str().to_string(),
+            role_ref: snapshot.session.role_ref.as_str().to_string(),
+            scope_ref: snapshot.session.scope_ref.as_str().to_string(),
+            current_object_ref: snapshot.session.current_object_ref.as_str().to_string(),
+            execution_channel: snapshot.session.execution_channel.as_str().to_string(),
+            permission_snapshot_ref: snapshot
+                .session
+                .permission_snapshot_ref
+                .as_str()
+                .to_string(),
+            owner_fingerprint: snapshot.session.owner_fingerprint.as_str().to_string(),
+        })
     }
 
     fn detail_from_snapshot(
@@ -1078,6 +1223,66 @@ mod tests {
             false,
         ));
         snapshot
+    }
+
+    #[test]
+    fn m4c02_secretary_runtime_is_server_only_and_keeps_project_hosts_closed() {
+        let fixture = ReadModelFixture::active("m4c02-secretary-runtime");
+        let slot = M3RoleSessionReadRuntimeSlot::from_ordinary_product_secretary(
+            M3OrdinarySecretaryReadBinding {
+                host: M3SecretaryReadHost::server_fixed(),
+                repository: fixture.repository.clone(),
+                binding: fixture.binding.clone(),
+                role_session_id: fixture.role_session_id.clone(),
+            },
+        )
+        .expect("install exact ordinary-product Secretary runtime");
+
+        let status = slot
+            .secretary_status()
+            .expect("reload Secretary status from repository");
+        assert_eq!(status.host, "SECRETARY");
+        assert_eq!(status.role_session_id, fixture.role_session_id.as_str());
+        assert_eq!(status.session_state, "ACTIVE");
+        assert_eq!(status.scope_ref, fixture.binding.scope_ref.as_str());
+        assert_eq!(
+            status.owner_fingerprint,
+            fixture.binding.owner_fingerprint.as_str()
+        );
+
+        assert_eq!(
+            slot.directory(
+                M3RoleSessionReadHost::Agent,
+                &directory_request("/not-a-personal-scope", "secretary-project-probe"),
+            )
+            .expect_err("Secretary runtime must not become a project binding"),
+            M3_BINDING_UNAVAILABLE,
+        );
+    }
+
+    #[test]
+    fn m4c02_secretary_runtime_rejects_missing_or_wrong_scope_binding() {
+        assert_eq!(
+            M3RoleSessionReadRuntimeSlot::default()
+                .secretary_status()
+                .expect_err("default AppState has no ordinary Secretary runtime"),
+            M3_BINDING_UNAVAILABLE,
+        );
+
+        let fixture = ReadModelFixture::active("m4c02-secretary-wrong-scope");
+        let wrong_scope = binding_for("m4c02-secretary-foreign-scope", "v1");
+        let error = match M3RoleSessionReadRuntimeSlot::from_ordinary_product_secretary(
+            M3OrdinarySecretaryReadBinding {
+                host: M3SecretaryReadHost::server_fixed(),
+                repository: fixture.repository.clone(),
+                binding: wrong_scope,
+                role_session_id: fixture.role_session_id.clone(),
+            },
+        ) {
+            Ok(_) => panic!("cross-scope binding must fail closed"),
+            Err(error) => error,
+        };
+        assert_eq!(error, "m3_read_server_binding_mismatch");
     }
 
     #[test]

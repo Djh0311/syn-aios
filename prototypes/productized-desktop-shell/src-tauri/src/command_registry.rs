@@ -75,6 +75,7 @@ macro_rules! workbench_command_handler {
             load_agent_role_session_detail,
             load_jiaoban_role_session_directory,
             load_jiaoban_role_session_detail,
+            load_secretary_role_session_status,
             start_agent_role_session_continuation,
             start_jiaoban_role_session_continuation,
             load_agent_m3c07_acceptance_status,

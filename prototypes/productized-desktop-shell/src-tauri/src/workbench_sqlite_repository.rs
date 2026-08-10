@@ -74,6 +74,18 @@ pub(crate) struct ConfirmedWorkbenchSqliteRepositoryConfig {
     pub(crate) denied_path_markers: Vec<String>,
 }
 
+/// Narrow product-only admission material for the one M3 ordinary store.
+/// M3 supplies this only after its own canonical/absolute/clean path admission;
+/// this repository repeats the fixed root and database shape before opening.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M3OrdinaryProductWorkbenchSqliteRepositoryConfig {
+    pub(crate) canonical_app_data_root: PathBuf,
+    pub(crate) db_path: PathBuf,
+}
+
+const M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH: &str = "conversation/m3-role-session-v1.sqlite3";
+const M3_ORDINARY_PRODUCT_TAURI_BUNDLE_IDENTIFIER: &str = "local.codex.governance.workbench";
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RepositoryFailurePoint {
     BeforeCommit,
@@ -264,6 +276,27 @@ impl WorkbenchSqliteRepository {
     ) -> Result<Self, String> {
         validate_confirmed_repository_path(config)?;
         initialize_confirmed_workbench_sqlite_db(&config.db_path, &config.confirmed_db_path)?;
+        let repository = Self {
+            db_path: config.db_path.clone(),
+            path_policy: WorkbenchSqlitePathPolicy::Confirmed,
+        };
+        repository.configured_connection()?;
+        Ok(repository)
+    }
+
+    /// Opens only M3's fixed ordinary-product store. This is deliberately
+    /// separate from `open_confirmed`: the generic confirmed gate continues to
+    /// reject every `.codex` path, while this entry accepts that marker only in
+    /// the exact Tauri bundle-identifier root component. M3 owns the later
+    /// per-operation path revalidation under the same fixed-shape policy.
+    pub(crate) fn open_m3_ordinary_product_confirmed(
+        config: &M3OrdinaryProductWorkbenchSqliteRepositoryConfig,
+    ) -> Result<Self, String> {
+        validate_m3_ordinary_product_repository_path(
+            &config.canonical_app_data_root,
+            &config.db_path,
+        )?;
+        initialize_confirmed_workbench_sqlite_db(&config.db_path, &config.db_path)?;
         let repository = Self {
             db_path: config.db_path.clone(),
             path_policy: WorkbenchSqlitePathPolicy::Confirmed,
@@ -5470,6 +5503,92 @@ fn validate_confirmed_repository_path(
     Ok(())
 }
 
+fn validate_m3_ordinary_product_repository_path(
+    canonical_app_data_root: &Path,
+    db_path: &Path,
+) -> Result<(), String> {
+    if !canonical_app_data_root.is_absolute()
+        || !db_path.is_absolute()
+        || canonical_app_data_root
+            .components()
+            .chain(db_path.components())
+            .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
+        return Err("m3_ordinary_product_clean_absolute_path_required".to_string());
+    }
+    let canonical_root = fs::canonicalize(canonical_app_data_root).map_err(|error| {
+        format!(
+            "m3_ordinary_product_app_data_root_canonicalize_failed:{}:{error}",
+            canonical_app_data_root.display()
+        )
+    })?;
+    if canonical_root != canonical_app_data_root {
+        return Err(format!(
+            "m3_ordinary_product_app_data_root_identity_changed:expected={}:actual={}",
+            canonical_root.display(),
+            canonical_app_data_root.display()
+        ));
+    }
+    if canonical_app_data_root
+        .file_name()
+        .and_then(|component| component.to_str())
+        != Some(M3_ORDINARY_PRODUCT_TAURI_BUNDLE_IDENTIFIER)
+    {
+        return Err(format!(
+            "m3_ordinary_product_tauri_app_data_root_required:{}",
+            canonical_app_data_root.display()
+        ));
+    }
+    let expected_db_path = canonical_app_data_root.join(M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH);
+    if db_path != expected_db_path {
+        return Err(format!(
+            "m3_ordinary_product_db_path_mismatch:expected={}:actual={}",
+            expected_db_path.display(),
+            db_path.display()
+        ));
+    }
+    let canonical_db_path = canonicalize_existing_or_parent(db_path)?;
+    if canonical_db_path != db_path {
+        return Err(format!(
+            "m3_ordinary_product_db_path_must_be_canonical:expected={}:actual={}",
+            canonical_db_path.display(),
+            db_path.display()
+        ));
+    }
+
+    let normalized_path = db_path.to_string_lossy().to_ascii_lowercase();
+    let has_denied_marker = CONFIRMED_DB_DENIED_PATH_MARKERS.iter().any(|marker| {
+        let normalized_marker = marker.trim().to_ascii_lowercase();
+        if normalized_marker.is_empty() {
+            return false;
+        }
+        if normalized_marker != ".codex" {
+            return normalized_path.contains(&normalized_marker);
+        }
+        let bundle_component_index = canonical_app_data_root.components().count() - 1;
+        db_path
+            .components()
+            .enumerate()
+            .filter_map(|(index, component)| match component {
+                Component::Normal(component) => Some((index, component.to_string_lossy())),
+                _ => None,
+            })
+            .any(|(index, component)| {
+                let normalized_component = component.to_ascii_lowercase();
+                (index != bundle_component_index
+                    || normalized_component != M3_ORDINARY_PRODUCT_TAURI_BUNDLE_IDENTIFIER)
+                    && normalized_component.contains(&normalized_marker)
+            })
+    });
+    if has_denied_marker {
+        return Err(format!(
+            "m3_ordinary_product_db_path_denied_marker:{}",
+            db_path.display()
+        ));
+    }
+    Ok(())
+}
+
 fn canonicalize_existing_or_parent(path: &Path) -> Result<PathBuf, String> {
     if path.exists() {
         return fs::canonicalize(path).map_err(|error| {
@@ -5911,6 +6030,102 @@ mod tests {
             "got: {denied}"
         );
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn m4c02_m3_ordinary_product_admits_only_the_bundle_id_dot_codex_component() {
+        let fixture_root = std::env::temp_dir().join(format!(
+            "m4c02-m3-ordinary-workbench-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        let requested_root = fixture_root.join(M3_ORDINARY_PRODUCT_TAURI_BUNDLE_IDENTIFIER);
+        let requested_db_path = requested_root.join(M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH);
+        fs::create_dir_all(
+            requested_db_path
+                .parent()
+                .expect("M3 ordinary database parent"),
+        )
+        .expect("create M3 ordinary database parent");
+        let canonical_root = fs::canonicalize(&requested_root).expect("canonical M3 app-data root");
+        let db_path = canonical_root.join(M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH);
+
+        let generic_error = WorkbenchSqliteRepository::open_confirmed(
+            &ConfirmedWorkbenchSqliteRepositoryConfig {
+                db_path: db_path.clone(),
+                confirmed_db_path: db_path.clone(),
+                denied_path_markers: Vec::new(),
+            },
+        )
+        .expect_err("generic confirmed gate must keep rejecting .codex paths");
+        assert!(
+            generic_error.contains("confirmed_db_path_denied_marker"),
+            "got: {generic_error}"
+        );
+
+        let config = M3OrdinaryProductWorkbenchSqliteRepositoryConfig {
+            canonical_app_data_root: canonical_root.clone(),
+            db_path: db_path.clone(),
+        };
+        let first = WorkbenchSqliteRepository::open_m3_ordinary_product_confirmed(&config)
+            .expect("M3 ordinary bundle-id path opens");
+        assert_eq!(first.db_path, db_path);
+        let reopened = WorkbenchSqliteRepository::open_m3_ordinary_product_confirmed(&config)
+            .expect("M3 ordinary bundle-id path reopens");
+        assert_eq!(reopened.db_path, db_path);
+
+        let wrong_requested_root = fixture_root.join("not-the-tauri-bundle-id");
+        let wrong_db_path = wrong_requested_root.join(M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH);
+        fs::create_dir_all(
+            wrong_db_path
+                .parent()
+                .expect("wrong M3 ordinary database parent"),
+        )
+        .expect("create wrong M3 ordinary database parent");
+        let wrong_root =
+            fs::canonicalize(&wrong_requested_root).expect("canonical wrong M3 app-data root");
+        let wrong_error = WorkbenchSqliteRepository::open_m3_ordinary_product_confirmed(
+            &M3OrdinaryProductWorkbenchSqliteRepositoryConfig {
+                canonical_app_data_root: wrong_root.clone(),
+                db_path: wrong_root.join(M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH),
+            },
+        )
+        .expect_err("M3 ordinary root must end in the exact Tauri bundle identifier");
+        assert!(
+            wrong_error.contains("m3_ordinary_product_tauri_app_data_root_required"),
+            "got: {wrong_error}"
+        );
+
+        let denied_requested_root = fixture_root
+            .join(M3_ORDINARY_PRODUCT_TAURI_BUNDLE_IDENTIFIER)
+            .join(M3_ORDINARY_PRODUCT_TAURI_BUNDLE_IDENTIFIER);
+        let denied_db_path = denied_requested_root.join(M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH);
+        fs::create_dir_all(
+            denied_db_path
+                .parent()
+                .expect("duplicate bundle-id M3 ordinary database parent"),
+        )
+        .expect("create duplicate bundle-id M3 ordinary database parent");
+        let denied_root =
+            fs::canonicalize(&denied_requested_root).expect("canonical duplicate bundle-id root");
+        let denied_db_path = denied_root.join(M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH);
+        let denied_error = WorkbenchSqliteRepository::open_m3_ordinary_product_confirmed(
+            &M3OrdinaryProductWorkbenchSqliteRepositoryConfig {
+                canonical_app_data_root: denied_root,
+                db_path: denied_db_path,
+            },
+        )
+        .expect_err("only the final bundle-id component may contain .codex");
+        assert!(
+            denied_error.contains("m3_ordinary_product_db_path_denied_marker"),
+            "got: {denied_error}"
+        );
+
+        drop(first);
+        drop(reopened);
+        let _ = fs::remove_dir_all(&fixture_root);
     }
 
     #[test]

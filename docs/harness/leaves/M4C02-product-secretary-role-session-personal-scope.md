@@ -7,12 +7,14 @@
 允许动：
 
 - prototypes/productized-desktop-shell/src-tauri/src/lib.rs
+- prototypes/productized-desktop-shell/src-tauri/src/index_host_app_entrypoints.rs
 - prototypes/productized-desktop-shell/src-tauri/src/commands.rs
 - prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs
 - prototypes/productized-desktop-shell/src-tauri/src/mcp/identity_kernel.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_read_model.rs
+- prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_schema.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_domain.rs [新增]
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_schema.rs [新增]

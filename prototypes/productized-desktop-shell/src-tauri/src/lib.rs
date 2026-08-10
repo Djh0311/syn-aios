@@ -75,6 +75,7 @@ mod m3_role_session;
 mod m3_role_session_repository;
 mod m3_role_session_read_model;
 mod m3_role_session_schema;
+mod m4_secretary_domain;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;
@@ -95,9 +96,9 @@ struct AppState {
     index_path: PathBuf,
     tasks_path: PathBuf,
     workflow_state_path: PathBuf,
-    // M3C06 deliberately starts unavailable in production.  M3C07 owns a
-    // separately-approved isolated runtime injection and desktop acceptance;
-    // neither an index/thread cache nor a host profile may populate this.
+    // M3C07 acceptance and M4 ordinary-product Secretary injection are two
+    // separate named constructors. Neither an index/thread cache, renderer
+    // profile, cwd, nor project locator may populate this slot.
     m3_role_session_read_runtime: m3_role_session_read_model::M3RoleSessionReadRuntimeSlot,
 }
 include!("types.rs");
@@ -117,7 +118,7 @@ struct AllowedPaths {
 }
 impl AppState {
     fn new() -> Self {
-        Self::try_new().expect("acceptance runtime profile must resolve before AppState")
+        Self::try_new().expect("AppState runtime profile must resolve before construction")
     }
 
     fn try_new() -> Result<Self, String> {
@@ -131,12 +132,32 @@ impl AppState {
                 m3_role_session_read_runtime,
             });
         }
+        // Non-Tauri internal hosts still use this legacy composition for the
+        // index/workflow paths. They deliberately keep M3 unavailable. The
+        // ordinary desktop product entrypoint must use the Tauri-rooted
+        // constructor below and never fall back to this path.
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         Ok(Self {
             index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
             tasks_path: manifest_dir.join("../../tasks/README.md"),
             workflow_state_path: default_workflow_state_path(),
             m3_role_session_read_runtime: Default::default(),
+        })
+    }
+
+    fn try_new_with_tauri_app_data_root(app_data_root: &Path) -> Result<Self, String> {
+        if acceptance_runtime_profile::active_paths()?.is_some() {
+            return Err("m4_secretary_ordinary_constructor_rejects_acceptance_profile".to_string());
+        }
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let workflow_state_path = default_workflow_state_path();
+        let m3_role_session_read_runtime =
+            m4_secretary_domain::install_ordinary_product_secretary_runtime(app_data_root)?;
+        Ok(Self {
+            index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
+            tasks_path: manifest_dir.join("../../tasks/README.md"),
+            workflow_state_path,
+            m3_role_session_read_runtime,
         })
     }
 }

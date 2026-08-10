@@ -26,6 +26,7 @@
 - docs/harness/
 - handoffs/
 - prototypes/productized-desktop-shell/src-tauri/src/lib.rs
+- prototypes/productized-desktop-shell/src-tauri/src/index_host_app_entrypoints.rs
 - prototypes/productized-desktop-shell/src-tauri/src/commands.rs
 - prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs
 - prototypes/productized-desktop-shell/src-tauri/src/secretary_agent.rs

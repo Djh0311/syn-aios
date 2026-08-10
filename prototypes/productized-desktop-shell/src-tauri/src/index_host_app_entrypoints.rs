@@ -603,15 +603,15 @@ pub fn run() {
         eprintln!("验收 runtime profile 初始化失败：{error}");
         return;
     }
-    let state = match AppState::try_new() {
-        Ok(state) => state,
-        Err(error) => {
-            if acceptance_profile_requested {
+    let acceptance_state = if acceptance_profile_requested {
+        Some(match AppState::try_new() {
+            Ok(state) => state,
+            Err(_) => {
                 exit_acceptance_startup_failure(ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE);
             }
-            eprintln!("验收 runtime profile 路径解析失败：{error}");
-            return;
-        }
+        })
+    } else {
+        None
     };
     let m2_r4_reference_slice_requested = match crate::m2_r4_reference_slice_driver::requested() {
         Ok(requested) => requested,
@@ -623,48 +623,48 @@ pub fn run() {
             return;
         }
     };
-    if m2_r4_reference_slice_requested {
-        if let Err(error) = crate::m2_r4_reference_slice_driver::prepare_before_startup(&state) {
-            eprintln!("M2 R4 reference-slice runner 预置失败：{error}");
-            exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
+    if let Some(state) = acceptance_state.as_ref() {
+        if m2_r4_reference_slice_requested {
+            if let Err(error) = crate::m2_r4_reference_slice_driver::prepare_before_startup(state) {
+                eprintln!("M2 R4 reference-slice runner 预置失败：{error}");
+                exit_acceptance_startup_failure(
+                    ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE,
+                );
+            }
         }
-    }
-    if let Err(error) =
-        crate::migrate_legacy_workflow_node_session_binding_ids_at(&state.workflow_state_path)
-    {
-        eprintln!("工作流 binding_id 迁移未完成：{error}");
-    }
-    if let Err(error) =
-        crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path)
-    {
-        eprintln!("执行进程遗留回收未完成：{error}");
-    }
-    if let Err(error) =
-        crate::supervisor_session_launcher::reap_supervisor_resident_stale_sessions_at(
+        if let Err(error) = crate::migrate_legacy_workflow_node_session_binding_ids_at(
             &state.workflow_state_path,
-        )
-    {
-        eprintln!("主管一次一发会话陈账对账未完成：{error}");
-    }
-    if let Err(error) =
-        crate::workbench_sqlite_storage_mode::initialize_for_startup(&state.workflow_state_path)
-    {
-        if acceptance_profile_requested {
+        ) {
+            eprintln!("工作流 binding_id 迁移未完成：{error}");
+        }
+        if let Err(error) =
+            crate::exec_process_registry::reap_registered_orphans(&state.workflow_state_path)
+        {
+            eprintln!("执行进程遗留回收未完成：{error}");
+        }
+        if let Err(error) =
+            crate::supervisor_session_launcher::reap_supervisor_resident_stale_sessions_at(
+                &state.workflow_state_path,
+            )
+        {
+            eprintln!("主管一次一发会话陈账对账未完成：{error}");
+        }
+        if let Err(error) = crate::workbench_sqlite_storage_mode::initialize_for_startup(
+            &state.workflow_state_path,
+        ) {
             if m2_r4_reference_slice_requested {
                 eprintln!("M2 R4 reference-slice DB-primary startup failure:{error}");
             }
-            exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
+            exit_acceptance_startup_failure(
+                ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE,
+            );
         }
-        eprintln!("DB 主写模式启动对账未通过：{error}");
-    }
-    if acceptance_profile_requested {
         if let Err(error) = crate::acceptance_runtime_profile::finalize_first_r4_initialization() {
             eprintln!("验收 runtime profile 首次初始化标记失败：{error}");
             exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
         }
     }
     let app = tauri::Builder::default()
-        .manage(state)
         .manage(mcp::orchestrator::OrchestratorState::new())
         .manage(crate::knowledge_open_relay::KnowledgeOpenRelayState::new())
         .invoke_handler(workbench_command_handler!())
@@ -672,6 +672,69 @@ pub fn run() {
             let isolated_profile_active = crate::acceptance_runtime_profile::active_paths()
                 .map_err(std::io::Error::other)?
                 .is_some();
+            let state = if isolated_profile_active {
+                acceptance_state.ok_or_else(|| {
+                    "acceptance_runtime_profile_state_missing_after_initialization".to_string()
+                })
+            } else {
+                app.path()
+                    .app_data_dir()
+                    .map_err(|_| "m4_secretary_tauri_app_data_root_unavailable".to_string())
+                    .and_then(|app_data_root| {
+                        AppState::try_new_with_tauri_app_data_root(&app_data_root)
+                    })
+            };
+            let state = match state {
+                Ok(state) => state,
+                Err(error) => {
+                    if acceptance_profile_requested {
+                        exit_acceptance_startup_failure(
+                            ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE,
+                        );
+                    }
+                    return Err(std::io::Error::other(format!(
+                        "AppState 启动装配失败：{error}"
+                    ))
+                    .into());
+                }
+            };
+            if !isolated_profile_active {
+                if m2_r4_reference_slice_requested {
+                    if let Err(error) =
+                        crate::m2_r4_reference_slice_driver::prepare_before_startup(&state)
+                    {
+                        return Err(std::io::Error::other(format!(
+                            "M2 R4 reference-slice runner 预置失败：{error}"
+                        ))
+                        .into());
+                    }
+                }
+                if let Err(error) = crate::migrate_legacy_workflow_node_session_binding_ids_at(
+                    &state.workflow_state_path,
+                ) {
+                    eprintln!("工作流 binding_id 迁移未完成：{error}");
+                }
+                if let Err(error) = crate::exec_process_registry::reap_registered_orphans(
+                    &state.workflow_state_path,
+                ) {
+                    eprintln!("执行进程遗留回收未完成：{error}");
+                }
+                if let Err(error) =
+                    crate::supervisor_session_launcher::reap_supervisor_resident_stale_sessions_at(
+                        &state.workflow_state_path,
+                    )
+                {
+                    eprintln!("主管一次一发会话陈账对账未完成：{error}");
+                }
+                if let Err(error) = crate::workbench_sqlite_storage_mode::initialize_for_startup(
+                    &state.workflow_state_path,
+                ) {
+                    eprintln!("DB 主写模式启动对账未通过：{error}");
+                }
+            }
+            if !app.manage(state) {
+                return Err(std::io::Error::other("AppState 重复注册").into());
+            }
             if !isolated_profile_active {
                 app.state::<crate::knowledge_open_relay::KnowledgeOpenRelayState>()
                     .start(app.handle().clone())

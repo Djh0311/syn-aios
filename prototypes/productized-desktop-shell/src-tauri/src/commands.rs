@@ -4497,6 +4497,22 @@ fn operate_jiaoban_m3c07_acceptance(
     crate::m3_acceptance::operate_jiaoban_acceptance(&request)
 }
 
+/// Ordinary-product Secretary status. The endpoint has no renderer identity,
+/// role, scope, path, project, or permission input; it reloads the exact
+/// backend-installed PersonalScope RoleSession from the M3 repository.
+#[tauri::command]
+fn load_secretary_role_session_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto, String> {
+    load_secretary_role_session_status_for_state(&state)
+}
+
+fn load_secretary_role_session_status_for_state(
+    state: &AppState,
+) -> Result<crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto, String> {
+    state.m3_role_session_read_runtime.secretary_status()
+}
+
 fn load_role_session_directory_for_host(
     state: &AppState,
     host: crate::m3_role_session_read_model::M3RoleSessionReadHost,
