@@ -76,6 +76,9 @@ mod m3_role_session_repository;
 mod m3_role_session_read_model;
 mod m3_role_session_schema;
 mod m4_secretary_domain;
+mod m4_secretary_read_model;
+mod m4_secretary_repository;
+mod m4_secretary_schema;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;
@@ -100,6 +103,11 @@ struct AppState {
     // separate named constructors. Neither an index/thread cache, renderer
     // profile, cwd, nor project locator may populate this slot.
     m3_role_session_read_runtime: m3_role_session_read_model::M3RoleSessionReadRuntimeSlot,
+    // M4 has a separate, server-rooted database and single writer. Legacy and
+    // isolated M3 acceptance composition keep it unavailable; only the
+    // ordinary Tauri constructor installs it.
+    #[cfg(not(test))]
+    m4_secretary_repository: Option<m4_secretary_repository::M4SecretarySqliteRepository>,
 }
 include!("types.rs");
 trait CodexResumeRunner {
@@ -130,6 +138,8 @@ impl AppState {
                 tasks_path: paths.tasks_path,
                 workflow_state_path: paths.workflow_state_path,
                 m3_role_session_read_runtime,
+                #[cfg(not(test))]
+                m4_secretary_repository: None,
             });
         }
         // Non-Tauri internal hosts still use this legacy composition for the
@@ -142,6 +152,8 @@ impl AppState {
             tasks_path: manifest_dir.join("../../tasks/README.md"),
             workflow_state_path: default_workflow_state_path(),
             m3_role_session_read_runtime: Default::default(),
+            #[cfg(not(test))]
+            m4_secretary_repository: None,
         })
     }
 
@@ -153,11 +165,23 @@ impl AppState {
         let workflow_state_path = default_workflow_state_path();
         let m3_role_session_read_runtime =
             m4_secretary_domain::install_ordinary_product_secretary_runtime(app_data_root)?;
+        #[cfg(not(test))]
+        let m4_secretary_repository =
+            m4_secretary_repository::M4SecretarySqliteRepository::open_ordinary_product(
+                &m4_secretary_repository::M4OrdinarySecretaryRepositoryConfig {
+                    app_data_root: app_data_root.to_path_buf(),
+                    db_path: app_data_root
+                        .join(m4_secretary_repository::M4_ORDINARY_SECRETARY_RELATIVE_PATH),
+                },
+            )
+            .map_err(|error| error.code)?;
         Ok(Self {
             index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
             tasks_path: manifest_dir.join("../../tasks/README.md"),
             workflow_state_path,
             m3_role_session_read_runtime,
+            #[cfg(not(test))]
+            m4_secretary_repository: Some(m4_secretary_repository),
         })
     }
 }
