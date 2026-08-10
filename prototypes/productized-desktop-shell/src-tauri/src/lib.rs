@@ -78,6 +78,7 @@ mod m3_role_session_schema;
 mod m4_secretary_domain;
 mod m4_secretary_read_model;
 mod m4_secretary_repository;
+mod m4_secretary_service;
 mod m4_secretary_schema;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
