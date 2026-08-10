@@ -1,0 +1,75 @@
+{
+  "schema_version": "syn.m4c09.isolated-product-app-runtime.v1",
+  "evidence_level": "ISOLATED_PRODUCT_APP",
+  "launch_count": 3,
+  "role_session_hash": "9fdfa3fcc771906d83fbebea89a854579eea4ffbb801b77e3d4624df592b3c2e",
+  "same_role_session_recovered": true,
+  "owners": [
+    {
+      "owner_code": "OWNER_ALPHA",
+      "object_code": "OBJECT_ALPHA",
+      "inbox_status": "NEW",
+      "open_loop_status": "ACKNOWLEDGED",
+      "open_loop_revision": "2",
+      "item_ref_hash": "ae7090bbb6ca8442cdf13011071af9d61b2190e4967139451e2f7d75e4ba074b",
+      "route_ref_hash": "7d39b2602eb0b08067cb85200385d898bb88a1a8ff377a5a010cb16aea944daa"
+    },
+    {
+      "owner_code": "OWNER_BETA",
+      "object_code": "OBJECT_BETA",
+      "inbox_status": "NEW",
+      "open_loop_status": "SNOOZED",
+      "open_loop_revision": "2",
+      "item_ref_hash": "52dbdbc5a14137ba4088614ae819631e52647da21d1986fb751baf3c27b7e3b4",
+      "route_ref_hash": "48cf5096658f745e0b16b496f26cd95dc541e517cdca9bd2bd617d8c08d222e7"
+    }
+  ],
+  "ingestion": {
+    "two_fixed_source_owners": true,
+    "first_launch_fresh_admissions": true,
+    "exact_duplicate_replayed": true,
+    "restart_seed_replayed": true,
+    "admitted_source_event_rows": 2,
+    "inbox_rows": 2,
+    "open_loop_rows": 2
+  },
+  "lifecycle": {
+    "acknowledged_state_recovered": true,
+    "snoozed_state_recovered": true,
+    "carried_over_receipt_recovered": true,
+    "carried_over_receipt_rows": 1
+  },
+  "daily": {
+    "empty_run_zero_material_events": true,
+    "empty_run_zero_agent_turns": true,
+    "empty_run_zero_model_invocations": true,
+    "repeated_refresh_stable": true,
+    "daily_report_ref_hash": "1d6a91c86574eb7b9b8509020774ef531b9c887aa0170fbb8c8de3e42b59c219",
+    "report_version": "1",
+    "daily_report_rows": 1,
+    "scheduler_run_rows": 1
+  },
+  "model": {
+    "fake_model_only": true,
+    "zero_item_read_model_calls": true,
+    "deterministic_brief_unchanged_after_failure": true,
+    "first_failure_recorded": true,
+    "exact_failure_replay_recorded": true,
+    "terminal_failure_recovered_after_restart": true,
+    "fake_adapter_calls_this_launch": 0,
+    "fake_adapter_calls_total": 1,
+    "durable_invocation_rows": 1,
+    "real_model_attempts": 0
+  },
+  "isolation": {
+    "validated_profile_required": true,
+    "ordinary_product_runtime_used": true,
+    "synthetic_fixture_only": true,
+    "profile_fingerprint": "4f42d83126fe4b293d13b21f2c2605c4e5d158509eca5c52ffaec920f5facf9a",
+    "real_provider_attempts": 0,
+    "external_connector_attempts": 0,
+    "external_network_writes": 0,
+    "real_codex_message_attempts": 0
+  },
+  "evidence_limit": "MECHANICAL_AND_ISOLATED_PRODUCT_APP_ONLY_NOT_REAL_DAILY_USE"
+}

@@ -28,6 +28,23 @@ const M3C07_READINESS_RECEIPT_SCHEMA_VERSION =
   "syn_m3c07_isolated_desktop_launcher_receipt.v1";
 const M3C07_REAL_PROVIDER_ATTEMPTS = 0;
 const M3C07_MAX_LAUNCHES = 8;
+const M4C09_MODE_ENV = "SYN_M4C09_ISOLATED_ACCEPTANCE";
+const M4C09_MODE_VALUE = "1";
+const M4C09_ISOLATED_MODE_ARG = "--m4c09-isolated-acceptance";
+const M4C09_RUNTIME_RECEIPT_RELATIVE_PATH = join(
+  "logs",
+  "m4c09-runtime-receipt.json",
+);
+const M4C09_READINESS_RECEIPT_FILE_NAME =
+  "m4c09-isolated-product-app-launcher-receipt.json";
+const M4C09_READINESS_EVENT_SCHEMA_VERSION =
+  "syn_m4c09_ui_inspection_ready.v1";
+const M4C09_READINESS_RECEIPT_SCHEMA_VERSION =
+  "syn_m4c09_isolated_product_app_launcher_receipt.v1";
+const M4C09_RUNTIME_SCHEMA_VERSION =
+  "syn.m4c09.isolated-product-app-runtime.v1";
+const M4C09_MAX_LAUNCHES = 4;
+const M4C09_MAX_RUNTIME_RECEIPT_BYTES = 32 * 1024;
 const M2_REFERENCE_SLICE_DRIVER_ENV = "SYN_M2_R4_REFERENCE_SLICE_DRIVER";
 const M2_REFERENCE_SLICE_ATTEMPT_ENV = "SYN_M2_R4_REFERENCE_SLICE_ATTEMPT";
 const M2_REFERENCE_SLICE_PHASE_ENV = "SYN_M2_R4_REFERENCE_SLICE_PHASE";
@@ -49,6 +66,7 @@ const M3C07_M2_REFERENCE_SLICE_MODE_CONFLICT =
   "m3c07_m2_reference_slice_mode_conflict";
 const M2_REFERENCE_SLICE_M3C07_MODE_CONFLICT =
   "m2_reference_slice_m3c07_mode_conflict";
+const M4C09_MODE_CONFLICT = "m4c09_isolated_acceptance_mode_conflict";
 const PROFILE_PURPOSE = "syn-r4-isolated-runtime-profile";
 const PROFILE_SCHEMA_VERSION = 1;
 const ROOT_PREFIX = "syn-r4-acceptance-";
@@ -2494,6 +2512,291 @@ function m3c07ReadinessReceipt(
   };
 }
 
+function m4c09FinalLaunchEnvironment(
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+) {
+  const environment = {
+    ...normalBuildEnvironment,
+    [PROFILE_ENV]: profilePath,
+    [REENTRY_CAPABILITY_ENV]: reentryCapability,
+    [M4C09_MODE_ENV]: M4C09_MODE_VALUE,
+  };
+  if (
+    environment[PROFILE_ENV] !== profilePath ||
+    environment[M4C09_MODE_ENV] !== M4C09_MODE_VALUE ||
+    Object.hasOwn(environment, M3C07_MODE_ENV)
+  ) {
+    throw new Error("m4c09 launch gate environment was not sealed");
+  }
+  return environment;
+}
+
+function m4c09ReadinessEvent({
+  launchIndex,
+  profilePath,
+  runtimeReceiptPath,
+  runHash,
+  synPid,
+  uiInspectionPath,
+}) {
+  return {
+    schema_version: M4C09_READINESS_EVENT_SCHEMA_VERSION,
+    run_hash: runHash,
+    launch_index: launchIndex,
+    syn_pid: synPid,
+    target_bundle_name: DEBUG_APP_BUNDLE_NAME,
+    target_bundle_identifier: DEBUG_APP_BUNDLE_IDENTIFIER,
+    profile_path_sha256: sha256(profilePath),
+    ui_inspection_path: uiInspectionPath,
+    m4c09_runtime_receipt_path: runtimeReceiptPath,
+    r4_profile_usage: "r4_profile_filesystem_isolation_base_only",
+    profile_gate_required: true,
+    explicit_m4c09_mode_gate_required: true,
+    ordinary_m3_m4_runtime_required: true,
+    synthetic_fixture_only: true,
+    fake_model_only: true,
+    restart_same_profile_required: true,
+  };
+}
+
+function isLowerHex64(value) {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function m4c09RuntimeReceiptComplete(receipt, requireRestart) {
+  return Boolean(
+    receipt &&
+      receipt.schema_version === M4C09_RUNTIME_SCHEMA_VERSION &&
+      receipt.evidence_level === "ISOLATED_PRODUCT_APP" &&
+      Number.isSafeInteger(receipt.launch_count) &&
+      receipt.launch_count >= 1 &&
+      isLowerHex64(receipt.role_session_hash) &&
+      Array.isArray(receipt.owners) &&
+      receipt.owners.length === 2 &&
+      receipt.ingestion?.two_fixed_source_owners === true &&
+      receipt.ingestion?.first_launch_fresh_admissions === true &&
+      receipt.ingestion?.exact_duplicate_replayed === true &&
+      receipt.ingestion?.admitted_source_event_rows === 2 &&
+      receipt.ingestion?.inbox_rows === 2 &&
+      receipt.ingestion?.open_loop_rows === 2 &&
+      receipt.daily?.empty_run_zero_material_events === true &&
+      receipt.daily?.empty_run_zero_agent_turns === true &&
+      receipt.daily?.empty_run_zero_model_invocations === true &&
+      receipt.daily?.repeated_refresh_stable === true &&
+      receipt.model?.fake_model_only === true &&
+      receipt.model?.zero_item_read_model_calls === true &&
+      receipt.model?.deterministic_brief_unchanged_after_failure === true &&
+      receipt.model?.first_failure_recorded === true &&
+      receipt.model?.exact_failure_replay_recorded === true &&
+      receipt.model?.fake_adapter_calls_total === 1 &&
+      receipt.model?.durable_invocation_rows === 1 &&
+      receipt.model?.real_model_attempts === 0 &&
+      receipt.isolation?.validated_profile_required === true &&
+      receipt.isolation?.ordinary_product_runtime_used === true &&
+      receipt.isolation?.synthetic_fixture_only === true &&
+      isLowerHex64(receipt.isolation?.profile_fingerprint) &&
+      receipt.isolation?.real_provider_attempts === 0 &&
+      receipt.isolation?.external_connector_attempts === 0 &&
+      receipt.isolation?.external_network_writes === 0 &&
+      receipt.isolation?.real_codex_message_attempts === 0 &&
+      receipt.evidence_limit ===
+        "MECHANICAL_AND_ISOLATED_PRODUCT_APP_ONLY_NOT_REAL_DAILY_USE" &&
+      (!requireRestart ||
+        (receipt.launch_count >= 2 &&
+          receipt.same_role_session_recovered === true &&
+          receipt.ingestion?.restart_seed_replayed === true &&
+          receipt.lifecycle?.acknowledged_state_recovered === true &&
+          receipt.lifecycle?.snoozed_state_recovered === true &&
+          receipt.lifecycle?.carried_over_receipt_recovered === true &&
+          receipt.lifecycle?.carried_over_receipt_rows === 1 &&
+          receipt.model?.terminal_failure_recovered_after_restart === true &&
+          receipt.model?.fake_adapter_calls_this_launch === 0))
+  );
+}
+
+async function readM4C09RuntimeReceipt(runtimeReceiptPath, requireRestart) {
+  const metadata = await lstat(runtimeReceiptPath);
+  if (
+    !metadata.isFile() ||
+    metadata.isSymbolicLink() ||
+    metadata.nlink !== 1 ||
+    (metadata.mode & 0o777) !== MODE_0600 ||
+    metadata.size > M4C09_MAX_RUNTIME_RECEIPT_BYTES
+  ) {
+    throw new Error("m4c09 runtime receipt file contract failed");
+  }
+  const receipt = JSON.parse(await readFile(runtimeReceiptPath, "utf8"));
+  if (!m4c09RuntimeReceiptComplete(receipt, requireRestart)) {
+    throw new Error("m4c09 runtime receipt semantic contract failed");
+  }
+  return receipt;
+}
+
+async function runM4C09SameProfileRestart({
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  runHash,
+  runtimeReceiptPath,
+  uiInspectionPath,
+}) {
+  const finalSynEnvironment = m4c09FinalLaunchEnvironment(
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+  );
+  const launches = [];
+  let parentSignalToReraise = null;
+  let uiInspection = pendingUiInspection(runHash);
+
+  for (let launchIndex = 0; launchIndex < M4C09_MAX_LAUNCHES; launchIndex += 1) {
+    let synPid = null;
+    const diagnosedLaunch = await runDiagnosedChild(
+      debugAppExecutablePath,
+      [],
+      {
+        cwd: desktopRoot,
+        env: finalSynEnvironment,
+        shell: false,
+        stdio: "ignore",
+      },
+      (child) => {
+        synPid = child.pid ?? null;
+        process.stdout.write(
+          `${JSON.stringify(
+            m4c09ReadinessEvent({
+              launchIndex,
+              profilePath,
+              runtimeReceiptPath,
+              runHash,
+              synPid,
+              uiInspectionPath,
+            }),
+          )}\n`,
+        );
+      },
+    );
+    parentSignalToReraise ??= diagnosedLaunch.parent_signal_to_reraise;
+    uiInspection = await readUiInspection(uiInspectionPath, runHash);
+    const runtimeReceipt = await readM4C09RuntimeReceipt(
+      runtimeReceiptPath,
+      launchIndex > 0,
+    );
+    if (runtimeReceipt.launch_count !== launchIndex + 1) {
+      throw new Error("m4c09 runtime launch count did not match launcher");
+    }
+    launches.push({
+      launch_index: launchIndex,
+      profile_path_sha256: sha256(profilePath),
+      syn_pid_observed: synPid !== null,
+      launch: diagnosedLaunch.launch_result,
+      startup_failure_family: startupFailureFamily(diagnosedLaunch.launch_result),
+      disposition: m3c07LaunchDisposition(
+        diagnosedLaunch.launch_result,
+        uiInspection,
+      ),
+      ui_inspection: uiInspection,
+      runtime_receipt_sha256: sha256(JSON.stringify(runtimeReceipt)),
+      runtime_receipt: runtimeReceipt,
+      pre_list_sigkill_diagnostic: diagnosedLaunch.diagnostic,
+    });
+
+    if (
+      completedUiInspection(uiInspection) ||
+      !m3c07RestartEligible(diagnosedLaunch.launch_result) ||
+      diagnosedLaunch.parent_signal_to_reraise
+    ) {
+      break;
+    }
+  }
+
+  const finalRuntimeReceipt = launches.at(-1)?.runtime_receipt ?? null;
+  return {
+    profile_path_sha256: sha256(profilePath),
+    launches,
+    same_profile:
+      launches.length > 0 &&
+      launches.every(
+        (launch) => launch.profile_path_sha256 === sha256(profilePath),
+      ),
+    same_profile_reused:
+      launches.length > 1 &&
+      launches.every(
+        (launch) => launch.profile_path_sha256 === sha256(profilePath),
+      ),
+    ui_inspection: uiInspection,
+    ui_inspection_completed: completedUiInspection(uiInspection),
+    runtime_receipt_complete: m4c09RuntimeReceiptComplete(
+      finalRuntimeReceipt,
+      true,
+    ),
+    relaunch_limit_reached:
+      launches.length === M4C09_MAX_LAUNCHES &&
+      !completedUiInspection(uiInspection),
+    parent_signal_to_reraise: parentSignalToReraise,
+  };
+}
+
+function m4c09ReadinessReceipt(
+  identity,
+  profile,
+  runHash,
+  buildResult,
+  restart,
+) {
+  const launches = restart?.launches ?? [];
+  const startupFailure = launches.find(
+    (launch) => launch.startup_failure_family !== null,
+  );
+  return {
+    schema_version: M4C09_READINESS_RECEIPT_SCHEMA_VERSION,
+    evidence_level: "ISOLATED_PRODUCT_APP",
+    run_hash: runHash,
+    fixture_synthetic_identity_hash: sha256(
+      `${identity.projectId}\u0000${identity.workflowId}`,
+    ),
+    r4_profile_usage: "r4_profile_filesystem_isolation_base_only",
+    r4_profile_schema_version: profile.schema_version,
+    gate: {
+      explicit_mode_argument: M4C09_ISOLATED_MODE_ARG,
+      explicit_mode_environment: {
+        name: M4C09_MODE_ENV,
+        value: M4C09_MODE_VALUE,
+      },
+      profile_environment: PROFILE_ENV,
+      profile_gate_required: true,
+      fixed_m4_runtime_commands_only: true,
+    },
+    same_profile_restart: {
+      profile_path_sha256: restart?.profile_path_sha256 ?? null,
+      launch_count: launches.length,
+      same_profile: restart?.same_profile ?? false,
+      same_profile_reused: restart?.same_profile_reused ?? false,
+      ui_inspection_completed: restart?.ui_inspection_completed ?? false,
+      runtime_receipt_complete: restart?.runtime_receipt_complete ?? false,
+      relaunch_limit_reached: restart?.relaunch_limit_reached ?? false,
+      initial_restart_eligible:
+        launches[0] ? m3c07RestartEligible(launches[0].launch) : false,
+      startup_failure_family: startupFailure?.startup_failure_family ?? null,
+      launches,
+    },
+    isolation_boundary: {
+      synthetic_fixture_only: true,
+      fake_model_only: true,
+      real_model_attempts: 0,
+      real_provider_attempts: 0,
+      external_connector_attempts: 0,
+      external_network_writes: 0,
+      real_codex_message_attempts: 0,
+    },
+    ui_inspection: restart?.ui_inspection ?? pendingUiInspection(runHash),
+    evidence_limit: "MECHANICAL_AND_ISOLATED_PRODUCT_APP_ONLY_NOT_REAL_DAILY_USE",
+    build: buildResult,
+  };
+}
+
 // This policy is intentionally pure: it runs before the launcher creates a
 // root, scrubs inherited environment, builds, or spawns a child.  Values are
 // never returned or logged; marker names are normalized only as a fixed
@@ -2507,11 +2810,25 @@ function normalizeInheritedMarkerNames(environment, markerNames) {
 function resolveLauncherModeConflict({
   m2ReferenceSliceMode,
   m3c07IsolatedMode,
+  m4c09IsolatedMode = false,
   inheritedM2ReferenceSliceMarkers,
   inheritedM3C07ModeMarker,
+  inheritedM4C09ModeMarker = false,
 }) {
-  if (m2ReferenceSliceMode && m3c07IsolatedMode) {
+  if (
+    [m2ReferenceSliceMode, m3c07IsolatedMode, m4c09IsolatedMode].filter(Boolean)
+      .length > 1
+  ) {
     return "mode_argument";
+  }
+  if (
+    m4c09IsolatedMode &&
+    (inheritedM2ReferenceSliceMarkers.length > 0 || inheritedM3C07ModeMarker)
+  ) {
+    return M4C09_MODE_CONFLICT;
+  }
+  if (inheritedM4C09ModeMarker && (m2ReferenceSliceMode || m3c07IsolatedMode)) {
+    return M4C09_MODE_CONFLICT;
   }
   if (m3c07IsolatedMode && inheritedM2ReferenceSliceMarkers.length > 0) {
     return M3C07_M2_REFERENCE_SLICE_MODE_CONFLICT;
@@ -2527,19 +2844,24 @@ const initialCodexHome = process.env.CODEX_HOME;
 const launcherArguments = process.argv.slice(2);
 const m2ReferenceSliceMode = launcherArguments.includes(M2_REFERENCE_SLICE_MODE_ARG);
 const m3c07IsolatedMode = launcherArguments.includes(M3C07_ISOLATED_MODE_ARG);
+const m4c09IsolatedMode = launcherArguments.includes(M4C09_ISOLATED_MODE_ARG);
 const inheritedM2ReferenceSliceMarkers = normalizeInheritedMarkerNames(
   process.env,
   M2_REFERENCE_SLICE_MARKER_ENV_NAMES,
 );
 const inheritedM3C07ModeMarker = Object.hasOwn(process.env, M3C07_MODE_ENV);
+const inheritedM4C09ModeMarker = Object.hasOwn(process.env, M4C09_MODE_ENV);
 const launcherModeConflict = resolveLauncherModeConflict({
   m2ReferenceSliceMode,
   m3c07IsolatedMode,
+  m4c09IsolatedMode,
   inheritedM2ReferenceSliceMarkers,
   inheritedM3C07ModeMarker,
+  inheritedM4C09ModeMarker,
 });
 const launcherModeArgumentsValid =
-  !(m2ReferenceSliceMode && m3c07IsolatedMode);
+  [m2ReferenceSliceMode, m3c07IsolatedMode, m4c09IsolatedMode].filter(Boolean)
+    .length <= 1;
 const homeInitialViewConfigPinned =
   !Object.hasOwn(process.env, "VITE_STAGE_K_INITIAL_VIEW") ||
   process.env.VITE_STAGE_K_INITIAL_VIEW === "home";
@@ -2557,6 +2879,7 @@ let failureStage = null;
 let uiInspection = pendingUiInspection("");
 let m2ReferenceSliceSuite = null;
 let m3c07Restart = null;
+let m4c09Restart = null;
 
 try {
   if (!launcherModeArgumentsValid) {
@@ -2589,6 +2912,7 @@ try {
     normalBuildEnvironment.CARGO_HOME ??= tauriCargoHome;
     delete normalBuildEnvironment[PROFILE_ENV];
     delete normalBuildEnvironment[M3C07_MODE_ENV];
+    delete normalBuildEnvironment[M4C09_MODE_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_DRIVER_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_ATTEMPT_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_PHASE_ENV];
@@ -2707,6 +3031,48 @@ try {
             failureStage = "m3c07_launcher";
             process.exitCode = 1;
           }
+        } else if (m4c09IsolatedMode) {
+          try {
+            m4c09Restart = await runM4C09SameProfileRestart({
+              normalBuildEnvironment,
+              profilePath: join(root, PROFILE_FILE_NAME),
+              reentryCapability,
+              runHash,
+              runtimeReceiptPath: join(root, M4C09_RUNTIME_RECEIPT_RELATIVE_PATH),
+              uiInspectionPath: fixture.uiInspectionPath,
+            });
+            const finalLaunch = m4c09Restart.launches.at(-1);
+            launchResult = finalLaunch?.launch ?? launchResult;
+            preListSigkillDiagnostic =
+              finalLaunch?.pre_list_sigkill_diagnostic ?? preListSigkillDiagnostic;
+            parentSignalToReraise = m4c09Restart.parent_signal_to_reraise;
+            uiInspection = m4c09Restart.ui_inspection;
+            const failedLaunch = m4c09Restart.launches.find(
+              (launch) =>
+                !launch.launch.launched ||
+                launch.startup_failure_family !== null ||
+                launch.disposition === "unexpected_exit_before_ui_inspection",
+            );
+            if (!finalLaunch || failedLaunch) {
+              failureStage = "m4c09_launch";
+              process.exitCode = 1;
+            } else if (!m4c09Restart.same_profile_reused) {
+              failureStage = "m4c09_same_profile_relaunch";
+              process.exitCode = 1;
+            } else if (!m4c09Restart.runtime_receipt_complete) {
+              failureStage = "m4c09_runtime_receipt";
+              process.exitCode = 1;
+            } else if (!m4c09Restart.ui_inspection_completed) {
+              failureStage = "m4c09_ui_inspection";
+              process.exitCode = 1;
+            } else if (!m3c07RestartEligible(finalLaunch.launch)) {
+              failureStage = "m4c09_final_exit";
+              process.exitCode = 1;
+            }
+          } catch {
+            failureStage = "m4c09_launcher";
+            process.exitCode = 1;
+          }
         } else {
           const finalSynEnvironment = {
             ...normalBuildEnvironment,
@@ -2797,7 +3163,22 @@ try {
               process.env.CODEX_HOME === initialCodexHome,
             home_initial_view_config_pinned: homeInitialViewConfigPinned,
           }
-      : {
+        : m4c09IsolatedMode
+          ? {
+              ...m4c09ReadinessReceipt(
+                identity,
+                profile,
+                runHash,
+                buildResult,
+                m4c09Restart,
+              ),
+              ...(failureStage ? { failure_stage: failureStage } : {}),
+              environment_unchanged:
+                process.env.HOME === initialHome &&
+                process.env.CODEX_HOME === initialCodexHome,
+              home_initial_view_config_pinned: homeInitialViewConfigPinned,
+            }
+          : {
       ...redactedReceipt(
         identity,
         fixture,
@@ -2820,7 +3201,9 @@ try {
           ? "m2-reference-slice-suite-receipt.json"
           : m3c07IsolatedMode
             ? M3C07_READINESS_RECEIPT_FILE_NAME
-          : RECEIPT_FILE_NAME,
+            : m4c09IsolatedMode
+              ? M4C09_READINESS_RECEIPT_FILE_NAME
+              : RECEIPT_FILE_NAME,
       ),
       receipt,
     );

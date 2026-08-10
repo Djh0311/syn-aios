@@ -77,6 +77,7 @@ mod m3_role_session;
 mod m3_role_session_repository;
 mod m3_role_session_read_model;
 mod m3_role_session_schema;
+mod m4_acceptance;
 mod m4_secretary_domain;
 mod m4_secretary_read_model;
 mod m4_secretary_repository;
@@ -135,6 +136,16 @@ impl AppState {
 
     fn try_new() -> Result<Self, String> {
         if let Some(paths) = acceptance_runtime_profile::active_paths()? {
+            if let Some(installed) = m4_acceptance::install_for_validated_profile(&paths)? {
+                return Ok(Self {
+                    index_path: paths.index_path,
+                    tasks_path: paths.tasks_path,
+                    workflow_state_path: paths.workflow_state_path,
+                    m3_role_session_read_runtime: installed.m3_read_runtime,
+                    #[cfg(not(test))]
+                    m4_secretary_repository: Some(installed.repository),
+                });
+            }
             let m3_role_session_read_runtime =
                 m3_acceptance::install_for_validated_profile(&paths)?.unwrap_or_default();
             return Ok(Self {

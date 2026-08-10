@@ -8,6 +8,14 @@ fn load_workbench_snapshot(state: tauri::State<'_, AppState>) -> Result<Workbenc
     Ok(build_snapshot(&state, &index, &tasks_text))
 }
 
+/// Fixed no-request projection of the already installed C09 isolated runtime.
+/// The renderer cannot select a profile, owner, scope, model, path or fixture.
+#[tauri::command]
+fn load_m4c09_acceptance_status(
+) -> Result<m4_acceptance::M4C09AcceptanceStatusDto, String> {
+    m4_acceptance::load_acceptance_status()
+}
+
 fn m4_unavailable_daily_report(
     reason: &str,
 ) -> m4_secretary_read_model::M4SecretaryDailyReportEnvelope {

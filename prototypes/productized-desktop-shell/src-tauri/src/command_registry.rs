@@ -58,6 +58,7 @@ macro_rules! workbench_command_handler {
     () => {{
         let workbench_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             load_workbench_snapshot,
+            load_m4c09_acceptance_status,
             query_workbench_page_read_model,
             record_operation_control_decision,
             preview_manual_codex_relay,
@@ -180,9 +181,9 @@ macro_rules! workbench_command_handler {
             global_supervisor_agent::run_global_supervisor_review,
             global_supervisor_agent::run_global_supervisor_boundary_review,
             global_supervisor_review_store::load_global_supervisor_review_store,
-            secretary_agent::run_secretary_explain,
-            secretary_agent::load_secretary_home_context,
-            secretary_agent::operate_secretary_coordination,
+            m4_acceptance::m4c09_run_secretary_explain,
+            m4_acceptance::m4c09_load_secretary_home_context,
+            m4_acceptance::m4c09_operate_secretary_coordination,
             load_secretary_legacy_read_compatibility_report,
             load_secretary_daily_report,
             recover_secretary_daily_catch_up,
@@ -247,7 +248,9 @@ macro_rules! workbench_command_handler {
         ];
         move |invoke| {
             let command = invoke.message.command().to_owned();
-            match crate::m3_acceptance::reject_unapproved_tauri_command(&command) {
+            match crate::m3_acceptance::reject_unapproved_tauri_command(&command)
+                .and_then(|_| crate::m4_acceptance::reject_unapproved_tauri_command(&command))
+            {
                 Ok(()) => workbench_handler(invoke),
                 Err(error) => {
                     invoke.resolver.reject(error);
