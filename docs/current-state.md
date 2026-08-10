@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-10，M1–M4 已完成各自具名主线范围。M3 内容提交 `fa8e392`，状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`；M4C01–M4C10 已完成，C09 隔离验收内容提交为 `c823986c`，C10 launcher 回归修复提交为 `9e97120`，M4 状态为 `COMPLETED / MAINLINE / STAGE-06 CLOSED`。当前没有活动 stage、leaf 或工程任务；M5–M10 仍是 `PLANNED / NOT_ACTIVE`，不能从 M4 收口自动获得执行权。
+截至 2026-08-11，M1–M3 已完成各自具名主线范围。M3 内容提交 `fa8e392`，状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4C01–M4C10 已进入主线，C09 隔离验收内容提交为 `c823986c`，C10 launcher 回归修复提交为 `9e97120`，`stage-06` 已程序性关闭；但独立总线复核发现五项普通产品 P1，M4 产品状态改为 `CORRECTIVE CLOSURE PLANNED / NOT_ACTIVE`。当前没有活动 stage、leaf 或有效工程授权；M5–M10 继续 `PLANNED / NOT_ACTIVE`。
 
 ## 现在分别看哪里
 
@@ -13,18 +13,30 @@
 
 验收报告、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
 
-## M4 / stage-06 已完成事实
+## M4 / stage-06 已进入主线的事实
 
 - M4 实施合同 `docs/contracts/m4-secretary-attention-daily-resolution-v1.md` 已冻结并保持 SHA-256 `4e4d6251d53e1b9b156fb2fd1266d73d6beace38be2086e83e0f05694dec4e51`；M1 四份合同和 M3 实施补充合同均未被 M4 改写。
 - 普通产品 `AppState` 已安装后端构造的 Secretary RoleSession、PersonalScope、daily channel 与权限快照；身份不再来自固定项目 cwd、路由或 renderer 自报字段，错误 scope 继续 fail closed。
 - M4 自有 SQLite schema/repository/UoW 已持久化 source-first Inbox、OpenLoop、Decision projection、watermark、去重、排序理由、receipt/event/audit/checkpoint；不同 source owner 不合并，未知、敏感、过期或无法精确绑定的输入 quarantine。
-- read、dismiss、snooze、acknowledge、close、reopen、carry-over、Notification、Reminder 与显式 standalone `PersonalAction` 已有 CAS、幂等、重启和审计语义。协调状态不反写 owner；OpenLoop、日报或模型解释不会自动创建 Todo。
+- read、dismiss、snooze、acknowledge、close、reopen、carry-over、Notification、Reminder 与显式 standalone `PersonalAction` 已有 CAS、幂等、重启和审计语义。协调状态不反写 owner；OpenLoop、日报或模型解释不会自动创建 Todo。普通产品到期时钟和个人对象入口仍待修正。
 - Secretary 应用服务基于持久上下文提供确定性 brief、只读查询、模型增强 ledger 和 M3 Handoff 状态处理；普通产品的 M6 recipient 仍显式 `UNAVAILABLE`，不伪造全局主管成功结果。
-- 首页已消费后端 typed read model，展示来源、owner、优先理由、最后变化、状态和 deep link，并提供持续 Secretary 对话与协调动作；专业模块入口保留，React 不拥有协调真值。
-- Daily scheduler 已实现 OS IANA timezone、本地自然日窗口、最多 7 个窗口 catch-up、同窗幂等、版本纠正、重建和确定性 report；空事件窗口的 agent turn 与 model invocation 均机械证明为 0。
-- 旧 secretary/right rail/runtime attention/pending action/memory daily 五类读面已进入 shadow/parity/compatibility read-only。普通产品目前没有 legacy tuple adapter，因此五类 inventory 按设计 quarantine；这是真实 fail-closed 现状，不是活动兼容项。
+- 首页已消费后端 typed read model，展示来源、owner、优先理由、最后变化、状态和 source descriptor，并提供协调动作；专业模块入口保留，React 不拥有协调真值。当前 source link 只到通用项目面，持续 Secretary 输入明确 disabled，产品消息与历史恢复尚未接入。
+- Daily scheduler 已实现 OS IANA timezone、本地自然日窗口、最多 7 个窗口 catch-up、同窗幂等、版本纠正、重建和确定性 report；空事件窗口的 agent turn 与 model invocation 均机械证明为 0。该 scheduler 目前没有调用 OpenLoop/Reminder 到期推进。
+- 旧 secretary/right rail/runtime attention/pending action/memory daily 五类读面已有 inventory、comparator、compatibility read-only 边界和 quarantine。普通产品目前没有 legacy tuple adapter，因此五类 inventory 全部 fail closed；实际 shadow/parity/fallback 仍待接入。
 - C09 使用隔离 profile、两个 synthetic source owner 与 fake model 完成首启、SIGKILL、同 profile 重启、生命周期恢复、日报重跑、deep link、模型失败和零事件验收；证据只到机械层与隔离产品 App，不等于真实日常使用。
 - C10 将全部 M4 前端测试挂入 44-entrypoint 离线 runner，并以运行时等价源码修复 C09 与旧 R4/M3 source-string 静态契约碰撞；修复提交为 `9e97120`。
+
+## 2026-08-11 独立总线复核
+
+独立复核确认 Git/Harness 程序性收口成立，M4 底层 repository、状态机、日报、去重和隔离合成证据可继续依赖；但以下五项阻断产品验收：
+
+1. 普通产品没有 M4 内部 source ingress 的生产调用者；C09 直接注入 synthetic source。
+2. snoozed OpenLoop 与 Reminder 到期没有生产 scheduler 驱动。
+3. source link 只进入通用 Projects 页面，没有精确定位原对象。
+4. 首页持续 Secretary 消息输入、M3 Turn 写入与跨重启历史恢复未接入。
+5. 五类 legacy compatibility 仍是 inventory-only quarantine，没有实际 adapter parity。
+
+完整事实、证据上限和验收决定见 `docs/harness/reports/M4-independent-bus-review-2026-08-11.md`；当前修正入口为 `docs/plans/2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。这些是施工漏项，不需要重新拍板 M4 核心产品需求。
 
 ## M3C01–M3C07 已证实的主线事实
 
@@ -57,7 +69,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M4 / stage-06 已关闭，当前工作树应停在无活动 stage/leaf 的本地主线，等待总线主管复核。`USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810` 只作为已完成阶段的历史授权记录，不延续到 M5 或其他工作。
+M4 / stage-06 已程序性关闭，当前工作树停在无活动 stage/leaf 的本地主线。独立修正计划已经建立但尚未激活；拟议下一 Harness 生命周期为新的 `stage-07` 和 `M4R01…M4R07`，不得重开 stage-06。`USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810` 只作为历史授权记录，不延续到修正阶段、M5 或其他工作。
 
 后续任何实现都需要新的当前用户指令、匹配 stage、唯一 leaf 与授权。若复核发现冻结合同冲突、owner/revision 无法精确绑定、协调动作反写 owner、空事件触发模型、敏感正文进入 M4 store、普通模式依赖隔离 gate/fixed cwd，或需要真实数据/模型/provider/connector/远端/发布，必须停在该事实，不扩大本次 M4 结论。
 

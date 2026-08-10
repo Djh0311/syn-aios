@@ -5,7 +5,7 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M5。<br>
 硬前置：M1 scope / workflow-owner / report / ExecutionGrant；M2 UoW；M3 Project Supervisor RoleSession。<br>
-当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权真实项目写、执行器、Codex、桌面应用或产品代码。
+当前活动阶段 / 叶：无（`NONE`）；M3 已完成并关闭，M4 处于独立修正再验收前的 `NOT_ACTIVE` 状态，本计划仍未激活；本计划不授权真实项目写、执行器、Codex、桌面应用或产品代码。第 0 节是 2026-08-01 的预激活盘点，M5 真正启动前必须对当前代码重新核验。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../current-state.md` → 2026-08-01 修订与当前能力盘点 → master → M1-M3 退出回执 → 本计划。现有特殊路径零件只作迁移素材，不等于普通项目闭环。
 

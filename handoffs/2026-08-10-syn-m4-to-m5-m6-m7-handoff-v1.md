@@ -1,14 +1,16 @@
 # Syn M4 收口至 M5 / M6 / M7 指引 v1
 
 日期：2026-08-10<br>
-状态：`GUIDANCE_ONLY / M4_COMPLETED / NOT_EXECUTION_AUTHORITY`
+状态：`GUIDANCE_ONLY / DOWNSTREAM_HOLD_PENDING_M4_REACCEPTANCE / NOT_EXECUTION_AUTHORITY`
 
-本文件说明 M4 已交付什么、下游怎样接 typed ref/event，以及哪些面仍是 HOLD。它不激活 M5、M6、M7 或任何真实数据、模型、connector、远端与发布工作。M4C01–M4C10 已完成，C09 隔离验收提交为 `c823986c`，C10 launcher 回归修复为 `9e97120`，stage-06 已关闭。
+本文件保留 M4 已进入主线的 typed ref/event 交接素材和下游 HOLD 边界，但“M4 已完成”的旧结论已被 2026-08-11 独立总线复核撤回。M4C01–M4C10 与 `stage-06` 的历史归档仍成立；下游在 M4 修正再验收前不得把本交接当作完成前置。当前入口见 `docs/plans/2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。
+
+本文件不激活 M5、M6、M7 或任何真实数据、模型、connector、远端与发布工作。
 
 ## 5 分钟接手顺序
 
 1. 读当前用户指令、根/仓库 `AGENTS.md`、`docs/harness/plan.md`，确认没有活动 stage 或 leaf。
-2. 读 `docs/current-state.md` 与 `docs/harness/reports/M4C10-mainline-integration-and-acceptance.md`，先看证据等级、红灯历史和未进入边界。
+2. 先读 `docs/current-state.md`、`docs/harness/reports/M4-independent-bus-review-2026-08-11.md` 和当前 M4 修正计划；再把 `docs/harness/reports/M4C10-mainline-integration-and-acceptance.md` 作为当时的机械与隔离证据读取，不沿用其整阶段完成结论。
 3. 读 `docs/contracts/m4-secretary-attention-daily-resolution-v1.md` 的唯一 `m4-resolution-v1` JSON，机器消费必须拒绝缺失、重复或格式漂移。
 4. 需要实现下游时，再读对应 M5/M6/M7 独立计划，并由新的用户指令、stage、唯一 leaf 和授权建立施工入口；本交接和 M4 历史授权都不授予实现权。
 
@@ -19,7 +21,7 @@
 - Source admission 是 source-first、版本化、可回源和 fail closed 的。不同 owner 不合并；unknown/sensitive/stale/unjoinable 输入 quarantine；OpenLoop 不自动克隆 Todo。
 - 首页消费 typed read model；每项带 source、owner、reason、last change、status 和 opaque deep link。模型不可用时 deterministic brief/report 继续工作；空事件窗口 agent/model 均为 0。
 - 五类 legacy read path 只保留 compatibility read-only。当前普通产品没有 legacy tuple adapter，因此 inventory 全部 quarantine；旧面没有协调写，也未物理删除。
-- C09 只证明 synthetic fixture + fake model + isolated debug App 的首启/强退/重启与可见交互，不证明真实日常使用或发布。
+- C09 只证明 synthetic fixture + fake model + isolated debug App 的首启/强退/重启，以及 task-local 结构化 receipt 所声明的可见交互；截图像素不可携带复核，也不证明真实日常使用或发布。
 
 ## 给 M5：ProjectSummary source 接口
 
@@ -56,4 +58,4 @@ M7 按合同 idempotency key 消费，并只创建 M7-owned artifact/annotation 
 - 未进入：真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/connector、网络外部写入、真实迁移、push/merge/rebase、部署、发布、M5–M10 产品实现。
 - 接手时若需要扩大上述边界、source owner 不唯一、revision/watermark 无法精确绑定、协调动作会反写 owner、事件含正文/secret，或空事件会触发模型，停在事实并回到新任务包裁决。
 
-当前停止点是总线主管复核；没有自动下一包。
+当前停止点是 M4 修正计划已建立、尚无活动 stage/leaf/授权；由新的 M4 修正开发主管在专门任务中只读接管并等待用户授权，没有自动下一包。

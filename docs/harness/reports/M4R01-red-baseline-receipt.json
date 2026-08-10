@@ -1,0 +1,214 @@
+{
+  "schema_version": "syn.m4.remediation-probes.receipt.v1",
+  "red_baseline_commit": "7f9c6da717f0ec49c22fcd76327431fcfff0cb4e",
+  "selected_probe": "all",
+  "expected_state": "RED",
+  "status_semantics": "ALL_REQUIRED_STATIC_MARKERS_MATCH_ONLY",
+  "evidence_limit": "STATIC_LITERAL_MARKER_PRESENCE_ONLY; no reachability, edge, behavior, or bypass absence beyond explicit ABSENT checks is proven",
+  "probe_script_sha256": "df6556532acfa8d5cc1d179ec752bd9c37d65cda1b6f6d0c9557f988f0a92980",
+  "addendum_sha256": "13ffe26f5e5e721ea56e5848b47e8c89f9a77661fe82fdf5811bbb672d8867fb",
+  "probes": [
+    {
+      "id": "source",
+      "p1": "P1-A",
+      "title": "ordinary source owner and personal-object composition",
+      "status": "RED",
+      "passed_checks": [
+        "source.work-item-command-registration",
+        "source.proposal-create-command-registration",
+        "source.proposal-decision-command-registration",
+        "source.work-item-owner-revision-marker",
+        "source.work-item-owner-event-marker"
+      ],
+      "missing_checks": [
+        "source.work-item-publication-edge",
+        "source.provenance-validator",
+        "source.work-item-consumer-checkpoint",
+        "source.registered-owner-mapper",
+        "source.adapter-ingest-edge",
+        "source.proposal-decision-outbox",
+        "source.production-dispatcher"
+      ]
+    },
+    {
+      "id": "clock",
+      "p1": "P1-B",
+      "title": "server due clock and recovery",
+      "status": "RED",
+      "passed_checks": [
+        "clock.scheduler-entry"
+      ],
+      "missing_checks": [
+        "clock.due-batch-definition",
+        "clock.production-caller",
+        "clock.open-loop-server-reason",
+        "clock.reminder-server-reason"
+      ]
+    },
+    {
+      "id": "route",
+      "p1": "P1-C",
+      "title": "registered owner exact source return",
+      "status": "RED",
+      "passed_checks": [],
+      "missing_checks": [
+        "route.app-state-registry",
+        "route.registered-owner-registry",
+        "route.revision-target-validator",
+        "route.finite-target-enum",
+        "route.server-command",
+        "route.command-registration",
+        "route.renderer-client",
+        "route.owner-focus-consumer",
+        "route.app-resolver-call",
+        "route.failure-marker",
+        "route.old-project-guess-absent"
+      ]
+    },
+    {
+      "id": "conversation",
+      "p1": "P1-D",
+      "title": "persistent Secretary conversation",
+      "status": "RED",
+      "passed_checks": [],
+      "missing_checks": [
+        "conversation.app-state-runtime",
+        "conversation.m3-turn-edge",
+        "conversation.transcript-read-join",
+        "conversation.load-command",
+        "conversation.send-command",
+        "conversation.load-command-registration",
+        "conversation.send-command-registration",
+        "conversation.load-renderer-client",
+        "conversation.send-renderer-client",
+        "conversation.app-send-edge",
+        "conversation.enabled-composer",
+        "conversation.unavailable-placeholder-absent",
+        "conversation.unavailable-status-absent"
+      ]
+    },
+    {
+      "id": "legacy",
+      "p1": "P1-E",
+      "title": "real legacy shadow/parity/fallback readers",
+      "status": "RED",
+      "passed_checks": [
+        "legacy.canonical-comparator",
+        "legacy.guarded-fallback"
+      ],
+      "missing_checks": [
+        "legacy.app-state-registry",
+        "legacy.five-reader-registry",
+        "legacy.server-owned-reader",
+        "legacy.ordinary-command-caller",
+        "legacy.parity-source-reader",
+        "legacy.inventory-only-caller-absent"
+      ]
+    }
+  ],
+  "frozen_contracts_exact": true,
+  "frozen_contracts": [
+    {
+      "path": "docs/contracts/role-session-v1.md",
+      "expected_sha256": "77c82932e728d4982ebb501b167f274cc31d2076957602771904d96dc399b2ca",
+      "actual_sha256": "77c82932e728d4982ebb501b167f274cc31d2076957602771904d96dc399b2ca",
+      "exact": true
+    },
+    {
+      "path": "docs/contracts/handoff-v1.md",
+      "expected_sha256": "3378f02f5dfb06e4db39125b5828eeda9440fc2c25ddbee3fe4e951fa6c386bf",
+      "actual_sha256": "3378f02f5dfb06e4db39125b5828eeda9440fc2c25ddbee3fe4e951fa6c386bf",
+      "exact": true
+    },
+    {
+      "path": "docs/contracts/identity-scope-v1.md",
+      "expected_sha256": "3cb0073c0fffc2423e3450ce9d9e3c683065cdd075bf618e0d406cc1475e3ea4",
+      "actual_sha256": "3cb0073c0fffc2423e3450ce9d9e3c683065cdd075bf618e0d406cc1475e3ea4",
+      "exact": true
+    },
+    {
+      "path": "docs/contracts/event-audit-outbox-v1.md",
+      "expected_sha256": "15a24d8040da054794e340fe7839b273dce0f60a2c1708513d1b998c8e968e99",
+      "actual_sha256": "15a24d8040da054794e340fe7839b273dce0f60a2c1708513d1b998c8e968e99",
+      "exact": true
+    },
+    {
+      "path": "docs/contracts/m3-role-session-turn-handoff-resolution-v1.md",
+      "expected_sha256": "946c756b30a8e73aaad441e49ba39a5c9cbd7c7d47241ed97fa19d02783bac48",
+      "actual_sha256": "946c756b30a8e73aaad441e49ba39a5c9cbd7c7d47241ed97fa19d02783bac48",
+      "exact": true
+    },
+    {
+      "path": "docs/contracts/m4-secretary-attention-daily-resolution-v1.md",
+      "expected_sha256": "4e4d6251d53e1b9b156fb2fd1266d73d6beace38be2086e83e0f05694dec4e51",
+      "actual_sha256": "4e4d6251d53e1b9b156fb2fd1266d73d6beace38be2086e83e0f05694dec4e51",
+      "exact": true
+    }
+  ],
+  "call_graph_inputs": [
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs",
+      "sha256": "f146c443ea775dbf921bf8eeab35ad90ec076e7f80f66e5f43e498411d2b3c0c"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/commands.rs",
+      "sha256": "9c9e60565978ae7e4a219943a1d5e6a4cf0df527d84a6ff6fd9a94bbc9fc1b23"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/lib.rs",
+      "sha256": "8369b7b6f7c5bb6bf9bcc2eb46c5f0f4182ebc737cc09ab5f1f3a54efe607eb9"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/m4_legacy_readers.rs",
+      "sha256": null,
+      "disposition": "MISSING_AT_RED_BASELINE"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_conversation.rs",
+      "sha256": null,
+      "disposition": "MISSING_AT_RED_BASELINE"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_read_model.rs",
+      "sha256": "c2951bb86d37be16e0e305ca4affbde9eb57b9222feb452b876061c233b8b216"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_repository.rs",
+      "sha256": "8c153b9e94653c09142cdd3911bda74e26099137220b5382f133c9ccebc9fc5b"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/m4_source_dispatcher.rs",
+      "sha256": null,
+      "disposition": "MISSING_AT_RED_BASELINE"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/m4_source_route_resolver.rs",
+      "sha256": null,
+      "disposition": "MISSING_AT_RED_BASELINE"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/project_consultation_proposal_store.rs",
+      "sha256": "19dd55def98372e60b7310895992e05a1f4e429c2d414161fb981e0cefcaccc8"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src-tauri/src/workflow_run_dispatch_entrypoints.rs",
+      "sha256": "70bd64d8a8e50abbb84dccfcd0cb806d442e2f71570c75c4f036119edf53fa9d"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src/App.tsx",
+      "sha256": "fdebaca60883f392ab0a783782062a9b0f5f2b396707da684f41fefb82a426c6"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src/components/WorkbenchShell.tsx",
+      "sha256": "5454064c229b88caa7e585a9cb48579558f0cf54dc8234c7b8e79a3ca54c204c"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src/lib/tauri.ts",
+      "sha256": "6798f867cf22e22cb9e9aedb2019ac404b309f9b7eab064ef007ac9b1ef96d0f"
+    },
+    {
+      "path": "prototypes/productized-desktop-shell/src/views/ProjectsView.tsx",
+      "sha256": "f3ed91f7333fee36b8a0fe13ad207e842cc35fcbb8d2b4750f0e46b3a18d3bff"
+    }
+  ]
+}

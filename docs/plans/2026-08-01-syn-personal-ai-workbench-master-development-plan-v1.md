@@ -1,7 +1,7 @@
 # Syn 全能个人 AI 工作台总开发计划 v1
 
 日期：2026-08-01<br>
-状态：**当前总开发计划；M0–M4 已完成各自具名主线范围，M3 为 `STAGE-05 CLOSED`，M4 为 `STAGE-06 CLOSED`；M5–M10 未激活。**<br>
+状态：**当前总开发计划；M0–M3 已完成各自具名主线范围。M4 的 `stage-06` 已程序性关闭，但 2026-08-11 独立总线复核要求修正后再验收；M5–M10 未激活。**<br>
 计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、桌面应用、存储、真实消息、外部连接、凭据、Git（版本控制写入）或发布权限。当前事实看 `../current-state.md`、源码和新鲜验证；具体施工入口看当前用户指令、`AGENTS.md` 与轻量开发护栏的活动阶段、唯一活动叶和 `../harness/authorization.json`。没有活动阶段时，不从本计划推导自动下一包。
 
 ## 0. 目标
@@ -264,14 +264,14 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 
 ### 5.1 独立阶段计划索引
 
-下列文件把 master 的顺序展开为可单独审查的阶段合同。M1–M4 已完成主线收口；M3C08 内容提交为 `fa8e392`，M4C09 内容提交为 `c823986c`，C10 launcher 回归修复提交为 `9e97120`。M3 / stage-05 与 M4 / stage-06 均已关闭，当前没有活动 stage 或 leaf；M5–M10 仍为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。
+下列文件把 master 的顺序展开为可单独审查的阶段合同。M1–M3 已完成主线收口；M3C08 内容提交为 `fa8e392`。M4C01–M4C10 已进入主线，C09 内容提交为 `c823986c`，C10 launcher 回归修复提交为 `9e97120`，`stage-06` 已程序性关闭；但独立总线复核发现五项普通产品 P1，M4 转入独立修正与再验收。当前没有活动 stage 或 leaf；M5–M10 仍为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。
 
 | 阶段 | 独立计划 | 当前路由状态 |
 |---|---|---|
 | M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE` |
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE` |
 | M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-05 CLOSED`；内容提交 `fa8e392` |
-| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-06 CLOSED`；C09 `c823986c`，C10 修复 `9e97120` |
+| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` + `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md` | `STAGE-06 PROCEDURALLY CLOSED / CORRECTIVE CLOSURE PLANNED / NOT_ACTIVE`；产品验收待修正 |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
@@ -342,7 +342,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 
 前端：先增加明确角色入口和固定上下文标签，不先改首页视觉；智能体中心成为成员与历史会话目录。
 
-退出门：每种角色新建 / 续接 / stop；重启恢复；跨项目续接拒绝；会话不静默生成 workflow / formal memory；Station 3b 后端真拒绝。真实 Codex 消息另行授权。2026-08-10，M3C08 已由 `fa8e392` 收口内容并达到 `COMPLETED / MAINLINE / STAGE-05 CLOSED`；M4 随后在独立 stage-06 完成，M5 仍未激活。
+退出门：每种角色新建 / 续接 / stop；重启恢复；跨项目续接拒绝；会话不静默生成 workflow / formal memory；Station 3b 后端真拒绝。真实 Codex 消息另行授权。2026-08-10，M3C08 已由 `fa8e392` 收口内容并达到 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4 的 stage-06 随后程序性关闭，但其普通产品接线仍待独立修正；M5 仍未激活。
 
 ### M4 — 秘书、个人范围、Attention 与日常节奏
 
@@ -357,7 +357,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 
 排序底线：已与别人约定和时间敏感事项优先；所有条目必须显示来源、owner、为何出现、最后变化并能回源。
 
-退出门：App 重启不丢关注状态；“已知晓”不改项目 / 任务 / 记忆；同窗口日报幂等；每个日报项可回源；无事件窗口零模型调用。2026-08-10，M4C01–M4C10 已完成，C09 synthetic isolated App 证据与 C10 全量回归已结算，状态为 `COMPLETED / MAINLINE / STAGE-06 CLOSED`；该结论不包含真实日常使用、真实模型/provider/connector、M5 ProjectSummary、M6 consult success、M7 memory consumer 或发布。
+退出门：App 重启不丢关注状态；“已知晓”不改项目 / 任务 / 记忆；同窗口日报幂等；每个日报项可精确回源；无事件窗口零模型调用；普通产品具备持续 Secretary 对话和内部来源入口。2026-08-10，M4C01–M4C10 已进入主线并关闭 stage-06；2026-08-11 独立总线复核确认普通来源、到期唤醒、精确回源、持续对话和实际 legacy parity 尚未满足产品退出门。M4 按独立修正计划再验收；M5 继续未激活。
 
 ### M5 — 项目主管与既有执行能力重组
 

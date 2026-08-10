@@ -2,10 +2,11 @@
 
 日期：2026-08-01<br>
 阶段：`M4`<br>
-状态：**COMPLETED / MAINLINE / STAGE-06 CLOSED。**<br>
+状态：**STAGE-06 PROCEDURALLY CLOSED / CORRECTIVE CLOSURE REQUIRED / NOT_ACTIVE。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M4。<br>
 硬前置：M1 identity / scope / policy 冻结合同、M2 bounded reference slice（有边界参考切片）、M3 已完成的通用 RoleSession 合同与隔离实现；普通产品 Secretary RoleSession 运行时桥接已由 M4C02 完成。项目摘要仍等待 M5 owner 提供。<br>
 已关闭阶段：`stage-06`；M4C01–M4C10 已归档。本阶段历史授权记录为 `USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810`，不延续到新的工程任务。真实个人资料、真实模型 / provider、真实消息、外部连接器、远端和发布均未进入。
+当前修正入口：`2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。2026-08-11 独立总线复核未接受 M4 产品退出；修正计划未激活，不产生新的施工权限。
 
 三条权威链分开读取，不能把 current-state（当前事实）排在产品正本之前：
 
@@ -21,14 +22,19 @@ M5 项目摘要和 M6 咨询未完成时按 unavailable source（来源暂不可
 
 - M4C01 冻结了普通产品 M3 bridge、Secretary/PersonalScope、M4 单写 store、source/dedupe/priority、时区/日报、OpenLoop/Todo、M4/M7、迁移回切与证据分层合同。
 - M4C02 把后端固定的 Secretary RoleSession 与 PersonalScope 接入普通产品 `AppState`；M4C03 建立 M4 自有 schema/repository/UoW 与 source-first Inbox/OpenLoop/Decision projection。
-- M4C04 完成 attention、Notification、Reminder、显式 PersonalAction 与 owner command receipt 的生命周期；M4C05 完成确定性 brief、持久协调上下文、模型 ledger 和 M3 Handoff 状态处理。
-- M4C06 让首页消费 typed read model，展示来源、owner、优先理由、状态与 deep link，并接入持续 Secretary 对话；专业入口与受守卫回切仍保留。
-- M4C07 完成本地时区 daily window、scheduler、catch-up、幂等、版本纠正、失败恢复与空事件零模型机械证明。
-- M4C08 完成五类旧读面的 shadow/parity/compatibility read-only 和 quarantine；普通产品尚无 legacy tuple adapter，因此 inventory 当前全部 fail closed，不显示活动兼容项。
+- M4C04 完成 attention、Notification、Reminder、显式 PersonalAction 与 owner command receipt 的状态机、repository 和单元测试；普通产品入口与到期时钟调用仍待修正。
+- M4C06 让首页消费 typed read model，展示来源、owner、优先理由、状态与 source descriptor；当前 deep link 只到通用项目面，持续 Secretary 消息输入仍处于 disabled 占位。
+- M4C07 完成本地时区 daily window、daily scheduler、catch-up、幂等、版本纠正、失败恢复与空事件零模型机械证明；它尚未驱动 snoozed OpenLoop 和 Reminder 到期唤醒。
+- M4C08 完成五类旧读面的 inventory、comparator、compatibility read-only 边界和 quarantine；普通产品尚无 legacy tuple adapter，当前全部 fail closed，实际 shadow/parity/fallback 尚未成立。
 - M4C09 使用 synthetic fixture、两个 source owner、fake model 与隔离 profile 完成 debug App 首启、强退、同 profile 重启、生命周期、日报、deep link 和模型故障验收；C10 完成全量离线回归与 launcher 静态契约消歧。
 
 ### 尚未成立或下游 HOLD
 
+- 普通产品 composition 尚无 M4 source ingress 的生产调用者；C09 通过验收代码直接注入 synthetic source，不能证明正常产品会自然接收内部事项。
+- snoozed OpenLoop 与 Reminder 的到期推进没有接入生产 scheduler；单元测试手工调用 transition 不能替代产品时钟。
+- source deep link 尚未通过 owner adapter 精确落到原对象；当前只进入通用 Projects 页面。
+- 首页持续 Secretary 消息发送、M3 Turn 写入和跨重启历史恢复尚未接入；固定机械解释不等于持续对话。
+- 五类 legacy read path 尚无实际 server-owned tuple adapter；inventory-only quarantine 不等于真实 parity / fallback。
 - M5 ProjectSummary 合同/owner 尚未激活，项目摘要 source 明确 unavailable；M4 的完成口径不覆盖“全部用户相关 open loops”。
 - M6 Global Supervisor 成功 consult 尚未实现；普通产品 M4 只保留 M3 Handoff 请求/回执边界并显式 unavailable。
 - M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M8 真实 connector/credential/external source 也未进入。
@@ -175,6 +181,6 @@ stage-06 历史授权曾允许各 leaf 写域内的 local schema/store、离线�
 - 旧派生面有 parity / compatibility / rollback，不物理删除；
 - isolated App 场景通过；真实数据结论逐项记录；
 - 把 source event / DailyReport ref 合同交 M7，把咨询合同交 M6；
-- `../current-state.md` 回写实际完成、证据上限和暂缓项；M4C10 独立验收、全量回归、文档同步与 stage-06 收口完成后停止，等待总线主管复核。
+- `../current-state.md` 回写实际完成、证据上限和暂缓项；M4C10 全量回归、文档同步与 stage-06 收口已经完成，当时停止等待总线主管复核。当前结论与下一入口见本节末尾及独立修正计划。
 
-以上退出项已在 M4C01–M4C10 的具名范围内完成并由 `../harness/reports/M4C10-mainline-integration-and-acceptance.md` 结算；M4 状态为 `COMPLETED / MAINLINE / STAGE-06 CLOSED`。当前停止等待总线主管复核，不自动进入 M5–M10。
+M4C01–M4C10 和 `stage-06` 的程序性归档已经完成，`../harness/reports/M4C10-mainline-integration-and-acceptance.md` 保留为当时的机械与隔离证据；但 2026-08-11 独立总线复核确认上述退出项并未全部满足。M4 进入 `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`，当前为 `NOT_ACTIVE`，不自动进入 M5–M10。

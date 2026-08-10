@@ -19,7 +19,8 @@
 - M0 产品正本、权威分级、候选收口和文档入口整理已经完成；它是文档收口，不是产品代码阶段。
 - M1、M2 已完成主线收口。
 - M3 已完成：M3C01–M3C08 已进入主线并归档，M3C08 内容提交为 `fa8e392`，阶段状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。
-- M4 已完成：M4C01–M4C10 已进入主线并归档，C09 隔离验收提交为 `c823986c`，C10 launcher 回归修复为 `9e97120`，阶段状态为 `COMPLETED / MAINLINE / STAGE-06 CLOSED`。当前没有活动 stage 或 leaf；M5–M10 仍是计划中、未激活。
+- M4C01–M4C10 已进入主线并归档，`stage-06` 已程序性关闭；C09 隔离验收提交为 `c823986c`，C10 launcher 回归修复为 `9e97120`。2026-08-11 独立总线复核确认普通产品仍有五项 P1 接线缺口，因此 M4 产品状态为 `CORRECTIVE CLOSURE PLANNED / NOT_ACTIVE`，不是已验收完成。当前没有活动 stage 或 leaf；M5–M10 继续未激活。
+- M4 当前修正入口：`2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。它不重开 `stage-06`，也不自行产生工程权限。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
 
 ## M1-M10 独立阶段计划
@@ -29,7 +30,8 @@
 | M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE`；关闭验收只证明 M1 |
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE`；真实工作台切换未进入 |
 | M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-05 CLOSED`；内容提交 `fa8e392` |
-| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-06 CLOSED`；只证明 M4 具名范围与 synthetic isolated App |
+| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `STAGE-06 PROCEDURALLY CLOSED / CORRECTIVE CLOSURE REQUIRED`；历史产物在主线，产品验收待修正 |
+| M4 修正 | `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md` | `PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY`；拟议新 stage，不重开 stage-06 |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |
 | M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE`；存储策略片与真实日常接入分层依赖 |
@@ -71,7 +73,8 @@
 - `STOPPED_BEFORE_ACTIVATION`：激活前停止，没有产生施工授权。
 - `CANDIDATE_SOURCE`：候选来源材料；开放状态只看候选登记。
 - `COMPLETED / MAINLINE / STAGE-05 CLOSED`：M3 内容提交已进入主线；与本次状态回写同批的终态控制提交执行并归档 M3C08 `done` 与 stage-05 `close-stage`，不据此激活下游实现。
-- `COMPLETED / MAINLINE / STAGE-06 CLOSED`：M4C01–M4C10 已完成并归档；只结算 M4 typed refs、协调状态、日报、兼容读面与隔离验收，不据此激活 M5–M10 或升级为真实日常使用。
+- `STAGE-06 PROCEDURALLY CLOSED / CORRECTIVE CLOSURE REQUIRED`：M4C01–M4C10 已进入主线并归档，但独立总线复核未接受整阶段产品退出；按独立修正计划补齐后再验收。
+- `CORRECTIVE CLOSURE PLANNED / NOT_ACTIVE`：修正范围已经规划，尚无活动 stage、leaf 或授权，不产生施工权限。
 
 正文内旧的“当前”“下一步”“唯一”只在文件状态与本索引一致时有效。
 

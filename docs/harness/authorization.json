@@ -1,21 +1,21 @@
 {
   "version": 1,
-  "id": "USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810",
+  "id": "USER-SYN-M4-CORRECTIVE-STAGE-07-20260811",
   "issuedBy": "user",
   "scope": {
     "kind": "stage",
-    "id": "stage-06"
+    "id": "stage-07"
   },
-  "summary": "用户明确授权整个 M4 本地开发阶段，并允许模型代为落盘授权记录；授权覆盖 stage-06 内窄任务包连续推进、任务包写域内的合同/文档/Rust/前端/测试/本地隔离脚本、离线测试与构建、临时或隔离数据库迁移、假模型/假 provider、隔离调试 App 启停/强退/重启、脱敏证据、精确暂存与本地提交。任务叶完成后自动进入下一叶，直到 M4 验收和收口。",
+  "summary": "用户于 2026-08-11 在当前任务中明确授权整个 M4 修正 stage-07；授权覆盖新的 Harness control/authorization、M4R01-M4R07 计划内代码与测试、离线/合成/隔离产品 App 验证、精确本地提交，并允许整阶段在窄 leaf 间连续推进直到 M4R07 收口。",
   "grants": [
     {
-      "id": "M4-CONTEXT",
+      "id": "M4R-CONTEXT",
       "category": "context",
       "operations": ["change"],
-      "targets": ["M4C*", "docs/harness/stages/stage-06.md"]
+      "targets": ["M4R*", "docs/harness/stages/stage-07.md"]
     },
     {
-      "id": "M4-CONTROL",
+      "id": "M4R-CONTROL",
       "category": "control",
       "operations": ["modify"],
       "targets": ["docs/harness/"]
