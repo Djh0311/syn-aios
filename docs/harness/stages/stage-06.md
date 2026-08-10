@@ -89,7 +89,7 @@
 - [x] M4C02 普通产品 Secretary RoleSession 与 PersonalScope 接线
 - [x] M4C03 持久 Inbox 与 Attention source projection
 - [x] M4C04 完整关注生命周期、个人待办与来源回写
-- [ ] M4C05 Secretary 应用服务与持续协调上下文
+- [x] M4C05 Secretary 应用服务与持续协调上下文
 - [ ] M4C06 首页情境与持续 Secretary 对话
 - [ ] M4C07 DailyReport、scheduler 与空事件零模型
 - [ ] M4C08 旧读面兼容迁移与回切
