@@ -86,7 +86,7 @@
 ## 叶子
 
 - [x] M4C01 M4 实施合同与当前事实纠偏
-- [ ] M4C02 普通产品 Secretary RoleSession 与 PersonalScope 接线
+- [x] M4C02 普通产品 Secretary RoleSession 与 PersonalScope 接线
 - [ ] M4C03 持久 Inbox 与 Attention source projection
 - [ ] M4C04 完整关注生命周期、个人待办与来源回写
 - [ ] M4C05 Secretary 应用服务与持续协调上下文
