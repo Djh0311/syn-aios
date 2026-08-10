@@ -18,7 +18,8 @@
 - 该计划完整覆盖公共底座重构到首个全日试点和发布候选；M10 之后五类长期业务、个人服务器备份、开源成本工具和高级检索按真实需求另建路线，不伪装成已经排完的终身计划。
 - M0 产品正本、权威分级、候选收口和文档入口整理已经完成；它是文档收口，不是产品代码阶段。
 - M1、M2 已完成主线收口。
-- M3 已完成：M3C01–M3C07 已进入主线并归档，M3C08 内容提交为 `fa8e392`，阶段状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`，当前没有活动 stage 或 leaf；M4-M10 仍是计划中、未激活。
+- M3 已完成：M3C01–M3C08 已进入主线并归档，M3C08 内容提交为 `fa8e392`，阶段状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。
+- M4 已完成：M4C01–M4C10 已进入主线并归档，C09 隔离验收提交为 `c823986c`，C10 launcher 回归修复为 `9e97120`，阶段状态为 `COMPLETED / MAINLINE / STAGE-06 CLOSED`。当前没有活动 stage 或 leaf；M5–M10 仍是计划中、未激活。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
 
 ## M1-M10 独立阶段计划
@@ -28,7 +29,7 @@
 | M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE`；关闭验收只证明 M1 |
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE`；真实工作台切换未进入 |
 | M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-05 CLOSED`；内容提交 `fa8e392` |
-| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
+| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-06 CLOSED`；只证明 M4 具名范围与 synthetic isolated App |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |
 | M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE`；存储策略片与真实日常接入分层依赖 |
@@ -70,6 +71,7 @@
 - `STOPPED_BEFORE_ACTIVATION`：激活前停止，没有产生施工授权。
 - `CANDIDATE_SOURCE`：候选来源材料；开放状态只看候选登记。
 - `COMPLETED / MAINLINE / STAGE-05 CLOSED`：M3 内容提交已进入主线；与本次状态回写同批的终态控制提交执行并归档 M3C08 `done` 与 stage-05 `close-stage`，不据此激活下游实现。
+- `COMPLETED / MAINLINE / STAGE-06 CLOSED`：M4C01–M4C10 已完成并归档；只结算 M4 typed refs、协调状态、日报、兼容读面与隔离验收，不据此激活 M5–M10 或升级为真实日常使用。
 
 正文内旧的“当前”“下一步”“唯一”只在文件状态与本索引一致时有效。
 

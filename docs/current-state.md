@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-10，M3C01–M3C08 已完成并进入主线；M3C08 内容提交为 `fa8e392`（`fix(m3): close integration regression [catch:none]`），其回归证据在本文件和 M3C08 验收报告中结算。M3 状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4 已由用户整阶段授权并在本地主线激活为 `ACTIVE / STAGE-06`；阶段入口 leaf 是 `M4C01`，阶段搭建提交为 `7b1b63f`，实时唯一 current leaf 以 `docs/harness/leaves/` 为准。M4C01 只冻结实施合同并纠正当前事实，不把合同证据写成后续产品实现已完成。
+截至 2026-08-10，M1–M4 已完成各自具名主线范围。M3 内容提交 `fa8e392`，状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`；M4C01–M4C10 已完成，C09 隔离验收内容提交为 `c823986c`，C10 launcher 回归修复提交为 `9e97120`，M4 状态为 `COMPLETED / MAINLINE / STAGE-06 CLOSED`。当前没有活动 stage、leaf 或工程任务；M5–M10 仍是 `PLANNED / NOT_ACTIVE`，不能从 M4 收口自动获得执行权。
 
 ## 现在分别看哪里
 
@@ -9,20 +9,22 @@
 3. `docs/product/authority-register-v1.md`：决定各类文件当前有什么效力；
 4. `docs/workbench-system-architecture-v1.md`：决定现行系统边界；
 5. 本文件、源码与新鲜验证：说明已实现事实、未知和证据上限；
-6. `AGENTS.md`、`docs/harness/plan.md`、`docs/harness/stages/stage-06.md`、唯一活动 leaf 与 `docs/harness/authorization.json`：确认 M4 当前任务包写域、验证和整阶段本地授权；stage-05 / M3C08 的 done 归档只证明 M3 已关闭。
+6. `AGENTS.md`、`docs/harness/plan.md` 与 `docs/harness/done/2026-08/`：确认 M3/M4 已关闭的阶段和 leaf 归档；历史授权只证明当时施工有依据，不延续为新的实现权限。
 
 验收报告、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
 
-## M4 stage-06 当前事实
+## M4 / stage-06 已完成事实
 
-- 用户已明确授权“整个 M4 本地阶段”，授权记录为 `USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810`。它允许当前任务包内的 M4 合同、文档、Rust 后端、前端、测试、隔离脚本、离线构建/迁移、假模型/provider、M4C09 隔离调试 App 验收、精确暂存和本地提交；任务包完成后可自动进入下一 leaf。
-- 授权始终排除真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/外部 connector、网络外部写入、远端、push、merge、rebase、部署、发布、reset、clean、stash、破坏性删除、M5-M10 产品实现和当前 leaf 写域外修改。
-- M4 的核心产品要求已经完整确定：Secretary 是跨重启长期稳定角色，持续看住与用户有关、已接入来源中的未闭环事项，提供可回源情境、提醒、日报和交接建议。它只拥有可撤销的协调状态，不拥有项目、任务、工作流、授权、正式记忆、Skill 或外部来源事实。
-- `OpenLoop` 与 standalone personal Todo 是不同对象。只有用户明确命令才创建 `PersonalAction`；Inbox、Attention、日报和模型输出都不会自动克隆个人待办。
-- M3 通用合同、自有 repository/schema/read model/transport/Handoff 与隔离实现已经完成；普通产品 `AppState` 目前仍以 `Default::default()` 注入空的 M3 read runtime，只有 M3C07 隔离 profile 会安装运行时。普通产品正式接线是 M4C02 的施工前置，不是 M3 缺陷。
-- 现有 `secretary_agent.rs` 仍是一次性只读解释，固定历史测试项目 cwd，没有 RoleSession/store/audit。`mcp/identity_kernel.rs` 的 Personal/Global/Project 类型仍未接 Tauri，现有 resolver 固定构造 Project scope；两者都不能作为已完成的 M4 产品能力。
-- M2 已完成的是 bounded `workflow-state-sidecar.repository.m2.v1` reference slice。M4 只能复用经过明确映射的 immediate transaction、busy retry 和物理 ledger 形状；M4 必须拥有自己的 schema、repository、UoW、receipt/event/audit/projector/checkpoint，不能把 M2 workflow sidecar 或 private/unwired candidate 当通用产品端口。
-- 当前 M4C01 新增 `docs/contracts/m4-secretary-attention-daily-resolution-v1.md`，冻结普通产品 M3 bridge、Secretary/PersonalScope、M4 单写存储、source/dedupe/priority、时区/日报、OpenLoop/Todo、M4/M7、事件驱动零模型、迁移/回切、证据等级和 M4C02-M4C10 分工。它当前的证据级别只是 contract/source resolution，不等于后续实现已通过。
+- M4 实施合同 `docs/contracts/m4-secretary-attention-daily-resolution-v1.md` 已冻结并保持 SHA-256 `4e4d6251d53e1b9b156fb2fd1266d73d6beace38be2086e83e0f05694dec4e51`；M1 四份合同和 M3 实施补充合同均未被 M4 改写。
+- 普通产品 `AppState` 已安装后端构造的 Secretary RoleSession、PersonalScope、daily channel 与权限快照；身份不再来自固定项目 cwd、路由或 renderer 自报字段，错误 scope 继续 fail closed。
+- M4 自有 SQLite schema/repository/UoW 已持久化 source-first Inbox、OpenLoop、Decision projection、watermark、去重、排序理由、receipt/event/audit/checkpoint；不同 source owner 不合并，未知、敏感、过期或无法精确绑定的输入 quarantine。
+- read、dismiss、snooze、acknowledge、close、reopen、carry-over、Notification、Reminder 与显式 standalone `PersonalAction` 已有 CAS、幂等、重启和审计语义。协调状态不反写 owner；OpenLoop、日报或模型解释不会自动创建 Todo。
+- Secretary 应用服务基于持久上下文提供确定性 brief、只读查询、模型增强 ledger 和 M3 Handoff 状态处理；普通产品的 M6 recipient 仍显式 `UNAVAILABLE`，不伪造全局主管成功结果。
+- 首页已消费后端 typed read model，展示来源、owner、优先理由、最后变化、状态和 deep link，并提供持续 Secretary 对话与协调动作；专业模块入口保留，React 不拥有协调真值。
+- Daily scheduler 已实现 OS IANA timezone、本地自然日窗口、最多 7 个窗口 catch-up、同窗幂等、版本纠正、重建和确定性 report；空事件窗口的 agent turn 与 model invocation 均机械证明为 0。
+- 旧 secretary/right rail/runtime attention/pending action/memory daily 五类读面已进入 shadow/parity/compatibility read-only。普通产品目前没有 legacy tuple adapter，因此五类 inventory 按设计 quarantine；这是真实 fail-closed 现状，不是活动兼容项。
+- C09 使用隔离 profile、两个 synthetic source owner 与 fake model 完成首启、SIGKILL、同 profile 重启、生命周期恢复、日报重跑、deep link、模型失败和零事件验收；证据只到机械层与隔离产品 App，不等于真实日常使用。
+- C10 将全部 M4 前端测试挂入 44-entrypoint 离线 runner，并以运行时等价源码修复 C09 与旧 R4/M3 source-string 静态契约碰撞；修复提交为 `9e97120`。
 
 ## M3C01–M3C07 已证实的主线事实
 
@@ -38,26 +40,26 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 冻结、迁移与证据边界
 
-- 2026-08-10 的静态核对确认四份 M1 冻结合同仍与 M3C01 frozen inputs 相符：`role-session-v1`、`handoff-v1`、`identity-scope-v1`、`event-audit-outbox-v1`。完整 SHA-256 记录在 `docs/harness/reports/M3C08-mainline-integration-and-acceptance.md`。
-- M3C01 冻结的 M3 计划快照是 `9403851ece470c32bac5071e2613495a6f0e525214dbd6990a1cd2d28d1ce013`。该快照并非第四个 M1 合同；在 M3C08 前，现行 M3 计划文件已因状态型回写而为 `d584cc19592095cbeb521b483319ab77b61ecc3276351220ef5b94c0c9dae25c`。M3C08 的状态型回写还会再次改变现行计划文件，不得声称“所有 frozen hash 均相等”。
-- 迁移只允许 shadow / provenance / bounded references；无法精确绑定的记录保留为 orphaned 或 ambiguous，不自动分配项目。前端 cache 只可显示，不能升格为真源。
-- rollback 只可切换旧 UI / read fallback 或关闭新 M3 read projection；不得移除 M1 thread-owner、scope 或 Station 3b 守卫，不得重放 provider effect，不得恢复跨项目 bypass，也不得删除未解决 orphan。
+- 2026-08-10 静态核对确认 M1 四合同 SHA-256 仍为 `77c829…b2ca`、`3378f0…86bf`、`3cb007…3ea4`、`15a24d…8e99`，且相对 `29085cc` diff exact；M3 合同 SHA-256 为 `946c75…ac48`，M4 合同为 `4e4d62…4e51`，两者相对 `530ab41` diff exact。完整值见 M4C10 报告。
+- 最终 Rust 聚焦回归为 C09 3/3、M4 98/98；完整 `cargo test --lib` 在主机权限环境为 1639 passed / 0 failed / 45 ignored。受限 sandbox 首跑的 5 个 launcher source-string collision 与 1 个 PID `lstart` EPERM 作为红灯保留；前五项已做等价源码消歧，PID exact 主机复跑 1/1 后完整套件全绿。
+- `cargo check --lib`、M4 新增 Rust 文件定向 `rustfmt --check`、TypeScript typecheck、44-entrypoint offline interaction、3 个 launcher `node --check` 和 production build 均 exit 0。build 仍有既有 `>500k` chunk 提示；`cargo check` 仍报告仓库既有 warning debt，不写成零 warning。
+- C09 仓库回执 SHA-256 为 launcher `036d002…d1eb`、runtime `5371773…210`、UI `669f4b1…23c6`；截图只在本任务可见记录中，以 hash 留痕，不在仓库。详细证据和完整 hash 见 `docs/harness/reports/M4C09-isolated-product-app-layered-acceptance.md` 与 M4C10 报告。
+- 回切只能选择受守卫的 legacy read-only 展示或关闭 M4 ingestion/scheduler/read projection；必须保留 M1/M3 守卫、M4 已提交协调状态、event/audit/receipt/quarantine/report version，不能重放 effect、反写 owner 或物理删除旧面。
 
 ## 尚未成立或未进入
 
-- M1 四份 frozen contract SHA 和相对 `29085cc` 的 diff 均 exact；Rust `m3c07_` 为 exit 0、11/11 通过（Cargo 4.92s），`m3c0` 为 exit 0、123/123 通过（Cargo 40.29s），`m3c07_ --no-run` 为 exit 0。
-- 完整 `--lib` 的受限 sandbox 首跑为 exit 101、1520 通过 / 4 失败 / 45 忽略：3 个失败是 M3C07 launcher source-string 与既有 `acceptance_runtime_profile` helper 的静态契约 collision，不是 runtime 或 sandbox 行为失败；第 4 个是 resident-session test 读取 PID `lstart` 的 EPERM 环境差异。该首跑保留为红灯证据，不从记录中抹去。
-- current leaf 已按 stage 范围只扩充 `prototypes/productized-desktop-shell/scripts/run-r4-isolated-app-preflight.mjs`，以运行时等价源码消歧修复 3 个静态 collision；`node --check` 通过、launcher focused 5/5 通过、`m3c07_` 11/11 通过。resident-session exact test 在主机权限环境为 exit 0、1/1 通过、3.27s。最终完整 `--lib` 在主机权限环境为 exit 0、1524 通过 / 0 失败 / 45 忽略、72.83s；仅保留 141 条既有 `unused` / `dead_code` / `private_interfaces` warning，无新增失败。
-- 启动器纠偏后主线程再次直接复跑前端 / 构建：`npm run typecheck`、`npm run test:offline-interaction`、`node --check scripts/run-r4-isolated-app-preflight.mjs` 和 `npm run build` 均 exit 0；offline runner 实际遍历 39 个 entrypoint，脚本摘要为 `offline interaction tests passed: 15`；build 转换 306 modules、955ms 完成，只有既有 Vite `>500k` chunk warning。npm 使用既有 ignored `node_modules`，未将曾因缺少 `zustand` 失败的 `npm ci --offline` 写成 clean install 成功。
-- 真实 provider、真实 Codex 消息、真实用户项目、真实账号、凭据、外部 connector、部署、发布、merge、push 与真实数据迁移均未进入。
-- 桌面证据只覆盖 Agent / Jiaoban synthetic host；窗口截图只保存在 Codex 主任务 `019fe53e-c4c2-7ab0-a965-0e231075df57` 的线程内，仓库持久证据只有 `docs/harness/reports/M3C07-isolated-desktop-evidence/` 的 6 份脱敏 launcher JSON receipt。
-- 完整知识检索、同步、记忆治理、connector、Secretary、项目主管和全局主管实现均不属于 M3 已完成范围。
+- M5 ProjectSummary 合同和 owner 尚未激活，M4 项目摘要来源保持 `HOLD / UNAVAILABLE`；不得据此声称“全部用户相关 open loops”已经接入。
+- M6 Global Supervisor 成功 consult 未实现；M4 只持 M3 Handoff 请求/回执边界，普通产品 recipient 显式 unavailable。
+- M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M4 只产出 source-backed event/ref，不写 M7 对象。
+- M8 真实 connector、credential 与外部 source 未进入；M9 旧路 command unregister/物理退役、M10 全日真实试点与发布硬化也未进入。
+- 真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/connector、网络外部写入、真实数据迁移、push、merge、rebase、部署和发布均未进入。
+- C09 只证明本机 debug App + synthetic fixture + fake model + isolated profile；没有长期运行、真实日常节奏、发布包或生产结论。npm 回归使用仓库既有 ignored `node_modules`，不等于 clean install 已通过。
 
 ## 当前开发状态与停止点
 
-M3 已完成，stage-05 已关闭。M4 为当前唯一活动开发阶段；stage-06 从 M4C01 合同包进入，实时唯一 current leaf 以 Harness 为准。每个 leaf 完成机械校验、独立审查、精确提交和归档后，按整阶段授权自动进入下一 leaf。M5、M6 及之后阶段均未由本轮激活；M4 只消费或交接它们未来拥有的 typed ref/event，不实现其产品写面。
+M4 / stage-06 已关闭，当前工作树应停在无活动 stage/leaf 的本地主线，等待总线主管复核。`USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810` 只作为已完成阶段的历史授权记录，不延续到 M5 或其他工作。
 
-本轮停止边界仍是：出现产品正本与 M1/M3 冻结合同的真实冲突、来源 owner/revision 无法精确绑定、协调动作反写 owner、空事件触发模型、敏感正文进入 M4 store、普通模式借隔离 gate/fixed cwd 上活，或需要扩大到真实数据/模型/provider/connector/远端/发布。普通实现细节在 M4 合同和当前 leaf 内自主冻结，不再作为产品问题回问用户。
+后续任何实现都需要新的当前用户指令、匹配 stage、唯一 leaf 与授权。若复核发现冻结合同冲突、owner/revision 无法精确绑定、协调动作反写 owner、空事件触发模型、敏感正文进入 M4 store、普通模式依赖隔离 gate/fixed cwd，或需要真实数据/模型/provider/connector/远端/发布，必须停在该事实，不扩大本次 M4 结论。
 
 ## 保全
 

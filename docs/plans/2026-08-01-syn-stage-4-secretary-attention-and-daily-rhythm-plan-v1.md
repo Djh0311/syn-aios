@@ -2,40 +2,39 @@
 
 日期：2026-08-01<br>
 阶段：`M4`<br>
-状态：**ACTIVE / STAGE-06。**<br>
+状态：**COMPLETED / MAINLINE / STAGE-06 CLOSED。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M4。<br>
-硬前置：M1 identity / scope / policy 冻结合同、M2 bounded reference slice（有边界参考切片）、M3 已完成的通用 RoleSession 合同与隔离实现；普通产品 Secretary RoleSession 运行时桥接由 M4C02 完成。项目摘要由 M5 owner 提供时再接项目源。<br>
-当前活动阶段：`stage-06`；入口合同包为 `M4C01`，实时唯一 current leaf 以 `../harness/leaves/` 为准。本轮整阶段本地授权已记录为 `USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810`。真实个人资料、真实模型 / provider、真实消息、外部连接器、远端和发布仍未进入。
+硬前置：M1 identity / scope / policy 冻结合同、M2 bounded reference slice（有边界参考切片）、M3 已完成的通用 RoleSession 合同与隔离实现；普通产品 Secretary RoleSession 运行时桥接已由 M4C02 完成。项目摘要仍等待 M5 owner 提供。<br>
+已关闭阶段：`stage-06`；M4C01–M4C10 已归档。本阶段历史授权记录为 `USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810`，不延续到新的工程任务。真实个人资料、真实模型 / provider、真实消息、外部连接器、远端和发布均未进入。
 
 三条权威链分开读取，不能把 current-state（当前事实）排在产品正本之前：
 
 - 产品与架构：当前用户指令 → 产品正本 → authority register → 现行架构 → master → 本计划 → `../contracts/m4-secretary-attention-daily-resolution-v1.md` 的 M4 实施解释；
-- 施工与授权：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → `../harness/stages/stage-06.md` / 唯一活动 leaf → `../harness/authorization.json`；
+- 施工与授权：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 新的活动 stage / 唯一 leaf → `../harness/authorization.json`；已归档 stage-06 与历史授权不产生下一阶段权限；
 - 已实现事实与证据：当前源码 / 新鲜验证 → `../current-state.md` → M1-M3 合同、退出回执和验收报告。
 
 M5 项目摘要和 M6 咨询未完成时按 unavailable source（来源暂不可用）处理，不能由 M4 补写成当前事实。
 
 ## 0. 当前事实与未知
 
-### 已有局部能力
+### 已完成主线能力
 
-- M3 的通用 RoleSession / Turn / Handoff 合同、M3 自有 repository/schema、读模型、transport、Handoff 和隔离验收已经完成；普通产品 `AppState` 尚未正式注入 M3 RoleSession runtime，这一接线属于 M4C02，不是 M3 缺陷。
-- `secretaryReadModel.ts` 能从 snapshot、workflow、runtime、proposal、blackboard、memory candidate 等来源确定性派生摘要；Secretary Board 与右 rail 有离线 DOM / fixture 覆盖。
-- `secretary_agent.rs` 能做一次性只读解释，但仍固定使用历史测试项目 cwd，没有 RoleSession/store/audit；runtime attention、右栏通知 / 待办、memory daily inbox 只提供旧来源和产品形态素材。
-- `mcp/identity_kernel.rs` 已有 Personal / Global / Project 类型，但仍是 staged / unwired（暂存、未接线），现有 resolver 固定构造 Project scope，不能直接冒充普通产品 PersonalScope。
-- M2 的已完成面是 `workflow-state-sidecar.repository.m2.v1` bounded reference slice；通用 M2 transaction / projector 接口仍是 private/unwired candidate，M4 只能复用明确映射后的低层 immediate transaction 与 busy retry 机制。
-- 当前首页、右栏、秘书看板已经显示部分“等用户”“风险”“运行中”信息，但它们是多源临时拼装。
+- M4C01 冻结了普通产品 M3 bridge、Secretary/PersonalScope、M4 单写 store、source/dedupe/priority、时区/日报、OpenLoop/Todo、M4/M7、迁移回切与证据分层合同。
+- M4C02 把后端固定的 Secretary RoleSession 与 PersonalScope 接入普通产品 `AppState`；M4C03 建立 M4 自有 schema/repository/UoW 与 source-first Inbox/OpenLoop/Decision projection。
+- M4C04 完成 attention、Notification、Reminder、显式 PersonalAction 与 owner command receipt 的生命周期；M4C05 完成确定性 brief、持久协调上下文、模型 ledger 和 M3 Handoff 状态处理。
+- M4C06 让首页消费 typed read model，展示来源、owner、优先理由、状态与 deep link，并接入持续 Secretary 对话；专业入口与受守卫回切仍保留。
+- M4C07 完成本地时区 daily window、scheduler、catch-up、幂等、版本纠正、失败恢复与空事件零模型机械证明。
+- M4C08 完成五类旧读面的 shadow/parity/compatibility read-only 和 quarantine；普通产品尚无 legacy tuple adapter，因此 inventory 当前全部 fail closed，不显示活动兼容项。
+- M4C09 使用 synthetic fixture、两个 source owner、fake model 与隔离 profile 完成 debug App 首启、强退、同 profile 重启、生命周期、日报、deep link 和模型故障验收；C10 完成全量离线回归与 launcher 静态契约消歧。
 
-### 尚未成立
+### 尚未成立或下游 HOLD
 
-- 普通产品没有已注入的 Secretary M3 RoleSession runtime，也没有 M4 自有持久 store；前端缓存不跨重启，也没有 M4 统一审计。
-- 没有 `PersonalScope`、`InboxItem`、`OpenLoop`、持久 `Notification / Todo / Reminder / DecisionRequest` 生命周期。
-- `pendingAction`、通知、待办和运行关注主要是 React state 或即时派生，缺 read / dismiss / snooze / close / reopen / carry-over。
-- 现有 “daily loop” 是记忆候选筛选 / best-effort capture，不是日报实体、scheduler 或全日整理。
-- 没有顶层持续 Secretary conversation；“已知晓”与 owner 事实之间尚无正式边界。
-- 没有空事件窗口的模型调用计数证据，也没有日报同窗口幂等、跨重启或逐项 deep link 证据。
+- M5 ProjectSummary 合同/owner 尚未激活，项目摘要 source 明确 unavailable；M4 的完成口径不覆盖“全部用户相关 open loops”。
+- M6 Global Supervisor 成功 consult 尚未实现；普通产品 M4 只保留 M3 Handoff 请求/回执边界并显式 unavailable。
+- M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M8 真实 connector/credential/external source 也未进入。
+- M9 command unregister 与旧路物理退役、M10 真实全日试点和发布硬化未进入。C09 synthetic isolated App 不等于真实日常使用、发布包或生产验收。
 
-### 已决边界、M4C01 施工参数与后续验收项
+### 已冻结边界与验收结论
 
 以下内容已经由产品正本、M1/M3 合同、本计划和 `m4-secretary-attention-daily-resolution-v1.md` 裁决，不是待用户重复回答的问题：
 
@@ -159,9 +158,9 @@ SEC-001 → SEC-002 → SEC-003 → SEC-004
 
 ## 8. 授权与停止条件
 
-整阶段本地授权允许在当前 leaf 写域内实施 local schema/store、离线测试和构建、临时/隔离数据库、假模型/provider、精确本地提交，并允许在 M4C09 专门验收包中启动、强制退出和重启本仓库调试 App，使用合成资料和隔离配置保存脱敏证据。每个 leaf 完成、验证、独立审查、精确提交和归档后可自动进入下一 leaf。
+stage-06 历史授权曾允许各 leaf 写域内的 local schema/store、离线测试和构建、临时/隔离数据库、假模型/provider、精确本地提交，以及 M4C09 专门验收包中的合成调试 App 启动、强退、重启和脱敏证据保存。阶段关闭后该授权不再产生新的施工权限。
 
-始终排除真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/外部 connector、网络外部写入、远端、push、merge、rebase、部署、发布、reset、clean、stash、破坏性删除、M5-M10 产品实现和当前任务包写域外修改。首页正式切换、scheduler 产品常驻与旧读路关闭只能在对应 M4 leaf 的合同和回切条件内实施；本阶段不产生真实日常使用结论。
+本阶段始终排除了真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/外部 connector、网络外部写入、远端、push、merge、rebase、部署、发布、reset、clean、stash、破坏性删除和 M5-M10 产品实现；最终结论也不包含这些范围。
 
 立即停止：source owner 不唯一；OpenLoop 与 Todo 重叠成双真源；ack 改了 owner 事实；日报需要 raw transcript / secret；priority 无 reason；空事件仍调用模型；M4 直接写 M5/M7 对象；UI 本地状态冒充持久生命周期；dirty WIP 冲突；synthetic 被表述成真实日常验收。
 
@@ -177,3 +176,5 @@ SEC-001 → SEC-002 → SEC-003 → SEC-004
 - isolated App 场景通过；真实数据结论逐项记录；
 - 把 source event / DailyReport ref 合同交 M7，把咨询合同交 M6；
 - `../current-state.md` 回写实际完成、证据上限和暂缓项；M4C10 独立验收、全量回归、文档同步与 stage-06 收口完成后停止，等待总线主管复核。
+
+以上退出项已在 M4C01–M4C10 的具名范围内完成并由 `../harness/reports/M4C10-mainline-integration-and-acceptance.md` 结算；M4 状态为 `COMPLETED / MAINLINE / STAGE-06 CLOSED`。当前停止等待总线主管复核，不自动进入 M5–M10。
