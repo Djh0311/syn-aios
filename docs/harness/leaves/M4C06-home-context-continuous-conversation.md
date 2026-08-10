@@ -19,6 +19,7 @@
 - prototypes/productized-desktop-shell/src/lib/tauri.ts
 - prototypes/productized-desktop-shell/src/lib/types/
 - prototypes/productized-desktop-shell/src/views/HomeView.tsx
+- prototypes/productized-desktop-shell/src/styles.css
 - prototypes/productized-desktop-shell/src/styles/
 - prototypes/productized-desktop-shell/tests/ [新增]
 - prototypes/productized-desktop-shell/scripts/run-offline-interaction-test.mjs
