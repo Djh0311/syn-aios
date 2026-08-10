@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-10，M3C01–M3C08 已完成并进入主线；M3C08 内容提交为 `fa8e392`（`fix(m3): close integration regression [catch:none]`），其回归证据在本文件和 M3C08 验收报告中结算。状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`：M3C08 `done` 与 stage-05 `close-stage` 由与本次状态回写同批的终态控制提交执行并归档，不在此猜测该控制提交自身 hash。当前没有活动 stage 或 leaf。
+截至 2026-08-10，M3C01–M3C08 已完成并进入主线；M3C08 内容提交为 `fa8e392`（`fix(m3): close integration regression [catch:none]`），其回归证据在本文件和 M3C08 验收报告中结算。M3 状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4 已由用户整阶段授权并在本地主线激活为 `ACTIVE / STAGE-06`；阶段入口 leaf 是 `M4C01`，阶段搭建提交为 `7b1b63f`，实时唯一 current leaf 以 `docs/harness/leaves/` 为准。M4C01 只冻结实施合同并纠正当前事实，不把合同证据写成后续产品实现已完成。
 
 ## 现在分别看哪里
 
@@ -9,9 +9,20 @@
 3. `docs/product/authority-register-v1.md`：决定各类文件当前有什么效力；
 4. `docs/workbench-system-architecture-v1.md`：决定现行系统边界；
 5. 本文件、源码与新鲜验证：说明已实现事实、未知和证据上限；
-6. `AGENTS.md`、`docs/harness/plan.md`、stage-05 / M3C08 的 done 归档与 `docs/harness/authorization.json`：确认已关闭阶段的证据边界；新的工程施工必须重新取得用户指令、stage、leaf 和授权。
+6. `AGENTS.md`、`docs/harness/plan.md`、`docs/harness/stages/stage-06.md`、唯一活动 leaf 与 `docs/harness/authorization.json`：确认 M4 当前任务包写域、验证和整阶段本地授权；stage-05 / M3C08 的 done 归档只证明 M3 已关闭。
 
 验收报告、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
+
+## M4 stage-06 当前事实
+
+- 用户已明确授权“整个 M4 本地阶段”，授权记录为 `USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810`。它允许当前任务包内的 M4 合同、文档、Rust 后端、前端、测试、隔离脚本、离线构建/迁移、假模型/provider、M4C09 隔离调试 App 验收、精确暂存和本地提交；任务包完成后可自动进入下一 leaf。
+- 授权始终排除真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/外部 connector、网络外部写入、远端、push、merge、rebase、部署、发布、reset、clean、stash、破坏性删除、M5-M10 产品实现和当前 leaf 写域外修改。
+- M4 的核心产品要求已经完整确定：Secretary 是跨重启长期稳定角色，持续看住与用户有关、已接入来源中的未闭环事项，提供可回源情境、提醒、日报和交接建议。它只拥有可撤销的协调状态，不拥有项目、任务、工作流、授权、正式记忆、Skill 或外部来源事实。
+- `OpenLoop` 与 standalone personal Todo 是不同对象。只有用户明确命令才创建 `PersonalAction`；Inbox、Attention、日报和模型输出都不会自动克隆个人待办。
+- M3 通用合同、自有 repository/schema/read model/transport/Handoff 与隔离实现已经完成；普通产品 `AppState` 目前仍以 `Default::default()` 注入空的 M3 read runtime，只有 M3C07 隔离 profile 会安装运行时。普通产品正式接线是 M4C02 的施工前置，不是 M3 缺陷。
+- 现有 `secretary_agent.rs` 仍是一次性只读解释，固定历史测试项目 cwd，没有 RoleSession/store/audit。`mcp/identity_kernel.rs` 的 Personal/Global/Project 类型仍未接 Tauri，现有 resolver 固定构造 Project scope；两者都不能作为已完成的 M4 产品能力。
+- M2 已完成的是 bounded `workflow-state-sidecar.repository.m2.v1` reference slice。M4 只能复用经过明确映射的 immediate transaction、busy retry 和物理 ledger 形状；M4 必须拥有自己的 schema、repository、UoW、receipt/event/audit/projector/checkpoint，不能把 M2 workflow sidecar 或 private/unwired candidate 当通用产品端口。
+- 当前 M4C01 新增 `docs/contracts/m4-secretary-attention-daily-resolution-v1.md`，冻结普通产品 M3 bridge、Secretary/PersonalScope、M4 单写存储、source/dedupe/priority、时区/日报、OpenLoop/Todo、M4/M7、事件驱动零模型、迁移/回切、证据等级和 M4C02-M4C10 分工。它当前的证据级别只是 contract/source resolution，不等于后续实现已通过。
 
 ## M3C01–M3C07 已证实的主线事实
 
@@ -44,7 +55,9 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M3 已完成，stage-05 已关闭，当前没有活动工程任务。M4、M5、M6 及之后阶段均为 `PLANNED / NOT_ACTIVE`；M3 收口不自动激活它们，也不授予实现权限。任何下一步均需新的明确用户指令、匹配的新 stage、唯一 leaf 和授权。
+M3 已完成，stage-05 已关闭。M4 为当前唯一活动开发阶段；stage-06 从 M4C01 合同包进入，实时唯一 current leaf 以 Harness 为准。每个 leaf 完成机械校验、独立审查、精确提交和归档后，按整阶段授权自动进入下一 leaf。M5、M6 及之后阶段均未由本轮激活；M4 只消费或交接它们未来拥有的 typed ref/event，不实现其产品写面。
+
+本轮停止边界仍是：出现产品正本与 M1/M3 冻结合同的真实冲突、来源 owner/revision 无法精确绑定、协调动作反写 owner、空事件触发模型、敏感正文进入 M4 store、普通模式借隔离 gate/fixed cwd 上活，或需要扩大到真实数据/模型/provider/connector/远端/发布。普通实现细节在 M4 合同和当前 leaf 内自主冻结，不再作为产品问题回问用户。
 
 ## 保全
 
