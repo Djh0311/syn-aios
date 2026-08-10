@@ -1,6 +1,7 @@
 import { SecretaryBrief } from "./SecretaryBrief";
 import { displayStatus, listRowTimeLabel, runtimeLogCategoryLabel } from "../lib/format";
 import { deriveRunQueueReadModel, type RunQueueReadModel } from "../lib/runQueue";
+import { isSecretaryLegacyReadFallback } from "../lib/secretaryReadModel";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
 import type { SecretaryHomeReadModel, SecretaryTypedDeepLinkDescriptor } from "../lib/types/m4Secretary";
 import type { MemoryCandidateStoreV1, MemoryCaptureStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
@@ -72,6 +73,7 @@ export function RightDetailPanel({
   onReloadWorkflowState: () => void;
 }) {
   if (activePanel === "secretary") {
+    const compatibilityFallback = isSecretaryLegacyReadFallback(secretaryHome);
     return (
       <div className="right-detail">
         <section className="status-pane secretary-boundary-pane">
@@ -81,12 +83,17 @@ export function RightDetailPanel({
               ×
             </button>
           </h2>
-          <p className="muted small-note">只展示后端恢复的持续情境；不写来源事实、不派发任务、不创建 Todo。</p>
+          <p className="muted small-note">
+            {compatibilityFallback
+              ? "当前是旧摘要的只读兼容回退；只显示已核验来源，未知 owner 保持隔离，不写来源事实、不派发任务、不创建 Todo。"
+              : "只展示后端恢复的持续情境；不写来源事实、不派发任务、不创建 Todo。"}
+          </p>
         </section>
         <section className="status-pane">
           {secretaryHome ? (
             <SecretaryBrief
               home={secretaryHome}
+              context={secretaryContext}
               presentationState={secretaryHomePresentationState}
               onOpenBoard={() => onNavigate("secretary_board")}
               onOpenDeepLink={onOpenSecretaryDeepLink}

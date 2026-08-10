@@ -18,6 +18,64 @@ fn m4_unavailable_daily_report(
     }
 }
 
+// M4C08 legacy read compatibility ------------------------------------------
+//
+// The renderer supplies no C08 compatibility request data. The backend owns
+// the closed inventory and fixed scope, then returns a read-only parity
+// envelope; it has no coordination transition, owner port, raw legacy
+// aggregate, callback, route guess, or executable payload.
+const M4C08_LEGACY_READ_COMPATIBILITY_UNAVAILABLE: &str =
+    "M4_LEGACY_READ_COMPATIBILITY_UNAVAILABLE";
+
+/// Re-reads the fixed personal scope in a SQLite read-only transaction and
+/// produces a versioned C08 parity report. An invalid or incomplete legacy
+/// tuple is quarantined in that report; this command never promotes, repairs,
+/// mutates, deletes, or dispatches anything.
+#[tauri::command]
+async fn load_secretary_legacy_read_compatibility_report(
+    state: tauri::State<'_, AppState>,
+) -> Result<m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope, String> {
+    let candidates = m4_secretary_read_model::m4_legacy_read_inventory_only_candidates();
+    #[cfg(not(test))]
+    {
+        let Some(repository) = state.m4_secretary_repository.clone() else {
+            return Ok(
+                m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::unavailable(
+                    M4C08_LEGACY_READ_COMPATIBILITY_UNAVAILABLE,
+                ),
+            );
+        };
+        return Ok(tauri::async_runtime::spawn_blocking(move || {
+            repository
+                .read_legacy_read_compatibility_report(
+                    crate::m4_secretary_domain::m4_primary_scope_ref(),
+                    &candidates,
+                )
+                .map(m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::ready)
+                .unwrap_or_else(|_| {
+                    m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::unavailable(
+                        M4C08_LEGACY_READ_COMPATIBILITY_UNAVAILABLE,
+                    )
+                })
+        })
+        .await
+        .unwrap_or_else(|_| {
+            m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::unavailable(
+                M4C08_LEGACY_READ_COMPATIBILITY_UNAVAILABLE,
+            )
+        }));
+    }
+    #[cfg(test)]
+    {
+        let _ = (state, candidates);
+        Ok(
+            m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::unavailable(
+                M4C08_LEGACY_READ_COMPATIBILITY_UNAVAILABLE,
+            ),
+        )
+    }
+}
+
 /// Explicit open/refresh is an admitted mechanical DailyBrief projection
 /// trigger. Identity, PersonalScope and timezone stay server-owned; the
 /// renderer supplies no path, scope, date, model purpose or provider input.
@@ -8711,5 +8769,29 @@ mod fnd004a_ownership_tests {
         let err = result.unwrap_err();
         assert!(err.contains("fnd004a_rejected"), "错误应包含 fnd004a_rejected: {err}");
         let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod m4c08_legacy_read_compatibility_command_tests {
+    use super::*;
+
+    #[test]
+    fn m4c08_command_uses_server_fixed_inventory_only_candidates() {
+        let candidates = m4_secretary_read_model::m4_legacy_read_inventory_only_candidates();
+        assert_eq!(candidates.len(), 5);
+        assert!(candidates.iter().all(|candidate| {
+            candidate.legacy_item_ref.is_none()
+                && candidate.source_owner_ref.is_none()
+                && candidate.scope_ref.is_none()
+                && candidate.source_type.is_none()
+                && candidate.canonical_source_object_id.is_none()
+                && candidate.source_revision.is_none()
+                && candidate.source_owner_watermark.is_none()
+                && candidate.source_link.is_none()
+                && candidate.source_status_code.is_none()
+                && candidate.priority_reason_code.is_none()
+                && candidate.scope_source_watermark.is_none()
+        }));
     }
 }

@@ -4,10 +4,13 @@
 //! supplies already-validated rows; ordering is repeated mechanically in Rust
 //! so SQLite collation or renderer order never becomes priority authority.
 
-use crate::m4_secretary_domain::{m4_is_opaque_reference, m4_parse_rfc3339_utc_key};
+use crate::m4_secretary_domain::{
+    m4_is_opaque_reference, m4_parse_rfc3339_utc_key, M4_WORKFLOW_ATTENTION_OBJECT_TYPE,
+    M4_WORKFLOW_ATTENTION_SOURCE_TYPE,
+};
 use serde::Serialize;
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct M4SourceLinkRead {
@@ -571,6 +574,803 @@ fn compare_attention_order(
         .then_with(|| left_object_id.cmp(right_object_id))
 }
 
+// -------------------------------------------------------------------------
+// M4C08 legacy read compatibility: shadow/parity only, never a write path.
+// -------------------------------------------------------------------------
+
+pub(crate) const M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION: &str =
+    "syn.m4.secretary.legacy-read-compatibility.v1";
+pub(crate) const M4_LEGACY_READ_PARITY_MATRIX_VERSION: &str = "syn.m4.legacy-read-parity/v1";
+const M4_LEGACY_READ_COMPATIBILITY_MODE: &str = "M4_PRIMARY_LEGACY_READ_ONLY_FALLBACK";
+const M4_LEGACY_READ_ROLLBACK_MODE: &str = "GUARDED_LEGACY_READ_ONLY";
+const M4_LEGACY_READ_SOURCE_REF_ONLY_ROLE: &str = "SOURCE_REF_AND_DEDUPE_CANDIDATE_ONLY";
+const M4_LEGACY_READ_WRITE_AUTHORITY_NONE: &str = "NONE";
+
+/// The C08 inventory is deliberately closed. These values name only former
+/// read surfaces; none creates a source adapter or owner-command port.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M4LegacyReadSourceKind {
+    SecretaryReadModelDeterministicSummary,
+    RightRailNotificationAndTodoProjection,
+    RuntimeAttentionProjection,
+    ReactPendingActionVisibility,
+    MemoryDailyInboxCandidate,
+}
+
+impl M4LegacyReadSourceKind {
+    const ALL: [Self; 5] = [
+        Self::SecretaryReadModelDeterministicSummary,
+        Self::RightRailNotificationAndTodoProjection,
+        Self::RuntimeAttentionProjection,
+        Self::ReactPendingActionVisibility,
+        Self::MemoryDailyInboxCandidate,
+    ];
+
+    pub(crate) fn code(self) -> &'static str {
+        match self {
+            Self::SecretaryReadModelDeterministicSummary => {
+                "SECRETARY_READ_MODEL_DETERMINISTIC_SUMMARY"
+            }
+            Self::RightRailNotificationAndTodoProjection => {
+                "RIGHT_RAIL_NOTIFICATION_AND_TODO_PROJECTION"
+            }
+            Self::RuntimeAttentionProjection => "RUNTIME_ATTENTION_PROJECTION",
+            Self::ReactPendingActionVisibility => "REACT_PENDING_ACTION_VISIBILITY",
+            Self::MemoryDailyInboxCandidate => "MEMORY_DAILY_INBOX_CANDIDATE",
+        }
+    }
+}
+
+/// Machine-readable inventory. Its fields are constants, never a route,
+/// callback, raw payload, or mutable legacy handle.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyReadSourceInventoryEntry {
+    pub(crate) legacy_source_kind: String,
+    pub(crate) compatibility_role: String,
+    pub(crate) write_authority: String,
+}
+
+pub(crate) fn m4_legacy_read_source_inventory() -> Vec<M4LegacyReadSourceInventoryEntry> {
+    M4LegacyReadSourceKind::ALL
+        .into_iter()
+        .map(|legacy_source_kind| M4LegacyReadSourceInventoryEntry {
+            legacy_source_kind: legacy_source_kind.code().to_string(),
+            compatibility_role: M4_LEGACY_READ_SOURCE_REF_ONLY_ROLE.to_string(),
+            write_authority: M4_LEGACY_READ_WRITE_AUTHORITY_NONE.to_string(),
+        })
+        .collect()
+}
+
+/// The public C08 command receives no renderer data. Its fixed, server-owned
+/// inventory intentionally carries no join tuple, so each ordinary-product
+/// candidate stays report-only quarantine until an internal adapter supplies
+/// an exact typed source tuple.
+pub(crate) fn m4_legacy_read_inventory_only_candidates() -> Vec<M4LegacyReadCandidate> {
+    M4LegacyReadSourceKind::ALL
+        .into_iter()
+        .map(|legacy_source_kind| M4LegacyReadCandidate {
+            legacy_source_kind,
+            legacy_item_ref: None,
+            source_owner_ref: None,
+            scope_ref: None,
+            source_type: None,
+            canonical_source_object_id: None,
+            source_revision: None,
+            source_owner_watermark: None,
+            source_link: None,
+            source_status_code: None,
+            priority_reason_code: None,
+            scope_source_watermark: None,
+        })
+        .collect()
+}
+
+/// A scrubbed, non-authoritative observation from one legacy read surface.
+/// Missing fields cause quarantine rather than reconstruction from frontend
+/// cache, labels, routes, or executable pending-action data.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M4LegacyReadCandidate {
+    pub(crate) legacy_source_kind: M4LegacyReadSourceKind,
+    pub(crate) legacy_item_ref: Option<String>,
+    pub(crate) source_owner_ref: Option<String>,
+    pub(crate) scope_ref: Option<String>,
+    pub(crate) source_type: Option<String>,
+    pub(crate) canonical_source_object_id: Option<String>,
+    pub(crate) source_revision: Option<u64>,
+    pub(crate) source_owner_watermark: Option<String>,
+    pub(crate) source_link: Option<M4SourceLinkRead>,
+    pub(crate) source_status_code: Option<String>,
+    pub(crate) priority_reason_code: Option<String>,
+    pub(crate) scope_source_watermark: Option<String>,
+}
+
+/// Exact current-source data re-read by the repository before C08 permits a
+/// compatibility item to appear. It is canonical M4 source fact, not legacy
+/// truth copied into a second store.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyCanonicalSourceRead {
+    pub(crate) source_owner_ref: String,
+    pub(crate) scope_ref: String,
+    pub(crate) source_type: String,
+    pub(crate) canonical_source_object_id: String,
+    pub(crate) source_revision: u64,
+    pub(crate) source_owner_watermark: String,
+    pub(crate) source_link: M4SourceLinkRead,
+    pub(crate) source_status_code: String,
+    pub(crate) priority_reason_code: String,
+}
+
+/// One read transaction's canonical source set plus its scope watermark.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M4LegacyCanonicalReadSnapshot {
+    pub(crate) scope_ref: String,
+    pub(crate) scope_source_watermark: String,
+    pub(crate) sources: Vec<M4LegacyCanonicalSourceRead>,
+}
+
+/// A mechanically compared legacy candidate. Legacy values are never echoed;
+/// only safe item refs, canonical values, and parity booleans leave this
+/// boundary, so it cannot become a second fact store.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyReadParityRow {
+    pub(crate) legacy_source_kind: String,
+    pub(crate) legacy_item_ref: Option<String>,
+    pub(crate) disposition: String,
+    pub(crate) reason_code: Option<String>,
+    pub(crate) canonical_source: Option<M4LegacyCanonicalSourceRead>,
+    pub(crate) canonical_scope_source_watermark: Option<String>,
+    pub(crate) source_matches: bool,
+    pub(crate) status_matches: bool,
+    pub(crate) priority_reason_matches: bool,
+    pub(crate) source_owner_watermark_matches: bool,
+    pub(crate) scope_source_watermark_matches: bool,
+    pub(crate) dedupe_key: Option<String>,
+    pub(crate) dedupe_disposition: String,
+}
+
+/// Versioned output for shadow comparison and guarded rollback display.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyReadCompatibilityReport {
+    pub(crate) schema_version: String,
+    pub(crate) parity_matrix_version: String,
+    pub(crate) mode: String,
+    pub(crate) rollback_mode: String,
+    pub(crate) scope_ref: String,
+    pub(crate) scope_source_watermark: String,
+    pub(crate) inventory: Vec<M4LegacyReadSourceInventoryEntry>,
+    pub(crate) rows: Vec<M4LegacyReadParityRow>,
+}
+
+// The command boundary uses canonical decimal strings for every u64.  This
+// keeps a legacy candidate's exact revision intact across JavaScript rather
+// than allowing a renderer number to round it before the next read.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyReadSourceLinkDto {
+    pub(crate) link_kind: String,
+    pub(crate) source_owner_ref: String,
+    pub(crate) object_type: String,
+    pub(crate) canonical_source_object_id: String,
+    pub(crate) expected_source_revision: String,
+    pub(crate) opaque_route_ref: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyCanonicalSourceReadDto {
+    pub(crate) source_owner_ref: String,
+    pub(crate) scope_ref: String,
+    pub(crate) source_type: String,
+    pub(crate) canonical_source_object_id: String,
+    pub(crate) source_revision: String,
+    pub(crate) source_owner_watermark: String,
+    pub(crate) source_link: M4LegacyReadSourceLinkDto,
+    pub(crate) source_status_code: String,
+    pub(crate) priority_reason_code: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyReadParityRowDto {
+    pub(crate) legacy_source_kind: String,
+    pub(crate) legacy_item_ref: Option<String>,
+    pub(crate) disposition: String,
+    pub(crate) reason_code: Option<String>,
+    pub(crate) canonical_source: Option<M4LegacyCanonicalSourceReadDto>,
+    pub(crate) canonical_scope_source_watermark: Option<String>,
+    pub(crate) source_matches: bool,
+    pub(crate) status_matches: bool,
+    pub(crate) priority_reason_matches: bool,
+    pub(crate) source_owner_watermark_matches: bool,
+    pub(crate) scope_source_watermark_matches: bool,
+    pub(crate) dedupe_key: Option<String>,
+    pub(crate) dedupe_disposition: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyReadCompatibilityReportDto {
+    pub(crate) schema_version: String,
+    pub(crate) parity_matrix_version: String,
+    pub(crate) mode: String,
+    pub(crate) rollback_mode: String,
+    pub(crate) scope_ref: String,
+    pub(crate) scope_source_watermark: String,
+    pub(crate) inventory: Vec<M4LegacyReadSourceInventoryEntry>,
+    pub(crate) rows: Vec<M4LegacyReadParityRowDto>,
+}
+
+/// The compatibility command is a read envelope, never an owner-command or
+/// migration result. `UNAVAILABLE` intentionally carries no partial report.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum M4LegacyReadCompatibilityReportEnvelope {
+    Ready {
+        report: M4LegacyReadCompatibilityReportDto,
+    },
+    Unavailable {
+        reason: String,
+    },
+}
+
+impl M4LegacyReadCompatibilityReportEnvelope {
+    pub(crate) fn ready(report: M4LegacyReadCompatibilityReport) -> Self {
+        Self::Ready {
+            report: report.into(),
+        }
+    }
+
+    pub(crate) fn unavailable(reason: &str) -> Self {
+        Self::Unavailable {
+            reason: reason.to_string(),
+        }
+    }
+}
+
+impl From<M4LegacyReadCompatibilityReport> for M4LegacyReadCompatibilityReportDto {
+    fn from(report: M4LegacyReadCompatibilityReport) -> Self {
+        Self {
+            schema_version: report.schema_version,
+            parity_matrix_version: report.parity_matrix_version,
+            mode: report.mode,
+            rollback_mode: report.rollback_mode,
+            scope_ref: report.scope_ref,
+            scope_source_watermark: report.scope_source_watermark,
+            inventory: report.inventory,
+            rows: report.rows.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<M4LegacyReadParityRow> for M4LegacyReadParityRowDto {
+    fn from(row: M4LegacyReadParityRow) -> Self {
+        Self {
+            legacy_source_kind: row.legacy_source_kind,
+            legacy_item_ref: row.legacy_item_ref,
+            disposition: row.disposition,
+            reason_code: row.reason_code,
+            canonical_source: row.canonical_source.map(Into::into),
+            canonical_scope_source_watermark: row.canonical_scope_source_watermark,
+            source_matches: row.source_matches,
+            status_matches: row.status_matches,
+            priority_reason_matches: row.priority_reason_matches,
+            source_owner_watermark_matches: row.source_owner_watermark_matches,
+            scope_source_watermark_matches: row.scope_source_watermark_matches,
+            dedupe_key: row.dedupe_key,
+            dedupe_disposition: row.dedupe_disposition,
+        }
+    }
+}
+
+impl From<M4LegacyCanonicalSourceRead> for M4LegacyCanonicalSourceReadDto {
+    fn from(source: M4LegacyCanonicalSourceRead) -> Self {
+        Self {
+            source_owner_ref: source.source_owner_ref,
+            scope_ref: source.scope_ref,
+            source_type: source.source_type,
+            canonical_source_object_id: source.canonical_source_object_id,
+            source_revision: source.source_revision.to_string(),
+            source_owner_watermark: source.source_owner_watermark,
+            source_link: source.source_link.into(),
+            source_status_code: source.source_status_code,
+            priority_reason_code: source.priority_reason_code,
+        }
+    }
+}
+
+impl From<M4SourceLinkRead> for M4LegacyReadSourceLinkDto {
+    fn from(link: M4SourceLinkRead) -> Self {
+        Self {
+            link_kind: link.link_kind,
+            source_owner_ref: link.source_owner_ref,
+            object_type: link.object_type,
+            canonical_source_object_id: link.canonical_source_object_id,
+            expected_source_revision: link.expected_source_revision.to_string(),
+            opaque_route_ref: link.opaque_route_ref,
+        }
+    }
+}
+
+/// Build C08's report from an atomically re-read canonical snapshot. Missing,
+/// stale, unknown, or divergent legacy candidates stay quarantined in the
+/// returned read result; this function has no storage or owner side effects.
+pub(crate) fn build_m4_legacy_shadow_parity_report(
+    canonical_snapshot: &M4LegacyCanonicalReadSnapshot,
+    legacy_candidates: &[M4LegacyReadCandidate],
+) -> Result<M4LegacyReadCompatibilityReport, String> {
+    validate_m4c08_canonical_snapshot(canonical_snapshot)?;
+
+    let mut ordered_candidates = legacy_candidates.to_vec();
+    ordered_candidates.sort_by(|left, right| {
+        (
+            left.legacy_source_kind.code(),
+            left.legacy_item_ref.as_deref().unwrap_or(""),
+        )
+            .cmp(&(
+                right.legacy_source_kind.code(),
+                right.legacy_item_ref.as_deref().unwrap_or(""),
+            ))
+    });
+
+    let mut rows = ordered_candidates
+        .iter()
+        .map(|candidate| m4c08_build_parity_row(canonical_snapshot, candidate))
+        .collect::<Vec<_>>();
+    m4c08_quarantine_ambiguous_legacy_identities(&mut rows)?;
+    let mut seen_dedupe_keys = BTreeSet::new();
+    for row in &mut rows {
+        if row.disposition != "PARITY" {
+            row.dedupe_disposition = "NOT_ELIGIBLE".to_string();
+            continue;
+        }
+        let canonical_source = row
+            .canonical_source
+            .as_ref()
+            .ok_or_else(|| "m4c08_parity_row_canonical_missing".to_string())?;
+        let dedupe_key = m4c08_dedupe_key(canonical_source)?;
+        row.dedupe_disposition = if seen_dedupe_keys.insert(dedupe_key.clone()) {
+            "PRIMARY".to_string()
+        } else {
+            "DUPLICATE_DISPLAY_ONLY".to_string()
+        };
+        row.dedupe_key = Some(dedupe_key);
+    }
+
+    let report = M4LegacyReadCompatibilityReport {
+        schema_version: M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION.to_string(),
+        parity_matrix_version: M4_LEGACY_READ_PARITY_MATRIX_VERSION.to_string(),
+        mode: M4_LEGACY_READ_COMPATIBILITY_MODE.to_string(),
+        rollback_mode: M4_LEGACY_READ_ROLLBACK_MODE.to_string(),
+        scope_ref: canonical_snapshot.scope_ref.clone(),
+        scope_source_watermark: canonical_snapshot.scope_source_watermark.clone(),
+        inventory: m4_legacy_read_source_inventory(),
+        rows,
+    };
+    validate_m4c08_legacy_read_compatibility_report(&report)?;
+    Ok(report)
+}
+
+/// A legacy identity is the closed pair `(legacy_source_kind, legacy_item_ref)`.
+/// Once that identity exactly joins more than one distinct canonical source,
+/// every row for it becomes diagnostic-only quarantine before global canonical
+/// de-duplication can choose a display primary.
+fn m4c08_quarantine_ambiguous_legacy_identities(
+    rows: &mut [M4LegacyReadParityRow],
+) -> Result<(), String> {
+    let mut canonical_by_legacy_identity =
+        BTreeMap::<(String, String), (String, M4LegacyCanonicalSourceRead)>::new();
+    let mut ambiguous_legacy_identities = BTreeSet::new();
+
+    for row in rows.iter() {
+        if row.disposition != "PARITY" {
+            continue;
+        }
+        let legacy_item_ref = row
+            .legacy_item_ref
+            .as_ref()
+            .ok_or_else(|| "m4c08_parity_row_legacy_identity_missing".to_string())?;
+        let canonical_source = row
+            .canonical_source
+            .as_ref()
+            .ok_or_else(|| "m4c08_parity_row_canonical_missing".to_string())?;
+        let canonical_dedupe_key = m4c08_dedupe_key(canonical_source)?;
+        let legacy_identity = (row.legacy_source_kind.clone(), legacy_item_ref.clone());
+        if let Some((known_dedupe_key, known_canonical_source)) =
+            canonical_by_legacy_identity.get(&legacy_identity)
+        {
+            if known_dedupe_key != &canonical_dedupe_key
+                || known_canonical_source != canonical_source
+            {
+                ambiguous_legacy_identities.insert(legacy_identity);
+            }
+        } else {
+            canonical_by_legacy_identity.insert(
+                legacy_identity,
+                (canonical_dedupe_key, canonical_source.clone()),
+            );
+        }
+    }
+
+    for row in rows {
+        if row.disposition != "PARITY" {
+            continue;
+        }
+        let Some(legacy_item_ref) = row.legacy_item_ref.as_ref() else {
+            continue;
+        };
+        if ambiguous_legacy_identities
+            .contains(&(row.legacy_source_kind.clone(), legacy_item_ref.clone()))
+        {
+            m4c08_quarantine_legacy_identity_ambiguity(row);
+        }
+    }
+    Ok(())
+}
+
+fn m4c08_quarantine_legacy_identity_ambiguity(row: &mut M4LegacyReadParityRow) {
+    row.disposition = "QUARANTINED".to_string();
+    row.reason_code = Some("M4C08_LEGACY_IDENTITY_AMBIGUOUS".to_string());
+    row.canonical_source = None;
+    row.canonical_scope_source_watermark = None;
+    row.source_matches = false;
+    row.status_matches = false;
+    row.priority_reason_matches = false;
+    row.source_owner_watermark_matches = false;
+    row.scope_source_watermark_matches = false;
+    row.dedupe_key = None;
+    row.dedupe_disposition = "NOT_ELIGIBLE".to_string();
+}
+
+/// The rollback display is a filtered read-only view. It cannot resurrect an
+/// owner fact, modify M4 evidence, or physically remove legacy material.
+pub(crate) fn guarded_m4_legacy_read_only_fallback(
+    report: &M4LegacyReadCompatibilityReport,
+) -> Result<Vec<M4LegacyReadParityRow>, String> {
+    validate_m4c08_legacy_read_compatibility_report(report)?;
+    if report.rollback_mode != M4_LEGACY_READ_ROLLBACK_MODE {
+        return Err("m4c08_rollback_mode_invalid".to_string());
+    }
+    Ok(report
+        .rows
+        .iter()
+        .filter(|row| row.disposition == "PARITY" && row.dedupe_disposition == "PRIMARY")
+        .cloned()
+        .collect())
+}
+
+fn m4c08_build_parity_row(
+    canonical_snapshot: &M4LegacyCanonicalReadSnapshot,
+    candidate: &M4LegacyReadCandidate,
+) -> M4LegacyReadParityRow {
+    let legacy_item_ref = candidate
+        .legacy_item_ref
+        .as_deref()
+        .filter(|value| m4_is_opaque_reference(value))
+        .map(str::to_string);
+    let mut row = M4LegacyReadParityRow {
+        legacy_source_kind: candidate.legacy_source_kind.code().to_string(),
+        legacy_item_ref,
+        disposition: "QUARANTINED".to_string(),
+        reason_code: None,
+        canonical_source: None,
+        canonical_scope_source_watermark: None,
+        source_matches: false,
+        status_matches: false,
+        priority_reason_matches: false,
+        source_owner_watermark_matches: false,
+        scope_source_watermark_matches: false,
+        dedupe_key: None,
+        dedupe_disposition: "NOT_ELIGIBLE".to_string(),
+    };
+
+    if !m4c08_candidate_is_well_formed(candidate) {
+        row.reason_code = Some("M4C08_LEGACY_CANDIDATE_INVALID".to_string());
+        return row;
+    }
+    if candidate.scope_ref.as_deref() != Some(canonical_snapshot.scope_ref.as_str()) {
+        row.reason_code = Some("M4C08_SCOPE_MISMATCH".to_string());
+        return row;
+    }
+
+    let mut canonical_sources = canonical_snapshot.sources.iter().filter(|source| {
+        candidate.source_owner_ref.as_deref() == Some(source.source_owner_ref.as_str())
+            && candidate.scope_ref.as_deref() == Some(source.scope_ref.as_str())
+            && candidate.source_type.as_deref() == Some(source.source_type.as_str())
+            && candidate.canonical_source_object_id.as_deref()
+                == Some(source.canonical_source_object_id.as_str())
+    });
+    let Some(canonical_source) = canonical_sources.next() else {
+        row.reason_code = Some("M4C08_CANONICAL_SOURCE_NOT_FOUND".to_string());
+        return row;
+    };
+    if canonical_sources.next().is_some() {
+        row.reason_code = Some("M4C08_CANONICAL_SOURCE_AMBIGUOUS".to_string());
+        return row;
+    }
+
+    row.canonical_source = Some(canonical_source.clone());
+    row.canonical_scope_source_watermark = Some(canonical_snapshot.scope_source_watermark.clone());
+    row.source_matches = candidate.source_owner_ref.as_deref()
+        == Some(canonical_source.source_owner_ref.as_str())
+        && candidate.scope_ref.as_deref() == Some(canonical_source.scope_ref.as_str())
+        && candidate.source_type.as_deref() == Some(canonical_source.source_type.as_str())
+        && candidate.canonical_source_object_id.as_deref()
+            == Some(canonical_source.canonical_source_object_id.as_str())
+        && candidate.source_revision == Some(canonical_source.source_revision)
+        && candidate.source_link.as_ref() == Some(&canonical_source.source_link);
+    row.status_matches = candidate.source_status_code.as_deref()
+        == Some(canonical_source.source_status_code.as_str());
+    row.priority_reason_matches = candidate.priority_reason_code.as_deref()
+        == Some(canonical_source.priority_reason_code.as_str());
+    row.source_owner_watermark_matches = candidate.source_owner_watermark.as_deref()
+        == Some(canonical_source.source_owner_watermark.as_str());
+    row.scope_source_watermark_matches = candidate.scope_source_watermark.as_deref()
+        == Some(canonical_snapshot.scope_source_watermark.as_str());
+
+    row.reason_code = if !row.source_matches {
+        match candidate.source_revision {
+            Some(revision) if revision < canonical_source.source_revision => {
+                Some("M4C08_STALE_SOURCE_REVISION".to_string())
+            }
+            Some(revision) if revision > canonical_source.source_revision => {
+                Some("M4C08_CANONICAL_SOURCE_REVISION_UNAVAILABLE".to_string())
+            }
+            _ => Some("M4C08_SOURCE_LINK_MISMATCH".to_string()),
+        }
+    } else if !row.source_owner_watermark_matches {
+        Some("M4C08_SOURCE_OWNER_WATERMARK_MISMATCH".to_string())
+    } else if !row.status_matches {
+        Some("M4C08_PARITY_STATUS_MISMATCH".to_string())
+    } else if !row.priority_reason_matches {
+        Some("M4C08_PARITY_PRIORITY_REASON_MISMATCH".to_string())
+    } else if !row.scope_source_watermark_matches {
+        Some("M4C08_SCOPE_WATERMARK_MISMATCH".to_string())
+    } else {
+        None
+    };
+    if row.reason_code.is_none() {
+        row.disposition = "PARITY".to_string();
+    }
+    row
+}
+
+fn validate_m4c08_canonical_snapshot(
+    canonical_snapshot: &M4LegacyCanonicalReadSnapshot,
+) -> Result<(), String> {
+    if !m4c08_is_safe_reference(&canonical_snapshot.scope_ref)
+        || !m4c04_is_lower_hex_digest(&canonical_snapshot.scope_source_watermark)
+    {
+        return Err("m4c08_canonical_snapshot_scope_invalid".to_string());
+    }
+    for source in &canonical_snapshot.sources {
+        validate_m4c08_canonical_source(source, &canonical_snapshot.scope_ref)?;
+    }
+    Ok(())
+}
+
+fn validate_m4c08_canonical_source(
+    source: &M4LegacyCanonicalSourceRead,
+    expected_scope_ref: &str,
+) -> Result<(), String> {
+    if !m4c08_is_safe_reference(&source.source_owner_ref)
+        || source.scope_ref != expected_scope_ref
+        || source.source_type != M4_WORKFLOW_ATTENTION_SOURCE_TYPE
+        || !m4c08_is_safe_reference(&source.canonical_source_object_id)
+        || !m4_is_opaque_reference(&source.source_owner_watermark)
+        || !m4c08_source_link_matches(
+            &source.source_link,
+            &source.source_owner_ref,
+            &source.canonical_source_object_id,
+            source.source_revision,
+        )
+        || !m4c08_is_source_status(&source.source_status_code)
+        || m4_priority_reason_text(&source.priority_reason_code).is_err()
+    {
+        return Err("m4c08_canonical_source_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn m4c08_candidate_is_well_formed(candidate: &M4LegacyReadCandidate) -> bool {
+    let (
+        Some(legacy_item_ref),
+        Some(source_owner_ref),
+        Some(scope_ref),
+        Some(source_type),
+        Some(canonical_source_object_id),
+        Some(source_revision),
+        Some(source_owner_watermark),
+        Some(source_link),
+        Some(source_status_code),
+        Some(priority_reason_code),
+        Some(scope_source_watermark),
+    ) = (
+        candidate.legacy_item_ref.as_deref(),
+        candidate.source_owner_ref.as_deref(),
+        candidate.scope_ref.as_deref(),
+        candidate.source_type.as_deref(),
+        candidate.canonical_source_object_id.as_deref(),
+        candidate.source_revision,
+        candidate.source_owner_watermark.as_deref(),
+        candidate.source_link.as_ref(),
+        candidate.source_status_code.as_deref(),
+        candidate.priority_reason_code.as_deref(),
+        candidate.scope_source_watermark.as_deref(),
+    )
+    else {
+        return false;
+    };
+
+    m4_is_opaque_reference(legacy_item_ref)
+        && m4c08_is_safe_reference(source_owner_ref)
+        && m4c08_is_safe_reference(scope_ref)
+        && source_type == M4_WORKFLOW_ATTENTION_SOURCE_TYPE
+        && m4c08_is_safe_reference(canonical_source_object_id)
+        && m4_is_opaque_reference(source_owner_watermark)
+        && m4c08_source_link_matches(
+            source_link,
+            source_owner_ref,
+            canonical_source_object_id,
+            source_revision,
+        )
+        && m4c08_is_source_status(source_status_code)
+        && m4_priority_reason_text(priority_reason_code).is_ok()
+        && m4c04_is_lower_hex_digest(scope_source_watermark)
+}
+
+fn m4c08_source_link_matches(
+    source_link: &M4SourceLinkRead,
+    source_owner_ref: &str,
+    canonical_source_object_id: &str,
+    source_revision: u64,
+) -> bool {
+    source_link.link_kind == "INTERNAL_ROUTE"
+        && source_link.source_owner_ref == source_owner_ref
+        && source_link.object_type == M4_WORKFLOW_ATTENTION_OBJECT_TYPE
+        && source_link.canonical_source_object_id == canonical_source_object_id
+        && source_link.expected_source_revision == source_revision
+        && m4_is_opaque_reference(&source_link.opaque_route_ref)
+}
+
+fn m4c08_is_source_status(value: &str) -> bool {
+    matches!(
+        value,
+        "OPEN"
+            | "BLOCKED"
+            | "WAITING_USER"
+            | "INFORMATIONAL"
+            | "COMPLETED"
+            | "CANCELLED"
+            | "EXPIRED"
+    )
+}
+
+fn m4c08_is_safe_reference(value: &str) -> bool {
+    m4c04_is_reference_text(value)
+        && !m4c04_looks_like_raw_reference(value)
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'-'))
+}
+
+fn m4c08_dedupe_key(source: &M4LegacyCanonicalSourceRead) -> Result<String, String> {
+    let revision = source.source_revision.to_string();
+    crate::m4_secretary_domain::m4_internal_id(
+        "legacy-dedupe:",
+        "syn.m4.legacy-read-dedupe/v1",
+        &[
+            &source.source_owner_ref,
+            &source.scope_ref,
+            &source.source_type,
+            &source.canonical_source_object_id,
+            &revision,
+            &source.source_owner_watermark,
+        ],
+    )
+}
+
+fn validate_m4c08_legacy_read_compatibility_report(
+    report: &M4LegacyReadCompatibilityReport,
+) -> Result<(), String> {
+    if report.schema_version != M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION
+        || report.parity_matrix_version != M4_LEGACY_READ_PARITY_MATRIX_VERSION
+        || report.mode != M4_LEGACY_READ_COMPATIBILITY_MODE
+        || report.rollback_mode != M4_LEGACY_READ_ROLLBACK_MODE
+        || !m4c08_is_safe_reference(&report.scope_ref)
+        || !m4c04_is_lower_hex_digest(&report.scope_source_watermark)
+        || report.inventory != m4_legacy_read_source_inventory()
+    {
+        return Err("m4c08_compatibility_report_invalid".to_string());
+    }
+    let mut canonical_by_legacy_identity =
+        BTreeMap::<(String, String), (String, M4LegacyCanonicalSourceRead)>::new();
+    for row in &report.rows {
+        if !M4LegacyReadSourceKind::ALL
+            .iter()
+            .any(|kind| kind.code() == row.legacy_source_kind)
+            || row
+                .legacy_item_ref
+                .as_deref()
+                .is_some_and(|value| !m4_is_opaque_reference(value))
+        {
+            return Err("m4c08_compatibility_report_row_invalid".to_string());
+        }
+        match row.disposition.as_str() {
+            "PARITY"
+                if row.reason_code.is_none()
+                    && row.canonical_source.is_some()
+                    && row.canonical_scope_source_watermark.as_deref()
+                        == Some(report.scope_source_watermark.as_str())
+                    && row.source_matches
+                    && row.status_matches
+                    && row.priority_reason_matches
+                    && row.source_owner_watermark_matches
+                    && row.scope_source_watermark_matches
+                    && row.dedupe_key.as_deref().is_some_and(m4c08_is_dedupe_key)
+                    && matches!(
+                        row.dedupe_disposition.as_str(),
+                        "PRIMARY" | "DUPLICATE_DISPLAY_ONLY"
+                    ) => {}
+            "QUARANTINED"
+                if row.reason_code.as_deref().is_some_and(m4c08_is_reason_code)
+                    && row.dedupe_key.is_none()
+                    && row.dedupe_disposition == "NOT_ELIGIBLE" => {}
+            _ => return Err("m4c08_compatibility_report_row_invalid".to_string()),
+        }
+        if let Some(canonical_source) = &row.canonical_source {
+            validate_m4c08_canonical_source(canonical_source, &report.scope_ref)?;
+        }
+        if row.disposition == "PARITY" {
+            let legacy_item_ref = row
+                .legacy_item_ref
+                .as_ref()
+                .ok_or_else(|| "m4c08_compatibility_report_row_invalid".to_string())?;
+            let canonical_source = row
+                .canonical_source
+                .as_ref()
+                .ok_or_else(|| "m4c08_compatibility_report_row_invalid".to_string())?;
+            let dedupe_key = row
+                .dedupe_key
+                .as_ref()
+                .ok_or_else(|| "m4c08_compatibility_report_row_invalid".to_string())?;
+            let legacy_identity = (row.legacy_source_kind.clone(), legacy_item_ref.clone());
+            if let Some((known_dedupe_key, known_canonical_source)) =
+                canonical_by_legacy_identity.get(&legacy_identity)
+            {
+                if known_dedupe_key != dedupe_key || known_canonical_source != canonical_source {
+                    return Err("m4c08_compatibility_report_legacy_identity_ambiguous".to_string());
+                }
+            } else {
+                canonical_by_legacy_identity.insert(
+                    legacy_identity,
+                    (dedupe_key.clone(), canonical_source.clone()),
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn m4c08_is_dedupe_key(value: &str) -> bool {
+    value
+        .strip_prefix("legacy-dedupe:")
+        .is_some_and(m4c04_is_lower_hex_digest)
+}
+
+fn m4c08_is_reason_code(value: &str) -> bool {
+    matches!(
+        value,
+        "M4C08_LEGACY_CANDIDATE_INVALID"
+            | "M4C08_SCOPE_MISMATCH"
+            | "M4C08_CANONICAL_SOURCE_NOT_FOUND"
+            | "M4C08_CANONICAL_SOURCE_AMBIGUOUS"
+            | "M4C08_LEGACY_IDENTITY_AMBIGUOUS"
+            | "M4C08_STALE_SOURCE_REVISION"
+            | "M4C08_CANONICAL_SOURCE_REVISION_UNAVAILABLE"
+            | "M4C08_SOURCE_LINK_MISMATCH"
+            | "M4C08_SOURCE_OWNER_WATERMARK_MISMATCH"
+            | "M4C08_PARITY_STATUS_MISMATCH"
+            | "M4C08_PARITY_PRIORITY_REASON_MISMATCH"
+            | "M4C08_SCOPE_WATERMARK_MISMATCH"
+    )
+}
+
 // ===== M4C07 DailyBrief / DailyReport read protocol =======================
 //
 // This remains a read-only boundary.  It contains source-backed identifiers,
@@ -953,6 +1753,218 @@ mod tests {
         ];
         sort_m4_inbox_items(&mut items).expect("sort fractional M4 instants");
         assert_eq!(items[0].inbox_item_id, "later");
+    }
+
+    #[test]
+    fn m4c08_legacy_inventory_is_complete_deterministic_and_ref_only() {
+        let inventory = m4_legacy_read_source_inventory();
+        assert_eq!(
+            inventory
+                .iter()
+                .map(|entry| entry.legacy_source_kind.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "SECRETARY_READ_MODEL_DETERMINISTIC_SUMMARY",
+                "RIGHT_RAIL_NOTIFICATION_AND_TODO_PROJECTION",
+                "RUNTIME_ATTENTION_PROJECTION",
+                "REACT_PENDING_ACTION_VISIBILITY",
+                "MEMORY_DAILY_INBOX_CANDIDATE",
+            ]
+        );
+        assert!(inventory.iter().all(|entry| {
+            entry.compatibility_role == "SOURCE_REF_AND_DEDUPE_CANDIDATE_ONLY"
+                && entry.write_authority == "NONE"
+        }));
+        let serialized = serde_json::to_string(&inventory).expect("serialize C08 inventory");
+        for forbidden in [
+            "payload",
+            "callback",
+            "transcript",
+            "credential",
+            "owner_state",
+        ] {
+            assert!(
+                !serialized.to_ascii_lowercase().contains(forbidden),
+                "inventory leaked forbidden field: {forbidden}"
+            );
+        }
+    }
+
+    #[test]
+    fn m4c08_shadow_parity_releases_only_exact_rows_to_guarded_fallback() {
+        let canonical = M4LegacyCanonicalSourceRead {
+            source_owner_ref: "workflow-owner".to_string(),
+            scope_ref: "scope:personal:primary".to_string(),
+            source_type: "structured_internal_workflow_attention_ref".to_string(),
+            canonical_source_object_id: "work-item-a".to_string(),
+            source_revision: 7,
+            source_owner_watermark: opaque("watermark", 'a'),
+            source_link: m4c04_source_link("work-item-a", 7),
+            source_status_code: "WAITING_USER".to_string(),
+            priority_reason_code: "USER_DECISION_OR_BLOCKER".to_string(),
+        };
+        let snapshot = M4LegacyCanonicalReadSnapshot {
+            scope_ref: "scope:personal:primary".to_string(),
+            scope_source_watermark: "b".repeat(64),
+            sources: vec![canonical.clone()],
+        };
+        let exact = M4LegacyReadCandidate {
+            legacy_source_kind: M4LegacyReadSourceKind::SecretaryReadModelDeterministicSummary,
+            legacy_item_ref: Some(opaque("legacy-item", 'c')),
+            source_owner_ref: Some(canonical.source_owner_ref.clone()),
+            scope_ref: Some(canonical.scope_ref.clone()),
+            source_type: Some(canonical.source_type.clone()),
+            canonical_source_object_id: Some(canonical.canonical_source_object_id.clone()),
+            source_revision: Some(canonical.source_revision),
+            source_owner_watermark: Some(canonical.source_owner_watermark.clone()),
+            source_link: Some(canonical.source_link.clone()),
+            source_status_code: Some(canonical.source_status_code.clone()),
+            priority_reason_code: Some(canonical.priority_reason_code.clone()),
+            scope_source_watermark: Some(snapshot.scope_source_watermark.clone()),
+        };
+        let inventory_only = M4LegacyReadCandidate {
+            legacy_source_kind: M4LegacyReadSourceKind::MemoryDailyInboxCandidate,
+            legacy_item_ref: None,
+            source_owner_ref: None,
+            scope_ref: None,
+            source_type: None,
+            canonical_source_object_id: None,
+            source_revision: None,
+            source_owner_watermark: None,
+            source_link: None,
+            source_status_code: None,
+            priority_reason_code: None,
+            scope_source_watermark: None,
+        };
+        let inventory_report = build_m4_legacy_shadow_parity_report(&snapshot, &[inventory_only])
+            .expect("inventory-only C08 candidate becomes a report row");
+        assert_eq!(
+            inventory_report.rows[0].reason_code.as_deref(),
+            Some("M4C08_LEGACY_CANDIDATE_INVALID"),
+            "a missing tuple is quarantined rather than guessed"
+        );
+
+        let mut conflicting_canonical = canonical.clone();
+        conflicting_canonical.source_revision = 8;
+        conflicting_canonical.source_owner_watermark = opaque("watermark", 'd');
+        conflicting_canonical.source_link.expected_source_revision = 8;
+        let ambiguous_snapshot = M4LegacyCanonicalReadSnapshot {
+            scope_ref: snapshot.scope_ref.clone(),
+            scope_source_watermark: snapshot.scope_source_watermark.clone(),
+            sources: vec![canonical.clone(), conflicting_canonical],
+        };
+        let ambiguous_report =
+            build_m4_legacy_shadow_parity_report(&ambiguous_snapshot, &[exact.clone()])
+                .expect("ambiguous source identity remains a report-only quarantine");
+        assert_eq!(
+            ambiguous_report.rows[0].reason_code.as_deref(),
+            Some("M4C08_CANONICAL_SOURCE_AMBIGUOUS"),
+            "an ambiguous legacy join cannot become a guarded display row"
+        );
+
+        let mut same_canonical_other_legacy_surface = exact.clone();
+        same_canonical_other_legacy_surface.legacy_source_kind =
+            M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection;
+        same_canonical_other_legacy_surface.legacy_item_ref = Some(opaque("legacy-item", 'e'));
+        let canonical_dedupe_report = build_m4_legacy_shadow_parity_report(
+            &snapshot,
+            &[exact.clone(), same_canonical_other_legacy_surface],
+        )
+        .expect("different legacy surfaces may point to one canonical source");
+        assert_eq!(
+            canonical_dedupe_report
+                .rows
+                .iter()
+                .filter(|row| row.disposition == "PARITY")
+                .count(),
+            2
+        );
+        assert_eq!(
+            canonical_dedupe_report
+                .rows
+                .iter()
+                .filter(|row| row.dedupe_disposition == "PRIMARY")
+                .count(),
+            1
+        );
+        assert_eq!(
+            canonical_dedupe_report
+                .rows
+                .iter()
+                .filter(|row| row.dedupe_disposition == "DUPLICATE_DISPLAY_ONLY")
+                .count(),
+            1,
+            "different legacy kinds retain ordinary canonical de-duplication"
+        );
+
+        let mut mismatched = exact.clone();
+        mismatched.legacy_source_kind = M4LegacyReadSourceKind::RuntimeAttentionProjection;
+        mismatched.source_status_code = Some("OPEN".to_string());
+
+        let report = build_m4_legacy_shadow_parity_report(&snapshot, &[mismatched, exact])
+            .expect("build C08 parity report");
+        assert_eq!(report.mode, "M4_PRIMARY_LEGACY_READ_ONLY_FALLBACK");
+        assert_eq!(
+            report.parity_matrix_version,
+            M4_LEGACY_READ_PARITY_MATRIX_VERSION
+        );
+        assert_eq!(report.rows.len(), 2);
+        let exact_row = report
+            .rows
+            .iter()
+            .find(|row| row.disposition == "PARITY")
+            .expect("exact legacy candidate remains visible");
+        assert!(
+            exact_row.source_matches
+                && exact_row.status_matches
+                && exact_row.priority_reason_matches
+                && exact_row.source_owner_watermark_matches
+                && exact_row.scope_source_watermark_matches
+        );
+        assert_eq!(
+            exact_row
+                .canonical_source
+                .as_ref()
+                .expect("parity row has canonical source")
+                .source_status_code,
+            "WAITING_USER"
+        );
+        assert_eq!(
+            report
+                .rows
+                .iter()
+                .find(|row| row.disposition == "QUARANTINED")
+                .and_then(|row| row.reason_code.as_deref()),
+            Some("M4C08_PARITY_STATUS_MISMATCH")
+        );
+        let fallback =
+            guarded_m4_legacy_read_only_fallback(&report).expect("guarded compatibility fallback");
+        assert_eq!(fallback.len(), 1);
+        assert_eq!(fallback[0].disposition, "PARITY");
+
+        let transport = M4LegacyReadCompatibilityReportEnvelope::ready(report.clone());
+        let serialized = serde_json::to_value(transport).expect("serialize C08 transport envelope");
+        assert_eq!(serialized["status"], "READY");
+        assert_eq!(
+            serialized["report"]["rows"][0]["canonical_source"]["source_revision"], "7",
+            "C08 transport keeps u64 source revisions as canonical strings"
+        );
+        assert_eq!(
+            serialized["report"]["rows"][0]["canonical_source"]["source_link"]
+                ["expected_source_revision"],
+            "7",
+            "C08 transport keeps link revisions as canonical strings"
+        );
+        let serialized_text =
+            serde_json::to_string(&serialized).expect("render C08 transport JSON");
+        for forbidden in ["payload", "transcript", "cwd", "label", "pending_action"] {
+            assert!(
+                !serialized_text
+                    .to_ascii_lowercase()
+                    .contains(&format!("\"{forbidden}\"")),
+                "C08 transport leaked forbidden field name: {forbidden}"
+            );
+        }
     }
 
     fn opaque(namespace: &str, digit: char) -> String {

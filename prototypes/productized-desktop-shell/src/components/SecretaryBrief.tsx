@@ -1,5 +1,9 @@
 import { memo, useState } from "react";
 import { runSecretaryExplain } from "../lib/tauri";
+import {
+  isSecretaryLegacyReadFallback,
+  isSecretarySourceOwnerResolved,
+} from "../lib/secretaryReadModel";
 import type { SecretaryContext, SecretaryPendingBoard, SecretaryPendingBoardEntry, SecretaryRiskSignal } from "../lib/secretaryReadModel";
 import type {
   SecretaryHomeReadModel,
@@ -8,8 +12,8 @@ import type {
 
 type SecretaryBriefProps = {
   home?: SecretaryHomeReadModel;
-  // Old workbench surfaces still compile against this compatibility input.
-  // App never supplies it to the M4 Secretary path.
+  // Frozen pre-M4 static surfaces still compile against this input. The
+  // ordinary-product App never lets it override a READY M4 home projection.
   context?: SecretaryContext;
   presentationState?: "loading" | "error" | null;
   onOpenBoard?: () => void;
@@ -28,6 +32,9 @@ export function SecretaryBrief({
   onOpenDeepLink,
   onReload,
 }: SecretaryBriefProps) {
+  if (isSecretaryLegacyReadFallback(home)) {
+    return <SecretaryCompatibilityBrief home={home} onOpenBoard={onOpenBoard} onOpenDeepLink={onOpenDeepLink} />;
+  }
   if (!home && context) return <LegacySecretaryBrief context={context} onOpenBoard={onOpenBoard} />;
   if (!home) return <BriefState title="正在恢复 Secretary 情境" detail="等待后端持续情境读模型。" />;
   const state = presentationState ?? home.state;
@@ -74,22 +81,29 @@ export function SecretaryBrief({
 
       {home.attention_items.length ? (
         <div className="secretary-brief-attention" aria-label="关注来源摘要">
-          {home.attention_items.slice(0, 3).map((item) => (
-            <div key={item.item_ref} className="secretary-brief-attention-row">
-              <span>{item.priority_reason_code} · {item.why_code}</span>
-              <code>{item.status_code}</code>
-              <code>{item.source_owner.source_owner_ref ?? "owner unavailable"}</code>
-              <button
-                className="secondary-button secretary-brief-source-link"
-                type="button"
-                onClick={() => onOpenDeepLink?.(item.deep_link)}
-                disabled={!onOpenDeepLink}
-                aria-label="在来源模块中查看关注项"
-              >
-                来源
-              </button>
-            </div>
-          ))}
+          {home.attention_items.slice(0, 3).map((item) => {
+            const ownerResolved = isSecretarySourceOwnerResolved(item);
+            return (
+              <div key={item.item_ref} className="secretary-brief-attention-row">
+                <span>{item.priority_reason_code} · {item.why_code}</span>
+                <code>{item.status_code}</code>
+                <code>{item.source_owner.source_owner_ref ?? "owner unavailable"}</code>
+                {ownerResolved ? (
+                  <button
+                    className="secondary-button secretary-brief-source-link"
+                    type="button"
+                    onClick={() => onOpenDeepLink?.(item.deep_link)}
+                    disabled={!onOpenDeepLink}
+                    aria-label="在来源模块中查看关注项"
+                  >
+                    来源
+                  </button>
+                ) : (
+                  <span className="muted small-note">来源 owner 未确认，已隔离</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <p className="muted small-note">没有待持续看住的来源关注项。</p>
@@ -98,6 +112,58 @@ export function SecretaryBrief({
       <SecretaryAvailability home={home} />
       <SecretaryExplainSection home={home} />
       {onOpenBoard ? <SecretaryOpenBoardButton onOpen={onOpenBoard} /> : null}
+    </section>
+  );
+}
+
+// C08 consumes the server's sanitised typed report rather than the old raw
+// aggregate. Only a re-read `PARITY + PRIMARY` row reaches this component;
+// it may open its typed source route but never gets a coordination write.
+function SecretaryCompatibilityBrief({
+  home,
+  onOpenBoard,
+  onOpenDeepLink,
+}: {
+  home: SecretaryHomeReadModel;
+  onOpenBoard?: () => void;
+  onOpenDeepLink?: (descriptor: SecretaryTypedDeepLinkDescriptor) => void;
+}) {
+  return (
+    <section className="secretary-brief secretary-brief-state" aria-label="Secretary 只读兼容回退">
+      <p className="eyebrow">只读兼容回退</p>
+      <h3>旧摘要仅作只读显示</h3>
+      <p className="muted small-note">只显示后端重新核验为 PARITY + PRIMARY 的来源引用；未确认来源保持隔离，不恢复 RoleSession 或协调写入。</p>
+      {home.attention_items.length ? (
+        <div className="secretary-brief-attention" aria-label="兼容摘要关注项">
+          {home.attention_items.slice(0, 3).map((item) => {
+            const ownerResolved = isSecretarySourceOwnerResolved(item);
+            return (
+              <div key={item.item_ref} className="secretary-brief-attention-row">
+                <span>{item.priority_reason_code} · {item.why_code}</span>
+                <code>{item.source_status_code}</code>
+                <code>{item.source_owner.source_owner_ref ?? "owner unavailable"}</code>
+                {ownerResolved ? (
+                  <button
+                    className="secondary-button secretary-brief-source-link"
+                    type="button"
+                    onClick={() => onOpenDeepLink?.(item.deep_link)}
+                    disabled={!onOpenDeepLink}
+                    aria-label="在来源模块中查看已核验兼容项"
+                  >
+                    来源
+                  </button>
+                ) : (
+                  <span className="muted small-note">来源 owner 未确认，已隔离</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="muted small-note">没有可安全显示的兼容摘要关注项。</p>
+      )}
+      {home.degradation_code ? <p className="secretary-recovery-code">恢复码：<code>{home.degradation_code}</code></p> : null}
+      {onOpenBoard ? <LegacyOpenBoardButton onOpen={onOpenBoard} /> : null}
     </section>
   );
 }

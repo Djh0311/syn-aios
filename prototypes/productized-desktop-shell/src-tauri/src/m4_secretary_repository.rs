@@ -34,15 +34,17 @@ use crate::m4_secretary_domain::{
     M4SourceOwnerWritebackResult, M4SourceRecordRef, M4SourceStatus, M4StateTransitionResult,
     M4WorkflowAttentionAdmission, M4WorkflowAttentionSourceInput, M4_ATTENTION_POLICY_REF,
     M4_ATTENTION_PROJECTOR_ID, M4_ATTENTION_PROJECTOR_VERSION, M4_IN_APP_DELIVERY_CHANNEL,
-    M4_SCRUBBED_SENSITIVITY, M4_WORKFLOW_ATTENTION_OBJECT_TYPE,
+    M4_SCRUBBED_SENSITIVITY, M4_WORKFLOW_ATTENTION_OBJECT_TYPE, M4_WORKFLOW_ATTENTION_SOURCE_TYPE,
 };
 use crate::m4_secretary_read_model::{
-    m4_priority_reason_text, sort_m4_inbox_items, sort_m4_open_loops,
-    sort_m4c04_coordination_snapshot, validate_m4c07_daily_report_envelope, M4AttentionSnapshot,
-    M4CoordinationSnapshot, M4InboxItemRead, M4NotificationRead, M4OpenLoopRead,
-    M4OwnerWritebackReceiptRead, M4PersonalActionRead, M4ReminderRead, M4SecretaryDailyBriefRead,
-    M4SecretaryDailyReportEnvelope, M4SecretaryDailyReportRead, M4SecretaryDailySchedulerRead,
-    M4SecretarySchedulerRunRead, M4SourceLinkRead,
+    build_m4_legacy_shadow_parity_report, m4_priority_reason_text, sort_m4_inbox_items,
+    sort_m4_open_loops, sort_m4c04_coordination_snapshot, validate_m4c07_daily_report_envelope,
+    M4AttentionSnapshot, M4CoordinationSnapshot, M4InboxItemRead, M4LegacyCanonicalReadSnapshot,
+    M4LegacyCanonicalSourceRead, M4LegacyReadCandidate, M4LegacyReadCompatibilityReport,
+    M4NotificationRead, M4OpenLoopRead, M4OwnerWritebackReceiptRead, M4PersonalActionRead,
+    M4ReminderRead, M4SecretaryDailyBriefRead, M4SecretaryDailyReportEnvelope,
+    M4SecretaryDailyReportRead, M4SecretaryDailySchedulerRead, M4SecretarySchedulerRunRead,
+    M4SourceLinkRead,
 };
 use crate::m4_secretary_scheduler::{
     m4_daily_window_at_utc, m4_format_utc_seconds, m4_parse_utc_seconds,
@@ -517,6 +519,38 @@ impl M4SecretarySqliteRepository {
             M4SecretaryRepositoryError::sqlite("m4_attention_read_commit", error)
         })?;
         Ok(snapshot)
+    }
+
+    /// C08 re-reads the currently admitted M4 sources in one read-only
+    /// transaction, then evaluates only scrubbed legacy candidates against
+    /// that canonical snapshot. It never repairs a projection, dispatches an
+    /// owner command, or persists a migration result.
+    pub(crate) fn read_legacy_read_compatibility_report(
+        &self,
+        scope_ref: &str,
+        legacy_candidates: &[M4LegacyReadCandidate],
+    ) -> Result<M4LegacyReadCompatibilityReport, M4SecretaryRepositoryError> {
+        if scope_ref != m4_primary_scope_ref() {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4c08_legacy_read_scope_mismatch",
+            ));
+        }
+        let mut connection = self.open_read_connection()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Deferred)
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4c08_legacy_read_transaction", error)
+            })?;
+        verify_m4_secretary_schema_v1(&transaction)
+            .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))?;
+        let canonical_snapshot =
+            read_m4c08_legacy_canonical_snapshot_from_transaction(&transaction, scope_ref)?;
+        let report = build_m4_legacy_shadow_parity_report(&canonical_snapshot, legacy_candidates)
+            .map_err(M4SecretaryRepositoryError::new)?;
+        transaction.commit().map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4c08_legacy_read_commit", error)
+        })?;
+        Ok(report)
     }
 
     pub(crate) fn rebuild_source_projections(
@@ -8491,6 +8525,107 @@ fn replayed_writeback_dispatch_outcome(
     })
 }
 
+fn read_m4c08_legacy_canonical_snapshot_from_transaction(
+    transaction: &Transaction<'_>,
+    scope_ref: &str,
+) -> Result<M4LegacyCanonicalReadSnapshot, M4SecretaryRepositoryError> {
+    let scope_source_watermark = scope_watermark_in_transaction(transaction, scope_ref)?;
+    let mut statement = transaction
+        .prepare(
+            "SELECT source_owner_ref, scope_ref, source_type, canonical_source_object_id,
+                    source_revision, source_owner_watermark, source_link_ref,
+                    source_status_code, attention_external_commitment,
+                    attention_time_sensitive, attention_requires_user_decision,
+                    attention_source_blocked, attention_required, attention_material_change,
+                    sensitivity
+             FROM m4_admitted_source_current
+             WHERE scope_ref = ?1
+             ORDER BY source_owner_ref, scope_ref, source_type, canonical_source_object_id",
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4c08_canonical_source_prepare", error)
+        })?;
+    let rows = statement
+        .query_map([scope_ref], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row_source_revision(row, 4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                M4AttentionSignals {
+                    external_commitment: row.get::<_, i64>(8)? != 0,
+                    time_sensitive: row.get::<_, i64>(9)? != 0,
+                    requires_user_decision: row.get::<_, i64>(10)? != 0,
+                    source_blocked: row.get::<_, i64>(11)? != 0,
+                    attention_required: row.get::<_, i64>(12)? != 0,
+                    material_change: row.get::<_, i64>(13)? != 0,
+                },
+                row.get::<_, String>(14)?,
+            ))
+        })
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4c08_canonical_source_query", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4c08_canonical_source_row", error))?;
+    drop(statement);
+
+    let sources = rows
+        .into_iter()
+        .map(
+            |(
+                source_owner_ref,
+                source_scope_ref,
+                source_type,
+                canonical_source_object_id,
+                source_revision,
+                source_owner_watermark,
+                source_link_ref,
+                source_status_code,
+                attention_signals,
+                sensitivity,
+            )| {
+                if source_scope_ref != scope_ref
+                    || source_type != M4_WORKFLOW_ATTENTION_SOURCE_TYPE
+                    || M4SourceStatus::parse(&source_status_code).is_none()
+                    || sensitivity != M4_SCRUBBED_SENSITIVITY
+                {
+                    return Err(M4SecretaryRepositoryError::new(
+                        "m4c08_canonical_source_invalid",
+                    ));
+                }
+                let priority_reason = m4_priority_reason(&attention_signals)
+                    .map_err(M4SecretaryRepositoryError::new)?;
+                Ok(M4LegacyCanonicalSourceRead {
+                    source_owner_ref: source_owner_ref.clone(),
+                    scope_ref: source_scope_ref,
+                    source_type,
+                    canonical_source_object_id: canonical_source_object_id.clone(),
+                    source_revision,
+                    source_owner_watermark,
+                    source_link: M4SourceLinkRead {
+                        link_kind: "INTERNAL_ROUTE".to_string(),
+                        source_owner_ref,
+                        object_type: M4_WORKFLOW_ATTENTION_OBJECT_TYPE.to_string(),
+                        canonical_source_object_id,
+                        expected_source_revision: source_revision,
+                        opaque_route_ref: source_link_ref,
+                    },
+                    source_status_code,
+                    priority_reason_code: priority_reason.code.to_string(),
+                })
+            },
+        )
+        .collect::<Result<Vec<_>, M4SecretaryRepositoryError>>()?;
+    Ok(M4LegacyCanonicalReadSnapshot {
+        scope_ref: scope_ref.to_string(),
+        scope_source_watermark,
+        sources,
+    })
+}
+
 fn read_attention_snapshot_from_transaction(
     transaction: &Transaction<'_>,
     scope_ref: &str,
@@ -9294,6 +9429,39 @@ mod tests {
             source_blocked: false,
             attention_required: true,
             material_change: true,
+        }
+    }
+
+    fn legacy_candidate_from_source(
+        input: &M4WorkflowAttentionSourceInput,
+        scope_source_watermark: String,
+    ) -> crate::m4_secretary_read_model::M4LegacyReadCandidate {
+        crate::m4_secretary_read_model::M4LegacyReadCandidate {
+            legacy_source_kind:
+                crate::m4_secretary_read_model::M4LegacyReadSourceKind::SecretaryReadModelDeterministicSummary,
+            legacy_item_ref: Some(opaque("legacy-item", &input.canonical_source_object_id)),
+            source_owner_ref: Some(input.source_owner_ref.clone()),
+            scope_ref: Some(input.scope_ref.clone()),
+            source_type: Some(input.source_type.clone()),
+            canonical_source_object_id: Some(input.canonical_source_object_id.clone()),
+            source_revision: Some(input.source_revision),
+            source_owner_watermark: Some(input.source_owner_watermark.clone()),
+            source_link: Some(M4SourceLinkRead {
+                link_kind: input.source_link.link_kind.clone(),
+                source_owner_ref: input.source_link.source_owner_ref.clone(),
+                object_type: input.source_link.object_type.clone(),
+                canonical_source_object_id: input.source_link.canonical_source_object_id.clone(),
+                expected_source_revision: input.source_link.expected_source_revision,
+                opaque_route_ref: input.source_link.opaque_route_ref.clone(),
+            }),
+            source_status_code: Some(input.owner_status_code.clone()),
+            priority_reason_code: Some(
+                m4_priority_reason(&input.attention_signals)
+                    .expect("derive fixture priority")
+                    .code
+                    .to_string(),
+            ),
+            scope_source_watermark: Some(scope_source_watermark),
         }
     }
 
@@ -11437,5 +11605,263 @@ mod tests {
         assert_eq!(fixture.count("m4_notifications"), 0);
         assert_eq!(fixture.count("m4_reminders"), 0);
         assert_eq!(fixture.count("m4_source_owner_writeback_requests"), 0);
+    }
+
+    #[test]
+    fn m4c08_canonical_reread_parity_is_read_only_and_guarded_rollback_preserves_facts() {
+        let fixture = RepositoryFixture::new("m4c08-read-only");
+        let mut signals = attention_signals();
+        signals.requires_user_decision = true;
+        let input = source("m4c08-source", 7, "WAITING_USER", signals);
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&input)
+            .expect("seed canonical C08 source");
+        let before_snapshot = fixture
+            .repository
+            .read_attention_snapshot(m4_primary_scope_ref())
+            .expect("read canonical attention before compatibility report");
+        assert_eq!(before_snapshot.inbox_items[0].status, "NEW");
+        assert_eq!(
+            before_snapshot.inbox_items[0].current_source_status,
+            "WAITING_USER"
+        );
+        let candidate =
+            legacy_candidate_from_source(&input, before_snapshot.scope_source_watermark.clone());
+        let tables = [
+            "m4_admitted_source_events",
+            "m4_admitted_source_current",
+            "m4_inbox_items",
+            "m4_open_loops",
+            "m4_quarantine_records",
+            "m4_events",
+            "m4_audit_records",
+            "m4_coordination_command_receipts",
+            "m4_daily_reports",
+        ];
+        let before_counts = tables
+            .iter()
+            .map(|table| (*table, fixture.count(table)))
+            .collect::<Vec<_>>();
+
+        let report = fixture
+            .repository
+            .read_legacy_read_compatibility_report(m4_primary_scope_ref(), &[candidate])
+            .expect("canonical C08 shadow/parity report");
+        assert_eq!(report.mode, "M4_PRIMARY_LEGACY_READ_ONLY_FALLBACK");
+        assert_eq!(
+            report.scope_source_watermark,
+            before_snapshot.scope_source_watermark
+        );
+        let parity = report
+            .rows
+            .iter()
+            .find(|row| row.disposition == "PARITY")
+            .expect("exact candidate is the only guarded legacy row");
+        let canonical = parity
+            .canonical_source
+            .as_ref()
+            .expect("parity report re-reads canonical source");
+        assert_eq!(canonical.source_status_code, "WAITING_USER");
+        assert_eq!(canonical.priority_reason_code, "USER_DECISION_OR_BLOCKER");
+        assert_eq!(canonical.source_revision, 7);
+        assert_eq!(
+            canonical.source_owner_watermark,
+            input.source_owner_watermark
+        );
+        assert!(
+            parity.source_matches
+                && parity.status_matches
+                && parity.priority_reason_matches
+                && parity.source_owner_watermark_matches
+                && parity.scope_source_watermark_matches
+        );
+        let rollback_rows =
+            crate::m4_secretary_read_model::guarded_m4_legacy_read_only_fallback(&report)
+                .expect("guarded legacy display selection");
+        assert_eq!(rollback_rows.len(), 1);
+        assert_eq!(rollback_rows[0].canonical_source, parity.canonical_source);
+
+        for (table, before) in before_counts {
+            assert_eq!(fixture.count(table), before, "C08 read wrote {table}");
+        }
+        let after_snapshot = fixture
+            .repository
+            .read_attention_snapshot(m4_primary_scope_ref())
+            .expect("read canonical attention after compatibility report");
+        assert_eq!(after_snapshot, before_snapshot);
+    }
+
+    #[test]
+    fn m4c08_same_legacy_identity_with_two_canonical_sources_is_quarantined() {
+        let fixture = RepositoryFixture::new("m4c08-legacy-identity-ambiguity");
+        let first = source("m4c08-identity-source-a", 7, "OPEN", attention_signals());
+        let second = source(
+            "m4c08-identity-source-b",
+            8,
+            "WAITING_USER",
+            attention_signals(),
+        );
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&first)
+            .expect("seed first canonical C08 source");
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&second)
+            .expect("seed second canonical C08 source");
+        let before_snapshot = fixture
+            .repository
+            .read_attention_snapshot(m4_primary_scope_ref())
+            .expect("read canonical snapshot before ambiguous C08 report");
+        let first_candidate =
+            legacy_candidate_from_source(&first, before_snapshot.scope_source_watermark.clone());
+        let mut second_candidate =
+            legacy_candidate_from_source(&second, before_snapshot.scope_source_watermark.clone());
+        second_candidate.legacy_item_ref = first_candidate.legacy_item_ref.clone();
+
+        let report = fixture
+            .repository
+            .read_legacy_read_compatibility_report(
+                m4_primary_scope_ref(),
+                &[first_candidate, second_candidate],
+            )
+            .expect("ambiguous legacy identity is report-only quarantine");
+        assert_eq!(report.rows.len(), 2);
+        assert!(report.rows.iter().all(|row| {
+            row.disposition == "QUARANTINED"
+                && row.reason_code.as_deref() == Some("M4C08_LEGACY_IDENTITY_AMBIGUOUS")
+                && row.canonical_source.is_none()
+                && row.dedupe_key.is_none()
+                && row.dedupe_disposition == "NOT_ELIGIBLE"
+        }));
+        assert!(
+            crate::m4_secretary_read_model::guarded_m4_legacy_read_only_fallback(&report)
+                .expect("guarded legacy display selection")
+                .is_empty(),
+            "ambiguous legacy identity cannot become an active fallback item"
+        );
+        let after_snapshot = fixture
+            .repository
+            .read_attention_snapshot(m4_primary_scope_ref())
+            .expect("read canonical snapshot after ambiguous C08 report");
+        assert_eq!(
+            after_snapshot, before_snapshot,
+            "C08 ambiguity report remains read-only"
+        );
+    }
+
+    #[test]
+    fn m4c08_unknown_stale_and_watermark_mismatch_quarantine_without_mutation() {
+        let fixture = RepositoryFixture::new("m4c08-quarantine");
+        let v1 = source("m4c08-source", 7, "OPEN", attention_signals());
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&v1)
+            .expect("seed v1 C08 source");
+        let v1_watermark = fixture
+            .repository
+            .read_attention_snapshot(m4_primary_scope_ref())
+            .expect("read v1 watermark")
+            .scope_source_watermark;
+        let stale = legacy_candidate_from_source(&v1, v1_watermark);
+
+        let mut v2_signals = attention_signals();
+        v2_signals.source_blocked = true;
+        let v2 = source("m4c08-source", 8, "BLOCKED", v2_signals);
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&v2)
+            .expect("advance canonical source to v2");
+        let v2_watermark = fixture
+            .repository
+            .read_attention_snapshot(m4_primary_scope_ref())
+            .expect("read v2 watermark")
+            .scope_source_watermark;
+        let mut unknown_owner = legacy_candidate_from_source(&v2, v2_watermark.clone());
+        unknown_owner.legacy_source_kind =
+            crate::m4_secretary_read_model::M4LegacyReadSourceKind::RuntimeAttentionProjection;
+        unknown_owner.source_owner_ref = Some("unknown-owner".to_string());
+        unknown_owner
+            .source_link
+            .as_mut()
+            .expect("fixture source link")
+            .source_owner_ref = "unknown-owner".to_string();
+        let mut watermark_mismatch = legacy_candidate_from_source(&v2, v2_watermark);
+        watermark_mismatch.legacy_source_kind =
+            crate::m4_secretary_read_model::M4LegacyReadSourceKind::MemoryDailyInboxCandidate;
+        watermark_mismatch.source_owner_watermark = Some(opaque("watermark", "wrong"));
+        let tables = [
+            "m4_admitted_source_events",
+            "m4_admitted_source_current",
+            "m4_inbox_items",
+            "m4_open_loops",
+            "m4_quarantine_records",
+            "m4_events",
+            "m4_audit_records",
+            "m4_coordination_command_receipts",
+            "m4_daily_reports",
+        ];
+        let before_counts = tables
+            .iter()
+            .map(|table| (*table, fixture.count(table)))
+            .collect::<Vec<_>>();
+
+        let report = fixture
+            .repository
+            .read_legacy_read_compatibility_report(
+                m4_primary_scope_ref(),
+                &[watermark_mismatch, unknown_owner, stale],
+            )
+            .expect("fail-closed C08 report");
+        assert!(report
+            .rows
+            .iter()
+            .all(|row| row.disposition == "QUARANTINED"));
+        assert_eq!(
+            report
+                .rows
+                .iter()
+                .find(|row| row.legacy_source_kind == "RUNTIME_ATTENTION_PROJECTION")
+                .and_then(|row| row.reason_code.as_deref()),
+            Some("M4C08_CANONICAL_SOURCE_NOT_FOUND")
+        );
+        assert_eq!(
+            report
+                .rows
+                .iter()
+                .find(|row| row.legacy_source_kind == "MEMORY_DAILY_INBOX_CANDIDATE")
+                .and_then(|row| row.reason_code.as_deref()),
+            Some("M4C08_SOURCE_OWNER_WATERMARK_MISMATCH")
+        );
+        let stale_row = report
+            .rows
+            .iter()
+            .find(|row| row.legacy_source_kind == "SECRETARY_READ_MODEL_DETERMINISTIC_SUMMARY")
+            .expect("stale legacy source row");
+        assert_eq!(
+            stale_row.reason_code.as_deref(),
+            Some("M4C08_STALE_SOURCE_REVISION")
+        );
+        assert_eq!(
+            stale_row
+                .canonical_source
+                .as_ref()
+                .expect("stale row exposes re-read canonical source")
+                .source_status_code,
+            "BLOCKED"
+        );
+        assert!(
+            crate::m4_secretary_read_model::guarded_m4_legacy_read_only_fallback(&report)
+                .expect("guarded fallback remains readable")
+                .is_empty()
+        );
+        for (table, before) in before_counts {
+            assert_eq!(
+                fixture.count(table),
+                before,
+                "C08 quarantine report wrote {table}"
+            );
+        }
     }
 }

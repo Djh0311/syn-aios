@@ -1,4 +1,9 @@
 import { SecretaryBrief } from "./SecretaryBrief";
+import {
+  isSecretaryLegacyReadFallback,
+  isSecretaryModuleEntryOwnerResolved,
+  isSecretarySourceOwnerResolved,
+} from "../lib/secretaryReadModel";
 import type { SecretaryContext, SecretaryPendingBoardEntry } from "../lib/secretaryReadModel";
 import type {
   SecretaryHomeReadModel,
@@ -25,6 +30,7 @@ export function SecretaryBoardView({
 }) {
   if (!home && context) return <LegacySecretaryBoardView context={context} />;
   if (!home) return <section className="secretary-board" aria-label="持续 Secretary 情境">正在恢复 Secretary 情境。</section>;
+  const compatibilityFallback = isSecretaryLegacyReadFallback(home);
   const openDeepLink = onOpenDeepLink ?? (() => undefined);
   const reload = onReloadSecretaryHome ?? (() => undefined);
   const state = presentationState ?? home.state;
@@ -33,8 +39,12 @@ export function SecretaryBoardView({
       <header className="secretary-board-head">
         <div>
           <p className="eyebrow">持续 Secretary</p>
-          <h2>回到同一情境</h2>
-          <p className="muted small-note">这里延续后端恢复的 RoleSession/context；协调动作仍只在首页的来源关注项上执行。</p>
+          <h2>{compatibilityFallback ? "旧摘要只读兼容查看" : "回到同一情境"}</h2>
+          <p className="muted small-note">
+            {compatibilityFallback
+              ? "旧摘要只显示后端重新核验为 PARITY + PRIMARY 的来源引用；不恢复 RoleSession 或协调写入，其他候选保持隔离。"
+              : "这里延续后端恢复的 RoleSession/context；协调动作仍只在首页的来源关注项上执行。"}
+          </p>
         </div>
       </header>
 
@@ -49,24 +59,31 @@ export function SecretaryBoardView({
           </div>
           {home.attention_items.length ? (
             <div className="secretary-board-attention-list">
-              {home.attention_items.map((item) => (
-                <article className="secretary-board-attention-row" key={item.item_ref}>
-                  <div>
-                    <strong>{item.priority_reason_code} · {item.why_code}</strong>
-                    <span>当前 <code>{item.status_code}</code> · 来源 <code>{item.source_status_code}</code></span>
-                    <span>Owner <code>{item.source_owner.source_owner_ref ?? "UNAVAILABLE"}</code></span>
-                    <span>最后变化 {displayUtc(item.last_change_at_utc)} · 到期 {displayUtc(item.due_at_utc)}</span>
-                  </div>
-                  <button
-                    className="secondary-button secretary-board-go"
-                    type="button"
-                    onClick={() => openDeepLink(item.deep_link)}
-                    aria-label="在来源模块中查看此关注项"
-                  >
-                    回到来源
-                  </button>
-                </article>
-              ))}
+              {home.attention_items.map((item) => {
+                const ownerResolved = isSecretarySourceOwnerResolved(item);
+                return (
+                  <article className="secretary-board-attention-row" key={item.item_ref}>
+                    <div>
+                      <strong>{item.priority_reason_code} · {item.why_code}</strong>
+                      <span>当前 <code>{item.status_code}</code> · 来源 <code>{item.source_status_code}</code></span>
+                      <span>Owner <code>{item.source_owner.source_owner_ref ?? "UNAVAILABLE"}</code></span>
+                      <span>最后变化 {displayUtc(item.last_change_at_utc)} · 到期 {displayUtc(item.due_at_utc)}</span>
+                    </div>
+                    {ownerResolved ? (
+                      <button
+                        className="secondary-button secretary-board-go"
+                        type="button"
+                        onClick={() => openDeepLink(item.deep_link)}
+                        aria-label="在来源模块中查看此关注项"
+                      >
+                        回到来源
+                      </button>
+                    ) : (
+                      <span className="muted small-note">来源 owner 未确认，已隔离</span>
+                    )}
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <p className="secretary-inline-empty">当前没有来源型关注项。</p>
@@ -77,7 +94,7 @@ export function SecretaryBoardView({
         <aside className="secretary-board-side" aria-label="情境摘要与专业入口">
           <SecretaryBrief
             home={home}
-            presentationState={presentationState}
+            presentationState={compatibilityFallback ? null : presentationState}
             onOpenDeepLink={openDeepLink}
             onReload={reload}
           />
@@ -85,14 +102,21 @@ export function SecretaryBoardView({
             <p className="eyebrow">专业模块入口</p>
             {home.module_entries.length ? (
               <ul>
-                {home.module_entries.map((entry) => (
-                  <li key={entry.entry_ref}>
-                    <code>{entry.source_owner.source_owner_ref ?? "UNAVAILABLE"}</code>
-                    <button className="secondary-button" type="button" onClick={() => openDeepLink(entry.deep_link)}>
-                      打开模块
-                    </button>
-                  </li>
-                ))}
+                {home.module_entries.map((entry) => {
+                  const ownerResolved = isSecretaryModuleEntryOwnerResolved(entry);
+                  return (
+                    <li key={entry.entry_ref}>
+                      <code>{entry.source_owner.source_owner_ref ?? "UNAVAILABLE"}</code>
+                      {ownerResolved ? (
+                        <button className="secondary-button" type="button" onClick={() => openDeepLink(entry.deep_link)}>
+                          打开模块
+                        </button>
+                      ) : (
+                        <span className="muted small-note">owner 未确认，已隔离</span>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="muted small-note">没有可打开的来源模块入口。</p>

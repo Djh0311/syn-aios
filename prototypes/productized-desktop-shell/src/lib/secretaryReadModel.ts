@@ -234,6 +234,201 @@ export type SecretaryContext = {
   warnings: string[];
 };
 
+export const M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION = "syn.m4.secretary.legacy-read-compatibility.v1" as const;
+export const M4_LEGACY_READ_PARITY_MATRIX_VERSION = "syn.m4.legacy-read-parity/v1" as const;
+const M4_LEGACY_READ_COMPATIBILITY_MODE = "M4_PRIMARY_LEGACY_READ_ONLY_FALLBACK" as const;
+const M4_LEGACY_READ_ROLLBACK_MODE = "GUARDED_LEGACY_READ_ONLY" as const;
+const M4_LEGACY_READ_SOURCE_REF_ONLY_ROLE = "SOURCE_REF_AND_DEDUPE_CANDIDATE_ONLY" as const;
+const M4_LEGACY_READ_WRITE_AUTHORITY_NONE = "NONE" as const;
+
+export const M4_LEGACY_READ_SOURCE_KINDS = Object.freeze([
+  "SECRETARY_READ_MODEL_DETERMINISTIC_SUMMARY",
+  "RIGHT_RAIL_NOTIFICATION_AND_TODO_PROJECTION",
+  "RUNTIME_ATTENTION_PROJECTION",
+  "REACT_PENDING_ACTION_VISIBILITY",
+  "MEMORY_DAILY_INBOX_CANDIDATE",
+] as const);
+
+export type M4LegacyReadSourceKind = (typeof M4_LEGACY_READ_SOURCE_KINDS)[number];
+
+export type M4LegacyReadSourceLinkDto = Readonly<{
+  link_kind: string;
+  source_owner_ref: string;
+  object_type: string;
+  canonical_source_object_id: string;
+  expected_source_revision: string;
+  opaque_route_ref: string;
+}>;
+
+export type M4LegacyCanonicalSourceReadDto = Readonly<{
+  source_owner_ref: string;
+  scope_ref: string;
+  source_type: string;
+  canonical_source_object_id: string;
+  source_revision: string;
+  source_owner_watermark: string;
+  source_link: M4LegacyReadSourceLinkDto;
+  source_status_code: string;
+  priority_reason_code: string;
+}>;
+
+export type M4LegacyReadParityRowDto = Readonly<{
+  legacy_source_kind: M4LegacyReadSourceKind;
+  legacy_item_ref: string | null;
+  disposition: "PARITY" | "QUARANTINED";
+  reason_code: string | null;
+  canonical_source: M4LegacyCanonicalSourceReadDto | null;
+  canonical_scope_source_watermark: string | null;
+  source_matches: boolean;
+  status_matches: boolean;
+  priority_reason_matches: boolean;
+  source_owner_watermark_matches: boolean;
+  scope_source_watermark_matches: boolean;
+  dedupe_key: string | null;
+  dedupe_disposition: "PRIMARY" | "DUPLICATE_DISPLAY_ONLY" | "NOT_ELIGIBLE";
+}>;
+
+export type M4LegacyReadSourceInventoryEntryDto = Readonly<{
+  legacy_source_kind: M4LegacyReadSourceKind;
+  compatibility_role: typeof M4_LEGACY_READ_SOURCE_REF_ONLY_ROLE;
+  write_authority: typeof M4_LEGACY_READ_WRITE_AUTHORITY_NONE;
+}>;
+
+export type M4LegacyReadCompatibilityReportDto = Readonly<{
+  schema_version: typeof M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION;
+  parity_matrix_version: typeof M4_LEGACY_READ_PARITY_MATRIX_VERSION;
+  mode: typeof M4_LEGACY_READ_COMPATIBILITY_MODE;
+  rollback_mode: typeof M4_LEGACY_READ_ROLLBACK_MODE;
+  scope_ref: string;
+  scope_source_watermark: string;
+  inventory: readonly M4LegacyReadSourceInventoryEntryDto[];
+  rows: readonly M4LegacyReadParityRowDto[];
+}>;
+
+export type M4LegacyReadCompatibilityReportEnvelopeDto =
+  | Readonly<{ status: "READY"; report: M4LegacyReadCompatibilityReportDto }>
+  | Readonly<{ status: "UNAVAILABLE"; reason: string }>;
+
+// C08 keeps the pre-M4 aggregate behind a named compatibility input. Static
+// callers may still use the legacy-context variant, but the ordinary product
+// receives only the server's guarded report variant.
+export type SecretaryLegacyContextReadOnlyFallback = Readonly<{
+  read_surface: "LEGACY_READ_ONLY_FALLBACK";
+  source: "LEGACY_CONTEXT";
+  context: SecretaryContext;
+}>;
+
+export type SecretaryGuardedLegacyReadOnlyFallback = Readonly<{
+  read_surface: "LEGACY_READ_ONLY_FALLBACK";
+  source: "M4C08_GUARDED_REPORT";
+  report: M4LegacyReadCompatibilityReportDto;
+}>;
+
+export type SecretaryLegacyReadOnlyFallback =
+  | SecretaryLegacyContextReadOnlyFallback
+  | SecretaryGuardedLegacyReadOnlyFallback;
+
+export type SecretaryLegacyReadFallbackModel = SecretaryHomeReadModel & Readonly<{
+  source_authority: "CANONICAL_SNAPSHOT_SUMMARY";
+}>;
+
+// The normal M4 path must not derive the old aggregate just to satisfy a
+// legacy right-rail prop.  This inert shape keeps those pre-M4 props stable
+// until an explicit read-only fallback is selected.
+export const emptySecretaryContext: SecretaryContext = Object.freeze({
+  context_id: "secretary-context:compatibility-not-active",
+  source_kind: "derived_read_model",
+  generated_at_label: "兼容读面未启用",
+  global_summary: Object.freeze({
+    project_count: 0,
+    session_count: 0,
+    workflow_count: 0,
+    work_item_count: 0,
+    pending_permission_count: 0,
+    failed_attempt_count: 0,
+    timed_out_attempt_count: 0,
+    pending_blackboard_candidate_count: 0,
+    confirmed_blackboard_candidate_count: 0,
+    rejected_blackboard_candidate_count: 0,
+    deferred_blackboard_candidate_count: 0,
+    discarded_blackboard_candidate_count: 0,
+    pending_memory_candidate_count: 0,
+    confirmed_memory_candidate_count: 0,
+    rejected_memory_candidate_count: 0,
+    quarantined_memory_candidate_count: 0,
+    discarded_memory_candidate_count: 0,
+    diagnostic_warning_count: 0,
+    adapter_warning_count: 0,
+  }),
+  project_summaries: [],
+  risk_signals: [],
+  suggestions: [],
+  memory_candidates: [],
+  action_proposals: [],
+  pending_board: Object.freeze({
+    total: 0,
+    pending_proposals: [],
+    supervisor_reminders: [],
+    memory_candidate_entry: null,
+  }),
+  warnings: ["secretary_context_compatibility_not_active"],
+});
+
+export function createSecretaryLegacyReadOnlyFallback(
+  context: SecretaryContext,
+): SecretaryLegacyContextReadOnlyFallback {
+  return Object.freeze({ read_surface: "LEGACY_READ_ONLY_FALLBACK", source: "LEGACY_CONTEXT", context });
+}
+
+export function createSecretaryGuardedLegacyReadOnlyFallback(
+  envelope: M4LegacyReadCompatibilityReportEnvelopeDto | null | undefined,
+): SecretaryGuardedLegacyReadOnlyFallback | null {
+  if (envelope?.status !== "READY") return null;
+  return Object.freeze({
+    read_surface: "LEGACY_READ_ONLY_FALLBACK",
+    source: "M4C08_GUARDED_REPORT",
+    report: envelope.report,
+  });
+}
+
+// A transport exception is not a compatibility signal: it can be transient
+// and must remain visible as such. Only the server's explicit UNAVAILABLE
+// envelope can select the old read-only surface.
+export function shouldUseSecretaryLegacyReadFallback(
+  envelope: M4SecretaryHomeContextEnvelopeDto | null | undefined,
+): boolean {
+  return envelope?.status === "UNAVAILABLE";
+}
+
+export function isSecretaryLegacyReadFallback(
+  home: SecretaryHomeReadModel | null | undefined,
+): home is SecretaryLegacyReadFallbackModel {
+  return home?.source_authority === "CANONICAL_SNAPSHOT_SUMMARY";
+}
+
+// An ordinary M4 item or a C08 `PARITY + PRIMARY` row may open its already
+// re-read owner route. Legacy-context summaries have NOT_EMITTED owners and
+// remain quarantined instead of being routed by a renderer guess.
+export function isSecretarySourceOwnerResolved(item: SecretaryHomeAttentionItem): boolean {
+  return (item.source_authority === "M4_COORDINATION" || item.source_authority === "CANONICAL_SNAPSHOT_SUMMARY")
+    && item.source_owner.availability === "AVAILABLE"
+    && item.source_owner.source_owner_ref !== null
+    && item.deep_link.kind === "M4_SOURCE_ROUTE"
+    && item.deep_link.source_owner_ref === item.source_owner.source_owner_ref;
+}
+
+export function isSecretaryModuleEntryOwnerResolved(entry: SecretaryProfessionalModuleEntry): boolean {
+  return entry.source_owner.availability === "AVAILABLE"
+    && entry.source_owner.source_owner_ref !== null
+    && entry.deep_link.kind === "M4_SOURCE_ROUTE"
+    && entry.deep_link.source_owner_ref === entry.source_owner.source_owner_ref;
+}
+
+export function canOperateSecretaryReadModel(home: SecretaryHomeReadModel): boolean {
+  return home.source_authority === "M4_APPLICATION_SERVICE"
+    && home.role_session_recovery.status === "RESTORED";
+}
+
 const readOnlyWarning = "secretary_context_is_read_only";
 const memoryBoundary = "候选不等于工作台已经长期记住。";
 const nonExecutableReason = "第一版秘书模型只读；只能提示用户查看或确认，不能直接执行、写事实、批准权限或写正式记忆。";
@@ -1377,6 +1572,360 @@ function blackboardSourceRef(id: string, label: string): SecretarySourceRef {
 const M4_HOME_SCHEMA_VERSION = "syn.m4.secretary.home.v1" as const;
 const M4_HOME_MODEL_STATUSES = new Set(["AVAILABLE", "FAILED", "PENDING", "REPLAYED", "UNAVAILABLE"]);
 
+const M4_LEGACY_READ_SOURCE_STATUS_CODES = new Set([
+  "OPEN", "BLOCKED", "WAITING_USER", "INFORMATIONAL", "COMPLETED", "CANCELLED", "EXPIRED",
+]);
+const M4_LEGACY_READ_PRIORITY_REASON_CODES = new Set([
+  "EXTERNAL_COMMITMENT_OR_TIME_CRITICAL",
+  "USER_DECISION_OR_BLOCKER",
+  "ACTIVE_CHANGED_ATTENTION",
+  "CARRIED_OVER",
+  "INFORMATIONAL",
+]);
+const M4_LEGACY_READ_QUARANTINE_REASONS = new Set([
+  "M4C08_LEGACY_CANDIDATE_INVALID",
+  "M4C08_SCOPE_MISMATCH",
+  "M4C08_CANONICAL_SOURCE_NOT_FOUND",
+  "M4C08_CANONICAL_SOURCE_AMBIGUOUS",
+  "M4C08_LEGACY_IDENTITY_AMBIGUOUS",
+  "M4C08_STALE_SOURCE_REVISION",
+  "M4C08_CANONICAL_SOURCE_REVISION_UNAVAILABLE",
+  "M4C08_SOURCE_LINK_MISMATCH",
+  "M4C08_SOURCE_OWNER_WATERMARK_MISMATCH",
+  "M4C08_PARITY_STATUS_MISMATCH",
+  "M4C08_PARITY_PRIORITY_REASON_MISMATCH",
+  "M4C08_SCOPE_WATERMARK_MISMATCH",
+]);
+
+export function parseSecretaryLegacyReadCompatibilityReportEnvelope(
+  value: unknown,
+): M4LegacyReadCompatibilityReportEnvelopeDto {
+  const raw = m4LegacyAllowedObject(value, ["status", "report", "reason"], "legacy_read_envelope");
+  const status = m4LegacyCode(raw.status, "legacy_read_envelope.status");
+  if (status === "READY") {
+    const ready = m4LegacyExactObject(value, ["status", "report"], "legacy_read_envelope");
+    return Object.freeze({ status: "READY", report: m4LegacyParseReport(ready.report) });
+  }
+  if (status === "UNAVAILABLE") {
+    const unavailable = m4LegacyExactObject(value, ["status", "reason"], "legacy_read_envelope");
+    return Object.freeze({
+      status: "UNAVAILABLE",
+      reason: m4LegacyCode(unavailable.reason, "legacy_read_envelope.reason"),
+    });
+  }
+  throw new Error("m4_secretary_legacy_read_envelope_status_invalid");
+}
+
+function m4LegacyParseReport(value: unknown): M4LegacyReadCompatibilityReportDto {
+  const raw = m4LegacyExactObject(
+    value,
+    ["schema_version", "parity_matrix_version", "mode", "rollback_mode", "scope_ref", "scope_source_watermark", "inventory", "rows"],
+    "legacy_read_report",
+  );
+  if (raw.schema_version !== M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION
+    || raw.parity_matrix_version !== M4_LEGACY_READ_PARITY_MATRIX_VERSION
+    || raw.mode !== M4_LEGACY_READ_COMPATIBILITY_MODE
+    || raw.rollback_mode !== M4_LEGACY_READ_ROLLBACK_MODE) {
+    throw new Error("m4_secretary_legacy_read_report_version_invalid");
+  }
+  const scope_ref = m4LegacyTypedRef(raw.scope_ref, "legacy_read_report.scope_ref");
+  const scope_source_watermark = m4LegacyHash(raw.scope_source_watermark, "legacy_read_report.scope_source_watermark");
+  const inventory = m4LegacyArray(raw.inventory, "legacy_read_report.inventory")
+    .map((entry, index) => m4LegacyParseInventoryEntry(entry, index));
+  if (inventory.length !== M4_LEGACY_READ_SOURCE_KINDS.length
+    || inventory.some((entry, index) => entry.legacy_source_kind !== M4_LEGACY_READ_SOURCE_KINDS[index])) {
+    throw new Error("m4_secretary_legacy_read_inventory_invalid");
+  }
+  const rows = m4LegacyArray(raw.rows, "legacy_read_report.rows")
+    .map((row, index) => m4LegacyParseParityRow(row, index, scope_ref, scope_source_watermark));
+  const primaryCounts = new Map<string, number>();
+  const canonicalByLegacyIdentity = new Map<string, { dedupeKey: string; canonicalSource: M4LegacyCanonicalSourceReadDto }>();
+  for (const row of rows) {
+    if (row.disposition !== "PARITY" || row.dedupe_key === null) continue;
+    if (row.legacy_item_ref === null || row.canonical_source === null) {
+      throw new Error("m4_secretary_legacy_read_parity_row_invalid");
+    }
+    const legacyIdentity = `${row.legacy_source_kind}\u0000${row.legacy_item_ref}`;
+    const knownCanonical = canonicalByLegacyIdentity.get(legacyIdentity);
+    if (knownCanonical
+      && (knownCanonical.dedupeKey !== row.dedupe_key
+        || !m4LegacyCanonicalSourcesMatch(knownCanonical.canonicalSource, row.canonical_source))) {
+      throw new Error("m4_secretary_legacy_read_legacy_identity_ambiguous");
+    }
+    canonicalByLegacyIdentity.set(legacyIdentity, {
+      dedupeKey: row.dedupe_key,
+      canonicalSource: row.canonical_source,
+    });
+    if (row.dedupe_disposition === "PRIMARY") {
+      primaryCounts.set(row.dedupe_key, (primaryCounts.get(row.dedupe_key) ?? 0) + 1);
+    } else if (!primaryCounts.has(row.dedupe_key)) {
+      primaryCounts.set(row.dedupe_key, 0);
+    }
+  }
+  if ([...primaryCounts.values()].some((count) => count !== 1)) {
+    throw new Error("m4_secretary_legacy_read_primary_dedupe_invalid");
+  }
+  return Object.freeze({
+    schema_version: M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION,
+    parity_matrix_version: M4_LEGACY_READ_PARITY_MATRIX_VERSION,
+    mode: M4_LEGACY_READ_COMPATIBILITY_MODE,
+    rollback_mode: M4_LEGACY_READ_ROLLBACK_MODE,
+    scope_ref,
+    scope_source_watermark,
+    inventory: Object.freeze(inventory),
+    rows: Object.freeze(rows),
+  });
+}
+
+function m4LegacyCanonicalSourcesMatch(
+  left: M4LegacyCanonicalSourceReadDto,
+  right: M4LegacyCanonicalSourceReadDto,
+): boolean {
+  return left.source_owner_ref === right.source_owner_ref
+    && left.scope_ref === right.scope_ref
+    && left.source_type === right.source_type
+    && left.canonical_source_object_id === right.canonical_source_object_id
+    && left.source_revision === right.source_revision
+    && left.source_owner_watermark === right.source_owner_watermark
+    && left.source_link.link_kind === right.source_link.link_kind
+    && left.source_link.source_owner_ref === right.source_link.source_owner_ref
+    && left.source_link.object_type === right.source_link.object_type
+    && left.source_link.canonical_source_object_id === right.source_link.canonical_source_object_id
+    && left.source_link.expected_source_revision === right.source_link.expected_source_revision
+    && left.source_link.opaque_route_ref === right.source_link.opaque_route_ref
+    && left.source_status_code === right.source_status_code
+    && left.priority_reason_code === right.priority_reason_code;
+}
+
+function m4LegacyParseInventoryEntry(value: unknown, index: number): M4LegacyReadSourceInventoryEntryDto {
+  const field = `legacy_read_report.inventory[${index}]`;
+  const raw = m4LegacyExactObject(value, ["legacy_source_kind", "compatibility_role", "write_authority"], field);
+  if (raw.compatibility_role !== M4_LEGACY_READ_SOURCE_REF_ONLY_ROLE
+    || raw.write_authority !== M4_LEGACY_READ_WRITE_AUTHORITY_NONE) {
+    throw new Error("m4_secretary_legacy_read_inventory_boundary_invalid");
+  }
+  return Object.freeze({
+    legacy_source_kind: m4LegacySourceKind(raw.legacy_source_kind, `${field}.legacy_source_kind`),
+    compatibility_role: M4_LEGACY_READ_SOURCE_REF_ONLY_ROLE,
+    write_authority: M4_LEGACY_READ_WRITE_AUTHORITY_NONE,
+  });
+}
+
+function m4LegacyParseParityRow(
+  value: unknown,
+  index: number,
+  expectedScopeRef: string,
+  expectedScopeWatermark: string,
+): M4LegacyReadParityRowDto {
+  const field = `legacy_read_report.rows[${index}]`;
+  const raw = m4LegacyExactObject(
+    value,
+    [
+      "legacy_source_kind", "legacy_item_ref", "disposition", "reason_code", "canonical_source",
+      "canonical_scope_source_watermark", "source_matches", "status_matches", "priority_reason_matches",
+      "source_owner_watermark_matches", "scope_source_watermark_matches", "dedupe_key", "dedupe_disposition",
+    ],
+    field,
+  );
+  const legacy_item_ref = m4LegacyNullableOpaqueRef(raw.legacy_item_ref, `${field}.legacy_item_ref`);
+  const canonical_source = raw.canonical_source === null
+    ? null
+    : m4LegacyParseCanonicalSource(raw.canonical_source, `${field}.canonical_source`, expectedScopeRef);
+  const canonical_scope_source_watermark = raw.canonical_scope_source_watermark === null
+    ? null
+    : m4LegacyHash(raw.canonical_scope_source_watermark, `${field}.canonical_scope_source_watermark`);
+  const disposition = m4LegacyDisposition(m4LegacyCode(raw.disposition, `${field}.disposition`), `${field}.disposition`);
+  const reason_code = raw.reason_code === null ? null : m4LegacyCode(raw.reason_code, `${field}.reason_code`);
+  const dedupe_key = raw.dedupe_key === null ? null : m4LegacyDedupeKey(raw.dedupe_key, `${field}.dedupe_key`);
+  const dedupe_disposition = m4LegacyDedupeDisposition(
+    m4LegacyCode(raw.dedupe_disposition, `${field}.dedupe_disposition`),
+    `${field}.dedupe_disposition`,
+  );
+  const row: M4LegacyReadParityRowDto = Object.freeze({
+    legacy_source_kind: m4LegacySourceKind(raw.legacy_source_kind, `${field}.legacy_source_kind`),
+    legacy_item_ref,
+    disposition,
+    reason_code,
+    canonical_source,
+    canonical_scope_source_watermark,
+    source_matches: m4LegacyBoolean(raw.source_matches, `${field}.source_matches`),
+    status_matches: m4LegacyBoolean(raw.status_matches, `${field}.status_matches`),
+    priority_reason_matches: m4LegacyBoolean(raw.priority_reason_matches, `${field}.priority_reason_matches`),
+    source_owner_watermark_matches: m4LegacyBoolean(raw.source_owner_watermark_matches, `${field}.source_owner_watermark_matches`),
+    scope_source_watermark_matches: m4LegacyBoolean(raw.scope_source_watermark_matches, `${field}.scope_source_watermark_matches`),
+    dedupe_key,
+    dedupe_disposition,
+  });
+  if (row.disposition === "PARITY") {
+    if (row.legacy_item_ref === null || row.reason_code !== null || row.canonical_source === null
+      || row.canonical_scope_source_watermark !== expectedScopeWatermark
+      || !row.source_matches || !row.status_matches || !row.priority_reason_matches
+      || !row.source_owner_watermark_matches || !row.scope_source_watermark_matches
+      || row.dedupe_key === null || row.dedupe_disposition === "NOT_ELIGIBLE") {
+      throw new Error("m4_secretary_legacy_read_parity_row_invalid");
+    }
+  } else if (row.reason_code === null || !M4_LEGACY_READ_QUARANTINE_REASONS.has(row.reason_code)
+    || row.dedupe_key !== null || row.dedupe_disposition !== "NOT_ELIGIBLE") {
+    throw new Error("m4_secretary_legacy_read_quarantine_row_invalid");
+  }
+  return row;
+}
+
+function m4LegacyParseCanonicalSource(
+  value: unknown,
+  field: string,
+  expectedScopeRef: string,
+): M4LegacyCanonicalSourceReadDto {
+  const raw = m4LegacyExactObject(
+    value,
+    [
+      "source_owner_ref", "scope_ref", "source_type", "canonical_source_object_id", "source_revision",
+      "source_owner_watermark", "source_link", "source_status_code", "priority_reason_code",
+    ],
+    field,
+  );
+  const source_owner_ref = m4LegacyTypedRef(raw.source_owner_ref, `${field}.source_owner_ref`);
+  const scope_ref = m4LegacyTypedRef(raw.scope_ref, `${field}.scope_ref`);
+  const source_type = m4LegacyTypedRef(raw.source_type, `${field}.source_type`);
+  const canonical_source_object_id = m4LegacyTypedRef(raw.canonical_source_object_id, `${field}.canonical_source_object_id`);
+  const source_revision = m4LegacyRevision(raw.source_revision, `${field}.source_revision`);
+  const source_link = m4LegacyParseSourceLink(raw.source_link, `${field}.source_link`);
+  const source_status_code = m4LegacyCode(raw.source_status_code, `${field}.source_status_code`);
+  const priority_reason_code = m4LegacyCode(raw.priority_reason_code, `${field}.priority_reason_code`);
+  if (scope_ref !== expectedScopeRef
+    || source_type !== "structured_internal_workflow_attention_ref"
+    || source_link.link_kind !== "INTERNAL_ROUTE"
+    || source_link.source_owner_ref !== source_owner_ref
+    || source_link.object_type !== "workflow_attention"
+    || source_link.canonical_source_object_id !== canonical_source_object_id
+    || source_link.expected_source_revision !== source_revision
+    || !M4_LEGACY_READ_SOURCE_STATUS_CODES.has(source_status_code)
+    || !M4_LEGACY_READ_PRIORITY_REASON_CODES.has(priority_reason_code)) {
+    throw new Error("m4_secretary_legacy_read_canonical_source_invalid");
+  }
+  return Object.freeze({
+    source_owner_ref,
+    scope_ref,
+    source_type,
+    canonical_source_object_id,
+    source_revision,
+    source_owner_watermark: m4LegacyOpaqueRef(raw.source_owner_watermark, `${field}.source_owner_watermark`),
+    source_link,
+    source_status_code,
+    priority_reason_code,
+  });
+}
+
+function m4LegacyParseSourceLink(value: unknown, field: string): M4LegacyReadSourceLinkDto {
+  const raw = m4LegacyExactObject(
+    value,
+    ["link_kind", "source_owner_ref", "object_type", "canonical_source_object_id", "expected_source_revision", "opaque_route_ref"],
+    field,
+  );
+  return Object.freeze({
+    link_kind: m4LegacyCode(raw.link_kind, `${field}.link_kind`),
+    source_owner_ref: m4LegacyTypedRef(raw.source_owner_ref, `${field}.source_owner_ref`),
+    object_type: m4LegacyTypedRef(raw.object_type, `${field}.object_type`),
+    canonical_source_object_id: m4LegacyTypedRef(raw.canonical_source_object_id, `${field}.canonical_source_object_id`),
+    expected_source_revision: m4LegacyRevision(raw.expected_source_revision, `${field}.expected_source_revision`),
+    opaque_route_ref: m4LegacyOpaqueRef(raw.opaque_route_ref, `${field}.opaque_route_ref`),
+  });
+}
+
+function m4LegacyExactObject(value: unknown, expectedKeys: readonly string[], field: string): Record<string, unknown> {
+  const raw = m4LegacyAllowedObject(value, expectedKeys, field);
+  for (const key of expectedKeys) {
+    if (!(key in raw)) throw new Error(`m4_secretary_legacy_read_missing_${field}_field:${key}`);
+  }
+  return raw;
+}
+
+function m4LegacyAllowedObject(value: unknown, allowedKeys: readonly string[], field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  const raw = value as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!allowedKeys.includes(key)) throw new Error(`m4_secretary_legacy_read_unknown_${field}_field:${key}`);
+  }
+  return raw;
+}
+
+function m4LegacyArray(value: unknown, field: string): readonly unknown[] {
+  if (!Array.isArray(value)) throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  return Object.freeze([...value]);
+}
+
+function m4LegacyString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  return value;
+}
+
+function m4LegacyTypedRef(value: unknown, field: string): string {
+  const reference = m4LegacyString(value, field);
+  if (!/^[A-Za-z0-9._:-]{1,512}$/.test(reference)) throw new Error(`m4_secretary_legacy_read_unsafe_${field}`);
+  return reference;
+}
+
+function m4LegacyOpaqueRef(value: unknown, field: string): string {
+  const reference = m4LegacyTypedRef(value, field);
+  if (!/^[a-z][a-z0-9._-]{0,63}:sha256:[a-f0-9]{64}$/.test(reference)) {
+    throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  }
+  return reference;
+}
+
+function m4LegacyNullableOpaqueRef(value: unknown, field: string): string | null {
+  return value === null ? null : m4LegacyOpaqueRef(value, field);
+}
+
+function m4LegacyHash(value: unknown, field: string): string {
+  const hash = m4LegacyString(value, field);
+  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  return hash;
+}
+
+function m4LegacyRevision(value: unknown, field: string): string {
+  const revision = m4LegacyString(value, field);
+  if (!/^(0|[1-9][0-9]{0,19})$/.test(revision) || BigInt(revision) > 18446744073709551615n) {
+    throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  }
+  return revision;
+}
+
+function m4LegacyCode(value: unknown, field: string): string {
+  const code = m4LegacyString(value, field);
+  if (!/^[A-Z0-9_]{1,128}$/.test(code)) throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  return code;
+}
+
+function m4LegacySourceKind(value: unknown, field: string): M4LegacyReadSourceKind {
+  const sourceKind = m4LegacyCode(value, field);
+  if (!M4_LEGACY_READ_SOURCE_KINDS.includes(sourceKind as M4LegacyReadSourceKind)) {
+    throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  }
+  return sourceKind as M4LegacyReadSourceKind;
+}
+
+function m4LegacyDisposition(value: string, field: string): "PARITY" | "QUARANTINED" {
+  if (value === "PARITY" || value === "QUARANTINED") return value;
+  throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+}
+
+function m4LegacyDedupeDisposition(value: string, field: string): M4LegacyReadParityRowDto["dedupe_disposition"] {
+  if (value === "PRIMARY" || value === "DUPLICATE_DISPLAY_ONLY" || value === "NOT_ELIGIBLE") return value;
+  throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+}
+
+function m4LegacyDedupeKey(value: unknown, field: string): string {
+  const key = m4LegacyString(value, field);
+  if (!/^legacy-dedupe:[a-f0-9]{64}$/.test(key)) throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  return key;
+}
+
+function m4LegacyBoolean(value: unknown, field: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  return value;
+}
+
 export function parseSecretaryHomeContextEnvelope(value: unknown): M4SecretaryHomeContextEnvelopeDto {
   const raw = m4HomeAllowedObject(value, ["status", "application_outcome", "reason"], "home_context");
   const status = m4HomeEnvelopeStatus(raw.status, "home_context.status");
@@ -1492,12 +2041,15 @@ export function parseSecretaryCoordinationActionReceipt(value: unknown): M4Secre
 
 /**
  * Derives the homepage-only projection.  `home_context` is authoritative
- * whenever it is present.  `compatibility_context` is an explicit old
- * Workbench summary fallback and is marked as such; it never restores a
+ * whenever it is READY. `compatibility` is either the C08 guarded backend
+ * report or a frozen static caller's legacy-context input; neither restores a
  * RoleSession, context ref, cwd, cached identity, or executable command.
  */
 export function deriveSecretaryHomeReadModel(input: {
   home_context?: M4SecretaryHomeContextEnvelopeDto | null;
+  compatibility?: SecretaryLegacyReadOnlyFallback | null;
+  // Kept only for frozen pre-M4 static callers. The ordinary-product App
+  // selects the compatibility surface through the named wrapper above.
   compatibility_context?: SecretaryContext | null;
   phase?: "loading" | "error";
   error_code?: string | null;
@@ -1515,8 +2067,19 @@ export function deriveSecretaryHomeReadModel(input: {
     : phase === "error"
       ? m4HomeSafeDisplayCode(input.error_code)
       : null;
-  if (input.compatibility_context) {
-    return m4HomeCompatibilityReadModel(input.compatibility_context, unavailableCode ?? "M4_HOME_CONTEXT_NOT_LOADED");
+  const compatibility = input.compatibility ?? (
+    input.compatibility_context
+      ? createSecretaryLegacyReadOnlyFallback(input.compatibility_context)
+      : null
+  );
+  if (compatibility) {
+    if (compatibility.source === "M4C08_GUARDED_REPORT") {
+      return m4HomeGuardedLegacyCompatibilityReadModel(
+        compatibility.report,
+        unavailableCode ?? "M4_HOME_CONTEXT_NOT_LOADED",
+      );
+    }
+    return m4HomeCompatibilityReadModel(compatibility.context, unavailableCode ?? "M4_HOME_CONTEXT_NOT_LOADED");
   }
   if (unavailableCode) return m4HomeUnavailableReadModel(unavailableCode);
   return m4HomeLoadingReadModel();
@@ -1637,6 +2200,77 @@ function m4HomeCompatibilityReadModel(context: SecretaryContext, degradationCode
     handoff: m4HomeNotLoadedHandoff(),
     degradation_code: m4HomeSafeDisplayCode(degradationCode),
   });
+}
+
+function m4HomeGuardedLegacyCompatibilityReadModel(
+  report: M4LegacyReadCompatibilityReportDto,
+  degradationCode: string,
+): SecretaryHomeReadModel {
+  const attentionItems = m4HomeSortAttention(report.rows.flatMap((row) => {
+    if (row.disposition !== "PARITY" || row.dedupe_disposition !== "PRIMARY"
+      || row.legacy_item_ref === null || row.canonical_source === null || row.dedupe_key === null) {
+      return [];
+    }
+    const source = row.canonical_source;
+    const deepLink: SecretaryTypedDeepLinkDescriptor = Object.freeze({
+      kind: "M4_SOURCE_ROUTE",
+      source_owner_ref: source.source_owner_ref,
+      source_object_ref: source.canonical_source_object_id,
+      source_object_type: source.source_link.object_type,
+      source_route_ref: source.source_link.opaque_route_ref,
+      executable_payload: null,
+    });
+    return [Object.freeze({
+      item_ref: row.legacy_item_ref,
+      item_kind_code: "LEGACY_READ_COMPATIBILITY",
+      // This remains a read-only legacy display. The AVAILABLE owner and link
+      // are re-read canonical facts, not a coordination permission grant.
+      source_authority: "CANONICAL_SNAPSHOT_SUMMARY" as const,
+      source_owner: Object.freeze({ availability: "AVAILABLE" as const, source_owner_ref: source.source_owner_ref }),
+      source_object_ref: source.canonical_source_object_id,
+      source_object_type: source.source_link.object_type,
+      deep_link: deepLink,
+      why_code: "PARITY_PRIMARY",
+      priority_rank: m4LegacyPriorityRank(source.priority_reason_code),
+      priority_reason_code: source.priority_reason_code,
+      status_code: source.source_status_code,
+      source_status_code: source.source_status_code,
+      last_change_at_utc: null,
+      due_at_utc: null,
+      change_hash: row.dedupe_key.slice("legacy-dedupe:".length),
+      coordination_revision: null,
+    })];
+  }));
+  return Object.freeze({
+    schema_version: M4_HOME_SCHEMA_VERSION,
+    state: "degraded",
+    source_authority: "CANONICAL_SNAPSHOT_SUMMARY",
+    context: null,
+    deterministic_brief: null,
+    scope_source_watermark: report.scope_source_watermark,
+    role_session_recovery: Object.freeze({
+      status: "UNAVAILABLE",
+      role_session_ref: null,
+      context_ref: null,
+      recovery_code: m4HomeSafeDisplayCode(degradationCode),
+    }),
+    attention_items: attentionItems,
+    personal_actions: Object.freeze([]),
+    module_entries: m4HomeModuleEntries(attentionItems),
+    model_enhancement: m4HomeNotRequestedModelEnhancement(),
+    handoff: m4HomeNotLoadedHandoff(),
+    degradation_code: m4HomeSafeDisplayCode(degradationCode),
+  });
+}
+
+function m4LegacyPriorityRank(priorityReasonCode: string): number {
+  switch (priorityReasonCode) {
+    case "EXTERNAL_COMMITMENT_OR_TIME_CRITICAL": return 0;
+    case "USER_DECISION_OR_BLOCKER": return 1;
+    case "ACTIVE_CHANGED_ATTENTION": return 2;
+    case "CARRIED_OVER": return 3;
+    default: return 4;
+  }
 }
 
 function m4HomeAttentionFromM4(item: M4SecretarySourceBackedBriefItemDto): SecretaryHomeAttentionItem {

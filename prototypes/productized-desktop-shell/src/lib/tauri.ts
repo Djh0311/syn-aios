@@ -30,10 +30,12 @@ import {
 } from "./roleSessionReadModel";
 import {
   createSecretaryCoordinationActionRequest,
+  parseSecretaryLegacyReadCompatibilityReportEnvelope,
   parseSecretaryCoordinationActionReceipt,
   parseSecretaryDailyReportEnvelope,
   parseSecretaryHomeContextEnvelope,
   type M4SecretaryDailyReportEnvelopeDto,
+  type M4LegacyReadCompatibilityReportEnvelopeDto,
 } from "./secretaryReadModel";
 import type { PageReadModelQueryInput, PageReadModelQueryResult } from "./pageReadModel";
 import type {
@@ -1786,6 +1788,18 @@ export function startJiaobanRoleSessionContinuation(
 // provider, credential, prompt or callback.  The parser also keeps the M4
 // envelope as the authoritative homepage route rather than falling back to a
 // legacy Workbench snapshot.
+
+// M4C08 sends no renderer data. The backend fixes the inventory and scope,
+// re-reads canonical sources in a read-only transaction and returns a guarded
+// report; no legacy summary, tuple, label, route guess or action payload
+// crosses this command boundary.
+export async function loadSecretaryLegacyReadCompatibilityReport(): Promise<M4LegacyReadCompatibilityReportEnvelopeDto> {
+  ensureTauriRuntime();
+  return parseSecretaryLegacyReadCompatibilityReportEnvelope(
+    await invoke<unknown>("load_secretary_legacy_read_compatibility_report"),
+  );
+}
+
 export async function loadSecretaryHomeContext(): Promise<M4SecretaryHomeContextEnvelopeDto> {
   ensureTauriRuntime();
   return parseSecretaryHomeContextEnvelope(await invoke<unknown>("load_secretary_home_context"));

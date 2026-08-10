@@ -30,6 +30,7 @@ import {
   loadMemoryPatternStore,
   loadObservationStore,
   loadPlanAuthorizationStore,
+  loadSecretaryLegacyReadCompatibilityReport,
   loadSecretaryHomeContext,
   loadProjectConsultationProposalStore,
   loadSystemStatusReadModel,
@@ -90,9 +91,13 @@ import {
 import { emptySnapshot } from "./lib/emptySnapshot";
 import { loadWorkbenchSnapshotFromPageQueries } from "./lib/pageReadModelRuntime";
 import {
-  deriveSecretaryContext,
+  canOperateSecretaryReadModel,
+  createSecretaryGuardedLegacyReadOnlyFallback,
   deriveSecretaryHomeReadModel,
+  emptySecretaryContext,
   mintSecretaryCoordinationIdempotencyKey,
+  shouldUseSecretaryLegacyReadFallback,
+  type M4LegacyReadCompatibilityReportEnvelopeDto,
 } from "./lib/secretaryReadModel";
 import { setTauriWindowTitle } from "./lib/tauriWindow";
 import type {
@@ -151,6 +156,8 @@ export function App() {
   const [secretaryHomeEnvelope, setSecretaryHomeEnvelope] = useState<M4SecretaryHomeContextEnvelopeDto | null>(null);
   const [secretaryHomeTransport, setSecretaryHomeTransport] = useState<SecretaryHomeTransportState>("loading");
   const [secretaryHomeErrorCode, setSecretaryHomeErrorCode] = useState<string | null>(null);
+  const [secretaryLegacyReadCompatibilityEnvelope, setSecretaryLegacyReadCompatibilityEnvelope] =
+    useState<M4LegacyReadCompatibilityReportEnvelopeDto | null>(null);
   const [secretaryCoordinationStates, setSecretaryCoordinationStates] = useState<
     Readonly<Record<string, SecretaryCoordinationViewState>>
   >({});
@@ -278,6 +285,7 @@ export function App() {
     setSecretaryHomeTransport("loading");
     setSecretaryHomeEnvelope(null);
     setSecretaryHomeErrorCode(null);
+    setSecretaryLegacyReadCompatibilityEnvelope(null);
     if (browserPreviewEnabled) {
       setSecretaryHomeTransport("error");
       setSecretaryHomeErrorCode("M4_SECRETARY_HOME_REQUIRES_TAURI");
@@ -285,6 +293,17 @@ export function App() {
     }
     try {
       const envelope = await loadSecretaryHomeContext();
+      let compatibilityEnvelope: M4LegacyReadCompatibilityReportEnvelopeDto | null = null;
+      if (shouldUseSecretaryLegacyReadFallback(envelope)) {
+        try {
+          compatibilityEnvelope = await loadSecretaryLegacyReadCompatibilityReport();
+        } catch {
+          // Do not replace an unavailable M4 home with a local aggregate when
+          // the guarded backend report cannot be read or parsed.
+          compatibilityEnvelope = null;
+        }
+      }
+      setSecretaryLegacyReadCompatibilityEnvelope(compatibilityEnvelope);
       setSecretaryHomeEnvelope(envelope);
       setSecretaryHomeTransport("loaded");
     } catch (loadError) {
@@ -787,11 +806,25 @@ export function App() {
   }, [filteredSnapshot, workflowState]);
 
   const displaySnapshot = filteredSnapshot ?? emptySnapshot;
+  // The old aggregate is not part of the ordinary M4 Secretary path. A
+  // server-issued UNAVAILABLE envelope may select only a separately re-read,
+  // guarded C08 report; transport failures stay failures rather than quietly
+  // showing local state as Secretary truth.
+  const legacySecretaryCompatibilityFallback = useMemo(() => {
+    if (!shouldUseSecretaryLegacyReadFallback(secretaryHomeEnvelope)) return null;
+    return createSecretaryGuardedLegacyReadOnlyFallback(secretaryLegacyReadCompatibilityEnvelope);
+  }, [secretaryHomeEnvelope, secretaryLegacyReadCompatibilityEnvelope]);
+  const secretaryContext = emptySecretaryContext;
   const secretaryHome = useMemo<SecretaryHomeReadModel>(() => {
     if (secretaryHomeTransport === "loading") return deriveSecretaryHomeReadModel({ phase: "loading" });
-    if (secretaryHomeEnvelope) return deriveSecretaryHomeReadModel({ home_context: secretaryHomeEnvelope });
+    if (secretaryHomeEnvelope) {
+      return deriveSecretaryHomeReadModel({
+        home_context: secretaryHomeEnvelope,
+        compatibility: legacySecretaryCompatibilityFallback,
+      });
+    }
     return deriveSecretaryHomeReadModel({ phase: "error", error_code: secretaryHomeErrorCode });
-  }, [secretaryHomeEnvelope, secretaryHomeErrorCode, secretaryHomeTransport]);
+  }, [legacySecretaryCompatibilityFallback, secretaryHomeEnvelope, secretaryHomeErrorCode, secretaryHomeTransport]);
   const secretaryHomePresentationState = secretaryHomeTransport === "loading"
     ? "loading"
     : secretaryHomeTransport === "error"
@@ -815,7 +848,7 @@ export function App() {
 
   const operateSecretaryAction = useCallback(async (intent: SecretaryCoordinationIntent) => {
     const revision = intent.item.coordination_revision;
-    if (intent.item.source_authority !== "M4_COORDINATION" || revision === null) return;
+    if (!canOperateSecretaryReadModel(secretaryHome) || intent.item.source_authority !== "M4_COORDINATION" || revision === null) return;
     const attemptRef = `${intent.item.item_ref}|${revision}|${intent.action}`;
     let requestPromise = secretaryCoordinationAttempts.current.get(attemptRef);
     if (!requestPromise) {
@@ -859,22 +892,7 @@ export function App() {
         },
       }));
     }
-  }, []);
-
-  const secretaryContext = useMemo(
-    () =>
-      deriveSecretaryContext({
-        snapshot: displaySnapshot,
-        workflowState,
-        blackboardCandidateStore,
-        memoryCaptureStore,
-        memoryCandidateStore,
-        workflowStateError,
-        proposalStore: projectConsultationProposalStore,
-        supervisorReviewStore,
-      }),
-    [displaySnapshot, workflowState, blackboardCandidateStore, memoryCaptureStore, memoryCandidateStore, workflowStateError, projectConsultationProposalStore, supervisorReviewStore],
-  );
+  }, [secretaryHome]);
   const pendingReviewCount =
     workflowState?.project_workflows.reduce(
       (count, workflow) => count + workflow.task_drafts.filter((task) => task.state === "ready_for_review").length,
@@ -927,6 +945,7 @@ export function App() {
         ) : activeView === "secretary_board" ? (
           <SecretaryBoardView
             home={secretaryHome}
+            context={secretaryContext}
             presentationState={secretaryHomePresentationState}
             onOpenDeepLink={openSecretaryDeepLink}
             onReloadSecretaryHome={() => void reloadSecretaryHome()}

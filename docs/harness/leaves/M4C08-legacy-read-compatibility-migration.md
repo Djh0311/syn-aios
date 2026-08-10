@@ -8,6 +8,7 @@
 
 - prototypes/productized-desktop-shell/src-tauri/src/lib.rs
 - prototypes/productized-desktop-shell/src-tauri/src/commands.rs
+- prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_read_model.rs
 - prototypes/productized-desktop-shell/src/App.tsx
@@ -19,6 +20,10 @@
 - prototypes/productized-desktop-shell/tests/ [新增]
 - prototypes/productized-desktop-shell/scripts/run-offline-interaction-test.mjs
 - docs/harness/
+
+范围校正：原任务包漏列了当前架构中唯一承载 Tauri 命令实际注册表的
+`src-tauri/src/command_registry.rs`。本叶只允许在该文件登记 C08 的只读兼容报告命令；
+不借此改动其他命令、运行时或后续阶段功能。
 
 ## 步骤
 
