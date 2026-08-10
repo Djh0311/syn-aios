@@ -7,6 +7,7 @@
 use crate::m4_secretary_domain::{m4_is_opaque_reference, m4_parse_rfc3339_utc_key};
 use serde::Serialize;
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct M4SourceLinkRead {
@@ -570,6 +571,316 @@ fn compare_attention_order(
         .then_with(|| left_object_id.cmp(right_object_id))
 }
 
+// ===== M4C07 DailyBrief / DailyReport read protocol =======================
+//
+// This remains a read-only boundary.  It contains source-backed identifiers,
+// hashes and scrubbed codes only; a daily read must never carry a transcript,
+// prompt, provider response, memory artifact, secret, route payload, or any
+// other content-bearing field.  The repository/service owns the query and
+// its M4 priority/due/source-change order; this read boundary validates that
+// order's safe source refs without reordering it.
+
+pub(crate) const M4_SECRETARY_DAILY_SCHEMA_VERSION: &str = "syn.m4.secretary.daily.v1";
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4SecretaryDailySchedulerRead {
+    pub(crate) configuration_revision: String,
+    pub(crate) iana_timezone: String,
+    pub(crate) timezone_rules_version: String,
+    pub(crate) current_daily_window_id: String,
+    pub(crate) last_closed_daily_window_id: String,
+    pub(crate) catch_up_pending_count: u64,
+    pub(crate) pending_catch_up_receipt_refs: Vec<String>,
+    pub(crate) status: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4SecretaryDailyBriefRead {
+    pub(crate) daily_window_id: String,
+    pub(crate) scope_source_watermark: String,
+    pub(crate) projector_version: String,
+    pub(crate) ordered_item_refs: Vec<String>,
+    pub(crate) generated_at_utc: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4SecretaryDailyReportRead {
+    pub(crate) daily_report_id: String,
+    pub(crate) daily_window_id: String,
+    /// An unsigned 64-bit revision encoded as canonical base-10 ASCII so the
+    /// renderer never loses precision through a JavaScript number.
+    pub(crate) report_version: String,
+    pub(crate) status: String,
+    pub(crate) scope_source_watermark: String,
+    pub(crate) projector_version: String,
+    pub(crate) ordered_item_refs: Vec<String>,
+    pub(crate) supersedes_report_ref: Option<String>,
+    pub(crate) generated_at_utc: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4SecretarySchedulerRunRead {
+    pub(crate) scheduler_run_id: String,
+    pub(crate) configuration_revision: String,
+    pub(crate) window_ref: String,
+    pub(crate) scope_source_watermark_before: String,
+    pub(crate) scope_source_watermark_after: String,
+    pub(crate) admitted_material_event_count: u64,
+    pub(crate) agent_turn_count: u64,
+    pub(crate) model_invocation_count: u64,
+    pub(crate) outcome_code: String,
+    pub(crate) recorded_at_utc: Option<String>,
+}
+
+/// The frozen, server-owned daily read envelope consumed by the renderer.
+///
+/// `UNAVAILABLE` and `DISABLED` are separate variants instead of optional
+/// flags so they can never be emitted together, and neither variant can leak
+/// a partial ready payload.  Their only diagnostic is a scrubbed code.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum M4SecretaryDailyReportEnvelope {
+    Ready {
+        schema_version: String,
+        scheduler: M4SecretaryDailySchedulerRead,
+        daily_brief: M4SecretaryDailyBriefRead,
+        daily_report: M4SecretaryDailyReportRead,
+        last_run: M4SecretarySchedulerRunRead,
+        recovery_code: Option<String>,
+    },
+    Unavailable {
+        schema_version: String,
+        reason: String,
+    },
+    Disabled {
+        schema_version: String,
+        reason: String,
+    },
+}
+
+/// Validate the M4C07 read payload without querying or mutating any state.
+///
+/// The ready payload carries a current-window brief and a last-closed-window
+/// report.  A scheduler receipt belongs to that closed report, which is why
+/// their window/ref/watermark bindings are checked here rather than trusted
+/// from a renderer field.
+pub(crate) fn validate_m4c07_daily_report_envelope(
+    envelope: &M4SecretaryDailyReportEnvelope,
+) -> Result<(), String> {
+    match envelope {
+        M4SecretaryDailyReportEnvelope::Ready {
+            schema_version,
+            scheduler,
+            daily_brief,
+            daily_report,
+            last_run,
+            recovery_code,
+        } => {
+            validate_m4c07_schema_version(schema_version)?;
+            validate_m4c07_scheduler(scheduler)?;
+            validate_m4c07_daily_brief(daily_brief)?;
+            validate_m4c07_daily_report(daily_report)?;
+            validate_m4c07_scheduler_run(last_run)?;
+            if recovery_code
+                .as_deref()
+                .is_some_and(|code| !m4c07_is_scrubbed_code(code))
+            {
+                return Err("m4c07_daily_recovery_code_invalid".to_string());
+            }
+
+            if scheduler.current_daily_window_id != daily_brief.daily_window_id
+                || scheduler.last_closed_daily_window_id != daily_report.daily_window_id
+                || scheduler.current_daily_window_id == scheduler.last_closed_daily_window_id
+                || last_run.configuration_revision != scheduler.configuration_revision
+                || last_run.window_ref != daily_report.daily_window_id
+                || last_run.scope_source_watermark_after != daily_report.scope_source_watermark
+            {
+                return Err("m4c07_daily_cross_object_binding_invalid".to_string());
+            }
+            Ok(())
+        }
+        M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version,
+            reason,
+        }
+        | M4SecretaryDailyReportEnvelope::Disabled {
+            schema_version,
+            reason,
+        } => {
+            validate_m4c07_schema_version(schema_version)?;
+            if !m4c07_is_scrubbed_code(reason) {
+                return Err("m4c07_daily_unavailable_reason_invalid".to_string());
+            }
+            Ok(())
+        }
+    }
+}
+
+fn validate_m4c07_schema_version(value: &str) -> Result<(), String> {
+    if value == M4_SECRETARY_DAILY_SCHEMA_VERSION {
+        Ok(())
+    } else {
+        Err("m4c07_daily_schema_version_invalid".to_string())
+    }
+}
+
+fn validate_m4c07_scheduler(scheduler: &M4SecretaryDailySchedulerRead) -> Result<(), String> {
+    if !m4c04_is_canonical_u64(&scheduler.configuration_revision)
+        || !m4c04_is_iana_timezone(&scheduler.iana_timezone)
+        || !m4c07_is_timezone_rules_version(&scheduler.timezone_rules_version)
+        || !m4c07_is_daily_window_id(&scheduler.current_daily_window_id)
+        || !m4c07_is_daily_window_id(&scheduler.last_closed_daily_window_id)
+        || !m4c07_is_scheduler_status(&scheduler.status)
+        || (scheduler.catch_up_pending_count == 0
+            && !scheduler.pending_catch_up_receipt_refs.is_empty())
+        || (scheduler.catch_up_pending_count > 0
+            && scheduler.pending_catch_up_receipt_refs.is_empty())
+    {
+        return Err("m4c07_daily_scheduler_invalid".to_string());
+    }
+    let mut seen = BTreeSet::new();
+    if scheduler.pending_catch_up_receipt_refs.iter().any(|value| {
+        !m4c07_has_deterministic_id(value, "catch-up-truncation:") || !seen.insert(value)
+    }) {
+        return Err("m4c07_daily_scheduler_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn validate_m4c07_daily_brief(brief: &M4SecretaryDailyBriefRead) -> Result<(), String> {
+    if !m4c07_is_daily_window_id(&brief.daily_window_id)
+        || !m4c04_is_lower_hex_digest(&brief.scope_source_watermark)
+        || !m4c04_is_canonical_u64(&brief.projector_version)
+        || brief
+            .generated_at_utc
+            .as_deref()
+            .is_some_and(|value| m4_parse_rfc3339_utc_key(value).is_none())
+    {
+        return Err("m4c07_daily_brief_invalid".to_string());
+    }
+    validate_m4c07_ordered_item_refs(&brief.ordered_item_refs)
+}
+
+fn validate_m4c07_daily_report(report: &M4SecretaryDailyReportRead) -> Result<(), String> {
+    if !m4c07_has_deterministic_id(&report.daily_report_id, "daily-report:")
+        || !m4c07_is_daily_window_id(&report.daily_window_id)
+        || !m4c04_is_canonical_u64(&report.report_version)
+        || !matches!(
+            report.status.as_str(),
+            "GENERATED" | "SUPERSEDED" | "FAILED"
+        )
+        || !m4c04_is_lower_hex_digest(&report.scope_source_watermark)
+        || !m4c04_is_canonical_u64(&report.projector_version)
+        || report
+            .supersedes_report_ref
+            .as_deref()
+            .is_some_and(|value| {
+                !m4c07_has_deterministic_id(value, "daily-report:")
+                    || value == report.daily_report_id
+            })
+        || report
+            .generated_at_utc
+            .as_deref()
+            .is_some_and(|value| m4_parse_rfc3339_utc_key(value).is_none())
+    {
+        return Err("m4c07_daily_report_invalid".to_string());
+    }
+    validate_m4c07_ordered_item_refs(&report.ordered_item_refs)
+}
+
+fn validate_m4c07_scheduler_run(run: &M4SecretarySchedulerRunRead) -> Result<(), String> {
+    if !m4c07_is_scheduler_run_id(&run.scheduler_run_id)
+        || !m4c04_is_canonical_u64(&run.configuration_revision)
+        || !m4c07_is_daily_window_id(&run.window_ref)
+        || !m4c04_is_lower_hex_digest(&run.scope_source_watermark_before)
+        || !m4c04_is_lower_hex_digest(&run.scope_source_watermark_after)
+        || !m4c07_is_scrubbed_code(&run.outcome_code)
+        || run
+            .recorded_at_utc
+            .as_deref()
+            .is_some_and(|value| m4_parse_rfc3339_utc_key(value).is_none())
+        || (run.admitted_material_event_count == 0
+            && (run.agent_turn_count != 0 || run.model_invocation_count != 0))
+    {
+        return Err("m4c07_daily_scheduler_run_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn validate_m4c07_ordered_item_refs(values: &[String]) -> Result<(), String> {
+    let mut seen = BTreeSet::new();
+    for value in values {
+        if !m4c07_is_source_backed_item_ref(value) || !seen.insert(value) {
+            return Err("m4c07_daily_ordered_item_refs_invalid".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn m4c07_is_source_backed_item_ref(value: &str) -> bool {
+    [
+        "source:",
+        "source-event:",
+        "inbox:",
+        "open-loop:",
+        "personal-action:",
+        "decision-projection:",
+    ]
+    .into_iter()
+    .any(|prefix| m4c07_has_deterministic_id(value, prefix))
+}
+
+fn m4c07_is_daily_window_id(value: &str) -> bool {
+    m4c07_has_deterministic_id(value, "daily-window:")
+}
+
+fn m4c07_is_scheduler_run_id(value: &str) -> bool {
+    m4c07_has_deterministic_id(value, "scheduler-run:")
+        || (value.starts_with("scheduler-run:") && m4_is_opaque_reference(value))
+}
+
+fn m4c07_has_deterministic_id(value: &str, prefix: &str) -> bool {
+    value
+        .strip_prefix(prefix)
+        .is_some_and(m4c04_is_lower_hex_digest)
+}
+
+fn m4c07_is_timezone_rules_version(value: &str) -> bool {
+    m4c07_has_deterministic_id(value, "timezone-rules:")
+}
+
+fn m4c07_is_scheduler_status(value: &str) -> bool {
+    m4c07_is_scrubbed_code(value) && !matches!(value, "UNAVAILABLE" | "DISABLED")
+}
+
+fn m4c07_is_scrubbed_code(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 96
+        && value
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_uppercase())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+        && ![
+            "RAW",
+            "TRANSCRIPT",
+            "PROMPT",
+            "PROVIDER",
+            "SECRET",
+            "CREDENTIAL",
+            "TOKEN",
+            "PASSWORD",
+            "CALLBACK",
+            "URL",
+            "PATH",
+            "BODY",
+        ]
+        .into_iter()
+        .any(|forbidden| value.contains(forbidden))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -872,5 +1183,201 @@ mod tests {
                 "forbidden: {forbidden}"
             );
         }
+    }
+
+    fn m4c07_daily_window(digit: char) -> String {
+        deterministic("daily-window", digit)
+    }
+
+    fn m4c07_ready_envelope() -> M4SecretaryDailyReportEnvelope {
+        let current_window = m4c07_daily_window('a');
+        let closed_window = m4c07_daily_window('b');
+        M4SecretaryDailyReportEnvelope::Ready {
+            schema_version: M4_SECRETARY_DAILY_SCHEMA_VERSION.to_string(),
+            scheduler: M4SecretaryDailySchedulerRead {
+                configuration_revision: "2".to_string(),
+                iana_timezone: "Asia/Shanghai".to_string(),
+                timezone_rules_version: deterministic("timezone-rules", 'c'),
+                current_daily_window_id: current_window.clone(),
+                last_closed_daily_window_id: closed_window.clone(),
+                catch_up_pending_count: 0,
+                pending_catch_up_receipt_refs: vec![],
+                status: "IDLE".to_string(),
+            },
+            daily_brief: M4SecretaryDailyBriefRead {
+                daily_window_id: current_window,
+                scope_source_watermark: "e".repeat(64),
+                projector_version: "1".to_string(),
+                ordered_item_refs: vec![
+                    deterministic("open-loop", 'a'),
+                    deterministic("inbox", 'b'),
+                ],
+                generated_at_utc: Some("2026-08-10T09:00:00Z".to_string()),
+            },
+            daily_report: M4SecretaryDailyReportRead {
+                daily_report_id: deterministic("daily-report", 'c'),
+                daily_window_id: closed_window.clone(),
+                report_version: "1".to_string(),
+                status: "GENERATED".to_string(),
+                scope_source_watermark: "d".repeat(64),
+                projector_version: "1".to_string(),
+                ordered_item_refs: vec![
+                    deterministic("source-event", 'd'),
+                    deterministic("personal-action", 'e'),
+                ],
+                supersedes_report_ref: None,
+                generated_at_utc: Some("2026-08-10T00:05:00Z".to_string()),
+            },
+            last_run: M4SecretarySchedulerRunRead {
+                scheduler_run_id: deterministic("scheduler-run", 'f'),
+                configuration_revision: "2".to_string(),
+                window_ref: closed_window,
+                scope_source_watermark_before: "c".repeat(64),
+                scope_source_watermark_after: "d".repeat(64),
+                admitted_material_event_count: 0,
+                agent_turn_count: 0,
+                model_invocation_count: 0,
+                outcome_code: "EMPTY_WINDOW".to_string(),
+                recorded_at_utc: Some("2026-08-10T00:05:00Z".to_string()),
+            },
+            recovery_code: None,
+        }
+    }
+
+    #[test]
+    fn m4c07_ready_envelope_preserves_server_priority_order_and_serializes_frozen_fields() {
+        let envelope = m4c07_ready_envelope();
+        validate_m4c07_daily_report_envelope(&envelope)
+            .expect("synthetic M4C07 envelope validates with server priority order");
+
+        let M4SecretaryDailyReportEnvelope::Ready {
+            daily_brief,
+            daily_report,
+            ..
+        } = &envelope
+        else {
+            panic!("fixture must remain ready");
+        };
+        // These intentionally non-lexical sequences stand for the service's
+        // M4 priority/due/source-change projection and must pass unchanged.
+        assert_eq!(
+            daily_brief.ordered_item_refs,
+            vec![deterministic("open-loop", 'a'), deterministic("inbox", 'b')]
+        );
+        assert_eq!(
+            daily_report.ordered_item_refs,
+            vec![
+                deterministic("source-event", 'd'),
+                deterministic("personal-action", 'e'),
+            ]
+        );
+
+        let serialized = serde_json::to_value(&envelope).expect("serialize frozen daily envelope");
+        let fields = serialized
+            .as_object()
+            .expect("daily envelope serializes as an object");
+        assert_eq!(
+            fields
+                .get("schema_version")
+                .and_then(|value| value.as_str()),
+            Some(M4_SECRETARY_DAILY_SCHEMA_VERSION)
+        );
+        assert_eq!(
+            fields.get("status").and_then(|value| value.as_str()),
+            Some("READY")
+        );
+        for forbidden in [
+            "raw_transcript",
+            "transcript",
+            "prompt",
+            "provider_body",
+            "memory_artifact",
+            "secret",
+            "credential",
+            "route_payload",
+            "callback",
+        ] {
+            assert!(
+                fields.get(forbidden).is_none(),
+                "forbidden field: {forbidden}"
+            );
+        }
+    }
+
+    #[test]
+    fn m4c07_rejects_noncanonical_cross_bound_unsafe_and_zero_event_payloads() {
+        let mut noncanonical = m4c07_ready_envelope();
+        if let M4SecretaryDailyReportEnvelope::Ready { scheduler, .. } = &mut noncanonical {
+            scheduler.configuration_revision = "02".to_string();
+        }
+        assert!(validate_m4c07_daily_report_envelope(&noncanonical).is_err());
+
+        let mut invalid_timezone_rules_version = m4c07_ready_envelope();
+        if let M4SecretaryDailyReportEnvelope::Ready { scheduler, .. } =
+            &mut invalid_timezone_rules_version
+        {
+            scheduler.timezone_rules_version = "tzdb-2026a".to_string();
+        }
+        assert!(validate_m4c07_daily_report_envelope(&invalid_timezone_rules_version).is_err());
+
+        let mut cross_window = m4c07_ready_envelope();
+        if let M4SecretaryDailyReportEnvelope::Ready { daily_brief, .. } = &mut cross_window {
+            daily_brief.daily_window_id = m4c07_daily_window('c');
+        }
+        assert!(validate_m4c07_daily_report_envelope(&cross_window).is_err());
+
+        let mut unsafe_ref = m4c07_ready_envelope();
+        if let M4SecretaryDailyReportEnvelope::Ready { daily_report, .. } = &mut unsafe_ref {
+            daily_report.ordered_item_refs = vec!["https://example.invalid/raw-body".to_string()];
+        }
+        assert!(validate_m4c07_daily_report_envelope(&unsafe_ref).is_err());
+
+        let mut duplicate_ref = m4c07_ready_envelope();
+        if let M4SecretaryDailyReportEnvelope::Ready { daily_brief, .. } = &mut duplicate_ref {
+            let duplicate = deterministic("inbox", 'b');
+            daily_brief.ordered_item_refs = vec![duplicate.clone(), duplicate];
+        }
+        assert!(validate_m4c07_daily_report_envelope(&duplicate_ref).is_err());
+
+        let mut nonzero_empty_window = m4c07_ready_envelope();
+        if let M4SecretaryDailyReportEnvelope::Ready { last_run, .. } = &mut nonzero_empty_window {
+            last_run.agent_turn_count = 1;
+        }
+        assert!(validate_m4c07_daily_report_envelope(&nonzero_empty_window).is_err());
+    }
+
+    #[test]
+    fn m4c07_unavailable_and_disabled_are_exclusive_scrubbed_envelopes() {
+        let unavailable = M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version: M4_SECRETARY_DAILY_SCHEMA_VERSION.to_string(),
+            reason: "M4_DAILY_STORAGE_UNAVAILABLE".to_string(),
+        };
+        let disabled = M4SecretaryDailyReportEnvelope::Disabled {
+            schema_version: M4_SECRETARY_DAILY_SCHEMA_VERSION.to_string(),
+            reason: "SCHEDULER_CONFIGURATION_DISABLED".to_string(),
+        };
+        validate_m4c07_daily_report_envelope(&unavailable)
+            .expect("scrubbed unavailable envelope is valid");
+        validate_m4c07_daily_report_envelope(&disabled)
+            .expect("scrubbed disabled envelope is valid");
+
+        for envelope in [unavailable, disabled] {
+            let serialized = serde_json::to_value(&envelope).expect("serialize non-ready envelope");
+            let fields = serialized
+                .as_object()
+                .expect("non-ready envelope serializes as an object");
+            assert_eq!(fields.len(), 3);
+            assert!(fields.get("reason").is_some());
+            assert!(fields.get("scheduler").is_none());
+            assert!(fields.get("daily_brief").is_none());
+            assert!(fields.get("daily_report").is_none());
+            assert!(fields.get("last_run").is_none());
+        }
+
+        let unsafe_reason = M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version: M4_SECRETARY_DAILY_SCHEMA_VERSION.to_string(),
+            reason: "DATABASE_PATH_PRIVATE_TMP".to_string(),
+        };
+        assert!(validate_m4c07_daily_report_envelope(&unsafe_reason).is_err());
     }
 }

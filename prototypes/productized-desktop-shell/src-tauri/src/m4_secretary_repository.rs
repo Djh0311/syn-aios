@@ -11,15 +11,15 @@ use crate::m4_secretary_domain::{
     m4_close_open_loop, m4_coordination_command_fingerprint,
     m4_coordination_command_fingerprint_with_fields, m4_create_notification,
     m4_create_personal_action, m4_create_reminder, m4_dismiss_inbox_item, m4_dismiss_open_loop,
-    m4_inbox_item_id, m4_internal_id, m4_mark_inbox_item_read, m4_open_loop_id,
-    m4_personal_action_id, m4_prepare_source_owner_writeback, m4_primary_actor_ref,
-    m4_primary_scope_ref, m4_priority_reason, m4_reminder_id, m4_reopen_open_loop,
-    m4_reopen_snoozed_open_loop_on_clock, m4_scope_source_watermark,
-    m4_select_open_loop_for_carry_over, m4_snooze_open_loop, m4_source_owner_writeback_fingerprint,
-    m4_source_owner_writeback_idempotency_key, m4_transition_notification,
-    m4_transition_personal_action, m4_transition_reminder, m4_validate_inbox_item,
-    m4_validate_notification, m4_validate_open_loop, m4_validate_personal_action,
-    m4_validate_reminder, m4_validate_source_owner_writeback_intent,
+    m4_inbox_item_id, m4_internal_id, m4_is_lower_hex_digest, m4_is_opaque_reference,
+    m4_mark_inbox_item_read, m4_open_loop_id, m4_parse_rfc3339_utc_key, m4_personal_action_id,
+    m4_prepare_source_owner_writeback, m4_primary_actor_ref, m4_primary_scope_ref,
+    m4_priority_reason, m4_reminder_id, m4_reopen_open_loop, m4_reopen_snoozed_open_loop_on_clock,
+    m4_scope_source_watermark, m4_select_open_loop_for_carry_over, m4_snooze_open_loop,
+    m4_source_owner_writeback_fingerprint, m4_source_owner_writeback_idempotency_key,
+    m4_transition_notification, m4_transition_personal_action, m4_transition_reminder,
+    m4_validate_inbox_item, m4_validate_notification, m4_validate_open_loop,
+    m4_validate_personal_action, m4_validate_reminder, m4_validate_source_owner_writeback_intent,
     m4_validate_source_owner_writeback_result, M4AcknowledgeOpenLoopCommand,
     M4AdmittedWorkflowAttentionSource, M4AttentionSignals, M4CarryOverOpenLoopCommand,
     M4CoordinationCommandMetadata, M4CreateNotificationCommand, M4CreatePersonalActionCommand,
@@ -38,15 +38,32 @@ use crate::m4_secretary_domain::{
 };
 use crate::m4_secretary_read_model::{
     m4_priority_reason_text, sort_m4_inbox_items, sort_m4_open_loops,
-    sort_m4c04_coordination_snapshot, M4AttentionSnapshot, M4CoordinationSnapshot, M4InboxItemRead,
-    M4NotificationRead, M4OpenLoopRead, M4OwnerWritebackReceiptRead, M4PersonalActionRead,
-    M4ReminderRead, M4SourceLinkRead,
+    sort_m4c04_coordination_snapshot, validate_m4c07_daily_report_envelope, M4AttentionSnapshot,
+    M4CoordinationSnapshot, M4InboxItemRead, M4NotificationRead, M4OpenLoopRead,
+    M4OwnerWritebackReceiptRead, M4PersonalActionRead, M4ReminderRead, M4SecretaryDailyBriefRead,
+    M4SecretaryDailyReportEnvelope, M4SecretaryDailyReportRead, M4SecretaryDailySchedulerRead,
+    M4SecretarySchedulerRunRead, M4SourceLinkRead,
+};
+use crate::m4_secretary_scheduler::{
+    m4_daily_window_at_utc, m4_format_utc_seconds, m4_parse_utc_seconds,
+    m4_plan_explicit_catch_up_recovery, m4_plan_scheduler_run,
+    m4_resolve_os_scheduler_configuration, m4_scheduler_configuration, M4CatchUpTruncation,
+    M4DailyWindow, M4LocalDate, M4SchedulerCheckpoint, M4SchedulerConfiguration,
+    M4SchedulerConfigurationResolution, M4SchedulerOsTimezonePaths, M4SchedulerPlanningInput,
+    M4SchedulerTrigger, M4TimezoneRules,
 };
 use crate::m4_secretary_schema::{ensure_m4_secretary_schema_v1, verify_m4_secretary_schema_v1};
+use crate::m4_secretary_service::{
+    M4SecretaryHash, M4SecretaryInvocationClaimOutcome, M4SecretaryInvocationReceipt,
+    M4SecretaryInvocationTerminal, M4SecretaryModelInvocationClaim,
+    M4SecretaryModelInvocationLedgerPort, M4SecretaryOpaqueRef, M4SecretaryServiceError,
+};
 use rusqlite::{
     params, types::Type as SqliteType, Connection, Error as SqliteError, ErrorCode, OpenFlags,
     OptionalExtension, Row, Transaction, TransactionBehavior,
 };
+use sha2::{Digest, Sha256};
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -60,6 +77,9 @@ pub(crate) const M4_ORDINARY_SECRETARY_RELATIVE_PATH: &str = "secretary/m4-secre
 const M4_ORDINARY_APP_DATA_DIR_NAME: &str = "local.codex.governance.workbench";
 const M4_BUSY_TIMEOUT_MS: u64 = 250;
 const M4_BUSY_RETRY_LIMIT: usize = 3;
+const M4_DAILY_PROJECTOR_VERSION: &str = "1";
+const M4_DAILY_EXPLICIT_USER_BUDGET_CLASS: &str = "EXPLICIT_USER_EXPLANATION";
+const M4_DAILY_EXPLICIT_USER_BUDGET_LIMIT: i64 = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct M4OrdinarySecretaryRepositoryConfig {
@@ -197,11 +217,22 @@ pub(crate) struct M4SecretarySqliteRepository {
     path_policy: M4SecretaryPathPolicy,
     clock: M4RepositoryClock,
     #[cfg(test)]
+    scheduler_timezone_paths: Arc<Mutex<M4SchedulerOsTimezonePaths>>,
+    #[cfg(test)]
     fail_after_projection_once: Arc<Mutex<bool>>,
     #[cfg(test)]
     fail_rebuild_after_delete_once: Arc<Mutex<bool>>,
     #[cfg(test)]
     fail_after_coordination_state_once: Arc<Mutex<bool>>,
+    #[cfg(test)]
+    daily_failure_stage: Arc<Mutex<Option<M4DailyFailureStage>>>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum M4DailyFailureStage {
+    AfterWindow,
+    AfterReport,
+    BeforeCheckpoint,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -299,11 +330,15 @@ impl M4SecretarySqliteRepository {
             path_policy,
             clock: M4RepositoryClock::default(),
             #[cfg(test)]
+            scheduler_timezone_paths: Arc::new(Mutex::new(M4SchedulerOsTimezonePaths::default())),
+            #[cfg(test)]
             fail_after_projection_once: Arc::new(Mutex::new(false)),
             #[cfg(test)]
             fail_rebuild_after_delete_once: Arc::new(Mutex::new(false)),
             #[cfg(test)]
             fail_after_coordination_state_once: Arc::new(Mutex::new(false)),
+            #[cfg(test)]
+            daily_failure_stage: Arc::new(Mutex::new(None)),
         };
         repository.initialize_schema_with_busy_retry()?;
         repository.revalidated_db_path()?;
@@ -393,6 +428,22 @@ impl M4SecretarySqliteRepository {
         fixed_now: &str,
     ) -> Result<(), M4SecretaryRepositoryError> {
         self.clock.set_fixed_now(fixed_now)
+    }
+
+    #[cfg(test)]
+    fn set_test_scheduler_timezone_paths(&self, paths: M4SchedulerOsTimezonePaths) {
+        *self
+            .scheduler_timezone_paths
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = paths;
+    }
+
+    #[cfg(test)]
+    fn fail_daily_at(&self, stage: M4DailyFailureStage) {
+        *self
+            .daily_failure_stage
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(stage);
     }
 
     #[cfg(test)]
@@ -528,6 +579,714 @@ impl M4SecretarySqliteRepository {
             M4SecretaryRepositoryError::sqlite("m4_coordination_read_commit", error)
         })?;
         Ok(snapshot)
+    }
+
+    /// Run one local, model-free C07 scheduling cycle.  `TimerTick` records
+    /// its own idempotent local event first; every durable daily projection
+    /// mutation then shares one SQLite `IMMEDIATE` transaction.
+    pub(crate) fn run_daily_scheduler_cycle(
+        &self,
+        trigger: M4SchedulerTrigger,
+    ) -> Result<(), M4SecretaryRepositoryError> {
+        let recorded_at_utc = self.clock.capture_now()?;
+        let now_utc = m4_parse_utc_seconds(&recorded_at_utc)
+            .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+        let resolution = self.resolve_scheduler_configuration();
+
+        if trigger == M4SchedulerTrigger::TimerTick {
+            self.record_timer_fired(now_utc, &recorded_at_utc)?;
+        }
+
+        let failure_stage = self.take_daily_failure_stage();
+        self.with_immediate_transaction("m4_run_daily_scheduler_cycle", |transaction| {
+            let persisted = persist_scheduler_configuration(
+                transaction,
+                &resolution,
+                now_utc,
+                &recorded_at_utc,
+            )?;
+            match persisted {
+                M4PersistedSchedulerConfiguration::Disabled(disabled) => {
+                    let checkpoint =
+                        load_scheduler_checkpoint(transaction, m4_primary_scope_ref())?;
+                    upsert_scheduler_checkpoint(
+                        transaction,
+                        &disabled.scheduler_configuration_id,
+                        &disabled.configuration_revision,
+                        checkpoint.last_closed_daily_window_id.as_deref(),
+                        checkpoint.last_tick_utc.as_deref(),
+                        checkpoint.catch_up_pending_count,
+                        checkpoint.admitted_source_event_count,
+                        checkpoint.admitted_material_source_event_count,
+                        &checkpoint.scope_source_watermark,
+                        "DEGRADED",
+                        Some(&disabled.error_code),
+                        &recorded_at_utc,
+                    )?;
+                }
+                M4PersistedSchedulerConfiguration::Active(active) => {
+                    let checkpoint =
+                        load_scheduler_checkpoint(transaction, m4_primary_scope_ref())?;
+                    let planner_checkpoint = scheduler_checkpoint_from_stored(
+                        transaction,
+                        checkpoint.last_closed_daily_window_id.as_deref(),
+                        checkpoint.last_tick_utc.as_deref(),
+                    )?;
+                    let plan = m4_plan_scheduler_run(&M4SchedulerPlanningInput::new(
+                        active.configuration.clone(),
+                        trigger,
+                        now_utc,
+                        planner_checkpoint,
+                    ))
+                    .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+                    let current_scope_source_watermark =
+                        scope_watermark_in_transaction(transaction, m4_primary_scope_ref())?;
+                    let current_admitted_source_event_count =
+                        admitted_source_event_count_in_transaction(
+                            transaction,
+                            m4_primary_scope_ref(),
+                        )?;
+                    let current_admitted_material_source_event_count =
+                        admitted_material_source_event_count_in_transaction(
+                            transaction,
+                            m4_primary_scope_ref(),
+                        )?;
+                    let admitted_source_delta = scheduler_admitted_source_delta(
+                        &checkpoint,
+                        &current_scope_source_watermark,
+                        current_admitted_source_event_count,
+                        current_admitted_material_source_event_count,
+                    )?;
+                    if let Some(truncation) = plan.catch_up_truncation() {
+                        let _ = record_catch_up_truncation_receipt(
+                            transaction,
+                            &active,
+                            truncation,
+                            &recorded_at_utc,
+                        )?;
+                    }
+                    let planned_windows = plan.windows();
+                    let mut last_closed_daily_window_id =
+                        checkpoint.last_closed_daily_window_id.clone();
+
+                    for (window_index, planned_window) in planned_windows.iter().enumerate() {
+                        let (window, inserted) =
+                            ensure_daily_window(transaction, planned_window, &recorded_at_utc)?;
+                        if inserted {
+                            maybe_fail_daily_stage(
+                                failure_stage,
+                                M4DailyFailureStage::AfterWindow,
+                            )?;
+                        }
+                        let items = daily_projection_items_in_transaction(
+                            transaction,
+                            m4_primary_scope_ref(),
+                        )?;
+                        let (report, report_inserted) = ensure_daily_report(
+                            transaction,
+                            &window,
+                            &current_scope_source_watermark,
+                            &items,
+                            None,
+                            &recorded_at_utc,
+                        )?;
+                        if report_inserted {
+                            maybe_fail_daily_stage(
+                                failure_stage,
+                                M4DailyFailureStage::AfterReport,
+                            )?;
+                        }
+                        // A catch-up batch can close several older windows.  All
+                        // source changes since the prior checkpoint are consumed
+                        // exactly once, by its newest materialized window; older
+                        // windows are mechanically current/current/zero.
+                        let is_newest_materialized_window =
+                            window_index + 1 == planned_windows.len();
+                        let (
+                            scope_source_watermark_before,
+                            scope_source_watermark_after,
+                            admitted_material_event_count,
+                        ) = if is_newest_materialized_window && admitted_source_delta.total > 0 {
+                            (
+                                checkpoint.scope_source_watermark.as_str(),
+                                current_scope_source_watermark.as_str(),
+                                admitted_source_delta.material,
+                            )
+                        } else {
+                            (
+                                current_scope_source_watermark.as_str(),
+                                current_scope_source_watermark.as_str(),
+                                0,
+                            )
+                        };
+                        let scheduler_run_id = insert_scheduler_run(
+                            transaction,
+                            &window,
+                            scope_source_watermark_before,
+                            scope_source_watermark_after,
+                            admitted_material_event_count,
+                            plan.outcome_code(),
+                            &recorded_at_utc,
+                        )?;
+                        insert_daily_window_closed_event(
+                            transaction,
+                            &scheduler_run_id,
+                            &window,
+                            &current_scope_source_watermark,
+                            &recorded_at_utc,
+                        )?;
+                        if report_inserted {
+                            insert_daily_report_versioned_event(
+                                transaction,
+                                Some(&scheduler_run_id),
+                                &report,
+                                &recorded_at_utc,
+                            )?;
+                        }
+                        last_closed_daily_window_id = Some(window.daily_window_id.clone());
+                    }
+
+                    maybe_fail_daily_stage(failure_stage, M4DailyFailureStage::BeforeCheckpoint)?;
+                    let (catch_up_pending_count, _) = pending_catch_up_state(transaction)?;
+                    let last_tick_utc = if trigger == M4SchedulerTrigger::TimerTick {
+                        Some(recorded_at_utc.as_str())
+                    } else {
+                        checkpoint.last_tick_utc.as_deref()
+                    };
+                    let did_close_window = !planned_windows.is_empty();
+                    let checkpoint_scope_source_watermark = if did_close_window {
+                        current_scope_source_watermark.as_str()
+                    } else {
+                        checkpoint.scope_source_watermark.as_str()
+                    };
+                    let checkpoint_admitted_source_event_count = if did_close_window {
+                        current_admitted_source_event_count
+                    } else {
+                        checkpoint.admitted_source_event_count
+                    };
+                    let checkpoint_admitted_material_source_event_count = if did_close_window {
+                        current_admitted_material_source_event_count
+                    } else {
+                        checkpoint.admitted_material_source_event_count
+                    };
+                    upsert_scheduler_checkpoint(
+                        transaction,
+                        &active.scheduler_configuration_id,
+                        &active.configuration_revision,
+                        last_closed_daily_window_id.as_deref(),
+                        last_tick_utc,
+                        catch_up_pending_count,
+                        checkpoint_admitted_source_event_count,
+                        checkpoint_admitted_material_source_event_count,
+                        checkpoint_scope_source_watermark,
+                        "READY",
+                        None,
+                        &recorded_at_utc,
+                    )?;
+                }
+            }
+            verify_m4_secretary_schema_v1(transaction)
+                .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))
+        })?;
+        Ok(())
+    }
+
+    /// Explicit open/refresh is the only read API which reprojects the
+    /// current brief.  It still never starts an agent or provider.
+    pub(crate) fn refresh_and_read_daily_report(
+        &self,
+    ) -> Result<M4SecretaryDailyReportEnvelope, M4SecretaryRepositoryError> {
+        let recorded_at_utc = self.clock.capture_now()?;
+        let now_utc = m4_parse_utc_seconds(&recorded_at_utc)
+            .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+        let resolution = self.resolve_scheduler_configuration();
+        let (envelope, _) =
+            self.with_immediate_transaction("m4_refresh_and_read_daily_report", |transaction| {
+                let persisted = persist_scheduler_configuration(
+                    transaction,
+                    &resolution,
+                    now_utc,
+                    &recorded_at_utc,
+                )?;
+                let envelope = match persisted {
+                    M4PersistedSchedulerConfiguration::Disabled(disabled) => {
+                        let checkpoint =
+                            load_scheduler_checkpoint(transaction, m4_primary_scope_ref())?;
+                        upsert_scheduler_checkpoint(
+                            transaction,
+                            &disabled.scheduler_configuration_id,
+                            &disabled.configuration_revision,
+                            checkpoint.last_closed_daily_window_id.as_deref(),
+                            checkpoint.last_tick_utc.as_deref(),
+                            checkpoint.catch_up_pending_count,
+                            checkpoint.admitted_source_event_count,
+                            checkpoint.admitted_material_source_event_count,
+                            &checkpoint.scope_source_watermark,
+                            "DEGRADED",
+                            Some(&disabled.error_code),
+                            &recorded_at_utc,
+                        )?;
+                        M4SecretaryDailyReportEnvelope::Disabled {
+                            schema_version:
+                                crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+                                    .to_string(),
+                            reason: disabled.error_code,
+                        }
+                    }
+                    M4PersistedSchedulerConfiguration::Active(active) => {
+                        let checkpoint =
+                            load_scheduler_checkpoint(transaction, m4_primary_scope_ref())?;
+                        let current_candidate =
+                            m4_daily_window_at_utc(&active.configuration, now_utc)
+                                .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+                        let (current_window, _) =
+                            ensure_daily_window(transaction, &current_candidate, &recorded_at_utc)?;
+                        let scope_source_watermark =
+                            scope_watermark_in_transaction(transaction, m4_primary_scope_ref())?;
+                        let items = daily_projection_items_in_transaction(
+                            transaction,
+                            m4_primary_scope_ref(),
+                        )?;
+                        upsert_daily_brief(
+                            transaction,
+                            &current_window,
+                            &scope_source_watermark,
+                            &items,
+                            &recorded_at_utc,
+                        )?;
+                        upsert_scheduler_checkpoint(
+                            transaction,
+                            &active.scheduler_configuration_id,
+                            &active.configuration_revision,
+                            checkpoint.last_closed_daily_window_id.as_deref(),
+                            checkpoint.last_tick_utc.as_deref(),
+                            checkpoint.catch_up_pending_count,
+                            checkpoint.admitted_source_event_count,
+                            checkpoint.admitted_material_source_event_count,
+                            &checkpoint.scope_source_watermark,
+                            "READY",
+                            None,
+                            &recorded_at_utc,
+                        )?;
+                        read_daily_report_envelope_from_transaction(
+                            transaction,
+                            &current_window.daily_window_id,
+                        )?
+                    }
+                };
+                validate_m4c07_daily_report_envelope(&envelope)
+                    .map_err(M4SecretaryRepositoryError::new)?;
+                verify_m4_secretary_schema_v1(transaction)
+                    .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))?;
+                Ok(envelope)
+            })?;
+        Ok(envelope)
+    }
+
+    /// Materialize one oldest-first batch from a server-issued truncation
+    /// receipt. The renderer may return only that opaque receipt reference;
+    /// scope, timezone, date bounds and source accounting remain server-owned.
+    /// This explicit recovery is deterministic and never starts an agent or
+    /// model invocation.
+    pub(crate) fn recover_daily_catch_up(
+        &self,
+        catch_up_truncation_id: &str,
+    ) -> Result<M4SecretaryDailyReportEnvelope, M4SecretaryRepositoryError> {
+        if !catch_up_truncation_id
+            .strip_prefix("catch-up-truncation:")
+            .is_some_and(m4_is_lower_hex_digest)
+        {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_catch_up_truncation_reference_invalid",
+            ));
+        }
+        let recorded_at_utc = self.clock.capture_now()?;
+        let now_utc = m4_parse_utc_seconds(&recorded_at_utc)
+            .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+        let resolution = self.resolve_scheduler_configuration();
+        let (envelope, _) =
+            self.with_immediate_transaction("m4_recover_daily_catch_up", |transaction| {
+                let persisted = persist_scheduler_configuration(
+                    transaction,
+                    &resolution,
+                    now_utc,
+                    &recorded_at_utc,
+                )?;
+                let M4PersistedSchedulerConfiguration::Active(active) = persisted else {
+                    return Err(M4SecretaryRepositoryError::new(
+                        "m4_catch_up_recovery_scheduler_disabled",
+                    ));
+                };
+                let receipt =
+                    load_catch_up_truncation_receipt(transaction, catch_up_truncation_id)?
+                        .ok_or_else(|| {
+                            M4SecretaryRepositoryError::new("m4_catch_up_truncation_not_found")
+                        })?;
+                if receipt.status != "PENDING" && receipt.status != "COMPLETED" {
+                    return Err(M4SecretaryRepositoryError::new(
+                        "m4_catch_up_truncation_status_invalid",
+                    ));
+                }
+
+                let scope_source_watermark =
+                    scope_watermark_in_transaction(transaction, m4_primary_scope_ref())?;
+                let items =
+                    daily_projection_items_in_transaction(transaction, m4_primary_scope_ref())?;
+
+                if receipt.status == "PENDING" {
+                    let next_local_date = receipt
+                        .next_unmaterialized_local_date
+                        .as_deref()
+                        .ok_or_else(|| {
+                            M4SecretaryRepositoryError::new(
+                                "m4_catch_up_truncation_next_date_missing",
+                            )
+                        })
+                        .and_then(parse_m4_local_date)?;
+                    let through_local_date =
+                        parse_m4_local_date(&receipt.unmaterialized_through_local_date)?;
+                    let recovery_plan = m4_plan_explicit_catch_up_recovery(
+                        &active.configuration,
+                        next_local_date,
+                        through_local_date,
+                    )
+                    .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+                    let planned_total = u64::try_from(recovery_plan.windows().len())
+                        .ok()
+                        .and_then(|batch| batch.checked_add(recovery_plan.remaining_window_count()))
+                        .ok_or_else(|| {
+                            M4SecretaryRepositoryError::new("m4_catch_up_count_invalid")
+                        })?;
+                    if planned_total != receipt.remaining_window_count {
+                        return Err(M4SecretaryRepositoryError::new(
+                            "m4_catch_up_truncation_range_count_mismatch",
+                        ));
+                    }
+
+                    for planned_window in recovery_plan.windows() {
+                        let (window, _) =
+                            ensure_daily_window(transaction, planned_window, &recorded_at_utc)?;
+                        let (report, report_inserted) = ensure_daily_report(
+                            transaction,
+                            &window,
+                            &scope_source_watermark,
+                            &items,
+                            None,
+                            &recorded_at_utc,
+                        )?;
+                        let scheduler_run_id = insert_scheduler_run(
+                            transaction,
+                            &window,
+                            &scope_source_watermark,
+                            &scope_source_watermark,
+                            0,
+                            recovery_plan.outcome_code(),
+                            &recorded_at_utc,
+                        )?;
+                        insert_daily_window_closed_event(
+                            transaction,
+                            &scheduler_run_id,
+                            &window,
+                            &scope_source_watermark,
+                            &recorded_at_utc,
+                        )?;
+                        if report_inserted {
+                            insert_daily_report_versioned_event(
+                                transaction,
+                                Some(&scheduler_run_id),
+                                &report,
+                                &recorded_at_utc,
+                            )?;
+                        }
+                    }
+                    update_catch_up_truncation_progress(
+                        transaction,
+                        &receipt,
+                        recovery_plan.next_unmaterialized_local_date(),
+                        recovery_plan.remaining_window_count(),
+                        &recorded_at_utc,
+                    )?;
+
+                    let checkpoint =
+                        load_scheduler_checkpoint(transaction, m4_primary_scope_ref())?;
+                    let (catch_up_pending_count, _) = pending_catch_up_state(transaction)?;
+                    upsert_scheduler_checkpoint(
+                        transaction,
+                        &active.scheduler_configuration_id,
+                        &active.configuration_revision,
+                        checkpoint.last_closed_daily_window_id.as_deref(),
+                        checkpoint.last_tick_utc.as_deref(),
+                        catch_up_pending_count,
+                        checkpoint.admitted_source_event_count,
+                        checkpoint.admitted_material_source_event_count,
+                        &checkpoint.scope_source_watermark,
+                        "READY",
+                        None,
+                        &recorded_at_utc,
+                    )?;
+                }
+
+                let current_candidate = m4_daily_window_at_utc(&active.configuration, now_utc)
+                    .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+                let (current_window, _) =
+                    ensure_daily_window(transaction, &current_candidate, &recorded_at_utc)?;
+                upsert_daily_brief(
+                    transaction,
+                    &current_window,
+                    &scope_source_watermark,
+                    &items,
+                    &recorded_at_utc,
+                )?;
+                let envelope = read_daily_report_envelope_from_transaction(
+                    transaction,
+                    &current_window.daily_window_id,
+                )?;
+                validate_m4c07_daily_report_envelope(&envelope)
+                    .map_err(M4SecretaryRepositoryError::new)?;
+                verify_m4_secretary_schema_v1(transaction)
+                    .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))?;
+                Ok(envelope)
+            })?;
+        Ok(envelope)
+    }
+
+    /// Append a corrective version for one already-materialized report.  The
+    /// correction reference affects only the new immutable version key; old
+    /// report rows and their item bindings are never overwritten.
+    pub(crate) fn explicit_correct_daily_report(
+        &self,
+        daily_window_id: &str,
+        explicit_correction_ref: &str,
+    ) -> Result<M4SecretaryDailyReportRead, M4SecretaryRepositoryError> {
+        if !m4_is_daily_window_id(daily_window_id)
+            || !m4_is_opaque_reference(explicit_correction_ref)
+        {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_daily_report_correction_reference_invalid",
+            ));
+        }
+        let recorded_at_utc = self.clock.capture_now()?;
+        let (report, _) =
+            self.with_immediate_transaction("m4_explicit_correct_daily_report", |transaction| {
+                let window =
+                    load_daily_window_by_id(transaction, daily_window_id, m4_primary_scope_ref())?
+                        .ok_or_else(|| {
+                            M4SecretaryRepositoryError::new("m4_daily_report_window_not_found")
+                        })?;
+                let scope_source_watermark =
+                    scope_watermark_in_transaction(transaction, m4_primary_scope_ref())?;
+                let items =
+                    daily_projection_items_in_transaction(transaction, m4_primary_scope_ref())?;
+                let (report, inserted) = ensure_daily_report(
+                    transaction,
+                    &window,
+                    &scope_source_watermark,
+                    &items,
+                    Some(explicit_correction_ref),
+                    &recorded_at_utc,
+                )?;
+                if inserted {
+                    let scheduler_run_id = insert_scheduler_run(
+                        transaction,
+                        &window,
+                        &report.scope_source_watermark,
+                        &report.scope_source_watermark,
+                        0,
+                        "EXPLICIT_CORRECTION",
+                        &recorded_at_utc,
+                    )?;
+                    insert_daily_report_versioned_event(
+                        transaction,
+                        Some(&scheduler_run_id),
+                        &report,
+                        &recorded_at_utc,
+                    )?;
+                    let checkpoint =
+                        load_scheduler_checkpoint(transaction, m4_primary_scope_ref())?;
+                    upsert_scheduler_checkpoint(
+                        transaction,
+                        &window.scheduler_configuration_id,
+                        &window.configuration_revision,
+                        checkpoint.last_closed_daily_window_id.as_deref(),
+                        checkpoint.last_tick_utc.as_deref(),
+                        checkpoint.catch_up_pending_count,
+                        checkpoint.admitted_source_event_count,
+                        checkpoint.admitted_material_source_event_count,
+                        &checkpoint.scope_source_watermark,
+                        "READY",
+                        None,
+                        &recorded_at_utc,
+                    )?;
+                }
+                verify_m4_secretary_schema_v1(transaction)
+                    .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))?;
+                read_daily_report_by_id(transaction, &report.daily_report_id)
+            })?;
+        Ok(report)
+    }
+
+    /// The M4-owned claim gate is intentionally durable and model-free.  The
+    /// only successful result is permission for the caller to dispatch one
+    /// already-keyed invocation; neither a prompt nor a provider response is
+    /// accepted by this repository boundary.
+    fn claim_model_invocation(
+        &self,
+        claim: &M4SecretaryModelInvocationClaim,
+    ) -> Result<M4SecretaryInvocationClaimOutcome, M4SecretaryRepositoryError> {
+        if !m4_is_invocation_status_code(&claim.purpose_code) {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_model_invocation_purpose_invalid",
+            ));
+        }
+        let recorded_at_utc = self.clock.capture_now()?;
+        let now_utc = m4_parse_utc_seconds(&recorded_at_utc)
+            .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+        let resolution = self.resolve_scheduler_configuration();
+        let (outcome, _) =
+            self.with_immediate_transaction("m4_claim_model_invocation", |transaction| {
+                let persisted = persist_scheduler_configuration(
+                    transaction,
+                    &resolution,
+                    now_utc,
+                    &recorded_at_utc,
+                )?;
+                let outcome = match persisted {
+                    M4PersistedSchedulerConfiguration::Disabled(_) => {
+                        M4SecretaryInvocationClaimOutcome::Rejected {
+                            error_code: "SCHEDULER_DISABLED".to_string(),
+                        }
+                    }
+                    M4PersistedSchedulerConfiguration::Active(active) => {
+                        let candidate = m4_daily_window_at_utc(&active.configuration, now_utc)
+                            .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+                        let (daily_window, _) =
+                            ensure_daily_window(transaction, &candidate, &recorded_at_utc)?;
+                        claim_model_invocation_in_transaction(
+                            transaction,
+                            claim,
+                            &daily_window,
+                            &recorded_at_utc,
+                        )?
+                    }
+                };
+                verify_m4_secretary_schema_v1(transaction)
+                    .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))?;
+                Ok(outcome)
+            })?;
+        Ok(outcome)
+    }
+
+    fn terminal_model_invocation(
+        &self,
+        terminal: &M4SecretaryInvocationTerminal,
+    ) -> Result<M4SecretaryInvocationReceipt, M4SecretaryRepositoryError> {
+        let recorded_at_utc = self.clock.capture_now()?;
+        let (receipt, _) =
+            self.with_immediate_transaction("m4_terminal_model_invocation", |transaction| {
+                let receipt = terminal_model_invocation_in_transaction(
+                    transaction,
+                    terminal,
+                    &recorded_at_utc,
+                )?;
+                verify_m4_secretary_schema_v1(transaction)
+                    .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))?;
+                Ok(receipt)
+            })?;
+        Ok(receipt)
+    }
+
+    fn resolve_scheduler_configuration(&self) -> M4SchedulerResolutionSnapshot {
+        let paths = self.scheduler_timezone_paths();
+        match m4_resolve_os_scheduler_configuration(1, m4_primary_scope_ref(), &paths) {
+            M4SchedulerConfigurationResolution::Enabled(configuration) => {
+                M4SchedulerResolutionSnapshot::Enabled {
+                    timezone: configuration.timezone().clone(),
+                }
+            }
+            M4SchedulerConfigurationResolution::Disabled(disabled) => {
+                M4SchedulerResolutionSnapshot::Disabled {
+                    error_code: scrubbed_scheduler_error_code(disabled.error_code()).to_string(),
+                }
+            }
+        }
+    }
+
+    /// A structured-source admission or an explicit user coordination write
+    /// may refresh the current mechanical brief in its *existing* IMMEDIATE
+    /// transaction.  Scheduler timer/startup/recovery paths deliberately do
+    /// not call this helper.  In particular, this helper never writes the
+    /// scheduler checkpoint: opening a brief must not consume source-event
+    /// accounting reserved for a later closed-window run.
+    fn reproject_current_daily_brief_for_explicit_trigger(
+        &self,
+        transaction: &Transaction<'_>,
+        recorded_at_utc: &str,
+    ) -> Result<(), M4SecretaryRepositoryError> {
+        let now_utc = m4_parse_utc_seconds(recorded_at_utc)
+            .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+        let resolution = self.resolve_scheduler_configuration();
+        let persisted =
+            persist_scheduler_configuration(transaction, &resolution, now_utc, recorded_at_utc)?;
+        let M4PersistedSchedulerConfiguration::Active(active) = persisted else {
+            return Ok(());
+        };
+        let current_candidate = m4_daily_window_at_utc(&active.configuration, now_utc)
+            .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+        let (current_window, _) =
+            ensure_daily_window(transaction, &current_candidate, recorded_at_utc)?;
+        let scope_source_watermark =
+            scope_watermark_in_transaction(transaction, m4_primary_scope_ref())?;
+        let items = daily_projection_items_in_transaction(transaction, m4_primary_scope_ref())?;
+        upsert_daily_brief(
+            transaction,
+            &current_window,
+            &scope_source_watermark,
+            &items,
+            recorded_at_utc,
+        )
+    }
+
+    fn scheduler_timezone_paths(&self) -> M4SchedulerOsTimezonePaths {
+        #[cfg(test)]
+        {
+            return self
+                .scheduler_timezone_paths
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone();
+        }
+        #[cfg(not(test))]
+        {
+            M4SchedulerOsTimezonePaths::default()
+        }
+    }
+
+    fn record_timer_fired(
+        &self,
+        now_utc: i64,
+        recorded_at_utc: &str,
+    ) -> Result<(), M4SecretaryRepositoryError> {
+        let tick_utc = m4_format_utc_seconds(now_utc)
+            .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+        self.with_immediate_transaction("m4_record_timer_fired", |transaction| {
+            insert_timer_fired_event(transaction, &tick_utc, recorded_at_utc)
+        })?;
+        Ok(())
+    }
+
+    fn take_daily_failure_stage(&self) -> Option<M4DailyFailureStage> {
+        #[cfg(test)]
+        {
+            return self
+                .daily_failure_stage
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take();
+        }
+        #[cfg(not(test))]
+        {
+            None
+        }
     }
 
     pub(crate) fn mark_inbox_item_read(
@@ -821,6 +1580,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -921,6 +1681,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -1054,6 +1815,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -1196,6 +1958,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -1397,6 +2160,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -1673,6 +2437,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -1761,6 +2526,12 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                if reason_code == "USER_COMMAND" {
+                    self.reproject_current_daily_brief_for_explicit_trigger(
+                        transaction,
+                        &recorded_at,
+                    )?;
+                }
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -1855,6 +2626,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -1953,6 +2725,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -2048,6 +2821,7 @@ impl M4SecretarySqliteRepository {
                     &request_hash,
                     &recorded_at,
                 )?;
+                self.reproject_current_daily_brief_for_explicit_trigger(transaction, &recorded_at)?;
                 Ok(M4CoordinationCommandOutcome {
                     command_receipt_id: receipt_id.clone(),
                     coordination_event_id: event_id,
@@ -2181,6 +2955,2544 @@ impl M4SecretarySqliteRepository {
     }
 }
 
+impl M4SecretaryModelInvocationLedgerPort for M4SecretarySqliteRepository {
+    fn claim_invocation(
+        &self,
+        claim: &M4SecretaryModelInvocationClaim,
+    ) -> Result<M4SecretaryInvocationClaimOutcome, M4SecretaryServiceError> {
+        self.claim_model_invocation(claim)
+            .map_err(|error| M4SecretaryServiceError::new(error.code))
+    }
+
+    fn terminal_invocation(
+        &self,
+        terminal: &M4SecretaryInvocationTerminal,
+    ) -> Result<M4SecretaryInvocationReceipt, M4SecretaryServiceError> {
+        self.terminal_model_invocation(terminal)
+            .map_err(|error| M4SecretaryServiceError::new(error.code))
+    }
+}
+
+#[derive(Clone, Debug)]
+enum M4SchedulerResolutionSnapshot {
+    Enabled { timezone: M4TimezoneRules },
+    Disabled { error_code: String },
+}
+
+#[derive(Clone, Debug)]
+enum M4PersistedSchedulerConfiguration {
+    Active(M4PersistedActiveSchedulerConfiguration),
+    Disabled(M4PersistedDisabledSchedulerConfiguration),
+}
+
+#[derive(Clone, Debug)]
+struct M4PersistedActiveSchedulerConfiguration {
+    scheduler_configuration_id: String,
+    configuration_revision: String,
+    configuration: M4SchedulerConfiguration,
+}
+
+#[derive(Clone, Debug)]
+struct M4PersistedDisabledSchedulerConfiguration {
+    scheduler_configuration_id: String,
+    configuration_revision: String,
+    error_code: String,
+}
+
+#[derive(Clone, Debug)]
+struct M4StoredSchedulerConfiguration {
+    scheduler_configuration_id: String,
+    configuration_revision: String,
+    iana_timezone: Option<String>,
+    timezone_rules_version: Option<String>,
+    status: String,
+    configuration_error_code: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct M4StoredSchedulerCheckpoint {
+    last_closed_daily_window_id: Option<String>,
+    last_tick_utc: Option<String>,
+    catch_up_pending_count: u64,
+    admitted_source_event_count: u64,
+    admitted_material_source_event_count: u64,
+    scope_source_watermark: String,
+}
+
+#[derive(Clone, Debug)]
+struct M4StoredCatchUpTruncationReceipt {
+    catch_up_truncation_id: String,
+    unmaterialized_from_local_date: String,
+    unmaterialized_through_local_date: String,
+    next_unmaterialized_local_date: Option<String>,
+    initial_window_count: u64,
+    remaining_window_count: u64,
+    status: String,
+}
+
+#[derive(Clone, Debug)]
+struct M4StoredDailyWindow {
+    daily_window_id: String,
+    scope_ref: String,
+    scheduler_configuration_id: String,
+    configuration_revision: String,
+    iana_timezone: String,
+    local_date: String,
+    window_start_utc: String,
+    window_end_utc: String,
+    utc_offset_at_start_seconds: i64,
+    utc_offset_at_end_seconds: i64,
+    timezone_rules_version: String,
+}
+
+#[derive(Clone, Debug)]
+struct M4DailyProjectionItem {
+    item_ref: String,
+    item_kind: &'static str,
+    source_identity_key: Option<String>,
+    source_event_key: Option<String>,
+    source_revision: Option<String>,
+    personal_action_id: Option<String>,
+    priority_rank: Option<i64>,
+    due_at_utc: Option<String>,
+    last_source_change_at_utc: Option<String>,
+    source_owner_ref: Option<String>,
+    canonical_source_object_id: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct M4StoredDailyReport {
+    daily_report_id: String,
+    report_ref: String,
+    scope_ref: String,
+    daily_window_id: String,
+    report_version: String,
+    status: String,
+    scope_source_watermark: String,
+    explicit_correction_ref: Option<String>,
+    projector_version: String,
+    ordered_item_refs: String,
+    supersedes_report_ref: Option<String>,
+    generated_at_utc: String,
+}
+
+#[derive(Clone, Debug)]
+struct M4StoredModelInvocation {
+    invocation_id: String,
+    request_hash: String,
+    status: String,
+    outcome_code: String,
+    payload_ref: String,
+    payload_hash: String,
+}
+
+fn scrubbed_scheduler_error_code(raw_code: &str) -> &'static str {
+    match raw_code {
+        "m4_scheduler_timezone_unavailable" => "TIMEZONE_UNAVAILABLE",
+        "m4_scheduler_timezone_invalid" => "TIMEZONE_INVALID",
+        "m4_scheduler_tzif_invalid" => "TZIF_INVALID",
+        "m4_scheduler_tzif_v2_v3_required" => "TZIF_VERSION_UNSUPPORTED",
+        "m4_scheduler_tzif_future_rules_invalid" => "TZIF_FUTURE_RULES_INVALID",
+        "m4_scheduler_local_boundary_unresolvable" => "LOCAL_BOUNDARY_UNRESOLVABLE",
+        _ => "SCHEDULER_CONFIGURATION_INVALID",
+    }
+}
+
+fn m4_daily_digest(
+    domain_separator: &str,
+    components: &[&str],
+) -> Result<String, M4SecretaryRepositoryError> {
+    let value = m4_internal_id("daily-digest:", domain_separator, components)
+        .map_err(M4SecretaryRepositoryError::new)?;
+    value
+        .strip_prefix("daily-digest:")
+        .map(str::to_string)
+        .filter(|digest| m4_is_lower_hex_digest(digest))
+        .ok_or_else(|| M4SecretaryRepositoryError::new("m4_daily_digest_invalid"))
+}
+
+fn m4_empty_scope_watermark() -> Result<String, M4SecretaryRepositoryError> {
+    m4_scope_source_watermark(&[]).map_err(M4SecretaryRepositoryError::new)
+}
+
+fn m4_is_daily_window_id(value: &str) -> bool {
+    value
+        .strip_prefix("daily-window:")
+        .is_some_and(m4_is_lower_hex_digest)
+}
+
+fn parse_canonical_u64(
+    value: &str,
+    error_code: &'static str,
+) -> Result<u64, M4SecretaryRepositoryError> {
+    if value.is_empty()
+        || (value.len() > 1 && value.starts_with('0'))
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(M4SecretaryRepositoryError::new(error_code));
+    }
+    value
+        .parse::<u64>()
+        .map_err(|_| M4SecretaryRepositoryError::new(error_code))
+}
+
+fn next_scheduler_configuration_revision(
+    transaction: &Transaction<'_>,
+) -> Result<u64, M4SecretaryRepositoryError> {
+    let revisions = transaction
+        .prepare("SELECT configuration_revision FROM m4_scheduler_configurations")
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_scheduler_revision_prepare", error)
+        })?
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_scheduler_revision_query", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_scheduler_revision_row", error))?;
+    revisions
+        .iter()
+        .map(|revision| parse_canonical_u64(revision, "m4_scheduler_revision_invalid"))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .max()
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or_else(|| M4SecretaryRepositoryError::new("m4_scheduler_revision_exhausted"))
+}
+
+fn load_current_scheduler_configuration(
+    transaction: &Transaction<'_>,
+) -> Result<Option<M4StoredSchedulerConfiguration>, M4SecretaryRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT scheduler_configuration_id, configuration_revision, iana_timezone,
+                    timezone_rules_version, status, configuration_error_code
+             FROM m4_scheduler_configurations
+             WHERE scope_ref = ?1 AND is_current = 1",
+            [m4_primary_scope_ref()],
+            |row| {
+                Ok(M4StoredSchedulerConfiguration {
+                    scheduler_configuration_id: row.get(0)?,
+                    configuration_revision: row.get(1)?,
+                    iana_timezone: row.get(2)?,
+                    timezone_rules_version: row.get(3)?,
+                    status: row.get(4)?,
+                    configuration_error_code: row.get(5)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_current_scheduler_configuration", error)
+        })
+}
+
+fn persist_scheduler_configuration(
+    transaction: &Transaction<'_>,
+    resolution: &M4SchedulerResolutionSnapshot,
+    now_utc: i64,
+    recorded_at_utc: &str,
+) -> Result<M4PersistedSchedulerConfiguration, M4SecretaryRepositoryError> {
+    let current = load_current_scheduler_configuration(transaction)?;
+    match resolution {
+        M4SchedulerResolutionSnapshot::Enabled { timezone } => {
+            if let Some(current) = &current {
+                if current.status == "ACTIVE"
+                    && current.iana_timezone.as_deref() == Some(timezone.iana_timezone())
+                    && current.timezone_rules_version.as_deref()
+                        == Some(timezone.timezone_rules_version())
+                {
+                    let revision = parse_canonical_u64(
+                        &current.configuration_revision,
+                        "m4_scheduler_revision_invalid",
+                    )?;
+                    let configuration = m4_scheduler_configuration(
+                        revision,
+                        m4_primary_scope_ref(),
+                        timezone.clone(),
+                    )
+                    .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+                    return Ok(M4PersistedSchedulerConfiguration::Active(
+                        M4PersistedActiveSchedulerConfiguration {
+                            scheduler_configuration_id: current.scheduler_configuration_id.clone(),
+                            configuration_revision: current.configuration_revision.clone(),
+                            configuration,
+                        },
+                    ));
+                }
+            }
+
+            let revision = next_scheduler_configuration_revision(transaction)?;
+            let configuration =
+                m4_scheduler_configuration(revision, m4_primary_scope_ref(), timezone.clone())
+                    .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+            let effective_from_local_date = m4_daily_window_at_utc(&configuration, now_utc)
+                .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?
+                .local_date()
+                .canonical();
+            let configuration_revision = revision.to_string();
+            let scheduler_configuration_id = m4_internal_id(
+                "scheduler-config:",
+                "syn.m4.scheduler-configuration/v1",
+                &[
+                    m4_primary_scope_ref(),
+                    &configuration_revision,
+                    timezone.iana_timezone(),
+                    timezone.timezone_rules_version(),
+                ],
+            )
+            .map_err(M4SecretaryRepositoryError::new)?;
+            transaction
+                .execute(
+                    "UPDATE m4_scheduler_configurations
+                     SET is_current = 0
+                     WHERE scope_ref = ?1 AND is_current = 1",
+                    [m4_primary_scope_ref()],
+                )
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_scheduler_configuration_retire", error)
+                })?;
+            transaction
+                .execute(
+                    "INSERT INTO m4_scheduler_configurations (
+                        scheduler_configuration_id, scope_ref, configuration_revision,
+                        iana_timezone, timezone_rules_version, in_process_tick_seconds,
+                        daily_close_grace_minutes, status, configuration_error_code,
+                        effective_from_local_date, effective_from_utc, is_current,
+                        recorded_at_utc, revision
+                     ) VALUES (
+                        ?1, ?2, ?3, ?4, ?5, 60, 5, 'ACTIVE', NULL, ?6, ?7, 1, ?7, 1
+                     )",
+                    params![
+                        scheduler_configuration_id,
+                        m4_primary_scope_ref(),
+                        configuration_revision,
+                        timezone.iana_timezone(),
+                        timezone.timezone_rules_version(),
+                        effective_from_local_date,
+                        recorded_at_utc,
+                    ],
+                )
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_scheduler_configuration_insert", error)
+                })?;
+            Ok(M4PersistedSchedulerConfiguration::Active(
+                M4PersistedActiveSchedulerConfiguration {
+                    scheduler_configuration_id,
+                    configuration_revision,
+                    configuration,
+                },
+            ))
+        }
+        M4SchedulerResolutionSnapshot::Disabled { error_code } => {
+            if let Some(current) = &current {
+                if current.status == "DISABLED"
+                    && current.configuration_error_code.as_deref() == Some(error_code.as_str())
+                {
+                    return Ok(M4PersistedSchedulerConfiguration::Disabled(
+                        M4PersistedDisabledSchedulerConfiguration {
+                            scheduler_configuration_id: current.scheduler_configuration_id.clone(),
+                            configuration_revision: current.configuration_revision.clone(),
+                            error_code: error_code.clone(),
+                        },
+                    ));
+                }
+            }
+            let revision = next_scheduler_configuration_revision(transaction)?;
+            let configuration_revision = revision.to_string();
+            let scheduler_configuration_id = m4_internal_id(
+                "scheduler-config:",
+                "syn.m4.scheduler-configuration/v1",
+                &[
+                    m4_primary_scope_ref(),
+                    &configuration_revision,
+                    "DISABLED",
+                    error_code,
+                ],
+            )
+            .map_err(M4SecretaryRepositoryError::new)?;
+            transaction
+                .execute(
+                    "UPDATE m4_scheduler_configurations
+                     SET is_current = 0
+                     WHERE scope_ref = ?1 AND is_current = 1",
+                    [m4_primary_scope_ref()],
+                )
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_scheduler_configuration_retire", error)
+                })?;
+            transaction
+                .execute(
+                    "INSERT INTO m4_scheduler_configurations (
+                        scheduler_configuration_id, scope_ref, configuration_revision,
+                        iana_timezone, timezone_rules_version, in_process_tick_seconds,
+                        daily_close_grace_minutes, status, configuration_error_code,
+                        effective_from_local_date, effective_from_utc, is_current,
+                        recorded_at_utc, revision
+                     ) VALUES (
+                        ?1, ?2, ?3, NULL, NULL, 60, 5, 'DISABLED', ?4, NULL, ?5, 1, ?5, 1
+                     )",
+                    params![
+                        scheduler_configuration_id,
+                        m4_primary_scope_ref(),
+                        configuration_revision,
+                        error_code,
+                        recorded_at_utc,
+                    ],
+                )
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_scheduler_disabled_insert", error)
+                })?;
+            Ok(M4PersistedSchedulerConfiguration::Disabled(
+                M4PersistedDisabledSchedulerConfiguration {
+                    scheduler_configuration_id,
+                    configuration_revision,
+                    error_code: error_code.clone(),
+                },
+            ))
+        }
+    }
+}
+
+fn load_scheduler_checkpoint(
+    transaction: &Transaction<'_>,
+    scope_ref: &str,
+) -> Result<M4StoredSchedulerCheckpoint, M4SecretaryRepositoryError> {
+    let checkpoint = transaction
+        .query_row(
+            "SELECT last_closed_daily_window_id, last_tick_utc, catch_up_pending_count,
+                    admitted_source_event_count, admitted_material_source_event_count,
+                    scope_source_watermark
+             FROM m4_scheduler_checkpoints WHERE scope_ref = ?1",
+            [scope_ref],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_scheduler_checkpoint_read", error)
+        })?;
+    match checkpoint {
+        Some((
+            last_closed_daily_window_id,
+            last_tick_utc,
+            catch_up_pending_count,
+            admitted_source_event_count,
+            admitted_material_source_event_count,
+            scope_source_watermark,
+        )) => Ok(M4StoredSchedulerCheckpoint {
+            last_closed_daily_window_id,
+            last_tick_utc,
+            catch_up_pending_count: u64::try_from(catch_up_pending_count).map_err(|_| {
+                M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_count_invalid")
+            })?,
+            admitted_source_event_count: u64::try_from(admitted_source_event_count).map_err(
+                |_| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_count_invalid"),
+            )?,
+            admitted_material_source_event_count: u64::try_from(
+                admitted_material_source_event_count,
+            )
+            .map_err(|_| {
+                M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_count_invalid")
+            })?,
+            scope_source_watermark,
+        }),
+        None => Ok(M4StoredSchedulerCheckpoint {
+            last_closed_daily_window_id: None,
+            last_tick_utc: None,
+            catch_up_pending_count: 0,
+            admitted_source_event_count: 0,
+            admitted_material_source_event_count: 0,
+            scope_source_watermark: m4_empty_scope_watermark()?,
+        }),
+    }
+}
+
+fn scheduler_checkpoint_from_stored(
+    transaction: &Transaction<'_>,
+    last_closed_daily_window_id: Option<&str>,
+    last_tick_utc: Option<&str>,
+) -> Result<M4SchedulerCheckpoint, M4SecretaryRepositoryError> {
+    let latest_local_date = match last_closed_daily_window_id {
+        Some(daily_window_id) => {
+            let local_date: String = transaction
+                .query_row(
+                    "SELECT local_date FROM m4_daily_windows
+                     WHERE daily_window_id = ?1 AND scope_ref = ?2",
+                    params![daily_window_id, m4_primary_scope_ref()],
+                    |row| row.get(0),
+                )
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_scheduler_checkpoint_window", error)
+                })?;
+            Some(parse_m4_local_date(&local_date)?)
+        }
+        None => None,
+    };
+    let last_tick_utc = last_tick_utc
+        .map(m4_parse_utc_seconds)
+        .transpose()
+        .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+    Ok(M4SchedulerCheckpoint::new(latest_local_date, last_tick_utc))
+}
+
+fn parse_m4_local_date(value: &str) -> Result<M4LocalDate, M4SecretaryRepositoryError> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10
+        || bytes.get(4) != Some(&b'-')
+        || bytes.get(7) != Some(&b'-')
+        || !bytes
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != 4 && *index != 7)
+            .all(|(_, byte)| byte.is_ascii_digit())
+    {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_scheduler_checkpoint_date_invalid",
+        ));
+    }
+    let parse = |range: std::ops::Range<usize>| -> Result<u32, M4SecretaryRepositoryError> {
+        std::str::from_utf8(&bytes[range])
+            .ok()
+            .and_then(|part| part.parse::<u32>().ok())
+            .ok_or_else(|| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_date_invalid"))
+    };
+    M4LocalDate::new(
+        i32::try_from(parse(0..4)?)
+            .map_err(|_| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_date_invalid"))?,
+        u8::try_from(parse(5..7)?)
+            .map_err(|_| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_date_invalid"))?,
+        u8::try_from(parse(8..10)?)
+            .map_err(|_| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_date_invalid"))?,
+    )
+    .map_err(|_| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_date_invalid"))
+}
+
+fn upsert_scheduler_checkpoint(
+    transaction: &Transaction<'_>,
+    scheduler_configuration_id: &str,
+    configuration_revision: &str,
+    last_closed_daily_window_id: Option<&str>,
+    last_tick_utc: Option<&str>,
+    catch_up_pending_count: u64,
+    admitted_source_event_count: u64,
+    admitted_material_source_event_count: u64,
+    scope_source_watermark: &str,
+    status: &str,
+    error_code: Option<&str>,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    let catch_up_pending_count = i64::try_from(catch_up_pending_count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_count_invalid"))?;
+    let admitted_source_event_count = i64::try_from(admitted_source_event_count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_count_invalid"))?;
+    let admitted_material_source_event_count = i64::try_from(admitted_material_source_event_count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_scheduler_checkpoint_count_invalid"))?;
+    transaction
+        .execute(
+            "INSERT INTO m4_scheduler_checkpoints (
+                scope_ref, scheduler_configuration_id, configuration_revision,
+                last_closed_daily_window_id, last_tick_utc, catch_up_pending_count,
+                admitted_source_event_count, admitted_material_source_event_count,
+                scope_source_watermark, status, error_code, updated_at_utc, revision
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 1)
+             ON CONFLICT(scope_ref) DO UPDATE SET
+                scheduler_configuration_id = excluded.scheduler_configuration_id,
+                configuration_revision = excluded.configuration_revision,
+                last_closed_daily_window_id = excluded.last_closed_daily_window_id,
+                last_tick_utc = excluded.last_tick_utc,
+                catch_up_pending_count = excluded.catch_up_pending_count,
+                admitted_source_event_count = excluded.admitted_source_event_count,
+                admitted_material_source_event_count =
+                    excluded.admitted_material_source_event_count,
+                scope_source_watermark = excluded.scope_source_watermark,
+                status = excluded.status,
+                error_code = excluded.error_code,
+                updated_at_utc = excluded.updated_at_utc,
+                revision = m4_scheduler_checkpoints.revision + 1",
+            params![
+                m4_primary_scope_ref(),
+                scheduler_configuration_id,
+                configuration_revision,
+                last_closed_daily_window_id,
+                last_tick_utc,
+                catch_up_pending_count,
+                admitted_source_event_count,
+                admitted_material_source_event_count,
+                scope_source_watermark,
+                status,
+                error_code,
+                recorded_at_utc,
+            ],
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_scheduler_checkpoint_write", error)
+        })?;
+    Ok(())
+}
+
+fn record_catch_up_truncation_receipt(
+    transaction: &Transaction<'_>,
+    active: &M4PersistedActiveSchedulerConfiguration,
+    truncation: &M4CatchUpTruncation,
+    recorded_at_utc: &str,
+) -> Result<u64, M4SecretaryRepositoryError> {
+    let unmaterialized_from_local_date = truncation.unmaterialized_from_local_date().canonical();
+    let unmaterialized_through_local_date =
+        truncation.unmaterialized_through_local_date().canonical();
+    let omitted_window_count = truncation.omitted_window_count();
+    let catch_up_truncation_id = m4_internal_id(
+        "catch-up-truncation:",
+        "syn.m4.catch-up-truncation/v1",
+        &[
+            m4_primary_scope_ref(),
+            &active.scheduler_configuration_id,
+            &active.configuration_revision,
+            &unmaterialized_from_local_date,
+            &unmaterialized_through_local_date,
+        ],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let omitted_window_count_i64 = i64::try_from(omitted_window_count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_catch_up_count_invalid"))?;
+    let changed = transaction
+        .execute(
+            "INSERT OR IGNORE INTO m4_catch_up_truncation_receipts (
+                catch_up_truncation_id, scope_ref, scheduler_configuration_id,
+                configuration_revision, unmaterialized_from_local_date,
+                unmaterialized_through_local_date, next_unmaterialized_local_date,
+                initial_window_count, remaining_window_count, status, outcome_code,
+                created_at_utc, updated_at_utc, revision
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?5, ?7, ?7, 'PENDING',
+                'CATCH_UP_TRUNCATED', ?8, ?8, 1
+             )",
+            params![
+                catch_up_truncation_id,
+                m4_primary_scope_ref(),
+                active.scheduler_configuration_id,
+                active.configuration_revision,
+                unmaterialized_from_local_date,
+                unmaterialized_through_local_date,
+                omitted_window_count_i64,
+                recorded_at_utc,
+            ],
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_catch_up_truncation_insert", error)
+        })?;
+    if changed == 1 {
+        return Ok(omitted_window_count);
+    }
+    let existing = load_catch_up_truncation_receipt(transaction, &catch_up_truncation_id)?
+        .ok_or_else(|| M4SecretaryRepositoryError::new("m4_catch_up_truncation_missing"))?;
+    if existing.unmaterialized_from_local_date != unmaterialized_from_local_date
+        || existing.unmaterialized_through_local_date != unmaterialized_through_local_date
+        || existing.initial_window_count != omitted_window_count
+    {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_catch_up_truncation_collision",
+        ));
+    }
+    Ok(0)
+}
+
+fn load_catch_up_truncation_receipt(
+    transaction: &Transaction<'_>,
+    catch_up_truncation_id: &str,
+) -> Result<Option<M4StoredCatchUpTruncationReceipt>, M4SecretaryRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT catch_up_truncation_id, unmaterialized_from_local_date,
+                    unmaterialized_through_local_date, next_unmaterialized_local_date,
+                    initial_window_count, remaining_window_count, status
+             FROM m4_catch_up_truncation_receipts
+             WHERE catch_up_truncation_id = ?1 AND scope_ref = ?2",
+            params![catch_up_truncation_id, m4_primary_scope_ref()],
+            |row| {
+                let initial_window_count = u64::try_from(row.get::<_, i64>(4)?)
+                    .map_err(|_| SqliteError::IntegralValueOutOfRange(4, 0))?;
+                let remaining_window_count = u64::try_from(row.get::<_, i64>(5)?)
+                    .map_err(|_| SqliteError::IntegralValueOutOfRange(5, 0))?;
+                Ok(M4StoredCatchUpTruncationReceipt {
+                    catch_up_truncation_id: row.get(0)?,
+                    unmaterialized_from_local_date: row.get(1)?,
+                    unmaterialized_through_local_date: row.get(2)?,
+                    next_unmaterialized_local_date: row.get(3)?,
+                    initial_window_count,
+                    remaining_window_count,
+                    status: row.get(6)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_catch_up_truncation_read", error))
+}
+
+fn update_catch_up_truncation_progress(
+    transaction: &Transaction<'_>,
+    receipt: &M4StoredCatchUpTruncationReceipt,
+    next_unmaterialized_local_date: Option<M4LocalDate>,
+    remaining_window_count: u64,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    let next_unmaterialized_local_date = next_unmaterialized_local_date.map(M4LocalDate::canonical);
+    let next_status = if remaining_window_count == 0 {
+        "COMPLETED"
+    } else {
+        "PENDING"
+    };
+    let remaining_window_count_i64 = i64::try_from(remaining_window_count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_catch_up_count_invalid"))?;
+    let prior_remaining_window_count = i64::try_from(receipt.remaining_window_count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_catch_up_count_invalid"))?;
+    let changed = transaction
+        .execute(
+            "UPDATE m4_catch_up_truncation_receipts
+             SET next_unmaterialized_local_date = ?1, remaining_window_count = ?2,
+                 status = ?3, updated_at_utc = ?4, revision = revision + 1
+             WHERE catch_up_truncation_id = ?5 AND scope_ref = ?6
+               AND status = 'PENDING' AND remaining_window_count = ?7",
+            params![
+                next_unmaterialized_local_date,
+                remaining_window_count_i64,
+                next_status,
+                recorded_at_utc,
+                receipt.catch_up_truncation_id,
+                m4_primary_scope_ref(),
+                prior_remaining_window_count,
+            ],
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_catch_up_truncation_progress", error)
+        })?;
+    if changed != 1 {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_catch_up_truncation_progress_conflict",
+        ));
+    }
+    Ok(())
+}
+
+fn pending_catch_up_state(
+    transaction: &Transaction<'_>,
+) -> Result<(u64, Vec<String>), M4SecretaryRepositoryError> {
+    let total: i64 = transaction
+        .query_row(
+            "SELECT COALESCE(SUM(remaining_window_count), 0)
+             FROM m4_catch_up_truncation_receipts
+             WHERE scope_ref = ?1 AND status = 'PENDING'",
+            [m4_primary_scope_ref()],
+            |row| row.get(0),
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_catch_up_pending_count", error))?;
+    let refs = transaction
+        .prepare(
+            "SELECT catch_up_truncation_id
+             FROM m4_catch_up_truncation_receipts
+             WHERE scope_ref = ?1 AND status = 'PENDING'
+             ORDER BY created_at_utc ASC, catch_up_truncation_id ASC",
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_catch_up_pending_prepare", error))?
+        .query_map([m4_primary_scope_ref()], |row| row.get::<_, String>(0))
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_catch_up_pending_query", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_catch_up_pending_row", error))?;
+    Ok((
+        u64::try_from(total)
+            .map_err(|_| M4SecretaryRepositoryError::new("m4_catch_up_count_invalid"))?,
+        refs,
+    ))
+}
+
+fn load_daily_window_by_id(
+    transaction: &Transaction<'_>,
+    daily_window_id: &str,
+    scope_ref: &str,
+) -> Result<Option<M4StoredDailyWindow>, M4SecretaryRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT daily_window_id, scope_ref, scheduler_configuration_id,
+                    configuration_revision, iana_timezone, local_date,
+                    window_start_utc, window_end_utc,
+                    utc_offset_at_start_seconds, utc_offset_at_end_seconds,
+                    timezone_rules_version
+             FROM m4_daily_windows
+             WHERE daily_window_id = ?1 AND scope_ref = ?2",
+            params![daily_window_id, scope_ref],
+            stored_daily_window_from_row,
+        )
+        .optional()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_window_read", error))
+}
+
+fn stored_daily_window_from_row(row: &Row<'_>) -> Result<M4StoredDailyWindow, SqliteError> {
+    Ok(M4StoredDailyWindow {
+        daily_window_id: row.get(0)?,
+        scope_ref: row.get(1)?,
+        scheduler_configuration_id: row.get(2)?,
+        configuration_revision: row.get(3)?,
+        iana_timezone: row.get(4)?,
+        local_date: row.get(5)?,
+        window_start_utc: row.get(6)?,
+        window_end_utc: row.get(7)?,
+        utc_offset_at_start_seconds: row.get(8)?,
+        utc_offset_at_end_seconds: row.get(9)?,
+        timezone_rules_version: row.get(10)?,
+    })
+}
+
+fn ensure_daily_window(
+    transaction: &Transaction<'_>,
+    candidate: &M4DailyWindow,
+    recorded_at_utc: &str,
+) -> Result<(M4StoredDailyWindow, bool), M4SecretaryRepositoryError> {
+    let local_date = candidate.local_date().canonical();
+    if let Some(existing) = transaction
+        .query_row(
+            "SELECT daily_window_id, scope_ref, scheduler_configuration_id,
+                    configuration_revision, iana_timezone, local_date,
+                    window_start_utc, window_end_utc,
+                    utc_offset_at_start_seconds, utc_offset_at_end_seconds,
+                    timezone_rules_version
+             FROM m4_daily_windows WHERE scope_ref = ?1 AND local_date = ?2",
+            params![candidate.scope_id(), local_date],
+            stored_daily_window_from_row,
+        )
+        .optional()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_window_local_read", error))?
+    {
+        return Ok((existing, false));
+    }
+    let configuration_revision = candidate.configuration_revision().to_string();
+    let scheduler_configuration_id: String = transaction
+        .query_row(
+            "SELECT scheduler_configuration_id FROM m4_scheduler_configurations
+             WHERE scope_ref = ?1 AND configuration_revision = ?2",
+            params![candidate.scope_id(), configuration_revision],
+            |row| row.get(0),
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_daily_window_configuration_read", error)
+        })?;
+    let window_start_utc = m4_format_utc_seconds(candidate.window_start_utc())
+        .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+    let window_end_utc = m4_format_utc_seconds(candidate.window_end_utc())
+        .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+    transaction
+        .execute(
+            "INSERT INTO m4_daily_windows (
+                daily_window_id, scope_ref, scheduler_configuration_id,
+                configuration_revision, iana_timezone, local_date,
+                window_start_utc, window_end_utc, utc_offset_at_start_seconds,
+                utc_offset_at_end_seconds, timezone_rules_version, materialized_at_utc
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                candidate.daily_window_id(),
+                candidate.scope_id(),
+                scheduler_configuration_id,
+                configuration_revision,
+                candidate.iana_timezone(),
+                local_date,
+                window_start_utc,
+                window_end_utc,
+                candidate.utc_offset_at_start_seconds(),
+                candidate.utc_offset_at_end_seconds(),
+                candidate.timezone_rules_version(),
+                recorded_at_utc,
+            ],
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_window_insert", error))?;
+    Ok((
+        M4StoredDailyWindow {
+            daily_window_id: candidate.daily_window_id().to_string(),
+            scope_ref: candidate.scope_id().to_string(),
+            scheduler_configuration_id,
+            configuration_revision,
+            iana_timezone: candidate.iana_timezone().to_string(),
+            local_date,
+            window_start_utc,
+            window_end_utc,
+            utc_offset_at_start_seconds: i64::from(candidate.utc_offset_at_start_seconds()),
+            utc_offset_at_end_seconds: i64::from(candidate.utc_offset_at_end_seconds()),
+            timezone_rules_version: candidate.timezone_rules_version().to_string(),
+        },
+        true,
+    ))
+}
+
+fn maybe_fail_daily_stage(
+    configured: Option<M4DailyFailureStage>,
+    current: M4DailyFailureStage,
+) -> Result<(), M4SecretaryRepositoryError> {
+    if configured == Some(current) {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_test_daily_transaction_failure",
+        ));
+    }
+    Ok(())
+}
+
+fn daily_projection_items_in_transaction(
+    transaction: &Transaction<'_>,
+    scope_ref: &str,
+) -> Result<Vec<M4DailyProjectionItem>, M4SecretaryRepositoryError> {
+    let mut attention_items = Vec::new();
+    {
+        let mut statement = transaction
+            .prepare(
+                "SELECT i.inbox_item_id, c.source_identity_key, c.source_event_key,
+                        c.source_revision, i.priority_rank, c.due_at_utc,
+                        i.last_source_change_at_utc, c.source_owner_ref,
+                        c.canonical_source_object_id
+                 FROM m4_inbox_items AS i
+                 JOIN m4_admitted_source_current AS c
+                   ON c.source_identity_key = i.source_identity_key
+                  AND c.source_event_key = i.source_event_key
+                  AND c.source_revision = i.last_source_revision
+                 WHERE c.scope_ref = ?1 AND i.status IN ('NEW', 'READ')",
+            )
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_inbox_items_prepare", error)
+            })?;
+        let rows = statement
+            .query_map([scope_ref], |row| {
+                Ok(M4DailyProjectionItem {
+                    item_ref: row.get(0)?,
+                    item_kind: "SOURCE_ATTENTION",
+                    source_identity_key: Some(row.get(1)?),
+                    source_event_key: Some(row.get(2)?),
+                    source_revision: Some(row_source_revision(row, 3)?.to_string()),
+                    personal_action_id: None,
+                    priority_rank: Some(row.get(4)?),
+                    due_at_utc: row.get(5)?,
+                    last_source_change_at_utc: Some(row.get(6)?),
+                    source_owner_ref: Some(row.get(7)?),
+                    canonical_source_object_id: Some(row.get(8)?),
+                })
+            })
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_inbox_items_query", error)
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_inbox_items_row", error)
+            })?;
+        attention_items.extend(rows);
+    }
+    {
+        let mut statement = transaction
+            .prepare(
+                "SELECT l.open_loop_id, c.source_identity_key, c.source_event_key,
+                        c.source_revision, l.priority_rank, l.due_at_utc,
+                        c.occurred_at_utc, c.source_owner_ref,
+                        c.canonical_source_object_id
+                 FROM m4_open_loops AS l
+                 JOIN m4_admitted_source_current AS c
+                   ON c.source_identity_key = l.source_identity_key
+                  AND c.source_event_key = l.source_event_key
+                  AND c.source_revision = l.last_source_revision
+                 WHERE c.scope_ref = ?1
+                   AND l.status IN ('OPEN', 'ACKNOWLEDGED', 'SNOOZED')",
+            )
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_open_loop_items_prepare", error)
+            })?;
+        let rows = statement
+            .query_map([scope_ref], |row| {
+                Ok(M4DailyProjectionItem {
+                    item_ref: row.get(0)?,
+                    item_kind: "SOURCE_ATTENTION",
+                    source_identity_key: Some(row.get(1)?),
+                    source_event_key: Some(row.get(2)?),
+                    source_revision: Some(row_source_revision(row, 3)?.to_string()),
+                    personal_action_id: None,
+                    priority_rank: Some(row.get(4)?),
+                    due_at_utc: row.get(5)?,
+                    last_source_change_at_utc: Some(row.get(6)?),
+                    source_owner_ref: Some(row.get(7)?),
+                    canonical_source_object_id: Some(row.get(8)?),
+                })
+            })
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_open_loop_items_query", error)
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_open_loop_items_row", error)
+            })?;
+        attention_items.extend(rows);
+    }
+    attention_items.sort_by(compare_daily_source_attention_items);
+
+    let mut personal_actions = {
+        let mut statement = transaction
+            .prepare(
+                "SELECT personal_action_id, due_at_utc
+                 FROM m4_personal_actions WHERE status = 'OPEN'",
+            )
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_personal_actions_prepare", error)
+            })?;
+        let rows = statement
+            .query_map([], |row| {
+                let personal_action_id: String = row.get(0)?;
+                Ok(M4DailyProjectionItem {
+                    item_ref: personal_action_id.clone(),
+                    item_kind: "PERSONAL_ACTION",
+                    source_identity_key: None,
+                    source_event_key: None,
+                    source_revision: None,
+                    personal_action_id: Some(personal_action_id),
+                    priority_rank: None,
+                    due_at_utc: row.get(1)?,
+                    last_source_change_at_utc: None,
+                    source_owner_ref: None,
+                    canonical_source_object_id: None,
+                })
+            })
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_personal_actions_query", error)
+            })?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_personal_actions_row", error)
+            })?;
+        rows
+    };
+    personal_actions.sort_by(|left, right| {
+        compare_optional_utc(left.due_at_utc.as_deref(), right.due_at_utc.as_deref())
+            .then_with(|| left.item_ref.cmp(&right.item_ref))
+    });
+    attention_items.extend(personal_actions);
+    Ok(attention_items)
+}
+
+fn compare_daily_source_attention_items(
+    left: &M4DailyProjectionItem,
+    right: &M4DailyProjectionItem,
+) -> Ordering {
+    left.priority_rank
+        .expect("source attention has priority")
+        .cmp(&right.priority_rank.expect("source attention has priority"))
+        .then_with(|| compare_optional_utc(left.due_at_utc.as_deref(), right.due_at_utc.as_deref()))
+        .then_with(|| {
+            let left_change = left
+                .last_source_change_at_utc
+                .as_deref()
+                .and_then(m4_parse_rfc3339_utc_key);
+            let right_change = right
+                .last_source_change_at_utc
+                .as_deref()
+                .and_then(m4_parse_rfc3339_utc_key);
+            right_change.cmp(&left_change)
+        })
+        .then_with(|| left.source_owner_ref.cmp(&right.source_owner_ref))
+        .then_with(|| {
+            left.canonical_source_object_id
+                .cmp(&right.canonical_source_object_id)
+        })
+        .then_with(|| left.item_ref.cmp(&right.item_ref))
+}
+
+fn compare_optional_utc(left: Option<&str>, right: Option<&str>) -> Ordering {
+    match (
+        left.and_then(m4_parse_rfc3339_utc_key),
+        right.and_then(m4_parse_rfc3339_utc_key),
+    ) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+fn daily_items_serialized_ref(
+    window_id: &str,
+    scope_source_watermark: &str,
+    items: &[M4DailyProjectionItem],
+) -> Result<String, M4SecretaryRepositoryError> {
+    let mut fields = vec![
+        window_id.to_string(),
+        M4_DAILY_PROJECTOR_VERSION.to_string(),
+        scope_source_watermark.to_string(),
+    ];
+    for item in items {
+        fields.push(item.item_kind.to_string());
+        fields.push(item.item_ref.clone());
+        if let Some(source_event_key) = &item.source_event_key {
+            fields.push(source_event_key.clone());
+        }
+        if let Some(personal_action_id) = &item.personal_action_id {
+            fields.push(personal_action_id.clone());
+        }
+    }
+    let references = fields.iter().map(String::as_str).collect::<Vec<_>>();
+    m4_internal_id("daily-items:", "syn.m4.daily-items/v1", &references)
+        .map_err(M4SecretaryRepositoryError::new)
+}
+
+fn upsert_daily_brief(
+    transaction: &Transaction<'_>,
+    window: &M4StoredDailyWindow,
+    scope_source_watermark: &str,
+    items: &[M4DailyProjectionItem],
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    let ordered_item_refs =
+        daily_items_serialized_ref(&window.daily_window_id, scope_source_watermark, items)?;
+    let existing: Option<(String, String)> = transaction
+        .query_row(
+            "SELECT scope_source_watermark, ordered_item_refs
+             FROM m4_daily_briefs WHERE daily_window_id = ?1",
+            [&window.daily_window_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_brief_read", error))?;
+    if existing.as_ref().is_some_and(|(watermark, refs)| {
+        watermark == scope_source_watermark && refs == &ordered_item_refs
+    }) {
+        return Ok(());
+    }
+    transaction
+        .execute(
+            "INSERT INTO m4_daily_briefs (
+                daily_window_id, scope_ref, scope_source_watermark, projector_version,
+                ordered_item_refs, generated_at_utc, revision
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1)
+             ON CONFLICT(daily_window_id) DO UPDATE SET
+                scope_source_watermark = excluded.scope_source_watermark,
+                projector_version = excluded.projector_version,
+                ordered_item_refs = excluded.ordered_item_refs,
+                generated_at_utc = excluded.generated_at_utc,
+                revision = m4_daily_briefs.revision + 1",
+            params![
+                window.daily_window_id,
+                window.scope_ref,
+                scope_source_watermark,
+                M4_DAILY_PROJECTOR_VERSION,
+                ordered_item_refs,
+                recorded_at_utc,
+            ],
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_brief_write", error))?;
+    transaction
+        .execute(
+            "DELETE FROM m4_daily_brief_item_refs WHERE daily_window_id = ?1",
+            [&window.daily_window_id],
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_daily_brief_items_delete", error)
+        })?;
+    insert_daily_brief_items(transaction, window, items)
+}
+
+fn insert_daily_brief_items(
+    transaction: &Transaction<'_>,
+    window: &M4StoredDailyWindow,
+    items: &[M4DailyProjectionItem],
+) -> Result<(), M4SecretaryRepositoryError> {
+    for (ordinal, item) in items.iter().enumerate() {
+        transaction
+            .execute(
+                "INSERT INTO m4_daily_brief_item_refs (
+                    daily_window_id, scope_ref, ordinal, item_ref, item_kind,
+                    source_identity_key, source_event_key, source_revision,
+                    personal_action_id
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                params![
+                    window.daily_window_id,
+                    window.scope_ref,
+                    i64::try_from(ordinal).map_err(|_| {
+                        M4SecretaryRepositoryError::new("m4_daily_item_ordinal_invalid")
+                    })?,
+                    item.item_ref,
+                    item.item_kind,
+                    item.source_identity_key,
+                    item.source_event_key,
+                    item.source_revision,
+                    item.personal_action_id,
+                ],
+            )
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_brief_item_insert", error)
+            })?;
+    }
+    Ok(())
+}
+
+fn stored_daily_report_from_row(row: &Row<'_>) -> Result<M4StoredDailyReport, SqliteError> {
+    Ok(M4StoredDailyReport {
+        daily_report_id: row.get(0)?,
+        report_ref: row.get(1)?,
+        scope_ref: row.get(2)?,
+        daily_window_id: row.get(3)?,
+        report_version: row.get(4)?,
+        status: row.get(5)?,
+        scope_source_watermark: row.get(6)?,
+        explicit_correction_ref: row.get(7)?,
+        projector_version: row.get(8)?,
+        ordered_item_refs: row.get(9)?,
+        supersedes_report_ref: row.get(10)?,
+        generated_at_utc: row.get(11)?,
+    })
+}
+
+const M4_DAILY_REPORT_SELECT: &str =
+    "SELECT daily_report_id, report_ref, scope_ref, daily_window_id,
+            report_version, status, scope_source_watermark, explicit_correction_ref,
+            projector_version, ordered_item_refs, supersedes_report_ref, generated_at_utc
+     FROM m4_daily_reports";
+
+fn ensure_daily_report(
+    transaction: &Transaction<'_>,
+    window: &M4StoredDailyWindow,
+    scope_source_watermark: &str,
+    items: &[M4DailyProjectionItem],
+    explicit_correction_ref: Option<&str>,
+    recorded_at_utc: &str,
+) -> Result<(M4StoredDailyReport, bool), M4SecretaryRepositoryError> {
+    let existing_sql = match explicit_correction_ref {
+        Some(_) => format!(
+            "{M4_DAILY_REPORT_SELECT}
+             WHERE daily_window_id = ?1 AND projector_version = ?2
+               AND scope_source_watermark = ?3 AND explicit_correction_ref = ?4"
+        ),
+        None => format!(
+            "{M4_DAILY_REPORT_SELECT}
+             WHERE daily_window_id = ?1 AND projector_version = ?2
+               AND scope_source_watermark = ?3 AND explicit_correction_ref IS NULL"
+        ),
+    };
+    let existing = match explicit_correction_ref {
+        Some(correction_ref) => transaction
+            .query_row(
+                &existing_sql,
+                params![
+                    window.daily_window_id,
+                    M4_DAILY_PROJECTOR_VERSION,
+                    scope_source_watermark,
+                    correction_ref,
+                ],
+                stored_daily_report_from_row,
+            )
+            .optional(),
+        None => transaction
+            .query_row(
+                &existing_sql,
+                params![
+                    window.daily_window_id,
+                    M4_DAILY_PROJECTOR_VERSION,
+                    scope_source_watermark,
+                ],
+                stored_daily_report_from_row,
+            )
+            .optional(),
+    }
+    .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_report_replay_read", error))?;
+    if let Some(existing) = existing {
+        return Ok((existing, false));
+    }
+
+    let latest_sql = format!(
+        "{M4_DAILY_REPORT_SELECT}
+         WHERE daily_window_id = ?1
+         ORDER BY length(report_version) DESC, report_version DESC LIMIT 1"
+    );
+    let previous = transaction
+        .query_row(
+            &latest_sql,
+            [&window.daily_window_id],
+            stored_daily_report_from_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_daily_report_previous_read", error)
+        })?;
+    let report_version = match previous.as_ref() {
+        Some(report) => {
+            parse_canonical_u64(&report.report_version, "m4_daily_report_version_invalid")?
+                .checked_add(1)
+                .ok_or_else(|| {
+                    M4SecretaryRepositoryError::new("m4_daily_report_version_exhausted")
+                })?
+                .to_string()
+        }
+        None => "1".to_string(),
+    };
+    let daily_report_id = m4_internal_id(
+        "daily-report:",
+        "syn.m4.daily-report/v1",
+        &[&window.daily_window_id, &report_version],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let ordered_item_refs =
+        daily_items_serialized_ref(&window.daily_window_id, scope_source_watermark, items)?;
+    let supersedes_report_ref = previous.as_ref().map(|report| report.report_ref.as_str());
+    transaction
+        .execute(
+            "INSERT INTO m4_daily_reports (
+                daily_report_id, report_ref, scope_ref, daily_window_id, report_version,
+                status, scope_source_watermark, explicit_correction_ref, projector_version,
+                ordered_item_refs,
+                supersedes_report_ref, superseded_by_report_ref, failure_reason_code,
+                generated_at_utc
+             ) VALUES (
+                ?1, ?1, ?2, ?3, ?4, 'GENERATED', ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10
+             )",
+            params![
+                daily_report_id,
+                window.scope_ref,
+                window.daily_window_id,
+                report_version,
+                scope_source_watermark,
+                explicit_correction_ref,
+                M4_DAILY_PROJECTOR_VERSION,
+                ordered_item_refs,
+                supersedes_report_ref,
+                recorded_at_utc,
+            ],
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_report_insert", error))?;
+    insert_daily_report_items(transaction, &daily_report_id, window, items)?;
+    if let Some(previous) = &previous {
+        let changed = transaction
+            .execute(
+                "UPDATE m4_daily_reports
+                 SET status = 'SUPERSEDED', superseded_by_report_ref = ?1
+                 WHERE report_ref = ?2 AND status = 'GENERATED'",
+                params![daily_report_id, previous.report_ref],
+            )
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_report_supersede", error)
+            })?;
+        if changed != 1 {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_daily_report_predecessor_not_generatable",
+            ));
+        }
+    }
+    let report = M4StoredDailyReport {
+        daily_report_id: daily_report_id.clone(),
+        report_ref: daily_report_id,
+        scope_ref: window.scope_ref.clone(),
+        daily_window_id: window.daily_window_id.clone(),
+        report_version,
+        status: "GENERATED".to_string(),
+        scope_source_watermark: scope_source_watermark.to_string(),
+        explicit_correction_ref: explicit_correction_ref.map(str::to_string),
+        projector_version: M4_DAILY_PROJECTOR_VERSION.to_string(),
+        ordered_item_refs,
+        supersedes_report_ref: previous.map(|report| report.report_ref),
+        generated_at_utc: recorded_at_utc.to_string(),
+    };
+    Ok((report, true))
+}
+
+fn insert_daily_report_items(
+    transaction: &Transaction<'_>,
+    daily_report_id: &str,
+    window: &M4StoredDailyWindow,
+    items: &[M4DailyProjectionItem],
+) -> Result<(), M4SecretaryRepositoryError> {
+    for (ordinal, item) in items.iter().enumerate() {
+        transaction
+            .execute(
+                "INSERT INTO m4_daily_report_item_refs (
+                    daily_report_id, scope_ref, daily_window_id, ordinal, item_ref, item_kind,
+                    source_identity_key, source_event_key, source_revision,
+                    personal_action_id
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    daily_report_id,
+                    window.scope_ref,
+                    window.daily_window_id,
+                    i64::try_from(ordinal).map_err(|_| {
+                        M4SecretaryRepositoryError::new("m4_daily_item_ordinal_invalid")
+                    })?,
+                    item.item_ref,
+                    item.item_kind,
+                    item.source_identity_key,
+                    item.source_event_key,
+                    item.source_revision,
+                    item.personal_action_id,
+                ],
+            )
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_daily_report_item_insert", error)
+            })?;
+    }
+    Ok(())
+}
+
+fn insert_scheduler_run(
+    transaction: &Transaction<'_>,
+    window: &M4StoredDailyWindow,
+    scope_source_watermark_before: &str,
+    scope_source_watermark_after: &str,
+    admitted_material_event_count: u64,
+    outcome_code: &str,
+    recorded_at_utc: &str,
+) -> Result<String, M4SecretaryRepositoryError> {
+    let admitted_material_event_count = i64::try_from(admitted_material_event_count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_scheduler_run_count_invalid"))?;
+    let admitted_material_event_count_canonical = admitted_material_event_count.to_string();
+    let scheduler_run_id = m4_internal_id(
+        "scheduler-run:",
+        "syn.m4.scheduler-run/v1",
+        &[
+            &window.daily_window_id,
+            &window.configuration_revision,
+            scope_source_watermark_before,
+            scope_source_watermark_after,
+            &admitted_material_event_count_canonical,
+            outcome_code,
+        ],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO m4_scheduler_runs (
+                scheduler_run_id, scope_ref, scheduler_configuration_id,
+                configuration_revision, daily_window_id, scope_source_watermark_before,
+                scope_source_watermark_after, admitted_material_event_count,
+                agent_turn_count, model_invocation_count, outcome_code, recorded_at_utc
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, 0, ?9, ?10)",
+            params![
+                scheduler_run_id,
+                window.scope_ref,
+                window.scheduler_configuration_id,
+                window.configuration_revision,
+                window.daily_window_id,
+                scope_source_watermark_before,
+                scope_source_watermark_after,
+                admitted_material_event_count,
+                outcome_code,
+                recorded_at_utc,
+            ],
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_scheduler_run_insert", error))?;
+    Ok(scheduler_run_id)
+}
+
+fn insert_timer_fired_event(
+    transaction: &Transaction<'_>,
+    tick_utc: &str,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    let idempotency_key = m4_daily_digest("syn.m4.timer-fired-idempotency/v1", &[tick_utc])?;
+    let daily_event_id =
+        m4_internal_id("daily-event:", "syn.m4.timer-fired/v1", &[&idempotency_key])
+            .map_err(M4SecretaryRepositoryError::new)?;
+    let summary_ref = m4_internal_id(
+        "timer-summary:",
+        "syn.m4.timer-fired-summary/v1",
+        &[tick_utc],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let payload_ref = m4_internal_id(
+        "timer-payload:",
+        "syn.m4.timer-fired-payload/v1",
+        &[tick_utc],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    insert_daily_event(
+        transaction,
+        &daily_event_id,
+        "TimerFired",
+        "syn.m4.timer-fired/v1",
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        m4_primary_scope_ref(),
+        &idempotency_key,
+        &summary_ref,
+        &payload_ref,
+        &idempotency_key,
+        recorded_at_utc,
+    )
+}
+
+struct M4DailyWindowClosedPayload<'a> {
+    scope_ref: &'a str,
+    daily_window_id: &'a str,
+    iana_timezone: &'a str,
+    local_date: &'a str,
+    window_start_utc: &'a str,
+    window_end_utc: &'a str,
+    scope_source_watermark: &'a str,
+    projector_version: &'a str,
+    closed_at_utc: &'a str,
+}
+
+impl M4DailyWindowClosedPayload<'_> {
+    fn canonical_fields(&self) -> BTreeMap<&'static str, serde_json::Value> {
+        BTreeMap::from([
+            ("closed_at_utc", serde_json::Value::from(self.closed_at_utc)),
+            (
+                "daily_window_id",
+                serde_json::Value::from(self.daily_window_id),
+            ),
+            ("iana_timezone", serde_json::Value::from(self.iana_timezone)),
+            ("local_date", serde_json::Value::from(self.local_date)),
+            (
+                "projector_version",
+                serde_json::Value::from(self.projector_version),
+            ),
+            ("scope_ref", serde_json::Value::from(self.scope_ref)),
+            (
+                "scope_source_watermark",
+                serde_json::Value::from(self.scope_source_watermark),
+            ),
+            (
+                "window_end_utc",
+                serde_json::Value::from(self.window_end_utc),
+            ),
+            (
+                "window_start_utc",
+                serde_json::Value::from(self.window_start_utc),
+            ),
+        ])
+    }
+}
+
+struct M4DailyReportVersionedPayload<'a> {
+    scope_ref: &'a str,
+    daily_window_id: &'a str,
+    daily_report_id: &'a str,
+    report_version: &'a str,
+    report_ref: &'a str,
+    supersedes_report_ref: Option<&'a str>,
+    scope_source_watermark: &'a str,
+    projector_version: &'a str,
+    generated_at_utc: &'a str,
+}
+
+impl M4DailyReportVersionedPayload<'_> {
+    fn canonical_fields(&self) -> BTreeMap<&'static str, serde_json::Value> {
+        BTreeMap::from([
+            (
+                "daily_report_id",
+                serde_json::Value::from(self.daily_report_id),
+            ),
+            (
+                "daily_window_id",
+                serde_json::Value::from(self.daily_window_id),
+            ),
+            (
+                "generated_at_utc",
+                serde_json::Value::from(self.generated_at_utc),
+            ),
+            (
+                "projector_version",
+                serde_json::Value::from(self.projector_version),
+            ),
+            ("report_ref", serde_json::Value::from(self.report_ref)),
+            (
+                "report_version",
+                serde_json::Value::from(self.report_version),
+            ),
+            ("scope_ref", serde_json::Value::from(self.scope_ref)),
+            (
+                "scope_source_watermark",
+                serde_json::Value::from(self.scope_source_watermark),
+            ),
+            (
+                "supersedes_report_ref",
+                self.supersedes_report_ref
+                    .map(serde_json::Value::from)
+                    .unwrap_or(serde_json::Value::Null),
+            ),
+        ])
+    }
+}
+
+fn canonical_json_object_sha256(
+    fields: BTreeMap<&'static str, serde_json::Value>,
+) -> Result<String, M4SecretaryRepositoryError> {
+    let canonical_json = serde_json::to_vec(&fields)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_daily_payload_canonical_json_invalid"))?;
+    let mut hasher = Sha256::new();
+    hasher.update(canonical_json);
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn insert_daily_window_closed_event(
+    transaction: &Transaction<'_>,
+    scheduler_run_id: &str,
+    window: &M4StoredDailyWindow,
+    scope_source_watermark: &str,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    let payload = M4DailyWindowClosedPayload {
+        scope_ref: m4_primary_scope_ref(),
+        daily_window_id: &window.daily_window_id,
+        iana_timezone: &window.iana_timezone,
+        local_date: &window.local_date,
+        window_start_utc: &window.window_start_utc,
+        window_end_utc: &window.window_end_utc,
+        scope_source_watermark,
+        projector_version: M4_DAILY_PROJECTOR_VERSION,
+        closed_at_utc: recorded_at_utc,
+    };
+    let idempotency_key = m4_daily_digest(
+        "syn.m4.daily-window-closed-idempotency/v1",
+        &[payload.daily_window_id, payload.projector_version],
+    )?;
+    let daily_event_id = m4_internal_id(
+        "daily-event:",
+        "syn.m4.daily-window-closed/v1",
+        &[&idempotency_key],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let summary_ref = m4_internal_id(
+        "daily-window-summary:",
+        "syn.m4.daily-window-closed-summary/v1",
+        &[&window.daily_window_id, scope_source_watermark],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let payload_ref = m4_internal_id(
+        "daily-window-payload:",
+        "syn.m4.daily-window-closed-payload/v1",
+        &[&window.daily_window_id, scope_source_watermark],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let payload_hash = canonical_json_object_sha256(payload.canonical_fields())?;
+    insert_daily_event(
+        transaction,
+        &daily_event_id,
+        "DailyWindowClosed",
+        "syn.m4.daily-window-closed/v1",
+        Some(scheduler_run_id),
+        Some(payload.daily_window_id),
+        Some(payload.iana_timezone),
+        Some(payload.local_date),
+        Some(payload.window_start_utc),
+        Some(payload.window_end_utc),
+        None,
+        None,
+        None,
+        None,
+        Some(payload.scope_source_watermark),
+        Some(payload.projector_version),
+        payload.daily_window_id,
+        &idempotency_key,
+        &summary_ref,
+        &payload_ref,
+        &payload_hash,
+        recorded_at_utc,
+    )
+}
+
+fn insert_daily_report_versioned_event(
+    transaction: &Transaction<'_>,
+    scheduler_run_id: Option<&str>,
+    report: &M4StoredDailyReport,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    let payload = M4DailyReportVersionedPayload {
+        scope_ref: m4_primary_scope_ref(),
+        daily_window_id: &report.daily_window_id,
+        daily_report_id: &report.daily_report_id,
+        report_version: &report.report_version,
+        report_ref: &report.report_ref,
+        supersedes_report_ref: report.supersedes_report_ref.as_deref(),
+        scope_source_watermark: &report.scope_source_watermark,
+        projector_version: &report.projector_version,
+        generated_at_utc: &report.generated_at_utc,
+    };
+    let idempotency_key = m4_daily_digest(
+        "syn.m4.daily-report-versioned-idempotency/v1",
+        &[payload.daily_window_id, payload.report_version],
+    )?;
+    let daily_event_id = m4_internal_id(
+        "daily-event:",
+        "syn.m4.daily-report-versioned/v1",
+        &[&idempotency_key],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let summary_ref = m4_internal_id(
+        "daily-report-summary:",
+        "syn.m4.daily-report-versioned-summary/v1",
+        &[&report.daily_report_id, &report.scope_source_watermark],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let payload_ref = m4_internal_id(
+        "daily-report-payload:",
+        "syn.m4.daily-report-versioned-payload/v1",
+        &[&report.daily_report_id, &report.ordered_item_refs],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    let payload_hash = canonical_json_object_sha256(payload.canonical_fields())?;
+    insert_daily_event(
+        transaction,
+        &daily_event_id,
+        "DailyReportVersioned",
+        "syn.m4.daily-report-versioned/v1",
+        scheduler_run_id,
+        Some(payload.daily_window_id),
+        None,
+        None,
+        None,
+        None,
+        Some(payload.daily_report_id),
+        Some(payload.report_version),
+        Some(payload.report_ref),
+        payload.supersedes_report_ref,
+        Some(payload.scope_source_watermark),
+        Some(payload.projector_version),
+        payload.daily_report_id,
+        &idempotency_key,
+        &summary_ref,
+        &payload_ref,
+        &payload_hash,
+        recorded_at_utc,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_daily_event(
+    transaction: &Transaction<'_>,
+    daily_event_id: &str,
+    event_type: &str,
+    schema_version: &str,
+    scheduler_run_id: Option<&str>,
+    daily_window_id: Option<&str>,
+    iana_timezone: Option<&str>,
+    local_date: Option<&str>,
+    window_start_utc: Option<&str>,
+    window_end_utc: Option<&str>,
+    daily_report_id: Option<&str>,
+    report_version: Option<&str>,
+    report_ref: Option<&str>,
+    supersedes_report_ref: Option<&str>,
+    scope_source_watermark: Option<&str>,
+    projector_version: Option<&str>,
+    source_ref: &str,
+    idempotency_key: &str,
+    summary_ref: &str,
+    payload_ref: &str,
+    payload_hash: &str,
+    occurred_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO m4_daily_events (
+                daily_event_id, event_type, schema_version, scope_ref, scheduler_run_id,
+                daily_window_id, iana_timezone, local_date, window_start_utc,
+                window_end_utc, daily_report_id, report_version, report_ref,
+                supersedes_report_ref, scope_source_watermark, projector_version,
+                actor_ref, source_ref, idempotency_key, summary_ref, payload_ref,
+                payload_hash, occurred_at_utc, sensitivity
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23,
+                'SCRUBBED_INTERNAL_REF_ONLY'
+             )",
+            params![
+                daily_event_id,
+                event_type,
+                schema_version,
+                m4_primary_scope_ref(),
+                scheduler_run_id,
+                daily_window_id,
+                iana_timezone,
+                local_date,
+                window_start_utc,
+                window_end_utc,
+                daily_report_id,
+                report_version,
+                report_ref,
+                supersedes_report_ref,
+                scope_source_watermark,
+                projector_version,
+                m4_primary_actor_ref(),
+                source_ref,
+                idempotency_key,
+                summary_ref,
+                payload_ref,
+                payload_hash,
+                occurred_at_utc,
+            ],
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_event_insert", error))?;
+    Ok(())
+}
+
+fn read_ordered_item_refs(
+    transaction: &Transaction<'_>,
+    table: &str,
+    parent_column: &str,
+    parent_id: &str,
+) -> Result<Vec<String>, M4SecretaryRepositoryError> {
+    let sql = match (table, parent_column) {
+        ("m4_daily_brief_item_refs", "daily_window_id") => {
+            "SELECT item_ref FROM m4_daily_brief_item_refs
+             WHERE daily_window_id = ?1 ORDER BY ordinal ASC"
+        }
+        ("m4_daily_report_item_refs", "daily_report_id") => {
+            "SELECT item_ref FROM m4_daily_report_item_refs
+             WHERE daily_report_id = ?1 ORDER BY ordinal ASC"
+        }
+        _ => {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_daily_item_query_not_admitted",
+            ))
+        }
+    };
+    transaction
+        .prepare(sql)
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_item_read_prepare", error))?
+        .query_map([parent_id], |row| row.get::<_, String>(0))
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_item_read_query", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_item_read_row", error))
+}
+
+fn read_daily_report_by_id(
+    transaction: &Transaction<'_>,
+    daily_report_id: &str,
+) -> Result<M4SecretaryDailyReportRead, M4SecretaryRepositoryError> {
+    let sql = format!("{M4_DAILY_REPORT_SELECT} WHERE daily_report_id = ?1");
+    let report = transaction
+        .query_row(&sql, [daily_report_id], stored_daily_report_from_row)
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_daily_report_read", error))?;
+    let ordered_item_refs = read_ordered_item_refs(
+        transaction,
+        "m4_daily_report_item_refs",
+        "daily_report_id",
+        &report.daily_report_id,
+    )?;
+    Ok(M4SecretaryDailyReportRead {
+        daily_report_id: report.daily_report_id,
+        daily_window_id: report.daily_window_id,
+        report_version: report.report_version,
+        status: report.status,
+        scope_source_watermark: report.scope_source_watermark,
+        projector_version: report.projector_version,
+        ordered_item_refs,
+        supersedes_report_ref: report.supersedes_report_ref,
+        generated_at_utc: Some(report.generated_at_utc),
+    })
+}
+
+fn read_daily_report_envelope_from_transaction(
+    transaction: &Transaction<'_>,
+    current_daily_window_id: &str,
+) -> Result<M4SecretaryDailyReportEnvelope, M4SecretaryRepositoryError> {
+    let Some(configuration) = load_current_scheduler_configuration(transaction)? else {
+        return Ok(M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version: crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+                .to_string(),
+            reason: "SCHEDULER_NOT_CONFIGURED".to_string(),
+        });
+    };
+    if configuration.status == "DISABLED" {
+        return Ok(M4SecretaryDailyReportEnvelope::Disabled {
+            schema_version: crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+                .to_string(),
+            reason: configuration
+                .configuration_error_code
+                .unwrap_or_else(|| "SCHEDULER_CONFIGURATION_INVALID".to_string()),
+        });
+    }
+    let checkpoint = load_scheduler_checkpoint(transaction, m4_primary_scope_ref())?;
+    let Some(last_closed_daily_window_id) = checkpoint.last_closed_daily_window_id else {
+        return Ok(M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version: crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+                .to_string(),
+            reason: "NO_CLOSED_DAILY_REPORT".to_string(),
+        });
+    };
+    if current_daily_window_id == last_closed_daily_window_id {
+        return Ok(M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version: crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+                .to_string(),
+            reason: "CURRENT_WINDOW_NOT_ADVANCED".to_string(),
+        });
+    }
+    let brief: Option<(String, String, String)> = transaction
+        .query_row(
+            "SELECT scope_source_watermark, projector_version, generated_at_utc
+             FROM m4_daily_briefs WHERE daily_window_id = ?1",
+            [current_daily_window_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_daily_brief_envelope_read", error)
+        })?;
+    let Some((brief_watermark, brief_projector_version, brief_generated_at_utc)) = brief else {
+        return Ok(M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version: crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+                .to_string(),
+            reason: "CURRENT_DAILY_BRIEF_UNAVAILABLE".to_string(),
+        });
+    };
+    let report_sql = format!(
+        "{M4_DAILY_REPORT_SELECT}
+         WHERE daily_window_id = ?1
+         ORDER BY length(report_version) DESC, report_version DESC LIMIT 1"
+    );
+    let Some(report) = transaction
+        .query_row(
+            &report_sql,
+            [&last_closed_daily_window_id],
+            stored_daily_report_from_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_daily_report_envelope_read", error)
+        })?
+    else {
+        return Ok(M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version: crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+                .to_string(),
+            reason: "CLOSED_DAILY_REPORT_UNAVAILABLE".to_string(),
+        });
+    };
+    let last_run: Option<M4SecretarySchedulerRunRead> = transaction
+        .query_row(
+            "SELECT scheduler_run_id, configuration_revision, daily_window_id,
+                    scope_source_watermark_before, scope_source_watermark_after,
+                    admitted_material_event_count, agent_turn_count,
+                    model_invocation_count, outcome_code, recorded_at_utc
+             FROM m4_scheduler_runs
+             WHERE daily_window_id = ?1 AND configuration_revision = ?2
+               AND scope_source_watermark_after = ?3
+             ORDER BY recorded_at_utc DESC, scheduler_run_id DESC LIMIT 1",
+            params![
+                report.daily_window_id,
+                configuration.configuration_revision,
+                report.scope_source_watermark,
+            ],
+            |row| {
+                Ok(M4SecretarySchedulerRunRead {
+                    scheduler_run_id: row.get(0)?,
+                    configuration_revision: row.get(1)?,
+                    window_ref: row.get(2)?,
+                    scope_source_watermark_before: row.get(3)?,
+                    scope_source_watermark_after: row.get(4)?,
+                    admitted_material_event_count: u64::try_from(row.get::<_, i64>(5)?)
+                        .map_err(|_| SqliteError::IntegralValueOutOfRange(5, 0))?,
+                    agent_turn_count: u64::try_from(row.get::<_, i64>(6)?)
+                        .map_err(|_| SqliteError::IntegralValueOutOfRange(6, 0))?,
+                    model_invocation_count: u64::try_from(row.get::<_, i64>(7)?)
+                        .map_err(|_| SqliteError::IntegralValueOutOfRange(7, 0))?,
+                    outcome_code: row.get(8)?,
+                    recorded_at_utc: Some(row.get(9)?),
+                })
+            },
+        )
+        .optional()
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_scheduler_run_envelope_read", error)
+        })?;
+    let Some(last_run) = last_run else {
+        return Ok(M4SecretaryDailyReportEnvelope::Unavailable {
+            schema_version: crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+                .to_string(),
+            reason: "CLOSED_SCHEDULER_RUN_UNAVAILABLE".to_string(),
+        });
+    };
+    let iana_timezone = configuration
+        .iana_timezone
+        .ok_or_else(|| M4SecretaryRepositoryError::new("m4_scheduler_active_timezone_missing"))?;
+    let timezone_rules_version = configuration
+        .timezone_rules_version
+        .ok_or_else(|| M4SecretaryRepositoryError::new("m4_scheduler_active_rules_missing"))?;
+    let (pending_catch_up_count, pending_catch_up_receipt_refs) =
+        pending_catch_up_state(transaction)?;
+    if pending_catch_up_count != checkpoint.catch_up_pending_count {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_catch_up_checkpoint_projection_mismatch",
+        ));
+    }
+    Ok(M4SecretaryDailyReportEnvelope::Ready {
+        schema_version: crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION
+            .to_string(),
+        scheduler: M4SecretaryDailySchedulerRead {
+            configuration_revision: configuration.configuration_revision,
+            iana_timezone,
+            timezone_rules_version,
+            current_daily_window_id: current_daily_window_id.to_string(),
+            last_closed_daily_window_id: report.daily_window_id.clone(),
+            catch_up_pending_count: checkpoint.catch_up_pending_count,
+            pending_catch_up_receipt_refs,
+            status: "READY".to_string(),
+        },
+        daily_brief: M4SecretaryDailyBriefRead {
+            daily_window_id: current_daily_window_id.to_string(),
+            scope_source_watermark: brief_watermark,
+            projector_version: brief_projector_version,
+            ordered_item_refs: read_ordered_item_refs(
+                transaction,
+                "m4_daily_brief_item_refs",
+                "daily_window_id",
+                current_daily_window_id,
+            )?,
+            generated_at_utc: Some(brief_generated_at_utc),
+        },
+        daily_report: M4SecretaryDailyReportRead {
+            daily_report_id: report.daily_report_id.clone(),
+            daily_window_id: report.daily_window_id,
+            report_version: report.report_version,
+            status: report.status,
+            scope_source_watermark: report.scope_source_watermark,
+            projector_version: report.projector_version,
+            ordered_item_refs: read_ordered_item_refs(
+                transaction,
+                "m4_daily_report_item_refs",
+                "daily_report_id",
+                &report.daily_report_id,
+            )?,
+            supersedes_report_ref: report.supersedes_report_ref,
+            generated_at_utc: Some(report.generated_at_utc),
+        },
+        last_run,
+        recovery_code: None,
+    })
+}
+
+fn m4_is_invocation_status_code(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 96
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn stored_model_invocation_from_row(row: &Row<'_>) -> Result<M4StoredModelInvocation, SqliteError> {
+    Ok(M4StoredModelInvocation {
+        invocation_id: row.get(0)?,
+        request_hash: row.get(1)?,
+        status: row.get(2)?,
+        outcome_code: row.get(3)?,
+        payload_ref: row.get(4)?,
+        payload_hash: row.get(5)?,
+    })
+}
+
+fn load_model_invocation_by_idempotency(
+    transaction: &Transaction<'_>,
+    idempotency_key: &str,
+) -> Result<Option<M4StoredModelInvocation>, M4SecretaryRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT invocation_id, request_hash, status, outcome_code, payload_ref, payload_hash
+             FROM m4_model_invocations
+             WHERE idempotency_scope_ref = ?1 AND idempotency_key = ?2",
+            params![m4_primary_scope_ref(), idempotency_key],
+            stored_model_invocation_from_row,
+        )
+        .optional()
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_model_invocation_idempotency_read", error)
+        })
+}
+
+fn load_model_invocation_by_id(
+    transaction: &Transaction<'_>,
+    invocation_id: &str,
+) -> Result<Option<M4StoredModelInvocation>, M4SecretaryRepositoryError> {
+    transaction
+        .query_row(
+            "SELECT invocation_id, request_hash, status, outcome_code, payload_ref, payload_hash
+             FROM m4_model_invocations WHERE invocation_id = ?1",
+            [invocation_id],
+            stored_model_invocation_from_row,
+        )
+        .optional()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_model_invocation_read", error))
+}
+
+fn invocation_receipt_from_stored(
+    invocation: &M4StoredModelInvocation,
+) -> Result<M4SecretaryInvocationReceipt, M4SecretaryRepositoryError> {
+    let invocation_ref = M4SecretaryOpaqueRef::new(invocation.invocation_id.clone())
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_model_invocation_reference_invalid"))?;
+    let (outcome_code, result_ref, result_hash, error_code) = match invocation.status.as_str() {
+        "SUCCEEDED" => (
+            "SUCCEEDED".to_string(),
+            Some(
+                M4SecretaryOpaqueRef::new(invocation.payload_ref.clone()).map_err(|_| {
+                    M4SecretaryRepositoryError::new("m4_model_invocation_result_reference_invalid")
+                })?,
+            ),
+            Some(
+                M4SecretaryHash::new(invocation.payload_hash.clone()).map_err(|_| {
+                    M4SecretaryRepositoryError::new("m4_model_invocation_result_hash_invalid")
+                })?,
+            ),
+            None,
+        ),
+        "FAILED" if m4_is_invocation_status_code(&invocation.outcome_code) => (
+            "FAILED".to_string(),
+            None,
+            None,
+            Some(invocation.outcome_code.clone()),
+        ),
+        _ => {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_model_invocation_not_terminal",
+            ))
+        }
+    };
+    let terminal_receipt_ref = m4_internal_id(
+        "invocation-receipt:sha256:",
+        "syn.m4.model-invocation-receipt/v1",
+        &[
+            &invocation.invocation_id,
+            &outcome_code,
+            &invocation.payload_ref,
+            &invocation.payload_hash,
+            error_code.as_deref().unwrap_or(""),
+        ],
+    )
+    .map_err(M4SecretaryRepositoryError::new)?;
+    Ok(M4SecretaryInvocationReceipt {
+        invocation_ref,
+        terminal_receipt_ref: M4SecretaryOpaqueRef::new(terminal_receipt_ref).map_err(|_| {
+            M4SecretaryRepositoryError::new("m4_model_invocation_receipt_reference_invalid")
+        })?,
+        outcome_code,
+        result_ref,
+        result_hash,
+        error_code,
+    })
+}
+
+fn ensure_model_budget_ledger(
+    transaction: &Transaction<'_>,
+    daily_window: &M4StoredDailyWindow,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO m4_model_budget_ledgers (
+                daily_window_id, scope_ref, budget_class, max_invocation_count,
+                claimed_invocation_count, succeeded_invocation_count, failed_invocation_count,
+                rejected_invocation_count, updated_at_utc, revision
+             ) VALUES (?1, ?2, ?3, ?4, 0, 0, 0, 0, ?5, 1)",
+            params![
+                daily_window.daily_window_id,
+                m4_primary_scope_ref(),
+                M4_DAILY_EXPLICIT_USER_BUDGET_CLASS,
+                M4_DAILY_EXPLICIT_USER_BUDGET_LIMIT,
+                recorded_at_utc,
+            ],
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_model_budget_ledger_insert", error)
+        })?;
+    let max_invocation_count: i64 = transaction
+        .query_row(
+            "SELECT max_invocation_count FROM m4_model_budget_ledgers
+             WHERE daily_window_id = ?1 AND budget_class = ?2 AND scope_ref = ?3",
+            params![
+                daily_window.daily_window_id,
+                M4_DAILY_EXPLICIT_USER_BUDGET_CLASS,
+                m4_primary_scope_ref(),
+            ],
+            |row| row.get(0),
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_model_budget_ledger_read", error)
+        })?;
+    if max_invocation_count != M4_DAILY_EXPLICIT_USER_BUDGET_LIMIT {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_model_budget_limit_drift",
+        ));
+    }
+    Ok(())
+}
+
+fn reserve_model_budget_ordinal(
+    transaction: &Transaction<'_>,
+    daily_window: &M4StoredDailyWindow,
+    recorded_at_utc: &str,
+) -> Result<Option<i64>, M4SecretaryRepositoryError> {
+    let changed = transaction
+        .execute(
+            "UPDATE m4_model_budget_ledgers
+             SET claimed_invocation_count = claimed_invocation_count + 1,
+                 updated_at_utc = ?1,
+                 revision = revision + 1
+             WHERE daily_window_id = ?2 AND budget_class = ?3 AND scope_ref = ?4
+               AND claimed_invocation_count < max_invocation_count",
+            params![
+                recorded_at_utc,
+                daily_window.daily_window_id,
+                M4_DAILY_EXPLICIT_USER_BUDGET_CLASS,
+                m4_primary_scope_ref(),
+            ],
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_model_budget_reserve", error))?;
+    if changed == 0 {
+        return Ok(None);
+    }
+    transaction
+        .query_row(
+            "SELECT claimed_invocation_count FROM m4_model_budget_ledgers
+             WHERE daily_window_id = ?1 AND budget_class = ?2 AND scope_ref = ?3",
+            params![
+                daily_window.daily_window_id,
+                M4_DAILY_EXPLICIT_USER_BUDGET_CLASS,
+                m4_primary_scope_ref(),
+            ],
+            |row| row.get(0),
+        )
+        .map(Some)
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_model_budget_reserved_read", error))
+}
+
+fn increment_model_budget_terminal_count(
+    transaction: &Transaction<'_>,
+    daily_window_id: &str,
+    counter: &str,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    let sql = match counter {
+        "SUCCEEDED" => {
+            "UPDATE m4_model_budget_ledgers
+             SET succeeded_invocation_count = succeeded_invocation_count + 1,
+                 updated_at_utc = ?1, revision = revision + 1
+             WHERE daily_window_id = ?2 AND budget_class = ?3 AND scope_ref = ?4"
+        }
+        "FAILED" => {
+            "UPDATE m4_model_budget_ledgers
+             SET failed_invocation_count = failed_invocation_count + 1,
+                 updated_at_utc = ?1, revision = revision + 1
+             WHERE daily_window_id = ?2 AND budget_class = ?3 AND scope_ref = ?4"
+        }
+        "REJECTED" => {
+            "UPDATE m4_model_budget_ledgers
+             SET rejected_invocation_count = rejected_invocation_count + 1,
+                 updated_at_utc = ?1, revision = revision + 1
+             WHERE daily_window_id = ?2 AND budget_class = ?3 AND scope_ref = ?4"
+        }
+        _ => {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_model_budget_counter_invalid",
+            ))
+        }
+    };
+    let changed = transaction
+        .execute(
+            sql,
+            params![
+                recorded_at_utc,
+                daily_window_id,
+                M4_DAILY_EXPLICIT_USER_BUDGET_CLASS,
+                m4_primary_scope_ref(),
+            ],
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_model_budget_counter_update", error)
+        })?;
+    if changed != 1 {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_model_budget_counter_missing",
+        ));
+    }
+    Ok(())
+}
+
+fn invocation_turn_id(
+    claim: &M4SecretaryModelInvocationClaim,
+) -> Result<String, M4SecretaryRepositoryError> {
+    m4_internal_id(
+        "model-turn:sha256:",
+        "syn.m4.model-invocation-turn/v1",
+        &[
+            claim.invocation_key_ref.as_str(),
+            claim.role_session_ref.as_str(),
+            claim.deterministic_brief_hash.as_str(),
+        ],
+    )
+    .map_err(M4SecretaryRepositoryError::new)
+}
+
+fn insert_model_invocation_claim(
+    transaction: &Transaction<'_>,
+    claim: &M4SecretaryModelInvocationClaim,
+    daily_window: &M4StoredDailyWindow,
+    budget_ordinal: Option<i64>,
+    status: &str,
+    outcome_code: &str,
+    started_at_utc: Option<&str>,
+    terminal_at_utc: Option<&str>,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    transaction
+        .execute(
+            "INSERT INTO m4_model_invocations (
+                invocation_id, idempotency_scope_ref, idempotency_key, request_hash,
+                scope_ref, daily_window_id, scheduler_run_id, trigger_event_ref,
+                role_session_id, turn_id, purpose_code, budget_class, budget_ordinal,
+                status, outcome_code, summary_ref, payload_ref, payload_hash,
+                started_at_utc, terminal_at_utc, recorded_at_utc
+             ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, NULL, ?7, ?8, ?9, ?10, ?11, ?12,
+                ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20
+             )",
+            params![
+                claim.invocation_key_ref.as_str(),
+                m4_primary_scope_ref(),
+                claim.idempotency_key_ref.as_str(),
+                claim.immutable_input_hash.as_str(),
+                m4_primary_scope_ref(),
+                daily_window.daily_window_id,
+                claim.trigger_ref.as_str(),
+                claim.role_session_ref.as_str(),
+                invocation_turn_id(claim)?,
+                claim.purpose_code.as_str(),
+                M4_DAILY_EXPLICIT_USER_BUDGET_CLASS,
+                budget_ordinal,
+                status,
+                outcome_code,
+                claim.context_ref.as_str(),
+                claim.user_message_ref.as_str(),
+                claim.user_message_hash.as_str(),
+                started_at_utc,
+                terminal_at_utc,
+                recorded_at_utc,
+            ],
+        )
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_model_invocation_insert", error))?;
+    Ok(())
+}
+
+fn claim_model_invocation_in_transaction(
+    transaction: &Transaction<'_>,
+    claim: &M4SecretaryModelInvocationClaim,
+    daily_window: &M4StoredDailyWindow,
+    recorded_at_utc: &str,
+) -> Result<M4SecretaryInvocationClaimOutcome, M4SecretaryRepositoryError> {
+    if let Some(existing) =
+        load_model_invocation_by_idempotency(transaction, claim.idempotency_key_ref.as_str())?
+    {
+        if existing.request_hash != claim.immutable_input_hash.as_str() {
+            return Ok(M4SecretaryInvocationClaimOutcome::Rejected {
+                error_code: "IDEMPOTENCY_KEY_REUSE".to_string(),
+            });
+        }
+        return match existing.status.as_str() {
+            "CLAIMED" => Ok(M4SecretaryInvocationClaimOutcome::InFlight {
+                invocation_ref: M4SecretaryOpaqueRef::new(existing.invocation_id).map_err(
+                    |_| M4SecretaryRepositoryError::new("m4_model_invocation_reference_invalid"),
+                )?,
+            }),
+            "SUCCEEDED" | "FAILED" => Ok(M4SecretaryInvocationClaimOutcome::Replay {
+                receipt: invocation_receipt_from_stored(&existing)?,
+            }),
+            "REJECTED" => Ok(M4SecretaryInvocationClaimOutcome::Rejected {
+                error_code: existing.outcome_code,
+            }),
+            _ => Err(M4SecretaryRepositoryError::new(
+                "m4_model_invocation_status_invalid",
+            )),
+        };
+    }
+    if load_model_invocation_by_id(transaction, claim.invocation_key_ref.as_str())?.is_some() {
+        return Ok(M4SecretaryInvocationClaimOutcome::Rejected {
+            error_code: "INVOCATION_KEY_REUSE".to_string(),
+        });
+    }
+
+    ensure_model_budget_ledger(transaction, daily_window, recorded_at_utc)?;
+    if let Some(budget_ordinal) =
+        reserve_model_budget_ordinal(transaction, daily_window, recorded_at_utc)?
+    {
+        insert_model_invocation_claim(
+            transaction,
+            claim,
+            daily_window,
+            Some(budget_ordinal),
+            "CLAIMED",
+            "CLAIMED",
+            Some(recorded_at_utc),
+            None,
+            recorded_at_utc,
+        )?;
+        return Ok(M4SecretaryInvocationClaimOutcome::DispatchGranted {
+            invocation_ref: claim.invocation_key_ref.clone(),
+        });
+    }
+
+    insert_model_invocation_claim(
+        transaction,
+        claim,
+        daily_window,
+        None,
+        "REJECTED",
+        "MODEL_BUDGET_EXHAUSTED",
+        None,
+        Some(recorded_at_utc),
+        recorded_at_utc,
+    )?;
+    increment_model_budget_terminal_count(
+        transaction,
+        &daily_window.daily_window_id,
+        "REJECTED",
+        recorded_at_utc,
+    )?;
+    Ok(M4SecretaryInvocationClaimOutcome::Rejected {
+        error_code: "MODEL_BUDGET_EXHAUSTED".to_string(),
+    })
+}
+
+fn terminal_matches_receipt(
+    terminal: &M4SecretaryInvocationTerminal,
+    receipt: &M4SecretaryInvocationReceipt,
+) -> bool {
+    terminal.invocation_ref == receipt.invocation_ref
+        && terminal.outcome_code == receipt.outcome_code
+        && terminal.result_ref == receipt.result_ref
+        && terminal.result_hash == receipt.result_hash
+        && terminal.error_code == receipt.error_code
+}
+
+fn terminal_model_invocation_in_transaction(
+    transaction: &Transaction<'_>,
+    terminal: &M4SecretaryInvocationTerminal,
+    recorded_at_utc: &str,
+) -> Result<M4SecretaryInvocationReceipt, M4SecretaryRepositoryError> {
+    let invocation = load_model_invocation_by_id(transaction, terminal.invocation_ref.as_str())?
+        .ok_or_else(|| M4SecretaryRepositoryError::new("m4_model_invocation_not_found"))?;
+    match invocation.status.as_str() {
+        "SUCCEEDED" | "FAILED" => {
+            let receipt = invocation_receipt_from_stored(&invocation)?;
+            if !terminal_matches_receipt(terminal, &receipt) {
+                return Err(M4SecretaryRepositoryError::new(
+                    "m4_model_invocation_terminal_replay_mismatch",
+                ));
+            }
+            return Ok(receipt);
+        }
+        "REJECTED" => {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_model_invocation_rejected_terminal",
+            ))
+        }
+        "CLAIMED" => {}
+        _ => {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_model_invocation_status_invalid",
+            ))
+        }
+    }
+
+    let (stored_outcome_code, payload_ref, payload_hash, budget_counter) =
+        match terminal.outcome_code.as_str() {
+            "SUCCEEDED"
+                if terminal.result_ref.is_some()
+                    && terminal.result_hash.is_some()
+                    && terminal.error_code.is_none() =>
+            {
+                (
+                    "SUCCEEDED".to_string(),
+                    terminal
+                        .result_ref
+                        .as_ref()
+                        .expect("validated result reference")
+                        .as_str(),
+                    terminal
+                        .result_hash
+                        .as_ref()
+                        .expect("validated result hash")
+                        .as_str(),
+                    "SUCCEEDED",
+                )
+            }
+            "FAILED"
+                if terminal.result_ref.is_none()
+                    && terminal.result_hash.is_none()
+                    && terminal
+                        .error_code
+                        .as_deref()
+                        .is_some_and(m4_is_invocation_status_code) =>
+            {
+                (
+                    terminal.error_code.clone().expect("validated error code"),
+                    invocation.payload_ref.as_str(),
+                    invocation.payload_hash.as_str(),
+                    "FAILED",
+                )
+            }
+            _ => {
+                return Err(M4SecretaryRepositoryError::new(
+                    "m4_model_invocation_terminal_invalid",
+                ))
+            }
+        };
+    let changed = transaction
+        .execute(
+            "UPDATE m4_model_invocations
+             SET status = ?1, outcome_code = ?2, payload_ref = ?3, payload_hash = ?4,
+                 terminal_at_utc = ?5, recorded_at_utc = ?5
+             WHERE invocation_id = ?6 AND status = 'CLAIMED'",
+            params![
+                terminal.outcome_code,
+                stored_outcome_code,
+                payload_ref,
+                payload_hash,
+                recorded_at_utc,
+                invocation.invocation_id,
+            ],
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_model_invocation_terminal", error)
+        })?;
+    if changed != 1 {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_model_invocation_terminal_state_changed",
+        ));
+    }
+    let daily_window_id: String = transaction
+        .query_row(
+            "SELECT daily_window_id FROM m4_model_invocations WHERE invocation_id = ?1",
+            [terminal.invocation_ref.as_str()],
+            |row| row.get(0),
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_model_invocation_window_read", error)
+        })?;
+    increment_model_budget_terminal_count(
+        transaction,
+        &daily_window_id,
+        budget_counter,
+        recorded_at_utc,
+    )?;
+    let terminal_invocation =
+        load_model_invocation_by_id(transaction, terminal.invocation_ref.as_str())?
+            .ok_or_else(|| M4SecretaryRepositoryError::new("m4_model_invocation_not_found"))?;
+    let receipt = invocation_receipt_from_stored(&terminal_invocation)?;
+    if !terminal_matches_receipt(terminal, &receipt) {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_model_invocation_terminal_receipt_mismatch",
+        ));
+    }
+    Ok(receipt)
+}
+
 fn configure_connection(connection: &Connection) -> Result<(), M4SecretaryRepositoryError> {
     connection
         .busy_timeout(Duration::from_millis(M4_BUSY_TIMEOUT_MS))
@@ -2304,7 +5616,7 @@ fn ingest_admitted_source(
     transaction: &Transaction<'_>,
     source: &M4AdmittedWorkflowAttentionSource,
     recorded_at_utc: &str,
-    _repository: &M4SecretarySqliteRepository,
+    repository: &M4SecretarySqliteRepository,
 ) -> Result<M4IngestionOutcome, M4SecretaryRepositoryError> {
     if let Some(receipt) = find_exact_replay_for_admitted(transaction, source)? {
         return replay_outcome(transaction, receipt, &source.scope_ref);
@@ -2426,7 +5738,7 @@ fn ingest_admitted_source(
 
     #[cfg(test)]
     {
-        let mut fail = _repository
+        let mut fail = repository
             .fail_after_projection_once
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -2509,6 +5821,7 @@ fn ingest_admitted_source(
         &scope_watermark,
         recorded_at_utc,
     )?;
+    repository.reproject_current_daily_brief_for_explicit_trigger(transaction, recorded_at_utc)?;
 
     Ok(M4IngestionOutcome {
         ingestion_receipt_id: receipt_id,
@@ -3360,6 +6673,85 @@ fn scope_watermark_in_transaction(
         )
         .collect::<Result<Vec<_>, M4SecretaryRepositoryError>>()?;
     m4_scope_source_watermark(&entries).map_err(M4SecretaryRepositoryError::new)
+}
+
+/// Count immutable admitted source-event rows rather than current source
+/// projections.  The scheduler checkpoint deliberately consumes this total
+/// only after it has atomically materialized at least one closed window.
+fn admitted_source_event_count_in_transaction(
+    transaction: &Transaction<'_>,
+    scope_ref: &str,
+) -> Result<u64, M4SecretaryRepositoryError> {
+    let count: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM m4_admitted_source_events WHERE scope_ref = ?1",
+            [scope_ref],
+            |row| row.get(0),
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_admitted_source_count_read", error)
+        })?;
+    u64::try_from(count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_admitted_source_count_invalid"))
+}
+
+fn admitted_material_source_event_count_in_transaction(
+    transaction: &Transaction<'_>,
+    scope_ref: &str,
+) -> Result<u64, M4SecretaryRepositoryError> {
+    let count: i64 = transaction
+        .query_row(
+            "SELECT COUNT(*) FROM m4_admitted_source_events
+             WHERE scope_ref = ?1 AND attention_material_change = 1",
+            [scope_ref],
+            |row| row.get(0),
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_admitted_material_source_count_read", error)
+        })?;
+    u64::try_from(count)
+        .map_err(|_| M4SecretaryRepositoryError::new("m4_admitted_source_count_invalid"))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct M4SchedulerAdmittedSourceDelta {
+    total: u64,
+    material: u64,
+}
+
+fn scheduler_admitted_source_delta(
+    checkpoint: &M4StoredSchedulerCheckpoint,
+    current_scope_source_watermark: &str,
+    current_admitted_source_event_count: u64,
+    current_admitted_material_source_event_count: u64,
+) -> Result<M4SchedulerAdmittedSourceDelta, M4SecretaryRepositoryError> {
+    if checkpoint.admitted_material_source_event_count > checkpoint.admitted_source_event_count
+        || current_admitted_material_source_event_count > current_admitted_source_event_count
+    {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_scheduler_material_source_count_invalid",
+        ));
+    }
+    let total = current_admitted_source_event_count
+        .checked_sub(checkpoint.admitted_source_event_count)
+        .ok_or_else(|| M4SecretaryRepositoryError::new("m4_scheduler_source_count_regressed"))?;
+    let material = current_admitted_material_source_event_count
+        .checked_sub(checkpoint.admitted_material_source_event_count)
+        .ok_or_else(|| {
+            M4SecretaryRepositoryError::new("m4_scheduler_material_source_count_regressed")
+        })?;
+    if material > total {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_scheduler_material_source_delta_invalid",
+        ));
+    }
+    let watermark_changed = checkpoint.scope_source_watermark != current_scope_source_watermark;
+    if (total == 0 && watermark_changed) || (total > 0 && !watermark_changed) {
+        return Err(M4SecretaryRepositoryError::new(
+            "m4_scheduler_source_accounting_mismatch",
+        ));
+    }
+    Ok(M4SchedulerAdmittedSourceDelta { total, material })
 }
 
 fn upsert_projection_checkpoint(
@@ -5784,6 +9176,82 @@ mod tests {
             .expect("make test payload digest")
     }
 
+    fn test_zoneinfo_root() -> PathBuf {
+        [
+            PathBuf::from("/var/db/timezone/zoneinfo"),
+            PathBuf::from("/usr/share/zoneinfo"),
+            PathBuf::from("/usr/share/lib/zoneinfo"),
+        ]
+        .into_iter()
+        .find(|root| root.join("Asia/Shanghai").is_file())
+        .expect("local zoneinfo root with Asia/Shanghai")
+    }
+
+    fn test_timezone_paths(root: &Path, timezone: &str) -> M4SchedulerOsTimezonePaths {
+        let timezone_file = root.join("m4c07-timezone");
+        fs::write(&timezone_file, format!("{timezone}\n")).expect("write local test timezone");
+        M4SchedulerOsTimezonePaths {
+            localtime_path: root.join("m4c07-no-localtime"),
+            timezone_file_path: timezone_file,
+            zoneinfo_roots: vec![test_zoneinfo_root()],
+        }
+    }
+
+    fn set_test_timezone(fixture: &RepositoryFixture, timezone: &str) {
+        fixture
+            .repository
+            .set_test_scheduler_timezone_paths(test_timezone_paths(&fixture.root, timezone));
+    }
+
+    fn set_repository_test_timezone(
+        repository: &M4SecretarySqliteRepository,
+        fixture: &RepositoryFixture,
+        timezone: &str,
+    ) {
+        repository.set_test_scheduler_timezone_paths(test_timezone_paths(&fixture.root, timezone));
+    }
+
+    fn model_invocation_claim(seed: &str) -> M4SecretaryModelInvocationClaim {
+        let opaque_ref = |kind: &str| {
+            M4SecretaryOpaqueRef::new(opaque(kind, seed)).expect("make invocation opaque ref")
+        };
+        let hash = |kind: &str| {
+            M4SecretaryHash::new(digest(&format!("{kind}:{seed}"))).expect("make invocation hash")
+        };
+        M4SecretaryModelInvocationClaim {
+            invocation_key_ref: opaque_ref("invocation"),
+            idempotency_key_ref: opaque_ref("invocation-idempotency"),
+            immutable_input_hash: hash("immutable-input"),
+            role_session_ref: opaque_ref("role-session"),
+            context_ref: opaque_ref("context"),
+            deterministic_brief_hash: hash("brief"),
+            trigger_ref: opaque_ref("trigger"),
+            user_message_ref: opaque_ref("user-message"),
+            user_message_hash: hash("user-message"),
+            purpose_code: "EXPLAIN_ATTENTION_REASON".to_string(),
+        }
+    }
+
+    fn claim_model_invocation(
+        repository: &M4SecretarySqliteRepository,
+        claim: &M4SecretaryModelInvocationClaim,
+    ) -> M4SecretaryInvocationClaimOutcome {
+        <M4SecretarySqliteRepository as M4SecretaryModelInvocationLedgerPort>::claim_invocation(
+            repository, claim,
+        )
+        .expect("claim durable M4 model invocation")
+    }
+
+    fn terminal_model_invocation(
+        repository: &M4SecretarySqliteRepository,
+        terminal: &M4SecretaryInvocationTerminal,
+    ) -> M4SecretaryInvocationReceipt {
+        <M4SecretarySqliteRepository as M4SecretaryModelInvocationLedgerPort>::terminal_invocation(
+            repository, terminal,
+        )
+        .expect("terminal durable M4 model invocation")
+    }
+
     fn source(
         object_id: &str,
         revision: u64,
@@ -5827,6 +9295,864 @@ mod tests {
             attention_required: true,
             material_change: true,
         }
+    }
+
+    fn current_daily_brief_state(fixture: &RepositoryFixture) -> (String, i64, String, String) {
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("open current daily brief state");
+        connection
+            .query_row(
+                "SELECT daily_window_id, revision, generated_at_utc, scope_source_watermark
+                 FROM m4_daily_briefs WHERE scope_ref = ?1",
+                [m4_primary_scope_ref()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("read current daily brief state")
+    }
+
+    fn scheduler_checkpoint_source_accounting(
+        fixture: &RepositoryFixture,
+    ) -> (String, i64, i64, Option<String>, i64) {
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("open scheduler checkpoint accounting read");
+        connection
+            .query_row(
+                "SELECT scope_source_watermark, admitted_source_event_count,
+                        admitted_material_source_event_count,
+                        last_closed_daily_window_id, catch_up_pending_count
+                 FROM m4_scheduler_checkpoints WHERE scope_ref = ?1",
+                [m4_primary_scope_ref()],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("read scheduler checkpoint accounting")
+    }
+
+    #[test]
+    fn m4c07_admitted_source_and_user_command_reproject_current_brief_without_clone() {
+        let fixture = RepositoryFixture::new("daily-brief-explicit-triggers");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T12:00:00.000Z")
+            .expect("set explicit-trigger test clock");
+
+        let first_source = source("daily-brief-source", 1, "OPEN", attention_signals());
+        let first_outcome = fixture
+            .repository
+            .ingest_workflow_attention_source(&first_source)
+            .expect("admit first structured source event");
+        assert!(!first_outcome.replayed);
+        let after_first = current_daily_brief_state(&fixture);
+        assert_eq!(fixture.count("m4_daily_briefs"), 1);
+        assert_eq!(fixture.count("m4_scheduler_checkpoints"), 0);
+
+        let replay = fixture
+            .repository
+            .ingest_workflow_attention_source(&first_source)
+            .expect("exact source replay");
+        assert!(replay.replayed);
+        assert_eq!(
+            current_daily_brief_state(&fixture),
+            after_first,
+            "exact replay must not manufacture a daily brief revision"
+        );
+        let _ = fixture
+            .repository
+            .read_attention_snapshot(m4_primary_scope_ref())
+            .expect("read only attention snapshot");
+        assert_eq!(
+            current_daily_brief_state(&fixture),
+            after_first,
+            "read-only snapshot must not manufacture a daily brief revision"
+        );
+
+        let quarantined = fixture
+            .repository
+            .ingest_workflow_attention_source(&source(
+                "daily-brief-quarantine",
+                1,
+                "FUTURE_STATUS",
+                attention_signals(),
+            ))
+            .expect("quarantine unsupported source status");
+        assert_eq!(quarantined.disposition, "QUARANTINED");
+        assert_eq!(
+            current_daily_brief_state(&fixture),
+            after_first,
+            "quarantine must not manufacture a daily brief revision"
+        );
+
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&source(
+                "daily-brief-source",
+                2,
+                "OPEN",
+                attention_signals(),
+            ))
+            .expect("admit updated structured source event");
+        let after_source_update = current_daily_brief_state(&fixture);
+        assert_eq!(after_source_update.0, after_first.0);
+        assert_eq!(after_source_update.1, after_first.1 + 1);
+        assert_ne!(after_source_update.3, after_first.3);
+
+        let action = fixture
+            .repository
+            .create_personal_action(
+                "显式个人待办",
+                Some("2026-08-11T09:00:00Z"),
+                &opaque("command", "daily-brief-personal-action"),
+            )
+            .expect("create explicit standalone personal action");
+        let after_action = current_daily_brief_state(&fixture);
+        assert_eq!(after_action.0, after_source_update.0);
+        assert_eq!(after_action.1, after_source_update.1 + 1);
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("inspect current daily brief item bindings");
+        let item_rows = connection
+            .prepare(
+                "SELECT item_ref, item_kind, source_event_key, personal_action_id
+                 FROM m4_daily_brief_item_refs
+                 WHERE daily_window_id = ?1 ORDER BY ordinal",
+            )
+            .expect("prepare current daily brief item query")
+            .query_map([&after_action.0], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .expect("query current daily brief item bindings")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect current daily brief item bindings");
+        assert!(item_rows
+            .iter()
+            .any(|(item_ref, kind, event_key, action_id)| {
+                item_ref == &action.aggregate_id
+                    && kind == "PERSONAL_ACTION"
+                    && event_key.is_none()
+                    && action_id.as_deref() == Some(action.aggregate_id.as_str())
+            }));
+        assert!(item_rows.iter().any(|(_, kind, event_key, action_id)| {
+            kind == "SOURCE_ATTENTION" && event_key.is_some() && action_id.is_none()
+        }));
+        assert_eq!(fixture.count("m4_personal_actions"), 1);
+        assert_eq!(
+            fixture.count("m4_scheduler_checkpoints"),
+            0,
+            "brief reprojectors do not consume scheduler source accounting"
+        );
+    }
+
+    #[test]
+    fn m4c07_timer_and_startup_do_not_reproject_current_daily_brief() {
+        let fixture = RepositoryFixture::new("daily-brief-trigger-boundary");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T12:00:00.000Z")
+            .expect("set explicit refresh time");
+        let _ = fixture
+            .repository
+            .refresh_and_read_daily_report()
+            .expect("explicit refresh writes current daily brief");
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("open current daily brief read");
+        let before: (String, i64, String) = connection
+            .query_row(
+                "SELECT daily_window_id, revision, generated_at_utc
+                 FROM m4_daily_briefs WHERE scope_ref = ?1",
+                [m4_primary_scope_ref()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read explicit current daily brief");
+        drop(connection);
+
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T12:01:00.000Z")
+            .expect("set timer time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+            .expect("run pure local timer cycle");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T12:02:00.000Z")
+            .expect("set startup time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("run startup recovery without explicit refresh");
+
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("open post-trigger daily brief read");
+        let after: (String, i64, String) = connection
+            .query_row(
+                "SELECT daily_window_id, revision, generated_at_utc
+                 FROM m4_daily_briefs WHERE scope_ref = ?1",
+                [m4_primary_scope_ref()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read current daily brief after pure triggers");
+        assert_eq!(after, before);
+        assert_eq!(
+            fixture.count("m4_daily_briefs"),
+            1,
+            "pure timer/startup did not write a second current brief"
+        );
+    }
+
+    #[test]
+    fn m4c07_daily_event_hashes_follow_frozen_canonical_vectors() {
+        let watermark = "0".repeat(64);
+        let window_payload = M4DailyWindowClosedPayload {
+            scope_ref: "scope:test",
+            daily_window_id: "daily-window:test",
+            iana_timezone: "Asia/Shanghai",
+            local_date: "2026-08-10",
+            window_start_utc: "2026-08-09T16:00:00Z",
+            window_end_utc: "2026-08-10T16:00:00Z",
+            scope_source_watermark: &watermark,
+            projector_version: "1",
+            closed_at_utc: "2026-08-10T16:10:00Z",
+        };
+        assert_eq!(
+            canonical_json_object_sha256(window_payload.canonical_fields())
+                .expect("hash canonical window payload"),
+            "66fd5ab92d24baae73a3fa5dfca5e7df8d2e2f03c6759fe63bad632059334333"
+        );
+
+        let report_payload = M4DailyReportVersionedPayload {
+            scope_ref: "scope:test",
+            daily_window_id: "daily-window:test",
+            daily_report_id: "daily-report:test",
+            report_version: "2",
+            report_ref: "daily-report:test",
+            supersedes_report_ref: Some("daily-report:previous"),
+            scope_source_watermark: &watermark,
+            projector_version: "1",
+            generated_at_utc: "2026-08-10T16:10:00Z",
+        };
+        assert_eq!(
+            canonical_json_object_sha256(report_payload.canonical_fields())
+                .expect("hash canonical report payload"),
+            "5c3fc5bee8d370ff88cb6935e1653ebe5e7e1bfdfe610cb5625db176fee38b2b"
+        );
+        assert_eq!(
+            m4_daily_digest(
+                "syn.m4.daily-report-versioned-idempotency/v1",
+                &["daily-window:test", "2"],
+            )
+            .expect("hash frozen report-version event identity"),
+            "811ece0fbef9fc2bc5358dbf6a6fc2ef570aca0965583eefff06746de6a50fda"
+        );
+    }
+
+    #[test]
+    fn m4c07_scheduler_consumes_admitted_source_delta_only_on_closed_window() {
+        let fixture = RepositoryFixture::new("scheduler-source-accounting");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&source(
+                "scheduler-source-one",
+                1,
+                "OPEN",
+                attention_signals(),
+            ))
+            .expect("admit first source event");
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&source(
+                "scheduler-source-two",
+                1,
+                "OPEN",
+                attention_signals(),
+            ))
+            .expect("admit second source event");
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&source(
+                "scheduler-revision-heartbeat",
+                1,
+                "OPEN",
+                M4AttentionSignals {
+                    external_commitment: false,
+                    time_sensitive: false,
+                    requires_user_decision: false,
+                    source_blocked: false,
+                    attention_required: false,
+                    material_change: false,
+                },
+            ))
+            .expect("admit non-material revision heartbeat");
+        assert_eq!(fixture.count("m4_scheduler_checkpoints"), 0);
+
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:10:00.000Z")
+            .expect("set eligible close time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("close current eligible local window");
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("read scheduler source accounting run");
+        let run: (String, String, i64, i64, i64) = connection
+            .query_row(
+                "SELECT scope_source_watermark_before, scope_source_watermark_after,
+                        admitted_material_event_count, agent_turn_count, model_invocation_count
+                 FROM m4_scheduler_runs ORDER BY recorded_at_utc, scheduler_run_id LIMIT 1",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("read first scheduler run");
+        assert_ne!(run.0, run.1);
+        assert_eq!((run.2, run.3, run.4), (2, 0, 0));
+        let checkpoint_after_close = scheduler_checkpoint_source_accounting(&fixture);
+        assert_eq!(checkpoint_after_close.0, run.1);
+        assert_eq!(checkpoint_after_close.1, 3);
+        assert_eq!(checkpoint_after_close.2, 2);
+
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&source(
+                "scheduler-source-three",
+                1,
+                "OPEN",
+                attention_signals(),
+            ))
+            .expect("admit source after close");
+        let run_count_before_idle_tick = fixture.count("m4_scheduler_runs");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:11:00.000Z")
+            .expect("set no-eligible timer time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+            .expect("run timer with no eligible window");
+        assert_eq!(
+            scheduler_checkpoint_source_accounting(&fixture),
+            checkpoint_after_close,
+            "a no-window timer may advance tick status but cannot consume source delta"
+        );
+        assert_eq!(
+            fixture.count("m4_scheduler_runs"),
+            run_count_before_idle_tick
+        );
+    }
+
+    #[test]
+    fn m4c07_empty_close_records_zero_counts_and_daily_failure_rolls_back() {
+        let empty_fixture = RepositoryFixture::new("scheduler-empty-close");
+        set_test_timezone(&empty_fixture, "Asia/Shanghai");
+        empty_fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:10:00.000Z")
+            .expect("set empty close time");
+        empty_fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("materialize empty window");
+        let connection = empty_fixture
+            .repository
+            .open_read_connection()
+            .expect("inspect empty scheduler run");
+        let counts: (i64, i64, i64) = connection
+            .query_row(
+                "SELECT admitted_material_event_count, agent_turn_count, model_invocation_count
+                 FROM m4_scheduler_runs",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read empty scheduler counts");
+        assert_eq!(counts, (0, 0, 0));
+
+        for (label, stage) in [
+            ("after-window", M4DailyFailureStage::AfterWindow),
+            ("after-report", M4DailyFailureStage::AfterReport),
+            ("before-checkpoint", M4DailyFailureStage::BeforeCheckpoint),
+        ] {
+            let fixture = RepositoryFixture::new(&format!("daily-rollback-{label}"));
+            set_test_timezone(&fixture, "Asia/Shanghai");
+            fixture
+                .repository
+                .set_test_server_utc_now("2026-08-10T16:10:00.000Z")
+                .expect("set injected failure time");
+            fixture.repository.fail_daily_at(stage);
+            let failure = fixture
+                .repository
+                .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+                .expect_err("injected daily transaction stage must roll back");
+            assert_eq!(failure.code, "m4_test_daily_transaction_failure");
+            for table in [
+                "m4_scheduler_configurations",
+                "m4_scheduler_checkpoints",
+                "m4_daily_windows",
+                "m4_daily_reports",
+                "m4_scheduler_runs",
+                "m4_daily_events",
+            ] {
+                assert_eq!(fixture.count(table), 0, "{label} leaked a row in {table}");
+            }
+
+            let restarted = fixture.reopen();
+            set_repository_test_timezone(&restarted, &fixture, "Asia/Shanghai");
+            restarted
+                .set_test_server_utc_now("2026-08-10T16:10:00.000Z")
+                .expect("restore recovery time after reopen");
+            restarted
+                .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+                .expect("reopen can recover an atomically rolled-back close");
+            assert_eq!(fixture.count("m4_daily_reports"), 1);
+            assert_eq!(fixture.count("m4_scheduler_runs"), 1);
+            let checkpoint = scheduler_checkpoint_source_accounting(&fixture);
+            assert_eq!(checkpoint.1, 0);
+        }
+    }
+
+    #[test]
+    fn m4c07_same_window_restart_is_idempotent_and_ready_envelope_binds_objects() {
+        let fixture = RepositoryFixture::new("scheduler-restart-envelope");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:10:00.000Z")
+            .expect("set first close time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("materialize first daily window");
+        let reports_before_restart = fixture.count("m4_daily_reports");
+        let runs_before_restart = fixture.count("m4_scheduler_runs");
+
+        let restarted = fixture.reopen();
+        set_repository_test_timezone(&restarted, &fixture, "Asia/Shanghai");
+        restarted
+            .set_test_server_utc_now("2026-08-10T16:20:00.000Z")
+            .expect("set same-window restart time");
+        restarted
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("same closed window is idempotent after restart");
+        assert_eq!(fixture.count("m4_daily_reports"), reports_before_restart);
+        assert_eq!(fixture.count("m4_scheduler_runs"), runs_before_restart);
+
+        let envelope = restarted
+            .refresh_and_read_daily_report()
+            .expect("explicit refresh returns a ready cross-object envelope");
+        let M4SecretaryDailyReportEnvelope::Ready {
+            scheduler,
+            daily_brief,
+            daily_report,
+            last_run,
+            ..
+        } = envelope
+        else {
+            panic!("closed report plus explicit current brief must be ready")
+        };
+        assert_eq!(
+            scheduler.current_daily_window_id,
+            daily_brief.daily_window_id
+        );
+        assert_eq!(
+            scheduler.last_closed_daily_window_id,
+            daily_report.daily_window_id
+        );
+        assert_eq!(last_run.window_ref, daily_report.daily_window_id);
+        assert_eq!(
+            last_run.scope_source_watermark_after,
+            daily_report.scope_source_watermark
+        );
+        assert_eq!(
+            (last_run.agent_turn_count, last_run.model_invocation_count),
+            (0, 0)
+        );
+    }
+
+    #[test]
+    fn m4c07_truncated_startup_range_is_durable_and_explicitly_recovers_oldest_first() {
+        let fixture = RepositoryFixture::new("scheduler-catch-up-recovery");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-07-31T16:10:00.000Z")
+            .expect("set initial close time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("materialize initial closed window");
+
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:10:00.000Z")
+            .expect("set ten-window catch-up time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("materialize recent seven and persist the older range");
+        assert_eq!(fixture.count("m4_daily_reports"), 8);
+        assert_eq!(fixture.count("m4_scheduler_runs"), 8);
+
+        let envelope = fixture
+            .repository
+            .refresh_and_read_daily_report()
+            .expect("read pending catch-up receipt");
+        let M4SecretaryDailyReportEnvelope::Ready { scheduler, .. } = envelope else {
+            panic!("closed reports plus a current brief must be ready")
+        };
+        assert_eq!(scheduler.catch_up_pending_count, 3);
+        assert_eq!(scheduler.pending_catch_up_receipt_refs.len(), 1);
+        let receipt_ref = scheduler.pending_catch_up_receipt_refs[0].clone();
+
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("inspect persisted catch-up range");
+        let receipt_before: (String, String, Option<String>, i64, i64, String) = connection
+            .query_row(
+                "SELECT unmaterialized_from_local_date,
+                        unmaterialized_through_local_date,
+                        next_unmaterialized_local_date,
+                        initial_window_count, remaining_window_count, status
+                 FROM m4_catch_up_truncation_receipts
+                 WHERE catch_up_truncation_id = ?1",
+                [&receipt_ref],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                    ))
+                },
+            )
+            .expect("read exact pending catch-up range");
+        assert_eq!(
+            receipt_before,
+            (
+                "2026-08-01".to_string(),
+                "2026-08-03".to_string(),
+                Some("2026-08-01".to_string()),
+                3,
+                3,
+                "PENDING".to_string(),
+            )
+        );
+        let newest_auto_window: String = connection
+            .query_row(
+                "SELECT last_closed_daily_window_id FROM m4_scheduler_checkpoints
+                 WHERE scope_ref = ?1",
+                [m4_primary_scope_ref()],
+                |row| row.get(0),
+            )
+            .expect("read newest automatic checkpoint window");
+        drop(connection);
+
+        let recovered = fixture
+            .repository
+            .recover_daily_catch_up(&receipt_ref)
+            .expect("recover the exact persisted older range");
+        let M4SecretaryDailyReportEnvelope::Ready {
+            scheduler: recovered_scheduler,
+            ..
+        } = recovered
+        else {
+            panic!("completed catch-up must return the ready daily envelope")
+        };
+        assert_eq!(recovered_scheduler.catch_up_pending_count, 0);
+        assert!(recovered_scheduler.pending_catch_up_receipt_refs.is_empty());
+        assert_eq!(fixture.count("m4_daily_reports"), 11);
+        assert_eq!(fixture.count("m4_scheduler_runs"), 11);
+
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("inspect completed catch-up recovery");
+        let receipt_after: (Option<String>, i64, String) = connection
+            .query_row(
+                "SELECT next_unmaterialized_local_date, remaining_window_count, status
+                 FROM m4_catch_up_truncation_receipts
+                 WHERE catch_up_truncation_id = ?1",
+                [&receipt_ref],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read completed catch-up receipt");
+        assert_eq!(receipt_after, (None, 0, "COMPLETED".to_string()));
+        let recovery_runs: Vec<(String, i64, i64, i64)> = connection
+            .prepare(
+                "SELECT window.local_date, run.admitted_material_event_count,
+                        run.agent_turn_count, run.model_invocation_count
+                 FROM m4_scheduler_runs AS run
+                 JOIN m4_daily_windows AS window
+                   ON window.daily_window_id = run.daily_window_id
+                 WHERE run.outcome_code IN (
+                    'EXPLICIT_CATCH_UP_RECOVERED', 'CATCH_UP_RECOVERY_PARTIAL'
+                 )
+                 ORDER BY window.local_date ASC",
+            )
+            .expect("prepare explicit catch-up run evidence")
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+            })
+            .expect("query explicit catch-up run evidence")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect explicit catch-up run evidence");
+        assert_eq!(
+            recovery_runs,
+            vec![
+                ("2026-08-01".to_string(), 0, 0, 0),
+                ("2026-08-02".to_string(), 0, 0, 0),
+                ("2026-08-03".to_string(), 0, 0, 0),
+            ],
+            "explicit recovery is oldest-first and remains a strict zero-model path"
+        );
+        let checkpoint_after: String = connection
+            .query_row(
+                "SELECT last_closed_daily_window_id FROM m4_scheduler_checkpoints
+                 WHERE scope_ref = ?1",
+                [m4_primary_scope_ref()],
+                |row| row.get(0),
+            )
+            .expect("read checkpoint after explicit recovery");
+        assert_eq!(checkpoint_after, newest_auto_window);
+        drop(connection);
+
+        let report_count = fixture.count("m4_daily_reports");
+        let run_count = fixture.count("m4_scheduler_runs");
+        let event_count = fixture.count("m4_daily_events");
+        let replay = fixture
+            .repository
+            .recover_daily_catch_up(&receipt_ref)
+            .expect("exact completed recovery receipt replays safely");
+        assert!(matches!(
+            replay,
+            M4SecretaryDailyReportEnvelope::Ready { .. }
+        ));
+        assert_eq!(fixture.count("m4_daily_reports"), report_count);
+        assert_eq!(fixture.count("m4_scheduler_runs"), run_count);
+        assert_eq!(fixture.count("m4_daily_events"), event_count);
+    }
+
+    #[test]
+    fn m4c07_explicit_correction_preserves_real_watermark_and_exactly_replays() {
+        let fixture = RepositoryFixture::new("daily-report-explicit-correction");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:10:00.000Z")
+            .expect("set first eligible close time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("materialize baseline daily report");
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("open baseline report read");
+        let baseline: (String, String) = connection
+            .query_row(
+                "SELECT daily_window_id, scope_source_watermark
+                 FROM m4_daily_reports
+                 WHERE report_version = '1' AND explicit_correction_ref IS NULL",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read baseline report identity");
+        drop(connection);
+
+        let correction_ref = opaque("explicit-correction", "watermark-stays-real");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:11:00.000Z")
+            .expect("set correction time");
+        let correction = fixture
+            .repository
+            .explicit_correct_daily_report(&baseline.0, &correction_ref)
+            .expect("append corrective report version");
+        assert_eq!(correction.report_version, "2");
+        assert_eq!(correction.scope_source_watermark, baseline.1);
+
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("open corrected report read");
+        let report_rows = connection
+            .prepare(
+                "SELECT report_version, scope_source_watermark, explicit_correction_ref
+                 FROM m4_daily_reports WHERE daily_window_id = ?1
+                 ORDER BY report_version",
+            )
+            .expect("prepare corrected report query")
+            .query_map([&baseline.0], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })
+            .expect("query corrected reports")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect corrected reports");
+        assert_eq!(
+            report_rows,
+            vec![
+                ("1".to_string(), baseline.1.clone(), None),
+                (
+                    "2".to_string(),
+                    baseline.1.clone(),
+                    Some(correction_ref.clone())
+                ),
+            ],
+            "correction identity is separate from the immutable real watermark"
+        );
+        drop(connection);
+
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:12:00.000Z")
+            .expect("set correction replay time");
+        let replay = fixture
+            .repository
+            .explicit_correct_daily_report(&baseline.0, &correction_ref)
+            .expect("replay exact corrective report");
+        assert_eq!(replay.daily_report_id, correction.daily_report_id);
+        assert_eq!(fixture.count("m4_daily_reports"), 2);
+        fixture
+            .repository
+            .verify_schema()
+            .expect("verify baseline and correction reports");
+    }
+
+    #[test]
+    fn m4c07_model_invocation_ledger_replays_terminal_and_rejects_ninth_claim() {
+        let fixture = RepositoryFixture::new("model-invocation-budget");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T12:00:00.000Z")
+            .expect("set budget test time");
+
+        let first_claim = model_invocation_claim("one");
+        let invocation_ref = match claim_model_invocation(&fixture.repository, &first_claim) {
+            M4SecretaryInvocationClaimOutcome::DispatchGranted { invocation_ref } => invocation_ref,
+            outcome => panic!("first invocation should be granted, got {outcome:?}"),
+        };
+        let terminal = M4SecretaryInvocationTerminal {
+            invocation_ref: invocation_ref.clone(),
+            outcome_code: "SUCCEEDED".to_string(),
+            result_ref: Some(
+                M4SecretaryOpaqueRef::new(opaque("enhancement", "one"))
+                    .expect("make enhancement ref"),
+            ),
+            result_hash: Some(M4SecretaryHash::new(digest("enhancement:one")).expect("hash")),
+            error_code: None,
+        };
+        let receipt = terminal_model_invocation(&fixture.repository, &terminal);
+        assert_eq!(receipt.invocation_ref, invocation_ref);
+        assert_eq!(receipt.outcome_code, "SUCCEEDED");
+        assert_eq!(
+            terminal_model_invocation(&fixture.repository, &terminal),
+            receipt,
+            "exact terminal replays its durable receipt"
+        );
+        match claim_model_invocation(&fixture.repository, &first_claim) {
+            M4SecretaryInvocationClaimOutcome::Replay { receipt: replay } => {
+                assert_eq!(replay, receipt)
+            }
+            outcome => panic!("terminal invocation should replay, got {outcome:?}"),
+        }
+
+        for ordinal in 2..=8 {
+            let claim = model_invocation_claim(&format!("claim-{ordinal}"));
+            assert!(matches!(
+                claim_model_invocation(&fixture.repository, &claim),
+                M4SecretaryInvocationClaimOutcome::DispatchGranted { .. }
+            ));
+        }
+        let ninth_claim = model_invocation_claim("claim-9");
+        assert!(matches!(
+            claim_model_invocation(&fixture.repository, &ninth_claim),
+            M4SecretaryInvocationClaimOutcome::Rejected { ref error_code }
+                if error_code == "MODEL_BUDGET_EXHAUSTED"
+        ));
+        assert!(matches!(
+            claim_model_invocation(&fixture.repository, &ninth_claim),
+            M4SecretaryInvocationClaimOutcome::Rejected { ref error_code }
+                if error_code == "MODEL_BUDGET_EXHAUSTED"
+        ));
+        assert_eq!(fixture.count("m4_model_invocations"), 9);
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("open budget ledger read");
+        let counters: (i64, i64, i64, i64, i64) = connection
+            .query_row(
+                "SELECT max_invocation_count, claimed_invocation_count,
+                        succeeded_invocation_count, failed_invocation_count,
+                        rejected_invocation_count
+                 FROM m4_model_budget_ledgers
+                 WHERE budget_class = ?1",
+                [M4_DAILY_EXPLICIT_USER_BUDGET_CLASS],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                },
+            )
+            .expect("read exact daily budget counters");
+        assert_eq!(counters, (8, 8, 1, 0, 1));
+        fixture
+            .repository
+            .verify_schema()
+            .expect("verify C07 ledger");
+
+        let reopened = fixture.reopen();
+        assert_eq!(
+            terminal_model_invocation(&reopened, &terminal),
+            receipt,
+            "reopen preserves terminal replay without a model call"
+        );
+        reopened
+            .verify_schema()
+            .expect("verify reopened C07 ledger");
     }
 
     fn source_event_key_for(

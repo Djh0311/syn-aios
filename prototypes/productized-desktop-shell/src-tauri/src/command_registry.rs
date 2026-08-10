@@ -183,6 +183,8 @@ macro_rules! workbench_command_handler {
             secretary_agent::run_secretary_explain,
             secretary_agent::load_secretary_home_context,
             secretary_agent::operate_secretary_coordination,
+            load_secretary_daily_report,
+            recover_secretary_daily_catch_up,
             run_history_read_model::list_project_run_history,
             system_status_read_model::load_system_status_read_model,
             audit_ledger_read_model::query_audit_ledger_read_model,

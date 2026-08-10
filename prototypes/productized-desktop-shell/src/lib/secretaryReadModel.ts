@@ -2054,3 +2054,479 @@ function m4HomeLegacyHash(identity: readonly string[]): string {
 function m4HomeSafeDisplayCode(value: string | null | undefined): string {
   return value && /^[A-Za-z0-9_:-]{1,128}$/.test(value) ? value : "M4_HOME_CONTEXT_READ_FAILED";
 }
+
+// ===== M4C07 DailyBrief / DailyReport read protocol =======================
+//
+// This is intentionally a separate fail-closed boundary from the M4C06 home
+// envelope.  It accepts only server-owned source refs, hashes, canonical
+// revisions and scrubbed codes.  It never admits a transcript, prompt,
+// provider body, secret, memory artifact, route payload, or a renderer-created
+// daily window/report identifier. `ordered_item_refs` retains the server's M4
+// priority/due/source-change projection order after safe-ref and duplicate validation.
+
+export const M4_SECRETARY_DAILY_SCHEMA_VERSION = "syn.m4.secretary.daily.v1" as const;
+
+export type M4SecretaryDailySchedulerDto = Readonly<{
+  configuration_revision: string;
+  iana_timezone: string;
+  timezone_rules_version: string;
+  current_daily_window_id: string;
+  last_closed_daily_window_id: string;
+  catch_up_pending_count: number;
+  pending_catch_up_receipt_refs: readonly string[];
+  status: string;
+}>;
+
+export type M4SecretaryDailyBriefDto = Readonly<{
+  daily_window_id: string;
+  scope_source_watermark: string;
+  projector_version: string;
+  ordered_item_refs: readonly string[];
+  generated_at_utc: string | null;
+}>;
+
+export type M4SecretaryDailyReportDto = Readonly<{
+  daily_report_id: string;
+  daily_window_id: string;
+  report_version: string;
+  status: "GENERATED" | "SUPERSEDED" | "FAILED";
+  scope_source_watermark: string;
+  projector_version: string;
+  ordered_item_refs: readonly string[];
+  supersedes_report_ref: string | null;
+  generated_at_utc: string | null;
+}>;
+
+export type M4SecretarySchedulerRunDto = Readonly<{
+  scheduler_run_id: string;
+  configuration_revision: string;
+  window_ref: string;
+  scope_source_watermark_before: string;
+  scope_source_watermark_after: string;
+  admitted_material_event_count: number;
+  agent_turn_count: number;
+  model_invocation_count: number;
+  outcome_code: string;
+  recorded_at_utc: string | null;
+}>;
+
+export type M4SecretaryDailyReportEnvelopeDto =
+  | Readonly<{
+    schema_version: typeof M4_SECRETARY_DAILY_SCHEMA_VERSION;
+    status: "READY";
+    scheduler: M4SecretaryDailySchedulerDto;
+    daily_brief: M4SecretaryDailyBriefDto;
+    daily_report: M4SecretaryDailyReportDto;
+    last_run: M4SecretarySchedulerRunDto;
+    recovery_code: string | null;
+  }>
+  | Readonly<{
+    schema_version: typeof M4_SECRETARY_DAILY_SCHEMA_VERSION;
+    status: "UNAVAILABLE" | "DISABLED";
+    reason: string;
+  }>;
+
+/**
+ * Parses the sole daily read command response.  A malformed result does not
+ * fall back to a cache or a legacy Secretary projection: callers receive an
+ * error and keep the daily surface unavailable.
+ */
+export function parseSecretaryDailyReportEnvelope(value: unknown): M4SecretaryDailyReportEnvelopeDto {
+  const base = m4DailyAllowedObject(
+    value,
+    [
+      "schema_version",
+      "status",
+      "scheduler",
+      "daily_brief",
+      "daily_report",
+      "last_run",
+      "recovery_code",
+      "reason",
+    ],
+    "daily_envelope",
+  );
+  const status = m4DailyEnvelopeStatus(base.status, "daily_envelope.status");
+
+  if (status === "READY") {
+    const raw = m4DailyExactObject(
+      value,
+      ["schema_version", "status", "scheduler", "daily_brief", "daily_report", "last_run", "recovery_code"],
+      "daily_envelope.ready",
+    );
+    const scheduler = m4DailyParseScheduler(raw.scheduler);
+    const daily_brief = m4DailyParseBrief(raw.daily_brief);
+    const daily_report = m4DailyParseReport(raw.daily_report);
+    const last_run = m4DailyParseSchedulerRun(raw.last_run);
+    const recovery_code = m4DailyOptionalScrubbedCode(raw.recovery_code, "daily_envelope.recovery_code");
+
+    if (
+      scheduler.current_daily_window_id !== daily_brief.daily_window_id
+      || scheduler.last_closed_daily_window_id !== daily_report.daily_window_id
+      || scheduler.current_daily_window_id === scheduler.last_closed_daily_window_id
+      || last_run.configuration_revision !== scheduler.configuration_revision
+      || last_run.window_ref !== daily_report.daily_window_id
+      || last_run.scope_source_watermark_after !== daily_report.scope_source_watermark
+    ) {
+      throw new Error("m4_secretary_daily_cross_object_binding_invalid");
+    }
+
+    return Object.freeze({
+      schema_version: m4DailySchemaVersion(raw.schema_version, "daily_envelope.schema_version"),
+      status,
+      scheduler,
+      daily_brief,
+      daily_report,
+      last_run,
+      recovery_code,
+    });
+  }
+
+  // These exact shapes make `UNAVAILABLE` and `DISABLED` mutually exclusive
+  // with each other and with every ready-only field.
+  const raw = m4DailyExactObject(value, ["schema_version", "status", "reason"], "daily_envelope.not_ready");
+  return Object.freeze({
+    schema_version: m4DailySchemaVersion(raw.schema_version, "daily_envelope.schema_version"),
+    status,
+    reason: m4DailyScrubbedCode(raw.reason, "daily_envelope.reason"),
+  });
+}
+
+function m4DailyParseScheduler(value: unknown): M4SecretaryDailySchedulerDto {
+  const raw = m4DailyExactObject(
+    value,
+    [
+      "configuration_revision",
+      "iana_timezone",
+      "timezone_rules_version",
+      "current_daily_window_id",
+      "last_closed_daily_window_id",
+      "catch_up_pending_count",
+      "pending_catch_up_receipt_refs",
+      "status",
+    ],
+    "daily_envelope.scheduler",
+  );
+  const status = m4DailyScrubbedCode(raw.status, "daily_envelope.scheduler.status");
+  if (status === "UNAVAILABLE" || status === "DISABLED") {
+    throw new Error("m4_secretary_daily_scheduler_status_invalid");
+  }
+  const catch_up_pending_count = m4DailyCounter(
+    raw.catch_up_pending_count,
+    "daily_envelope.scheduler.catch_up_pending_count",
+  );
+  const pending_catch_up_receipt_refs = m4DailyCatchUpReceiptRefs(
+    raw.pending_catch_up_receipt_refs,
+    "daily_envelope.scheduler.pending_catch_up_receipt_refs",
+  );
+  if (
+    (catch_up_pending_count === 0 && pending_catch_up_receipt_refs.length !== 0)
+    || (catch_up_pending_count > 0 && pending_catch_up_receipt_refs.length === 0)
+  ) {
+    throw new Error("m4_secretary_daily_scheduler_catch_up_state_invalid");
+  }
+  return Object.freeze({
+    configuration_revision: m4DailyCanonicalRevision(raw.configuration_revision, "daily_envelope.scheduler.configuration_revision"),
+    iana_timezone: m4DailyIanaTimezone(raw.iana_timezone, "daily_envelope.scheduler.iana_timezone"),
+    timezone_rules_version: m4DailyTimezoneRulesVersion(raw.timezone_rules_version, "daily_envelope.scheduler.timezone_rules_version"),
+    current_daily_window_id: m4DailyDailyWindowId(raw.current_daily_window_id, "daily_envelope.scheduler.current_daily_window_id"),
+    last_closed_daily_window_id: m4DailyDailyWindowId(raw.last_closed_daily_window_id, "daily_envelope.scheduler.last_closed_daily_window_id"),
+    catch_up_pending_count,
+    pending_catch_up_receipt_refs,
+    status,
+  });
+}
+
+function m4DailyParseBrief(value: unknown): M4SecretaryDailyBriefDto {
+  const raw = m4DailyExactObject(
+    value,
+    ["daily_window_id", "scope_source_watermark", "projector_version", "ordered_item_refs", "generated_at_utc"],
+    "daily_envelope.daily_brief",
+  );
+  return Object.freeze({
+    daily_window_id: m4DailyDailyWindowId(raw.daily_window_id, "daily_envelope.daily_brief.daily_window_id"),
+    scope_source_watermark: m4DailyHash(raw.scope_source_watermark, "daily_envelope.daily_brief.scope_source_watermark"),
+    projector_version: m4DailyCanonicalRevision(raw.projector_version, "daily_envelope.daily_brief.projector_version"),
+    ordered_item_refs: m4DailyOrderedItemRefs(raw.ordered_item_refs, "daily_envelope.daily_brief.ordered_item_refs"),
+    generated_at_utc: m4DailyOptionalUtc(raw.generated_at_utc, "daily_envelope.daily_brief.generated_at_utc"),
+  });
+}
+
+function m4DailyParseReport(value: unknown): M4SecretaryDailyReportDto {
+  const raw = m4DailyExactObject(
+    value,
+    [
+      "daily_report_id",
+      "daily_window_id",
+      "report_version",
+      "status",
+      "scope_source_watermark",
+      "projector_version",
+      "ordered_item_refs",
+      "supersedes_report_ref",
+      "generated_at_utc",
+    ],
+    "daily_envelope.daily_report",
+  );
+  const daily_report_id = m4DailyDeterministicId(raw.daily_report_id, "daily-report:", "daily_envelope.daily_report.daily_report_id");
+  const supersedes_report_ref = raw.supersedes_report_ref === null
+    ? null
+    : m4DailyDeterministicId(raw.supersedes_report_ref, "daily-report:", "daily_envelope.daily_report.supersedes_report_ref");
+  if (supersedes_report_ref === daily_report_id) {
+    throw new Error("m4_secretary_daily_report_self_supersedes_invalid");
+  }
+  const status = m4DailyString(raw.status, "daily_envelope.daily_report.status");
+  if (status !== "GENERATED" && status !== "SUPERSEDED" && status !== "FAILED") {
+    throw new Error("m4_secretary_daily_report_status_invalid");
+  }
+  return Object.freeze({
+    daily_report_id,
+    daily_window_id: m4DailyDailyWindowId(raw.daily_window_id, "daily_envelope.daily_report.daily_window_id"),
+    report_version: m4DailyCanonicalRevision(raw.report_version, "daily_envelope.daily_report.report_version"),
+    status,
+    scope_source_watermark: m4DailyHash(raw.scope_source_watermark, "daily_envelope.daily_report.scope_source_watermark"),
+    projector_version: m4DailyCanonicalRevision(raw.projector_version, "daily_envelope.daily_report.projector_version"),
+    ordered_item_refs: m4DailyOrderedItemRefs(raw.ordered_item_refs, "daily_envelope.daily_report.ordered_item_refs"),
+    supersedes_report_ref,
+    generated_at_utc: m4DailyOptionalUtc(raw.generated_at_utc, "daily_envelope.daily_report.generated_at_utc"),
+  });
+}
+
+function m4DailyParseSchedulerRun(value: unknown): M4SecretarySchedulerRunDto {
+  const raw = m4DailyExactObject(
+    value,
+    [
+      "scheduler_run_id",
+      "configuration_revision",
+      "window_ref",
+      "scope_source_watermark_before",
+      "scope_source_watermark_after",
+      "admitted_material_event_count",
+      "agent_turn_count",
+      "model_invocation_count",
+      "outcome_code",
+      "recorded_at_utc",
+    ],
+    "daily_envelope.last_run",
+  );
+  const admitted_material_event_count = m4DailyCounter(
+    raw.admitted_material_event_count,
+    "daily_envelope.last_run.admitted_material_event_count",
+  );
+  const agent_turn_count = m4DailyCounter(raw.agent_turn_count, "daily_envelope.last_run.agent_turn_count");
+  const model_invocation_count = m4DailyCounter(
+    raw.model_invocation_count,
+    "daily_envelope.last_run.model_invocation_count",
+  );
+  if (
+    (admitted_material_event_count === 0 && (agent_turn_count !== 0 || model_invocation_count !== 0))
+  ) {
+    throw new Error("m4_secretary_daily_zero_event_counter_invalid");
+  }
+  return Object.freeze({
+    scheduler_run_id: m4DailySchedulerRunId(raw.scheduler_run_id, "daily_envelope.last_run.scheduler_run_id"),
+    configuration_revision: m4DailyCanonicalRevision(raw.configuration_revision, "daily_envelope.last_run.configuration_revision"),
+    window_ref: m4DailyDailyWindowId(raw.window_ref, "daily_envelope.last_run.window_ref"),
+    scope_source_watermark_before: m4DailyHash(
+      raw.scope_source_watermark_before,
+      "daily_envelope.last_run.scope_source_watermark_before",
+    ),
+    scope_source_watermark_after: m4DailyHash(
+      raw.scope_source_watermark_after,
+      "daily_envelope.last_run.scope_source_watermark_after",
+    ),
+    admitted_material_event_count,
+    agent_turn_count,
+    model_invocation_count,
+    outcome_code: m4DailyScrubbedCode(raw.outcome_code, "daily_envelope.last_run.outcome_code"),
+    recorded_at_utc: m4DailyOptionalUtc(raw.recorded_at_utc, "daily_envelope.last_run.recorded_at_utc"),
+  });
+}
+
+function m4DailyAllowedObject(value: unknown, allowedKeys: readonly string[], field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  const raw = value as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!allowedKeys.includes(key)) throw new Error(`m4_secretary_daily_unknown_${field}_field:${key}`);
+  }
+  return raw;
+}
+
+function m4DailyExactObject(value: unknown, expectedKeys: readonly string[], field: string): Record<string, unknown> {
+  const raw = m4DailyAllowedObject(value, expectedKeys, field);
+  for (const key of expectedKeys) {
+    if (!(key in raw)) throw new Error(`m4_secretary_daily_missing_${field}_field:${key}`);
+  }
+  return raw;
+}
+
+function m4DailyEnvelopeStatus(value: unknown, field: string): "READY" | "UNAVAILABLE" | "DISABLED" {
+  const status = m4DailyString(value, field);
+  if (status === "READY" || status === "UNAVAILABLE" || status === "DISABLED") return status;
+  throw new Error(`m4_secretary_daily_invalid_${field}`);
+}
+
+function m4DailySchemaVersion(value: unknown, field: string): typeof M4_SECRETARY_DAILY_SCHEMA_VERSION {
+  if (value === M4_SECRETARY_DAILY_SCHEMA_VERSION) return value;
+  throw new Error(`m4_secretary_daily_invalid_${field}`);
+}
+
+function m4DailyString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value || value.trim() !== value || value.length > 512) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return value;
+}
+
+function m4DailyHash(value: unknown, field: string): string {
+  const hash = m4DailyString(value, field);
+  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error(`m4_secretary_daily_invalid_${field}`);
+  return hash;
+}
+
+function m4DailyCanonicalRevision(value: unknown, field: string): string {
+  const revision = m4DailyString(value, field);
+  if (!/^(0|[1-9][0-9]{0,19})$/.test(revision) || BigInt(revision) > 18446744073709551615n) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return revision;
+}
+
+function m4DailyDeterministicId(value: unknown, prefix: string, field: string): string {
+  const reference = m4DailyString(value, field);
+  if (!new RegExp(`^${m4DailyRegexEscape(prefix)}[a-f0-9]{64}$`).test(reference)) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return reference;
+}
+
+function m4DailyDailyWindowId(value: unknown, field: string): string {
+  return m4DailyDeterministicId(value, "daily-window:", field);
+}
+
+function m4DailySchedulerRunId(value: unknown, field: string): string {
+  const reference = m4DailyString(value, field);
+  if (
+    !/^scheduler-run:[a-f0-9]{64}$/.test(reference)
+    && !/^scheduler-run:sha256:[a-f0-9]{64}$/.test(reference)
+  ) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return reference;
+}
+
+function m4DailyOrderedItemRefs(value: unknown, field: string): readonly string[] {
+  if (!Array.isArray(value)) throw new Error(`m4_secretary_daily_invalid_${field}`);
+  const refs = value.map((entry, index) => m4DailySourceBackedItemRef(entry, `${field}[${index}]`));
+  if (new Set(refs).size !== refs.length) {
+    throw new Error(`m4_secretary_daily_duplicate_${field}`);
+  }
+  return Object.freeze(refs);
+}
+
+function m4DailyCatchUpReceiptRefs(value: unknown, field: string): readonly string[] {
+  if (!Array.isArray(value)) throw new Error(`m4_secretary_daily_invalid_${field}`);
+  const refs = value.map((entry, index) => m4DailyDeterministicId(
+    entry,
+    "catch-up-truncation:",
+    `${field}[${index}]`,
+  ));
+  if (new Set(refs).size !== refs.length) {
+    throw new Error(`m4_secretary_daily_duplicate_${field}`);
+  }
+  return Object.freeze(refs);
+}
+
+function m4DailySourceBackedItemRef(value: unknown, field: string): string {
+  const reference = m4DailyString(value, field);
+  if (!/^(source|source-event|inbox|open-loop|personal-action|decision-projection):[a-f0-9]{64}$/.test(reference)) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return reference;
+}
+
+function m4DailyIanaTimezone(value: unknown, field: string): string {
+  const timezone = m4DailyString(value, field);
+  if (
+    !/^[A-Za-z0-9_+\-]+(?:\/[A-Za-z0-9_+\-]+)+$/.test(timezone)
+    || timezone.length > 128
+  ) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return timezone;
+}
+
+function m4DailyTimezoneRulesVersion(value: unknown, field: string): string {
+  const version = m4DailyString(value, field);
+  if (!/^timezone-rules:[a-f0-9]{64}$/.test(version)) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return version;
+}
+
+function m4DailyCounter(value: unknown, field: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || Object.is(value, -0)) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return value as number;
+}
+
+function m4DailyScrubbedCode(value: unknown, field: string): string {
+  const code = m4DailyString(value, field);
+  if (!/^[A-Z][A-Z0-9_]{0,95}$/.test(code)) throw new Error(`m4_secretary_daily_invalid_${field}`);
+  if ([
+    "RAW",
+    "TRANSCRIPT",
+    "PROMPT",
+    "PROVIDER",
+    "SECRET",
+    "CREDENTIAL",
+    "TOKEN",
+    "PASSWORD",
+    "CALLBACK",
+    "URL",
+    "PATH",
+    "BODY",
+  ].some((forbidden) => code.includes(forbidden))) {
+    throw new Error(`m4_secretary_daily_unscrubbed_${field}`);
+  }
+  return code;
+}
+
+function m4DailyOptionalScrubbedCode(value: unknown, field: string): string | null {
+  return value === null ? null : m4DailyScrubbedCode(value, field);
+}
+
+function m4DailyOptionalUtc(value: unknown, field: string): string | null {
+  return value === null ? null : m4DailyUtc(value, field);
+}
+
+function m4DailyUtc(value: unknown, field: string): string {
+  const timestamp = m4DailyString(value, field);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?Z$/.exec(timestamp);
+  if (!match) throw new Error(`m4_secretary_daily_invalid_${field}`);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = month === 2
+    ? (leapYear ? 29 : 28)
+    : [4, 6, 9, 11].includes(month)
+      ? 30
+      : [1, 3, 5, 7, 8, 10, 12].includes(month)
+        ? 31
+        : 0;
+  if (day < 1 || day > daysInMonth || hour > 23 || minute > 59 || second > 59) {
+    throw new Error(`m4_secretary_daily_invalid_${field}`);
+  }
+  return timestamp;
+}
+
+function m4DailyRegexEscape(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

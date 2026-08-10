@@ -3,6 +3,8 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+#[cfg(not(test))]
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, io::Write};
 mod acceptance_runtime_profile;
@@ -78,6 +80,7 @@ mod m3_role_session_schema;
 mod m4_secretary_domain;
 mod m4_secretary_read_model;
 mod m4_secretary_repository;
+mod m4_secretary_scheduler;
 mod m4_secretary_service;
 mod m4_secretary_schema;
 mod workbench_sqlite_preflight;
@@ -176,6 +179,8 @@ impl AppState {
                 },
             )
             .map_err(|error| error.code)?;
+        #[cfg(not(test))]
+        start_m4_secretary_scheduler(m4_secretary_repository.clone())?;
         Ok(Self {
             index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
             tasks_path: manifest_dir.join("../../tasks/README.md"),
@@ -185,6 +190,37 @@ impl AppState {
             m4_secretary_repository: Some(m4_secretary_repository),
         })
     }
+}
+
+/// The ordinary product owns one local mechanical timer.  Each wake-up only
+/// asks the M4 repository to process a typed TimerFired event; model/provider
+/// work remains behind the separate invocation ledger and is never started by
+/// this loop. Acceptance-profile composition never reaches this constructor.
+#[cfg(not(test))]
+fn start_m4_secretary_scheduler(
+    repository: m4_secretary_repository::M4SecretarySqliteRepository,
+) -> Result<(), String> {
+    std::thread::Builder::new()
+        .name("syn-m4-secretary-scheduler".to_string())
+        .spawn(move || {
+            if let Err(error) = repository.run_daily_scheduler_cycle(
+                m4_secretary_scheduler::M4SchedulerTrigger::StartupRecovery,
+            ) {
+                eprintln!("M4 Secretary scheduler startup unavailable:{}", error.code);
+            }
+            loop {
+                std::thread::sleep(Duration::from_secs(
+                    m4_secretary_scheduler::M4_SCHEDULER_TICK_SECONDS as u64,
+                ));
+                if let Err(error) = repository.run_daily_scheduler_cycle(
+                    m4_secretary_scheduler::M4SchedulerTrigger::TimerTick,
+                ) {
+                    eprintln!("M4 Secretary scheduler tick unavailable:{}", error.code);
+                }
+            }
+        })
+        .map(|_| ())
+        .map_err(|_| "m4_secretary_scheduler_thread_spawn_failed".to_string())
 }
 
 pub fn run_workflow_machine_cli(args: Vec<String>) -> Result<String, String> {

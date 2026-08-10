@@ -31,7 +31,9 @@ import {
 import {
   createSecretaryCoordinationActionRequest,
   parseSecretaryCoordinationActionReceipt,
+  parseSecretaryDailyReportEnvelope,
   parseSecretaryHomeContextEnvelope,
+  type M4SecretaryDailyReportEnvelopeDto,
 } from "./secretaryReadModel";
 import type { PageReadModelQueryInput, PageReadModelQueryResult } from "./pageReadModel";
 import type {
@@ -1787,6 +1789,27 @@ export function startJiaobanRoleSessionContinuation(
 export async function loadSecretaryHomeContext(): Promise<M4SecretaryHomeContextEnvelopeDto> {
   ensureTauriRuntime();
   return parseSecretaryHomeContextEnvelope(await invoke<unknown>("load_secretary_home_context"));
+}
+
+// M4C07 has no renderer-supplied selector, scope, timezone, window, or
+// recovery flag.  The server resolves all of those inputs and the parser
+// rejects a malformed result instead of exposing a stale/local fallback.
+export async function loadSecretaryDailyReport(): Promise<M4SecretaryDailyReportEnvelopeDto> {
+  ensureTauriRuntime();
+  return parseSecretaryDailyReportEnvelope(await invoke<unknown>("load_secretary_daily_report"));
+}
+
+export async function recoverSecretaryDailyCatchUp(
+  catchUpTruncationId: string,
+): Promise<M4SecretaryDailyReportEnvelopeDto> {
+  if (!/^catch-up-truncation:[a-f0-9]{64}$/.test(catchUpTruncationId)) {
+    throw new Error("m4_secretary_daily_catch_up_reference_invalid");
+  }
+  ensureTauriRuntime();
+  return parseSecretaryDailyReportEnvelope(await invoke<unknown>(
+    "recover_secretary_daily_catch_up",
+    { catchUpTruncationId },
+  ));
 }
 
 export async function operateSecretaryCoordination(

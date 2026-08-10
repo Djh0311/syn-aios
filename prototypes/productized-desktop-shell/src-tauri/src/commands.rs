@@ -8,6 +8,83 @@ fn load_workbench_snapshot(state: tauri::State<'_, AppState>) -> Result<Workbenc
     Ok(build_snapshot(&state, &index, &tasks_text))
 }
 
+fn m4_unavailable_daily_report(
+    reason: &str,
+) -> m4_secretary_read_model::M4SecretaryDailyReportEnvelope {
+    m4_secretary_read_model::M4SecretaryDailyReportEnvelope::Unavailable {
+        schema_version:
+            m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION.to_string(),
+        reason: reason.to_string(),
+    }
+}
+
+/// Explicit open/refresh is an admitted mechanical DailyBrief projection
+/// trigger. Identity, PersonalScope and timezone stay server-owned; the
+/// renderer supplies no path, scope, date, model purpose or provider input.
+#[tauri::command]
+async fn load_secretary_daily_report(
+    state: tauri::State<'_, AppState>,
+) -> Result<m4_secretary_read_model::M4SecretaryDailyReportEnvelope, String> {
+    #[cfg(not(test))]
+    {
+        let Some(repository) = state.m4_secretary_repository.clone() else {
+            return Ok(m4_unavailable_daily_report(
+                "M4_DAILY_REPOSITORY_UNAVAILABLE",
+            ));
+        };
+        return Ok(tauri::async_runtime::spawn_blocking(move || {
+            repository.refresh_and_read_daily_report().unwrap_or_else(|_| {
+                m4_unavailable_daily_report("M4_DAILY_REPORT_UNAVAILABLE")
+            })
+        })
+        .await
+        .unwrap_or_else(|_| m4_unavailable_daily_report("M4_DAILY_REPORT_UNAVAILABLE")));
+    }
+    #[cfg(test)]
+    {
+        let _ = state;
+        Ok(m4_unavailable_daily_report(
+            "M4_DAILY_REPOSITORY_UNAVAILABLE",
+        ))
+    }
+}
+
+/// Materialize one server-recorded catch-up batch. The renderer may return
+/// only the opaque receipt reference exposed by the daily read model; scope,
+/// timezone, calendar bounds and scheduler configuration stay server-owned.
+#[tauri::command]
+async fn recover_secretary_daily_catch_up(
+    state: tauri::State<'_, AppState>,
+    catch_up_truncation_id: String,
+) -> Result<m4_secretary_read_model::M4SecretaryDailyReportEnvelope, String> {
+    #[cfg(not(test))]
+    {
+        let Some(repository) = state.m4_secretary_repository.clone() else {
+            return Ok(m4_unavailable_daily_report(
+                "M4_DAILY_REPOSITORY_UNAVAILABLE",
+            ));
+        };
+        return Ok(tauri::async_runtime::spawn_blocking(move || {
+            repository
+                .recover_daily_catch_up(&catch_up_truncation_id)
+                .unwrap_or_else(|_| {
+                    m4_unavailable_daily_report("M4_CATCH_UP_RECOVERY_UNAVAILABLE")
+                })
+        })
+        .await
+        .unwrap_or_else(|_| {
+            m4_unavailable_daily_report("M4_CATCH_UP_RECOVERY_UNAVAILABLE")
+        }));
+    }
+    #[cfg(test)]
+    {
+        let _ = (state, catch_up_truncation_id);
+        Ok(m4_unavailable_daily_report(
+            "M4_DAILY_REPOSITORY_UNAVAILABLE",
+        ))
+    }
+}
+
 #[cfg(test)]
 mod m2a_execution_report_ingress_tests {
     use super::*;
