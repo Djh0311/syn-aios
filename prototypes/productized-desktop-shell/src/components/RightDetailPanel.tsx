@@ -2,6 +2,7 @@ import { SecretaryBrief } from "./SecretaryBrief";
 import { displayStatus, listRowTimeLabel, runtimeLogCategoryLabel } from "../lib/format";
 import { deriveRunQueueReadModel, type RunQueueReadModel } from "../lib/runQueue";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
+import type { SecretaryHomeReadModel, SecretaryTypedDeepLinkDescriptor } from "../lib/types/m4Secretary";
 import type { MemoryCandidateStoreV1, MemoryCaptureStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "../lib/types";
 import type { NavigateHandler, NavigationFocus, RightPanelKey, ViewKey } from "../lib/workbenchNavigation";
 
@@ -45,8 +46,12 @@ export function RightDetailPanel({
   memoryCaptureStore = null,
   memoryCandidateStore = null,
   secretaryContext,
+  secretaryHome,
+  secretaryHomePresentationState = null,
   onClose,
   onNavigate,
+  onOpenSecretaryDeepLink,
+  onReloadSecretaryHome,
   onReloadWorkflowState,
 }: {
   activePanel: RightPanelKey;
@@ -58,8 +63,12 @@ export function RightDetailPanel({
   memoryCaptureStore?: MemoryCaptureStoreV1 | null;
   memoryCandidateStore?: MemoryCandidateStoreV1 | null;
   secretaryContext: SecretaryContext;
+  secretaryHome?: SecretaryHomeReadModel;
+  secretaryHomePresentationState?: "loading" | "error" | null;
   onClose: () => void;
   onNavigate: NavigateHandler;
+  onOpenSecretaryDeepLink?: (descriptor: SecretaryTypedDeepLinkDescriptor) => void;
+  onReloadSecretaryHome?: () => void | Promise<void>;
   onReloadWorkflowState: () => void;
 }) {
   if (activePanel === "secretary") {
@@ -67,15 +76,25 @@ export function RightDetailPanel({
       <div className="right-detail">
         <section className="status-pane secretary-boundary-pane">
           <h2>
-            秘书只读摘要
+            持续 Secretary
             <button className="pane-close" type="button" onClick={onClose} aria-label="收起右侧详情">
               ×
             </button>
           </h2>
-          <p className="muted small-note">秘书入口只展示派生读模型；不写事实、不派发任务、不批准权限、不写正式记忆。</p>
+          <p className="muted small-note">只展示后端恢复的持续情境；不写来源事实、不派发任务、不创建 Todo。</p>
         </section>
         <section className="status-pane">
-          <SecretaryBrief context={secretaryContext} onOpenBoard={() => onNavigate("secretary_board")} />
+          {secretaryHome ? (
+            <SecretaryBrief
+              home={secretaryHome}
+              presentationState={secretaryHomePresentationState}
+              onOpenBoard={() => onNavigate("secretary_board")}
+              onOpenDeepLink={onOpenSecretaryDeepLink}
+              onReload={onReloadSecretaryHome ? () => void onReloadSecretaryHome() : undefined}
+            />
+          ) : (
+            <SecretaryBrief context={secretaryContext} onOpenBoard={() => onNavigate("secretary_board")} />
+          )}
         </section>
       </div>
     );

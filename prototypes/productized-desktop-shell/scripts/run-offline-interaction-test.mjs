@@ -45,6 +45,7 @@ const testEntries = [
   "tests/r4-page-read-model-runtime.test.ts",
   "tests/r4-page-selectors.test.ts",
   "tests/m3-isolated-desktop-acceptance.test.tsx",
+  "tests/m4c06-secretary-home-ui.test.tsx",
 ];
 
 try {

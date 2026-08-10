@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { renderActiveWorkbenchView } from "./components/ActiveWorkbenchView";
 import { RightDetailPanel } from "./components/RightDetailPanel";
+import { SecretaryBoardView } from "./components/SecretaryBoardView";
 import { WorkbenchShell } from "./components/WorkbenchShell";
 import { humanizeNoticeMessage } from "./lib/humanize";
 import {
@@ -29,6 +30,7 @@ import {
   loadMemoryPatternStore,
   loadObservationStore,
   loadPlanAuthorizationStore,
+  loadSecretaryHomeContext,
   loadProjectConsultationProposalStore,
   loadSystemStatusReadModel,
   loadWorkflowStateSnapshot,
@@ -55,6 +57,7 @@ import {
   recordProjectConsultationProposalDecision,
   recordUserResultDecision,
   queryWorkbenchPageReadModel,
+  operateSecretaryCoordination,
   previewFormalMemoryLifecycleOperation,
   previewTaskMemoryPacket,
   runProjectWorkflowAutomationPhaseA,
@@ -86,16 +89,29 @@ import {
 } from "./lib/browserPreviewWorkflowState";
 import { emptySnapshot } from "./lib/emptySnapshot";
 import { loadWorkbenchSnapshotFromPageQueries } from "./lib/pageReadModelRuntime";
-import { deriveSecretaryContext } from "./lib/secretaryReadModel";
+import {
+  deriveSecretaryContext,
+  deriveSecretaryHomeReadModel,
+  mintSecretaryCoordinationIdempotencyKey,
+} from "./lib/secretaryReadModel";
 import { setTauriWindowTitle } from "./lib/tauriWindow";
+import type {
+  M4SecretaryCoordinationActionRequestDto,
+  M4SecretaryHomeContextEnvelopeDto,
+  SecretaryHomeReadModel,
+  SecretaryTypedDeepLinkDescriptor,
+} from "./lib/types/m4Secretary";
 import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, GlobalSupervisorReviewStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, ProjectConsultationProposalStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "./lib/types";
 import { devNavItems, homeNavItem, primaryNavItems, settingsNavItem, workspaceRailItems } from "./lib/workbenchNavigation";
 import type { NavigateHandler, NavigationFocus, RightPanelKey, ViewKey } from "./lib/workbenchNavigation";
+import { HomeView, type SecretaryCoordinationIntent, type SecretaryCoordinationViewState } from "./views/HomeView";
 
 export { RightDetailPanel, workspaceRailItems };
 
 const viteEnv = import.meta.env ?? {};
 const browserPreviewEnabled = viteEnv.DEV === true && !("__TAURI_INTERNALS__" in window);
+
+type SecretaryHomeTransportState = "loading" | "loaded" | "error";
 
 const stageKInitialViewKeys = new Set<ViewKey>([
   homeNavItem.key,
@@ -130,6 +146,20 @@ export function App() {
   const [workflowStateLoading, setWorkflowStateLoading] = useState(false);
   const [workflowStateError, setWorkflowStateError] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemStatusReadModel | null>(null);
+  // The envelope is an authoritative transport result only.  No local role,
+  // scope, context, source owner or attention record is reconstructed here.
+  const [secretaryHomeEnvelope, setSecretaryHomeEnvelope] = useState<M4SecretaryHomeContextEnvelopeDto | null>(null);
+  const [secretaryHomeTransport, setSecretaryHomeTransport] = useState<SecretaryHomeTransportState>("loading");
+  const [secretaryHomeErrorCode, setSecretaryHomeErrorCode] = useState<string | null>(null);
+  const [secretaryCoordinationStates, setSecretaryCoordinationStates] = useState<
+    Readonly<Record<string, SecretaryCoordinationViewState>>
+  >({});
+  // Exact retry material only. It is never an identity/source cache and is
+  // discarded after a repository receipt. Keeping the full request makes an
+  // ambiguous transport retry reuse both its idempotency key and snooze time.
+  const secretaryCoordinationAttempts = useRef(
+    new Map<string, Promise<M4SecretaryCoordinationActionRequestDto>>(),
+  );
   const [blackboardCandidateStore, setBlackboardCandidateStore] = useState<BlackboardCandidateStoreV1 | null>(null);
   const [planAuthorizationStore, setPlanAuthorizationStore] = useState<PlanAuthorizationStoreV1 | null>(null);
   const [projectConsultationProposalStore, setProjectConsultationProposalStore] =
@@ -212,6 +242,7 @@ export function App() {
     setNotice("正在读取索引。");
     setError(false);
     setSystemStatus(null);
+    void reloadSecretaryHome();
     if (browserPreviewEnabled) {
       setSnapshot(browserPreviewSnapshot);
       setWorkflowState(browserPreviewWorkflowState);
@@ -240,6 +271,25 @@ export function App() {
     } catch {
       // 系统状态读模型是首页/顶栏的补充读面，读失败不能打断已有索引。
       setSystemStatus(null);
+    }
+  }
+
+  async function reloadSecretaryHome() {
+    setSecretaryHomeTransport("loading");
+    setSecretaryHomeEnvelope(null);
+    setSecretaryHomeErrorCode(null);
+    if (browserPreviewEnabled) {
+      setSecretaryHomeTransport("error");
+      setSecretaryHomeErrorCode("M4_SECRETARY_HOME_REQUIRES_TAURI");
+      return;
+    }
+    try {
+      const envelope = await loadSecretaryHomeContext();
+      setSecretaryHomeEnvelope(envelope);
+      setSecretaryHomeTransport("loaded");
+    } catch (loadError) {
+      setSecretaryHomeTransport("error");
+      setSecretaryHomeErrorCode(secretaryHomeSafeErrorCode(loadError));
     }
   }
 
@@ -737,6 +787,80 @@ export function App() {
   }, [filteredSnapshot, workflowState]);
 
   const displaySnapshot = filteredSnapshot ?? emptySnapshot;
+  const secretaryHome = useMemo<SecretaryHomeReadModel>(() => {
+    if (secretaryHomeTransport === "loading") return deriveSecretaryHomeReadModel({ phase: "loading" });
+    if (secretaryHomeEnvelope) return deriveSecretaryHomeReadModel({ home_context: secretaryHomeEnvelope });
+    return deriveSecretaryHomeReadModel({ phase: "error", error_code: secretaryHomeErrorCode });
+  }, [secretaryHomeEnvelope, secretaryHomeErrorCode, secretaryHomeTransport]);
+  const secretaryHomePresentationState = secretaryHomeTransport === "loading"
+    ? "loading"
+    : secretaryHomeTransport === "error"
+      ? "error"
+      : null;
+
+  const openSecretaryDeepLink = useCallback((descriptor: SecretaryTypedDeepLinkDescriptor) => {
+    // Route by the sealed descriptor kind only. The renderer never reads a
+    // path/URL or executes a payload; typed object fields only provide focus
+    // inside the fixed source-owner view.
+    if (descriptor.kind === "M4_SOURCE_ROUTE") {
+      navigate("projects", {
+        kind: descriptor.source_object_type,
+        id: descriptor.source_object_ref,
+      });
+      setNotice("已转到来源负责模块；事实详情只在来源模块读取。");
+      return;
+    }
+    setNotice("当前是降级摘要，尚未恢复可打开的来源负责模块。");
+  }, [navigate]);
+
+  const operateSecretaryAction = useCallback(async (intent: SecretaryCoordinationIntent) => {
+    const revision = intent.item.coordination_revision;
+    if (intent.item.source_authority !== "M4_COORDINATION" || revision === null) return;
+    const attemptRef = `${intent.item.item_ref}|${revision}|${intent.action}`;
+    let requestPromise = secretaryCoordinationAttempts.current.get(attemptRef);
+    if (!requestPromise) {
+      requestPromise = mintSecretaryCoordinationIdempotencyKey().then((idempotencyKey) => ({
+        action: intent.action,
+        item_ref: intent.item.item_ref,
+        expected_revision: revision,
+        idempotency_key: idempotencyKey,
+        ...(intent.snoozed_until_utc ? { snoozed_until_utc: intent.snoozed_until_utc } : {}),
+      }));
+      secretaryCoordinationAttempts.current.set(attemptRef, requestPromise);
+    }
+    setSecretaryCoordinationStates((current) => ({
+      ...current,
+      [intent.item.item_ref]: { phase: "pending", action: intent.action },
+    }));
+    let requestReady = false;
+    try {
+      const request = await requestPromise;
+      requestReady = true;
+      const receipt = await operateSecretaryCoordination(request);
+      secretaryCoordinationAttempts.current.delete(attemptRef);
+      setSecretaryCoordinationStates((current) => ({
+        ...current,
+        [intent.item.item_ref]: {
+          phase: "succeeded",
+          action: intent.action,
+          command_receipt_ref: receipt.command_receipt_ref,
+          outcome_code: receipt.outcome_code,
+        },
+      }));
+      await reloadSecretaryHome();
+    } catch (operationError) {
+      if (!requestReady) secretaryCoordinationAttempts.current.delete(attemptRef);
+      setSecretaryCoordinationStates((current) => ({
+        ...current,
+        [intent.item.item_ref]: {
+          phase: "failed",
+          action: intent.action,
+          error_code: secretaryHomeSafeErrorCode(operationError),
+        },
+      }));
+    }
+  }, []);
+
   const secretaryContext = useMemo(
     () =>
       deriveSecretaryContext({
@@ -774,6 +898,8 @@ export function App() {
       query={query}
       rightStats={rightStats}
       secretaryContext={secretaryContext}
+      secretaryHome={secretaryHome}
+      secretaryHomePresentationState={secretaryHomePresentationState}
       systemStatus={systemStatus}
       topbarReviewCount={topbarReviewCount}
       workflowState={workflowState}
@@ -785,9 +911,27 @@ export function App() {
       onConfirmAction={confirmAction}
       onQueryChange={setQuery}
       onReload={reload}
+      onReloadSecretaryHome={reloadSecretaryHome}
       onReloadWorkflowState={reloadWorkflowState}
+      onOpenSecretaryDeepLink={openSecretaryDeepLink}
     >
-        {renderActiveWorkbenchView({
+        {activeView === "home" ? (
+          <HomeView
+            secretaryHome={secretaryHome}
+            presentationState={secretaryHomePresentationState}
+            coordinationStates={secretaryCoordinationStates}
+            onOperateCoordination={(intent) => void operateSecretaryAction(intent)}
+            onOpenDeepLink={openSecretaryDeepLink}
+            onReloadSecretaryHome={() => void reloadSecretaryHome()}
+          />
+        ) : activeView === "secretary_board" ? (
+          <SecretaryBoardView
+            home={secretaryHome}
+            presentationState={secretaryHomePresentationState}
+            onOpenDeepLink={openSecretaryDeepLink}
+            onReloadSecretaryHome={() => void reloadSecretaryHome()}
+          />
+        ) : renderActiveWorkbenchView({
           view: activeView,
           snapshot: displaySnapshot,
           systemStatus,
@@ -857,4 +1001,9 @@ function messageOf(error: unknown): string {
 
 function legacyProductCommandBlockedNotice(commandName: string) {
   return `${commandName} 是旧真实执行入口，已在 K2.5 封存；请改走统一 Product Command，不再从普通 UI 调用 legacy Tauri wrapper。`;
+}
+
+function secretaryHomeSafeErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return /^[A-Za-z0-9_:-]{1,128}$/.test(message) ? message : "M4_SECRETARY_HOME_READ_FAILED";
 }

@@ -30,6 +30,26 @@ import type {
   WorkflowPermissionRequestRecord,
   WorkflowStateSnapshot,
 } from "./types";
+import type {
+  M4SecretaryApplicationOutcomeDto,
+  M4SecretaryCoordinationActionCode,
+  M4SecretaryCoordinationActionReceiptDto,
+  M4SecretaryCoordinationActionRequestDto,
+  M4SecretaryDeterministicBriefDto,
+  M4SecretaryHandoffOutcomeDto,
+  M4SecretaryHomeContextEnvelopeDto,
+  M4SecretaryInvocationReceiptDto,
+  M4SecretaryModelEnhancementOutcomeDto,
+  M4SecretaryOpaqueRef,
+  M4SecretaryPersonalActionBriefItemDto,
+  M4SecretarySourceBackedBriefItemDto,
+  SecretaryHomeAttentionItem,
+  SecretaryHomeHandoff,
+  SecretaryHomeModelEnhancement,
+  SecretaryHomeReadModel,
+  SecretaryProfessionalModuleEntry,
+  SecretaryTypedDeepLinkDescriptor,
+} from "./types/m4Secretary";
 
 export type SecretarySourceRef = {
   source_kind:
@@ -1344,4 +1364,693 @@ function memorySourceRef(id: string, label: string): SecretarySourceRef {
 
 function blackboardSourceRef(id: string, label: string): SecretarySourceRef {
   return { source_kind: "blackboard_entry", source_id: id, label };
+}
+
+// ===== M4C06 home context ==================================================
+//
+// The old `deriveSecretaryContext` above stays intact for compatibility with
+// the pre-M4 workbench.  New home consumers use the server-owned
+// `load_secretary_home_context` envelope below.  The renderer parses, projects
+// and sorts; it does not make ownership, scope, completion, or an executable
+// command payload authoritative.
+
+const M4_HOME_SCHEMA_VERSION = "syn.m4.secretary.home.v1" as const;
+const M4_HOME_MODEL_STATUSES = new Set(["AVAILABLE", "FAILED", "PENDING", "REPLAYED", "UNAVAILABLE"]);
+
+export function parseSecretaryHomeContextEnvelope(value: unknown): M4SecretaryHomeContextEnvelopeDto {
+  const raw = m4HomeAllowedObject(value, ["status", "application_outcome", "reason"], "home_context");
+  const status = m4HomeEnvelopeStatus(raw.status, "home_context.status");
+  if (status === "READY") {
+    if (!("application_outcome" in raw) || "reason" in raw) throw new Error("m4_secretary_home_invalid_ready_envelope");
+    return Object.freeze({
+      status,
+      application_outcome: m4HomeParseApplicationOutcome(raw.application_outcome),
+      reason: null,
+    });
+  }
+  if (!("reason" in raw) || "application_outcome" in raw) throw new Error("m4_secretary_home_invalid_unavailable_envelope");
+  return Object.freeze({
+    status,
+    application_outcome: null,
+    reason: m4HomeCode(raw.reason, "home_context.reason"),
+  });
+}
+
+const M4_HOME_COORDINATION_ACTIONS = new Set<M4SecretaryCoordinationActionCode>([
+  "INBOX_MARK_READ",
+  "INBOX_DISMISS",
+  "OPEN_LOOP_ACKNOWLEDGE",
+  "OPEN_LOOP_SNOOZE",
+  "OPEN_LOOP_CLOSE",
+  "OPEN_LOOP_DISMISS",
+  "OPEN_LOOP_REOPEN",
+  "OPEN_LOOP_CARRY_OVER",
+]);
+
+// The Rust boundary deliberately accepts only an opaque, content-addressed
+// reference for idempotency. Mint it from fresh entropy and hash that entropy
+// so the renderer never sends a plain UUID that the server will reject.
+export async function mintSecretaryCoordinationIdempotencyKey(): Promise<M4SecretaryOpaqueRef> {
+  if (!globalThis.crypto?.getRandomValues || !globalThis.crypto.subtle) {
+    throw new Error("m4_secretary_home_secure_entropy_unavailable");
+  }
+  const entropy = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(entropy);
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", entropy);
+  const digestHex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return m4HomeOpaqueReference(
+    `secretary-ui:sha256:${digestHex}`,
+    "coordination_request.idempotency_key",
+  );
+}
+
+// The request creator is intentionally a deny-unknown boundary.  It only
+// forwards the finite server enum, an existing item ref, a canonical revision,
+// an idempotency ref, and the one timestamp allowed for snoozing.
+export function createSecretaryCoordinationActionRequest(
+  input: M4SecretaryCoordinationActionRequestDto,
+): M4SecretaryCoordinationActionRequestDto {
+  const raw = m4HomeAllowedObject(
+    input,
+    ["action", "item_ref", "expected_revision", "idempotency_key", "snoozed_until_utc"],
+    "coordination_request",
+  );
+  for (const key of ["action", "item_ref", "expected_revision", "idempotency_key"]) {
+    if (!(key in raw)) throw new Error(`m4_secretary_home_missing_coordination_request_field:${key}`);
+  }
+  const action = m4HomeCode(raw.action, "coordination_request.action").toUpperCase() as M4SecretaryCoordinationActionCode;
+  if (!M4_HOME_COORDINATION_ACTIONS.has(action)) throw new Error("m4_secretary_home_invalid_coordination_action");
+  const item_ref = m4HomeReference(raw.item_ref, "coordination_request.item_ref");
+  const expected_revision = m4HomeCanonicalRevision(raw.expected_revision, "coordination_request.expected_revision");
+  const idempotency_key = m4HomeOpaqueReference(raw.idempotency_key, "coordination_request.idempotency_key");
+  const snoozed_until_utc = raw.snoozed_until_utc === undefined || raw.snoozed_until_utc === null
+    ? null
+    : m4HomeUtc(raw.snoozed_until_utc, "coordination_request.snoozed_until_utc");
+
+  const inboxAction = action === "INBOX_MARK_READ" || action === "INBOX_DISMISS";
+  if ((inboxAction && !item_ref.startsWith("inbox:")) || (!inboxAction && !item_ref.startsWith("open-loop:"))) {
+    throw new Error("m4_secretary_home_coordination_item_action_mismatch");
+  }
+  if ((action === "OPEN_LOOP_SNOOZE") !== (snoozed_until_utc !== null)) {
+    throw new Error("m4_secretary_home_coordination_snooze_matrix_invalid");
+  }
+
+  return Object.freeze({
+    action,
+    item_ref,
+    expected_revision,
+    idempotency_key,
+    ...(snoozed_until_utc === null ? {} : { snoozed_until_utc }),
+  });
+}
+
+export function parseSecretaryCoordinationActionReceipt(value: unknown): M4SecretaryCoordinationActionReceiptDto {
+  const raw = m4HomeExactObject(
+    value,
+    [
+      "command_receipt_ref",
+      "coordination_event_ref",
+      "aggregate_kind_code",
+      "item_ref",
+      "coordination_revision",
+      "outcome_code",
+      "replayed",
+    ],
+    "coordination_receipt",
+  );
+  if (typeof raw.replayed !== "boolean") throw new Error("m4_secretary_home_invalid_coordination_receipt.replayed");
+  return Object.freeze({
+    command_receipt_ref: m4HomeReference(raw.command_receipt_ref, "coordination_receipt.command_receipt_ref"),
+    coordination_event_ref: m4HomeReference(raw.coordination_event_ref, "coordination_receipt.coordination_event_ref"),
+    aggregate_kind_code: m4HomeCode(raw.aggregate_kind_code, "coordination_receipt.aggregate_kind_code"),
+    item_ref: m4HomeReference(raw.item_ref, "coordination_receipt.item_ref"),
+    coordination_revision: m4HomeCanonicalRevision(raw.coordination_revision, "coordination_receipt.coordination_revision"),
+    outcome_code: m4HomeCode(raw.outcome_code, "coordination_receipt.outcome_code"),
+    replayed: raw.replayed,
+  });
+}
+
+/**
+ * Derives the homepage-only projection.  `home_context` is authoritative
+ * whenever it is present.  `compatibility_context` is an explicit old
+ * Workbench summary fallback and is marked as such; it never restores a
+ * RoleSession, context ref, cwd, cached identity, or executable command.
+ */
+export function deriveSecretaryHomeReadModel(input: {
+  home_context?: M4SecretaryHomeContextEnvelopeDto | null;
+  compatibility_context?: SecretaryContext | null;
+  phase?: "loading" | "error";
+  error_code?: string | null;
+  handoff?: M4SecretaryHandoffOutcomeDto | null;
+}): SecretaryHomeReadModel {
+  const phase = input.phase ?? null;
+  if (phase === "loading" && !input.home_context) return m4HomeLoadingReadModel();
+
+  if (input.home_context?.status === "READY") {
+    return m4HomeReadyReadModel(input.home_context.application_outcome, input.handoff ?? null);
+  }
+
+  const unavailableCode = input.home_context?.status === "UNAVAILABLE"
+    ? input.home_context.reason
+    : phase === "error"
+      ? m4HomeSafeDisplayCode(input.error_code)
+      : null;
+  if (input.compatibility_context) {
+    return m4HomeCompatibilityReadModel(input.compatibility_context, unavailableCode ?? "M4_HOME_CONTEXT_NOT_LOADED");
+  }
+  if (unavailableCode) return m4HomeUnavailableReadModel(unavailableCode);
+  return m4HomeLoadingReadModel();
+}
+
+function m4HomeReadyReadModel(
+  outcome: M4SecretaryApplicationOutcomeDto,
+  handoff: M4SecretaryHandoffOutcomeDto | null,
+): SecretaryHomeReadModel {
+  const attentionItems = m4HomeSortAttention(outcome.deterministic_brief.attention_items.map(m4HomeAttentionFromM4));
+  const personalActions = Object.freeze(
+    outcome.deterministic_brief.personal_actions
+      .map(m4HomePersonalActionFromM4)
+      .sort((left, right) => left.personal_action_ref.localeCompare(right.personal_action_ref)),
+  );
+  const state = attentionItems.length || personalActions.length ? "ready" : "empty";
+  return Object.freeze({
+    schema_version: M4_HOME_SCHEMA_VERSION,
+    state,
+    source_authority: "M4_APPLICATION_SERVICE",
+    context: outcome.context,
+    deterministic_brief: Object.freeze({
+      brief_ref: outcome.deterministic_brief.brief_ref,
+      brief_hash: outcome.deterministic_brief.brief_hash,
+      context_ref: outcome.deterministic_brief.context_ref,
+      scope_source_watermark: outcome.deterministic_brief.scope_source_watermark,
+    }),
+    scope_source_watermark: outcome.context.scope_source_watermark,
+    role_session_recovery: Object.freeze({
+      status: "RESTORED",
+      role_session_ref: outcome.context.role_session_ref,
+      context_ref: outcome.context.context_ref,
+      recovery_code: null,
+    }),
+    attention_items: attentionItems,
+    personal_actions: personalActions,
+    module_entries: m4HomeModuleEntries(attentionItems),
+    model_enhancement: outcome.model_enhancement ?? m4HomeNotRequestedModelEnhancement(),
+    handoff: handoff ?? m4HomeNotLoadedHandoff(),
+    degradation_code: null,
+  });
+}
+
+function m4HomeUnavailableReadModel(recoveryCode: string): SecretaryHomeReadModel {
+  return Object.freeze({
+    schema_version: M4_HOME_SCHEMA_VERSION,
+    state: "degraded",
+    source_authority: "NONE",
+    context: null,
+    deterministic_brief: null,
+    scope_source_watermark: null,
+    role_session_recovery: Object.freeze({
+      status: "UNAVAILABLE",
+      role_session_ref: null,
+      context_ref: null,
+      recovery_code: m4HomeSafeDisplayCode(recoveryCode),
+    }),
+    attention_items: Object.freeze([]),
+    personal_actions: Object.freeze([]),
+    module_entries: Object.freeze([]),
+    model_enhancement: m4HomeNotRequestedModelEnhancement(),
+    handoff: m4HomeNotLoadedHandoff(),
+    degradation_code: m4HomeSafeDisplayCode(recoveryCode),
+  });
+}
+
+function m4HomeLoadingReadModel(): SecretaryHomeReadModel {
+  return Object.freeze({
+    schema_version: M4_HOME_SCHEMA_VERSION,
+    state: "loading",
+    source_authority: "NONE",
+    context: null,
+    deterministic_brief: null,
+    scope_source_watermark: null,
+    role_session_recovery: Object.freeze({ status: "LOADING", role_session_ref: null, context_ref: null, recovery_code: null }),
+    attention_items: Object.freeze([]),
+    personal_actions: Object.freeze([]),
+    module_entries: Object.freeze([]),
+    model_enhancement: m4HomeNotRequestedModelEnhancement(),
+    handoff: m4HomeNotLoadedHandoff(),
+    degradation_code: null,
+  });
+}
+
+function m4HomeCompatibilityReadModel(context: SecretaryContext, degradationCode: string): SecretaryHomeReadModel {
+  const attentionItems = m4HomeSortAttention([
+    ...context.risk_signals.flatMap((risk) =>
+      risk.source_refs.map((sourceRef, index) =>
+        m4HomeLegacyAttentionItem("RISK", risk.kind, risk.severity, sourceRef, index),
+      ),
+    ),
+    ...context.suggestions.flatMap((suggestion) =>
+      suggestion.source_refs.map((sourceRef, index) =>
+        m4HomeLegacyAttentionItem("SUGGESTION", suggestion.kind, suggestion.priority, sourceRef, index),
+      ),
+    ),
+  ]);
+  const actionEntries = context.action_proposals.map((proposal) => m4HomeLegacyModuleEntry(proposal.target_ref, proposal.proposal_id));
+  return Object.freeze({
+    schema_version: M4_HOME_SCHEMA_VERSION,
+    state: "degraded",
+    source_authority: "CANONICAL_SNAPSHOT_SUMMARY",
+    context: null,
+    deterministic_brief: null,
+    scope_source_watermark: null,
+    // A legacy summary is not a RoleSession.  In particular it cannot select a
+    // historical thread or an old local project/cwd as a continuation target.
+    role_session_recovery: Object.freeze({
+      status: "UNAVAILABLE",
+      role_session_ref: null,
+      context_ref: null,
+      recovery_code: m4HomeSafeDisplayCode(degradationCode),
+    }),
+    attention_items: attentionItems,
+    personal_actions: Object.freeze([]),
+    module_entries: m4HomeMergeModuleEntries([...m4HomeModuleEntries(attentionItems), ...actionEntries]),
+    model_enhancement: m4HomeNotRequestedModelEnhancement(),
+    handoff: m4HomeNotLoadedHandoff(),
+    degradation_code: m4HomeSafeDisplayCode(degradationCode),
+  });
+}
+
+function m4HomeAttentionFromM4(item: M4SecretarySourceBackedBriefItemDto): SecretaryHomeAttentionItem {
+  const deepLink: SecretaryTypedDeepLinkDescriptor = Object.freeze({
+    kind: "M4_SOURCE_ROUTE",
+    source_owner_ref: item.source_owner_ref,
+    source_object_ref: item.source_object_ref,
+    source_object_type: item.source_object_type,
+    source_route_ref: item.source_route_ref,
+    executable_payload: null,
+  });
+  return Object.freeze({
+    item_ref: item.item_ref,
+    item_kind_code: item.item_kind_code,
+    source_authority: "M4_COORDINATION",
+    source_owner: Object.freeze({ availability: "AVAILABLE", source_owner_ref: item.source_owner_ref }),
+    source_object_ref: item.source_object_ref,
+    source_object_type: item.source_object_type,
+    deep_link: deepLink,
+    why_code: item.why_code,
+    priority_rank: item.priority_rank,
+    priority_reason_code: item.priority_code,
+    status_code: item.status_code,
+    source_status_code: item.source_status_code,
+    last_change_at_utc: item.last_change_at_utc,
+    due_at_utc: item.due_at_utc,
+    change_hash: item.change_hash,
+    coordination_revision: item.coordination_revision,
+  });
+}
+
+function m4HomePersonalActionFromM4(item: M4SecretaryPersonalActionBriefItemDto) {
+  return Object.freeze({
+    personal_action_ref: item.personal_action_ref,
+    explicit_user_command_ref: item.explicit_user_command_ref,
+    status_code: item.status_code,
+    due_at_utc: item.due_at_utc,
+    revision_hash: item.revision_hash,
+    coordination_revision: item.coordination_revision,
+    source_authority: "M4_COORDINATION" as const,
+  });
+}
+
+function m4HomeLegacyAttentionItem(
+  section: "RISK" | "SUGGESTION",
+  reasonCode: string,
+  priority: "low" | "medium" | "high",
+  sourceRef: SecretarySourceRef,
+  index: number,
+): SecretaryHomeAttentionItem {
+  const identity = [section, reasonCode, sourceRef.source_kind, sourceRef.source_id, String(index)];
+  const objectRef = m4HomeLegacyOpaqueRef("legacy-summary-object", identity);
+  const routeRef = m4HomeLegacyOpaqueRef("legacy-summary-route", identity);
+  const deepLink: SecretaryTypedDeepLinkDescriptor = Object.freeze({
+    kind: "CANONICAL_SNAPSHOT_SUMMARY_ROUTE",
+    source_kind_code: m4HomeLegacyCode(sourceRef.source_kind),
+    summary_route_ref: routeRef,
+    executable_payload: null,
+  });
+  return Object.freeze({
+    item_ref: m4HomeLegacyOpaqueRef("legacy-summary-item", identity),
+    item_kind_code: section,
+    source_authority: "CANONICAL_SNAPSHOT_SUMMARY",
+    source_owner: Object.freeze({ availability: "NOT_EMITTED_BY_SUMMARY", source_owner_ref: null }),
+    source_object_ref: objectRef,
+    source_object_type: m4HomeLegacyCode(sourceRef.source_kind),
+    deep_link: deepLink,
+    why_code: m4HomeLegacyCode(reasonCode),
+    priority_rank: m4HomePriorityRank(priority),
+    priority_reason_code: m4HomeLegacyCode(priority),
+    // These are display-projection codes, not source business completion.
+    status_code: "SUMMARY_VISIBLE",
+    source_status_code: "NOT_EMITTED_BY_SUMMARY",
+    last_change_at_utc: null,
+    due_at_utc: null,
+    change_hash: m4HomeLegacyHash(identity),
+    coordination_revision: null,
+  });
+}
+
+function m4HomeLegacyModuleEntry(sourceRef: SecretarySourceRef, proposalId: string): SecretaryProfessionalModuleEntry {
+  const identity = ["ACTION_PROPOSAL", proposalId, sourceRef.source_kind, sourceRef.source_id];
+  return Object.freeze({
+    entry_ref: m4HomeLegacyOpaqueRef("legacy-module-entry", identity),
+    entry_kind: "SOURCE_OWNER_ROUTE",
+    source_owner: Object.freeze({ availability: "NOT_EMITTED_BY_SUMMARY", source_owner_ref: null }),
+    deep_link: Object.freeze({
+      kind: "CANONICAL_SNAPSHOT_SUMMARY_ROUTE",
+      source_kind_code: m4HomeLegacyCode(sourceRef.source_kind),
+      summary_route_ref: m4HomeLegacyOpaqueRef("legacy-summary-route", identity),
+      executable_payload: null,
+    }),
+    action_payload: null,
+  });
+}
+
+function m4HomeSortAttention(items: readonly SecretaryHomeAttentionItem[]): readonly SecretaryHomeAttentionItem[] {
+  return Object.freeze([...items].sort((left, right) => {
+    if (left.priority_rank !== right.priority_rank) return left.priority_rank - right.priority_rank;
+    const due = m4HomeCompareNullableUtc(left.due_at_utc, right.due_at_utc);
+    if (due !== 0) return due;
+    const changed = m4HomeCompareNullableUtc(right.last_change_at_utc, left.last_change_at_utc);
+    if (changed !== 0) return changed;
+    const owner = (left.source_owner.source_owner_ref ?? "").localeCompare(right.source_owner.source_owner_ref ?? "");
+    if (owner !== 0) return owner;
+    const object = left.source_object_ref.localeCompare(right.source_object_ref);
+    return object !== 0 ? object : left.item_ref.localeCompare(right.item_ref);
+  }));
+}
+
+function m4HomeModuleEntries(items: readonly SecretaryHomeAttentionItem[]): readonly SecretaryProfessionalModuleEntry[] {
+  return m4HomeMergeModuleEntries(items.map((item) => Object.freeze({
+    entry_ref: `secretary-owner-route:${item.item_ref}`,
+    entry_kind: "SOURCE_OWNER_ROUTE" as const,
+    source_owner: item.source_owner,
+    deep_link: item.deep_link,
+    action_payload: null,
+  })));
+}
+
+function m4HomeMergeModuleEntries(entries: readonly SecretaryProfessionalModuleEntry[]): readonly SecretaryProfessionalModuleEntry[] {
+  const byRoute = new Map<string, SecretaryProfessionalModuleEntry>();
+  for (const entry of entries) {
+    const routeKey = entry.deep_link.kind === "M4_SOURCE_ROUTE"
+      ? `m4:${entry.deep_link.source_route_ref}`
+      : `summary:${entry.deep_link.summary_route_ref}`;
+    if (!byRoute.has(routeKey)) byRoute.set(routeKey, entry);
+  }
+  return Object.freeze([...byRoute.values()].sort((left, right) => left.entry_ref.localeCompare(right.entry_ref)));
+}
+
+function m4HomeNotRequestedModelEnhancement(): SecretaryHomeModelEnhancement {
+  return Object.freeze({
+    status: "NOT_REQUESTED",
+    invocation_ref: null,
+    enhancement_ref: null,
+    enhancement_hash: null,
+    invocation_receipt: null,
+    recovery_code: null,
+  });
+}
+
+function m4HomeNotLoadedHandoff(): SecretaryHomeHandoff {
+  return Object.freeze({
+    status: "NOT_LOADED",
+    handoff_ref: null,
+    request_receipt_ref: null,
+    returned_receipt: null,
+    recovery_code: null,
+  });
+}
+
+function m4HomeParseApplicationOutcome(value: unknown): M4SecretaryApplicationOutcomeDto {
+  const raw = m4HomeExactObject(value, ["context", "deterministic_brief", "model_enhancement"], "application_outcome");
+  const context = m4HomeParseContext(raw.context);
+  const deterministic_brief = m4HomeParseDeterministicBrief(raw.deterministic_brief);
+  if (context.context_ref !== deterministic_brief.context_ref || context.scope_source_watermark !== deterministic_brief.scope_source_watermark) {
+    throw new Error("m4_secretary_home_context_brief_mismatch");
+  }
+  return Object.freeze({
+    context,
+    deterministic_brief,
+    model_enhancement: raw.model_enhancement === null ? null : m4HomeParseModelEnhancement(raw.model_enhancement),
+  });
+}
+
+function m4HomeParseContext(value: unknown) {
+  const raw = m4HomeExactObject(
+    value,
+    ["context_ref", "role_session_ref", "scope_ref", "scope_source_watermark", "snapshot_hash", "reconstruction_code"],
+    "application_outcome.context",
+  );
+  return Object.freeze({
+    context_ref: m4HomeReference(raw.context_ref, "context.context_ref"),
+    role_session_ref: m4HomeReference(raw.role_session_ref, "context.role_session_ref"),
+    scope_ref: m4HomeReference(raw.scope_ref, "context.scope_ref"),
+    scope_source_watermark: m4HomeHash(raw.scope_source_watermark, "context.scope_source_watermark"),
+    snapshot_hash: m4HomeHash(raw.snapshot_hash, "context.snapshot_hash"),
+    reconstruction_code: m4HomeCode(raw.reconstruction_code, "context.reconstruction_code"),
+  });
+}
+
+function m4HomeParseDeterministicBrief(value: unknown): M4SecretaryDeterministicBriefDto {
+  const raw = m4HomeExactObject(
+    value,
+    ["brief_ref", "brief_hash", "context_ref", "scope_source_watermark", "attention_items", "personal_actions"],
+    "application_outcome.deterministic_brief",
+  );
+  return Object.freeze({
+    brief_ref: m4HomeReference(raw.brief_ref, "brief.brief_ref"),
+    brief_hash: m4HomeHash(raw.brief_hash, "brief.brief_hash"),
+    context_ref: m4HomeReference(raw.context_ref, "brief.context_ref"),
+    scope_source_watermark: m4HomeHash(raw.scope_source_watermark, "brief.scope_source_watermark"),
+    attention_items: Object.freeze(m4HomeArray(raw.attention_items, "brief.attention_items").map(m4HomeParseBriefItem)),
+    personal_actions: Object.freeze(m4HomeArray(raw.personal_actions, "brief.personal_actions").map(m4HomeParsePersonalAction)),
+  });
+}
+
+function m4HomeParseBriefItem(value: unknown, index: number): M4SecretarySourceBackedBriefItemDto {
+  const field = `brief.attention_items[${index}]`;
+  const raw = m4HomeExactObject(
+    value,
+    [
+      "item_ref", "item_kind_code", "source_owner_ref", "source_object_ref", "source_object_type", "source_route_ref", "source_summary_ref",
+      "why_code", "priority_rank", "priority_code", "status_code", "source_status_code", "coordination_revision", "due_at_utc",
+      "last_change_at_utc", "change_hash",
+    ],
+    field,
+  );
+  return Object.freeze({
+    item_ref: m4HomeReference(raw.item_ref, `${field}.item_ref`),
+    item_kind_code: m4HomeCode(raw.item_kind_code, `${field}.item_kind_code`),
+    source_owner_ref: m4HomeReference(raw.source_owner_ref, `${field}.source_owner_ref`),
+    source_object_ref: m4HomeReference(raw.source_object_ref, `${field}.source_object_ref`),
+    source_object_type: m4HomeCode(raw.source_object_type, `${field}.source_object_type`),
+    source_route_ref: m4HomeReference(raw.source_route_ref, `${field}.source_route_ref`),
+    source_summary_ref: m4HomeReference(raw.source_summary_ref, `${field}.source_summary_ref`),
+    why_code: m4HomeCode(raw.why_code, `${field}.why_code`),
+    priority_rank: m4HomePriority(raw.priority_rank, `${field}.priority_rank`),
+    priority_code: m4HomeCode(raw.priority_code, `${field}.priority_code`),
+    status_code: m4HomeCode(raw.status_code, `${field}.status_code`),
+    source_status_code: m4HomeCode(raw.source_status_code, `${field}.source_status_code`),
+    coordination_revision: m4HomeCanonicalRevision(raw.coordination_revision, `${field}.coordination_revision`),
+    due_at_utc: m4HomeOptionalUtc(raw.due_at_utc, `${field}.due_at_utc`),
+    last_change_at_utc: m4HomeUtc(raw.last_change_at_utc, `${field}.last_change_at_utc`),
+    change_hash: m4HomeHash(raw.change_hash, `${field}.change_hash`),
+  });
+}
+
+function m4HomeParsePersonalAction(value: unknown, index: number): M4SecretaryPersonalActionBriefItemDto {
+  const field = `brief.personal_actions[${index}]`;
+  const raw = m4HomeExactObject(
+    value,
+    ["personal_action_ref", "explicit_user_command_ref", "status_code", "due_at_utc", "coordination_revision", "revision_hash"],
+    field,
+  );
+  return Object.freeze({
+    personal_action_ref: m4HomeReference(raw.personal_action_ref, `${field}.personal_action_ref`),
+    explicit_user_command_ref: m4HomeReference(raw.explicit_user_command_ref, `${field}.explicit_user_command_ref`),
+    status_code: m4HomeCode(raw.status_code, `${field}.status_code`),
+    due_at_utc: m4HomeOptionalUtc(raw.due_at_utc, `${field}.due_at_utc`),
+    coordination_revision: m4HomeCanonicalRevision(raw.coordination_revision, `${field}.coordination_revision`),
+    revision_hash: m4HomeHash(raw.revision_hash, `${field}.revision_hash`),
+  });
+}
+
+function m4HomeParseModelEnhancement(value: unknown): M4SecretaryModelEnhancementOutcomeDto {
+  const raw = m4HomeExactObject(
+    value,
+    ["status", "invocation_ref", "enhancement_ref", "enhancement_hash", "invocation_receipt", "recovery_code"],
+    "application_outcome.model_enhancement",
+  );
+  const status = m4HomeCode(raw.status, "model_enhancement.status").toUpperCase();
+  if (!M4_HOME_MODEL_STATUSES.has(status)) throw new Error("m4_secretary_home_invalid_model_status");
+  return Object.freeze({
+    status: status as M4SecretaryModelEnhancementOutcomeDto["status"],
+    invocation_ref: m4HomeOptionalReference(raw.invocation_ref, "model_enhancement.invocation_ref"),
+    enhancement_ref: m4HomeOptionalReference(raw.enhancement_ref, "model_enhancement.enhancement_ref"),
+    enhancement_hash: m4HomeOptionalHash(raw.enhancement_hash, "model_enhancement.enhancement_hash"),
+    invocation_receipt: raw.invocation_receipt === null ? null : m4HomeParseInvocationReceipt(raw.invocation_receipt),
+    recovery_code: m4HomeOptionalCode(raw.recovery_code, "model_enhancement.recovery_code"),
+  });
+}
+
+function m4HomeParseInvocationReceipt(value: unknown): M4SecretaryInvocationReceiptDto {
+  const raw = m4HomeExactObject(
+    value,
+    ["invocation_ref", "terminal_receipt_ref", "outcome_code", "result_ref", "result_hash", "error_code"],
+    "model_enhancement.invocation_receipt",
+  );
+  const result_ref = m4HomeOptionalReference(raw.result_ref, "invocation_receipt.result_ref");
+  const result_hash = m4HomeOptionalHash(raw.result_hash, "invocation_receipt.result_hash");
+  if ((result_ref === null) !== (result_hash === null)) throw new Error("m4_secretary_home_invalid_invocation_result_pair");
+  return Object.freeze({
+    invocation_ref: m4HomeReference(raw.invocation_ref, "invocation_receipt.invocation_ref"),
+    terminal_receipt_ref: m4HomeReference(raw.terminal_receipt_ref, "invocation_receipt.terminal_receipt_ref"),
+    outcome_code: m4HomeCode(raw.outcome_code, "invocation_receipt.outcome_code"),
+    result_ref,
+    result_hash,
+    error_code: m4HomeOptionalCode(raw.error_code, "invocation_receipt.error_code"),
+  });
+}
+
+function m4HomeEnvelopeStatus(value: unknown, field: string): "READY" | "UNAVAILABLE" {
+  const status = m4HomeCode(value, field).toUpperCase();
+  if (status === "READY" || status === "UNAVAILABLE") return status;
+  throw new Error(`m4_secretary_home_invalid_${field}`);
+}
+
+function m4HomeExactObject(value: unknown, allowedKeys: readonly string[], field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`m4_secretary_home_invalid_${field}`);
+  const raw = value as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!allowedKeys.includes(key)) throw new Error(`m4_secretary_home_unknown_${field}_field:${key}`);
+  }
+  for (const key of allowedKeys) {
+    if (!(key in raw)) throw new Error(`m4_secretary_home_missing_${field}_field:${key}`);
+  }
+  return raw;
+}
+
+function m4HomeAllowedObject(value: unknown, allowedKeys: readonly string[], field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`m4_secretary_home_invalid_${field}`);
+  const raw = value as Record<string, unknown>;
+  for (const key of Object.keys(raw)) {
+    if (!allowedKeys.includes(key)) throw new Error(`m4_secretary_home_unknown_${field}_field:${key}`);
+  }
+  return raw;
+}
+
+function m4HomeArray(value: unknown, field: string): readonly unknown[] {
+  if (!Array.isArray(value)) throw new Error(`m4_secretary_home_invalid_${field}`);
+  return Object.freeze([...value]);
+}
+
+function m4HomeString(value: unknown, field: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`m4_secretary_home_invalid_${field}`);
+  return value;
+}
+
+function m4HomeReference(value: unknown, field: string): string {
+  const reference = m4HomeString(value, field);
+  if (!/^[A-Za-z0-9._:-]{1,512}$/.test(reference)) throw new Error(`m4_secretary_home_unsafe_${field}`);
+  return reference;
+}
+
+function m4HomeOpaqueReference(value: unknown, field: string): string {
+  const reference = m4HomeReference(value, field);
+  if (!/^[a-z][a-z0-9._-]{0,63}:sha256:[a-f0-9]{64}$/.test(reference)) {
+    throw new Error(`m4_secretary_home_invalid_${field}`);
+  }
+  return reference;
+}
+
+function m4HomeHash(value: unknown, field: string): string {
+  const hash = m4HomeString(value, field);
+  if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error(`m4_secretary_home_invalid_${field}`);
+  return hash;
+}
+
+function m4HomeCode(value: unknown, field: string): string {
+  const code = m4HomeString(value, field);
+  if (!/^[A-Za-z0-9_:-]{1,128}$/.test(code)) throw new Error(`m4_secretary_home_invalid_${field}`);
+  return code;
+}
+
+function m4HomeOptionalReference(value: unknown, field: string): string | null {
+  return value === null ? null : m4HomeReference(value, field);
+}
+
+function m4HomeOptionalHash(value: unknown, field: string): string | null {
+  return value === null ? null : m4HomeHash(value, field);
+}
+
+function m4HomeOptionalCode(value: unknown, field: string): string | null {
+  return value === null ? null : m4HomeCode(value, field);
+}
+
+function m4HomeCanonicalRevision(value: unknown, field: string): string {
+  const revision = m4HomeString(value, field);
+  if (!/^(0|[1-9][0-9]*)$/.test(revision)) throw new Error(`m4_secretary_home_invalid_${field}`);
+  return revision;
+}
+
+function m4HomePriority(value: unknown, field: string): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0 || (value as number) > 255) {
+    throw new Error(`m4_secretary_home_invalid_${field}`);
+  }
+  return value as number;
+}
+
+function m4HomeUtc(value: unknown, field: string): string {
+  const timestamp = m4HomeString(value, field);
+  if (!Number.isFinite(Date.parse(timestamp))) throw new Error(`m4_secretary_home_invalid_${field}`);
+  return timestamp;
+}
+
+function m4HomeOptionalUtc(value: unknown, field: string): string | null {
+  return value === null ? null : m4HomeUtc(value, field);
+}
+
+function m4HomeCompareNullableUtc(left: string | null, right: string | null): number {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  const delta = Date.parse(left) - Date.parse(right);
+  return delta === 0 ? 0 : delta < 0 ? -1 : 1;
+}
+
+function m4HomePriorityRank(priority: "low" | "medium" | "high"): number {
+  return priority === "high" ? 1 : priority === "medium" ? 2 : 3;
+}
+
+function m4HomeLegacyCode(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "SUMMARY";
+}
+
+function m4HomeLegacyOpaqueRef(prefix: string, identity: readonly string[]): string {
+  return `${prefix}:${m4HomeLegacyHash(identity)}`;
+}
+
+// This is an opaque renderer display key, not a source identifier, security
+// digest, or backend command payload.  It ensures compatibility projection
+// JSON never repeats a raw legacy source id such as a path or URL.
+function m4HomeLegacyHash(identity: readonly string[]): string {
+  return Array.from({ length: 8 }, (_, index) => {
+    let hash = 0x811c9dc5;
+    for (const character of `${index}\u0000${identity.join("\u0000")}`) {
+      hash = Math.imul(hash ^ character.charCodeAt(0), 0x01000193) >>> 0;
+    }
+    return hash.toString(16).padStart(8, "0");
+  }).join("");
+}
+
+function m4HomeSafeDisplayCode(value: string | null | undefined): string {
+  return value && /^[A-Za-z0-9_:-]{1,128}$/.test(value) ? value : "M4_HOME_CONTEXT_READ_FAILED";
 }

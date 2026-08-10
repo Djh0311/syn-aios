@@ -309,6 +309,7 @@ pub(crate) struct M4SecretarySourceBackedBriefItem {
     pub(crate) item_ref: M4SecretaryTypedRef,
     pub(crate) item_kind_code: String,
     pub(crate) source_owner_ref: M4SecretaryTypedRef,
+    pub(crate) source_object_type: String,
     pub(crate) source_object_ref: M4SecretaryTypedRef,
     pub(crate) source_route_ref: M4SecretaryOpaqueRef,
     pub(crate) source_summary_ref: M4SecretaryOpaqueRef,
@@ -317,6 +318,9 @@ pub(crate) struct M4SecretarySourceBackedBriefItem {
     pub(crate) priority_code: String,
     pub(crate) status_code: String,
     pub(crate) source_status_code: String,
+    /// Canonical decimal M4 coordination revision. It stays a string so a
+    /// renderer never routes it through a lossy JavaScript number.
+    pub(crate) coordination_revision: String,
     pub(crate) due_at_utc: Option<String>,
     pub(crate) last_change_at_utc: String,
     pub(crate) change_hash: M4SecretaryHash,
@@ -329,6 +333,9 @@ pub(crate) struct M4SecretaryPersonalActionBriefItem {
     pub(crate) explicit_user_command_ref: M4SecretaryOpaqueRef,
     pub(crate) status_code: String,
     pub(crate) due_at_utc: Option<String>,
+    /// Canonical decimal M4 coordination revision, retained independently
+    /// from the opaque revision hash used for deterministic integrity.
+    pub(crate) coordination_revision: String,
     pub(crate) revision_hash: M4SecretaryHash,
 }
 
@@ -1115,6 +1122,7 @@ fn m4c05_brief_item_from_inbox(
         item.priority_reason_code.clone(),
         item.status.clone(),
         item.current_source_status.clone(),
+        item.revision,
         item.due_at_utc.clone(),
         item.last_source_change_at_utc.clone(),
         item.scrubbed_summary_ref.clone(),
@@ -1134,6 +1142,7 @@ fn m4c05_brief_item_from_open_loop(
         item.priority_reason_code.clone(),
         item.status.clone(),
         item.current_source_status.clone(),
+        item.revision,
         item.due_at_utc.clone(),
         item.last_source_change_at_utc.clone(),
         item.scrubbed_summary_ref.clone(),
@@ -1151,16 +1160,19 @@ fn m4c05_build_source_backed_item(
     priority_code: String,
     status_code: String,
     source_status_code: String,
+    coordination_revision: i64,
     due_at_utc: Option<String>,
     last_change_at_utc: String,
     source_summary_ref: String,
 ) -> Result<M4SecretarySourceBackedBriefItem, M4SecretaryServiceError> {
     let priority_rank = u8::try_from(priority_rank)
         .map_err(|_| M4SecretaryServiceError::new("m4c05_priority_rank_invalid"))?;
+    let coordination_revision = m4c05_canonical_revision_from_i64(coordination_revision)?;
     Ok(M4SecretarySourceBackedBriefItem {
         item_ref: M4SecretaryTypedRef::new(item_id.clone())?,
         item_kind_code: item_kind_code.to_string(),
         source_owner_ref: M4SecretaryTypedRef::new(source_owner_ref.clone())?,
+        source_object_type: source_link.object_type.clone(),
         source_object_ref: M4SecretaryTypedRef::new(
             source_link.canonical_source_object_id.clone(),
         )?,
@@ -1171,6 +1183,7 @@ fn m4c05_build_source_backed_item(
         priority_code,
         status_code,
         source_status_code,
+        coordination_revision: coordination_revision.clone(),
         due_at_utc,
         last_change_at_utc: last_change_at_utc.clone(),
         change_hash: M4SecretaryHash::of_texts(
@@ -1179,6 +1192,8 @@ fn m4c05_build_source_backed_item(
                 item_kind_code,
                 &item_id,
                 &source_owner_ref,
+                &source_link.object_type,
+                &coordination_revision,
                 &last_change_at_utc,
                 source_link.opaque_route_ref.as_str(),
             ],
@@ -1196,11 +1211,31 @@ fn m4c05_brief_personal_action(
         )?,
         status_code: action.status.clone(),
         due_at_utc: action.due_at_utc.clone(),
+        coordination_revision: m4c05_canonical_revision(&action.revision)?,
         revision_hash: M4SecretaryHash::of_texts(
             "syn.m4.secretary.personal-action-revision/v1",
             &[&action.personal_action_id, &action.revision],
         ),
     })
+}
+
+fn m4c05_canonical_revision(value: &str) -> Result<String, M4SecretaryServiceError> {
+    if value.is_empty()
+        || (value.len() > 1 && value.starts_with('0'))
+        || !value.bytes().all(|byte| byte.is_ascii_digit())
+        || value.parse::<u64>().is_err()
+    {
+        return Err(M4SecretaryServiceError::new(
+            "m4c05_coordination_revision_invalid",
+        ));
+    }
+    Ok(value.to_string())
+}
+
+fn m4c05_canonical_revision_from_i64(value: i64) -> Result<String, M4SecretaryServiceError> {
+    u64::try_from(value)
+        .map(|value| value.to_string())
+        .map_err(|_| M4SecretaryServiceError::new("m4c05_coordination_revision_invalid"))
 }
 
 fn m4c05_compare_brief_items(
@@ -1750,6 +1785,35 @@ mod tests {
             result_ref: Some(opaque("result", "returned")),
             result_hash: Some(hash("returned-result")),
         }
+    }
+
+    #[test]
+    fn m4c06_full_brief_serialization_retains_deep_link_and_canonical_revisions() {
+        let role = FakeRoleSessionPort::new();
+        let snapshot = FakeSnapshotPort::new(coordination_snapshot());
+        let handoff = FakeHandoffPort::new(FakeHandoffPhase::Unavailable);
+        let ledger = FakeInvocationLedger::new();
+        let model = FakeModelPort::successful();
+
+        let outcome = service(&role, &snapshot, &handoff, &ledger, &model)
+            .read_deterministic_brief()
+            .expect("build complete typed brief");
+        let value = serde_json::to_value(&outcome).expect("serialize full brief");
+        let attention_items = value["deterministic_brief"]["attention_items"]
+            .as_array()
+            .expect("serialized attention items");
+        assert_eq!(attention_items.len(), 2);
+        for item in attention_items {
+            assert_eq!(item["source_object_type"], "workflow_attention");
+            assert!(
+                item["coordination_revision"].is_string(),
+                "revision must remain a canonical decimal string"
+            );
+        }
+        assert_eq!(
+            value["deterministic_brief"]["personal_actions"][0]["coordination_revision"],
+            "1"
+        );
     }
 
     #[test]

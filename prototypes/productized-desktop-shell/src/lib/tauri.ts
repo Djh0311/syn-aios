@@ -28,7 +28,17 @@ import {
   type RoleSessionDirectory,
   type RoleSessionDirectoryRequest,
 } from "./roleSessionReadModel";
+import {
+  createSecretaryCoordinationActionRequest,
+  parseSecretaryCoordinationActionReceipt,
+  parseSecretaryHomeContextEnvelope,
+} from "./secretaryReadModel";
 import type { PageReadModelQueryInput, PageReadModelQueryResult } from "./pageReadModel";
+import type {
+  M4SecretaryCoordinationActionReceiptDto,
+  M4SecretaryCoordinationActionRequestDto,
+  M4SecretaryHomeContextEnvelopeDto,
+} from "./types/m4Secretary";
 import type {
   AdoptMemoryCandidateInput,
   AdoptMemoryCandidateOutput,
@@ -1766,6 +1776,27 @@ export function startJiaobanRoleSessionContinuation(
   const safeRequest = createRoleSessionContinuationStartRequest(request);
   ensureTauriRuntime();
   return invoke<void>("start_jiaoban_role_session_continuation", { request: safeRequest });
+}
+
+// M4C06 Secretary home context ------------------------------------------------
+//
+// The command has no renderer-supplied identity, scope, cwd, project locator,
+// provider, credential, prompt or callback.  The parser also keeps the M4
+// envelope as the authoritative homepage route rather than falling back to a
+// legacy Workbench snapshot.
+export async function loadSecretaryHomeContext(): Promise<M4SecretaryHomeContextEnvelopeDto> {
+  ensureTauriRuntime();
+  return parseSecretaryHomeContextEnvelope(await invoke<unknown>("load_secretary_home_context"));
+}
+
+export async function operateSecretaryCoordination(
+  request: M4SecretaryCoordinationActionRequestDto,
+): Promise<M4SecretaryCoordinationActionReceiptDto> {
+  const safeRequest = createSecretaryCoordinationActionRequest(request);
+  ensureTauriRuntime();
+  return parseSecretaryCoordinationActionReceipt(
+    await invoke<unknown>("operate_secretary_coordination", { request: safeRequest }),
+  );
 }
 
 // M3C07 isolated acceptance surface -----------------------------------------

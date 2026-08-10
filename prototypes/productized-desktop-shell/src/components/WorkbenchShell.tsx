@@ -2,6 +2,7 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { PermissionDialog } from "./PermissionDialog";
 import { RightDetailPanel, deriveRightPanelFeedCounts } from "./RightDetailPanel";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
+import type { SecretaryHomeReadModel, SecretaryTypedDeepLinkDescriptor } from "../lib/types/m4Secretary";
 import type {
   MemoryCandidateStoreV1,
   MemoryCaptureStoreV1,
@@ -40,6 +41,8 @@ export function WorkbenchShell({
   query,
   rightStats,
   secretaryContext,
+  secretaryHome,
+  secretaryHomePresentationState,
   systemStatus,
   topbarReviewCount,
   workflowState,
@@ -51,7 +54,9 @@ export function WorkbenchShell({
   onConfirmAction,
   onQueryChange,
   onReload,
+  onReloadSecretaryHome,
   onReloadWorkflowState,
+  onOpenSecretaryDeepLink,
 }: {
   activeRightPanel: RightPanelKey | null;
   activeView: ViewKey;
@@ -67,6 +72,8 @@ export function WorkbenchShell({
   query: string;
   rightStats: WorkbenchShellStat[];
   secretaryContext: SecretaryContext;
+  secretaryHome: SecretaryHomeReadModel;
+  secretaryHomePresentationState: "loading" | "error" | null;
   systemStatus: SystemStatusReadModel | null;
   topbarReviewCount: number;
   workflowState: WorkflowStateSnapshot | null;
@@ -78,7 +85,9 @@ export function WorkbenchShell({
   onConfirmAction: () => void | Promise<void>;
   onQueryChange: (value: string) => void;
   onReload: () => void | Promise<void>;
+  onReloadSecretaryHome: () => void | Promise<void>;
   onReloadWorkflowState: () => void;
+  onOpenSecretaryDeepLink: (descriptor: SecretaryTypedDeepLinkDescriptor) => void;
 }) {
   return (
     // 07-08 用户二调：秘书摘要归队右侧栏——与通知/待办同一套面板开法，不再单独浮层。
@@ -125,18 +134,19 @@ export function WorkbenchShell({
         notice={notice}
         rightStats={rightStats}
         secretaryContext={secretaryContext}
+        secretaryHome={secretaryHome}
+        secretaryHomePresentationState={secretaryHomePresentationState}
         workflowState={workflowState}
         workflowStateError={workflowStateError}
         workflowStateLoading={workflowStateLoading}
         onActiveRightPanelChange={onActiveRightPanelChange}
         onActiveViewChange={onActiveViewChange}
+        onOpenSecretaryDeepLink={onOpenSecretaryDeepLink}
+        onReloadSecretaryHome={onReloadSecretaryHome}
         onReloadWorkflowState={onReloadWorkflowState}
       />
 
-      <WorkbenchDock
-        onActiveRightPanelChange={onActiveRightPanelChange}
-        onActiveViewChange={onActiveViewChange}
-      />
+      <WorkbenchDock onActiveRightPanelChange={onActiveRightPanelChange} onActiveViewChange={onActiveViewChange} />
 
       <PermissionDialog
         action={pendingAction}
@@ -276,11 +286,15 @@ function WorkbenchStatusRail({
   notice,
   rightStats,
   secretaryContext,
+  secretaryHome,
+  secretaryHomePresentationState,
   workflowState,
   workflowStateError,
   workflowStateLoading,
   onActiveRightPanelChange,
   onActiveViewChange,
+  onOpenSecretaryDeepLink,
+  onReloadSecretaryHome,
   onReloadWorkflowState,
 }: {
   activeRightPanel: RightPanelKey | null;
@@ -292,11 +306,15 @@ function WorkbenchStatusRail({
   notice: string;
   rightStats: WorkbenchShellStat[];
   secretaryContext: SecretaryContext;
+  secretaryHome: SecretaryHomeReadModel;
+  secretaryHomePresentationState: "loading" | "error" | null;
   workflowState: WorkflowStateSnapshot | null;
   workflowStateError: string | null;
   workflowStateLoading: boolean;
   onActiveRightPanelChange: Dispatch<SetStateAction<RightPanelKey | null>>;
   onActiveViewChange: NavigateHandler;
+  onOpenSecretaryDeepLink: (descriptor: SecretaryTypedDeepLinkDescriptor) => void;
+  onReloadSecretaryHome: () => void | Promise<void>;
   onReloadWorkflowState: () => void;
 }) {
   // 角标数 = 抽屉里真数得出来的条数（同一处派生，见 deriveRightPanelFeedCounts）。
@@ -358,8 +376,12 @@ function WorkbenchStatusRail({
           memoryCaptureStore={memoryCaptureStore}
           memoryCandidateStore={memoryCandidateStore}
           secretaryContext={secretaryContext}
+          secretaryHome={secretaryHome}
+          secretaryHomePresentationState={secretaryHomePresentationState}
           onClose={() => onActiveRightPanelChange(null)}
           onNavigate={onActiveViewChange}
+          onOpenSecretaryDeepLink={onOpenSecretaryDeepLink}
+          onReloadSecretaryHome={onReloadSecretaryHome}
           onReloadWorkflowState={onReloadWorkflowState}
         />
       ) : null}
@@ -403,17 +425,14 @@ function WorkbenchDock({
         <span className="prompt" aria-hidden="true">›</span>
         <input
           className="dock-input"
-          readOnly
-          onFocus={() => onActiveRightPanelChange("secretary")}
-          onClick={() => onActiveRightPanelChange("secretary")}
-          aria-label="秘书对话输入预览，点击打开秘书"
+          disabled
+          placeholder="持续消息发送尚未接入"
+          aria-label="持续 Secretary 消息发送尚未接入"
+          aria-describedby="secretary-composer-unavailable"
         />
         <div className="dock-chips" aria-label="秘书快捷入口">
-          <button className="chip" type="button" onClick={() => onActiveRightPanelChange("secretary")}>解释</button>
-          <button className="chip" type="button" onClick={() => onActiveRightPanelChange("secretary")}>整理</button>
-          <button className="chip" type="button" onClick={() => onActiveRightPanelChange("secretary")}>提醒</button>
-          <button className="chip" type="button" onClick={() => onActiveRightPanelChange("secretary")}>影响面</button>
-          <button className="chip send" type="button" onClick={() => onActiveViewChange("secretary_board")}>打开秘书</button>
+          <span id="secretary-composer-unavailable" className="dock-unavailable">消息发送未接入</span>
+          <button className="chip send" type="button" onClick={() => onActiveViewChange("secretary_board")}>查看情境</button>
         </div>
       </div>
     </footer>
