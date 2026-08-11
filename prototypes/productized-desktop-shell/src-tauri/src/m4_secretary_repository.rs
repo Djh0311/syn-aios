@@ -45,9 +45,9 @@ use crate::m4_secretary_read_model::{
     build_m4_legacy_shadow_parity_report, m4_priority_reason_text, sort_m4_inbox_items,
     sort_m4_open_loops, sort_m4c04_coordination_snapshot, validate_m4c07_daily_report_envelope,
     M4AttentionSnapshot, M4CoordinationSnapshot, M4DecisionRead, M4InboxItemRead,
-    M4LegacyCanonicalReadSnapshot, M4LegacyCanonicalSourceRead, M4LegacyReadCandidate,
-    M4LegacyReadCompatibilityReport, M4NotificationRead, M4OpenLoopRead,
-    M4OwnerWritebackReceiptRead, M4PersonalActionRead, M4ReminderRead, M4SecretaryDailyBriefRead,
+    M4LegacyCanonicalReadSnapshot, M4LegacyCanonicalSourceRead, M4LegacyReadCompatibilityReport,
+    M4LegacyServerOwnedReadBatch, M4NotificationRead, M4OpenLoopRead, M4OwnerWritebackReceiptRead,
+    M4PersonalActionRead, M4ReminderRead, M4SecretaryDailyBriefRead,
     M4SecretaryDailyReportEnvelope, M4SecretaryDailyReportRead, M4SecretaryDailySchedulerRead,
     M4SecretarySchedulerRunRead, M4SourceLinkRead,
 };
@@ -856,7 +856,7 @@ impl M4SecretarySqliteRepository {
     pub(crate) fn read_legacy_read_compatibility_report(
         &self,
         scope_ref: &str,
-        legacy_candidates: &[M4LegacyReadCandidate],
+        server_owned_read: &M4LegacyServerOwnedReadBatch,
     ) -> Result<M4LegacyReadCompatibilityReport, M4SecretaryRepositoryError> {
         if scope_ref != m4_primary_scope_ref() {
             return Err(M4SecretaryRepositoryError::new(
@@ -873,7 +873,7 @@ impl M4SecretarySqliteRepository {
             .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))?;
         let canonical_snapshot =
             read_m4c08_legacy_canonical_snapshot_from_transaction(&transaction, scope_ref)?;
-        let report = build_m4_legacy_shadow_parity_report(&canonical_snapshot, legacy_candidates)
+        let report = build_m4_legacy_shadow_parity_report(&canonical_snapshot, server_owned_read)
             .map_err(M4SecretaryRepositoryError::new)?;
         transaction.commit().map_err(|error| {
             M4SecretaryRepositoryError::sqlite("m4c08_legacy_read_commit", error)
@@ -11019,7 +11019,7 @@ mod tests {
     ) -> crate::m4_secretary_read_model::M4LegacyReadCandidate {
         crate::m4_secretary_read_model::M4LegacyReadCandidate {
             legacy_source_kind:
-                crate::m4_secretary_read_model::M4LegacyReadSourceKind::SecretaryReadModelDeterministicSummary,
+                crate::m4_secretary_read_model::M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection,
             legacy_item_ref: Some(opaque("legacy-item", &input.canonical_source_object_id)),
             source_owner_ref: Some(input.source_owner_ref.clone()),
             scope_ref: Some(input.scope_ref.clone()),
@@ -14081,7 +14081,12 @@ mod tests {
 
         let report = fixture
             .repository
-            .read_legacy_read_compatibility_report(m4_primary_scope_ref(), &[candidate])
+            .read_legacy_read_compatibility_report(
+                m4_primary_scope_ref(),
+                &crate::m4_secretary_read_model::m4_legacy_test_right_rail_observed_batch(vec![
+                    candidate,
+                ]),
+            )
             .expect("canonical C08 shadow/parity report");
         assert_eq!(report.mode, "M4_PRIMARY_LEGACY_READ_ONLY_FALLBACK");
         assert_eq!(
@@ -14159,7 +14164,10 @@ mod tests {
             .repository
             .read_legacy_read_compatibility_report(
                 m4_primary_scope_ref(),
-                &[first_candidate, second_candidate],
+                &crate::m4_secretary_read_model::m4_legacy_test_right_rail_observed_batch(vec![
+                    first_candidate,
+                    second_candidate,
+                ]),
             )
             .expect("ambiguous legacy identity is report-only quarantine");
         assert_eq!(report.rows.len(), 2);
@@ -14214,8 +14222,7 @@ mod tests {
             .expect("read v2 watermark")
             .scope_source_watermark;
         let mut unknown_owner = legacy_candidate_from_source(&v2, v2_watermark.clone());
-        unknown_owner.legacy_source_kind =
-            crate::m4_secretary_read_model::M4LegacyReadSourceKind::RuntimeAttentionProjection;
+        unknown_owner.legacy_item_ref = Some(opaque("legacy-item", "unknown-owner"));
         unknown_owner.source_owner_ref = Some("unknown-owner".to_string());
         unknown_owner
             .source_link
@@ -14223,8 +14230,7 @@ mod tests {
             .expect("fixture source link")
             .source_owner_ref = "unknown-owner".to_string();
         let mut watermark_mismatch = legacy_candidate_from_source(&v2, v2_watermark);
-        watermark_mismatch.legacy_source_kind =
-            crate::m4_secretary_read_model::M4LegacyReadSourceKind::MemoryDailyInboxCandidate;
+        watermark_mismatch.legacy_item_ref = Some(opaque("legacy-item", "watermark-mismatch"));
         watermark_mismatch.source_owner_watermark = Some(opaque("watermark", "wrong"));
         let tables = [
             "m4_admitted_source_events",
@@ -14242,13 +14248,16 @@ mod tests {
             .map(|table| (*table, fixture.count(table)))
             .collect::<Vec<_>>();
 
-        let report = fixture
-            .repository
-            .read_legacy_read_compatibility_report(
-                m4_primary_scope_ref(),
-                &[watermark_mismatch, unknown_owner, stale],
-            )
-            .expect("fail-closed C08 report");
+        let report =
+            fixture
+                .repository
+                .read_legacy_read_compatibility_report(
+                    m4_primary_scope_ref(),
+                    &crate::m4_secretary_read_model::m4_legacy_test_right_rail_observed_batch(
+                        vec![watermark_mismatch, unknown_owner, stale],
+                    ),
+                )
+                .expect("fail-closed C08 report");
         assert!(report
             .rows
             .iter()
@@ -14257,7 +14266,10 @@ mod tests {
             report
                 .rows
                 .iter()
-                .find(|row| row.legacy_source_kind == "RUNTIME_ATTENTION_PROJECTION")
+                .find(|row| {
+                    row.legacy_item_ref.as_deref()
+                        == Some(opaque("legacy-item", "unknown-owner").as_str())
+                })
                 .and_then(|row| row.reason_code.as_deref()),
             Some("M4C08_CANONICAL_SOURCE_NOT_FOUND")
         );
@@ -14265,14 +14277,20 @@ mod tests {
             report
                 .rows
                 .iter()
-                .find(|row| row.legacy_source_kind == "MEMORY_DAILY_INBOX_CANDIDATE")
+                .find(|row| {
+                    row.legacy_item_ref.as_deref()
+                        == Some(opaque("legacy-item", "watermark-mismatch").as_str())
+                })
                 .and_then(|row| row.reason_code.as_deref()),
             Some("M4C08_SOURCE_OWNER_WATERMARK_MISMATCH")
         );
         let stale_row = report
             .rows
             .iter()
-            .find(|row| row.legacy_source_kind == "SECRETARY_READ_MODEL_DETERMINISTIC_SUMMARY")
+            .find(|row| {
+                row.legacy_item_ref.as_deref()
+                    == Some(opaque("legacy-item", "m4c08-source").as_str())
+            })
             .expect("stale legacy source row");
         assert_eq!(
             stale_row.reason_code.as_deref(),

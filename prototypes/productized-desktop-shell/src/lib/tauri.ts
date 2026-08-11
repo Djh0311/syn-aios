@@ -1803,10 +1803,10 @@ export function startJiaobanRoleSessionContinuation(
 // envelope as the authoritative homepage route rather than falling back to a
 // legacy Workbench snapshot.
 
-// M4C08 sends no renderer data. The backend fixes the inventory and scope,
-// re-reads canonical sources in a read-only transaction and returns a guarded
-// report; no legacy summary, tuple, label, route guess or action payload
-// crosses this command boundary.
+// M4R06 sends no renderer data. The backend fixes the reader registry and
+// scope, performs the server-owned read plus canonical re-read in a read-only
+// transaction, and returns a guarded report; no legacy summary, tuple, label,
+// route guess or action payload crosses this command boundary.
 export async function loadSecretaryLegacyReadCompatibilityReport(): Promise<M4LegacyReadCompatibilityReportEnvelopeDto> {
   ensureTauriRuntime();
   return parseSecretaryLegacyReadCompatibilityReportEnvelope(

@@ -644,7 +644,7 @@ pub(crate) enum M4LegacyReadSourceKind {
 }
 
 impl M4LegacyReadSourceKind {
-    const ALL: [Self; 5] = [
+    pub(crate) const ALL: [Self; 5] = [
         Self::SecretaryReadModelDeterministicSummary,
         Self::RightRailNotificationAndTodoProjection,
         Self::RuntimeAttentionProjection,
@@ -687,28 +687,220 @@ pub(crate) fn m4_legacy_read_source_inventory() -> Vec<M4LegacyReadSourceInvento
         .collect()
 }
 
-/// The public C08 command receives no renderer data. Its fixed, server-owned
-/// inventory intentionally carries no join tuple, so each ordinary-product
-/// candidate stays report-only quarantine until an internal adapter supplies
-/// an exact typed source tuple.
-pub(crate) fn m4_legacy_read_inventory_only_candidates() -> Vec<M4LegacyReadCandidate> {
-    M4LegacyReadSourceKind::ALL
+/// The reader receipt describes a real server-side attempt before a candidate
+/// reaches the canonical comparator.  It deliberately has a different state
+/// space from a comparator row: an empty or structurally unjoinable legacy
+/// surface is not a malformed candidate and must never be manufactured into
+/// one merely to make the old C08 row shape fit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M4LegacyReaderReadState {
+    Observed,
+    Empty,
+    Unjoinable,
+    Quarantined,
+}
+
+impl M4LegacyReaderReadState {
+    pub(crate) fn code(self) -> &'static str {
+        match self {
+            Self::Observed => "OBSERVED",
+            Self::Empty => "EMPTY",
+            Self::Unjoinable => "UNJOINABLE",
+            Self::Quarantined => "QUARANTINED",
+        }
+    }
+}
+
+pub(crate) const M4R06_EMPTY_SERVER_SURFACE: &str = "M4R06_EMPTY_SERVER_SURFACE";
+pub(crate) const M4R06_UNJOINABLE_NO_EXACT_TUPLE: &str = "M4R06_UNJOINABLE_NO_EXACT_TUPLE";
+pub(crate) const M4R06_READER_UNAVAILABLE: &str = "M4R06_READER_UNAVAILABLE";
+pub(crate) const M4R06_READER_REJECTED: &str = "M4R06_READER_REJECTED";
+
+/// A portable, value-free receipt for one member of the fixed legacy-reader
+/// allowlist.  `reader_id` and `source_surface_code` are closed per kind so a
+/// renderer cannot reinterpret a receipt as a route, callback, or owner port.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4LegacyReaderReceipt {
+    pub(crate) legacy_source_kind: String,
+    pub(crate) reader_id: String,
+    pub(crate) source_surface_code: String,
+    pub(crate) read_state: String,
+    pub(crate) reason_code: Option<String>,
+    pub(crate) legacy_reader_adapter_id: Option<String>,
+    pub(crate) candidate_count: u64,
+    pub(crate) complete_tuple_count: u64,
+}
+
+impl M4LegacyReaderReceipt {
+    pub(crate) fn new(
+        legacy_source_kind: M4LegacyReadSourceKind,
+        read_state: M4LegacyReaderReadState,
+        reason_code: Option<&str>,
+        legacy_reader_adapter_id: Option<&str>,
+        candidate_count: u64,
+        complete_tuple_count: u64,
+    ) -> Self {
+        Self {
+            legacy_source_kind: legacy_source_kind.code().to_string(),
+            reader_id: m4r06_reader_id(legacy_source_kind).to_string(),
+            source_surface_code: m4r06_source_surface_code(legacy_source_kind).to_string(),
+            read_state: read_state.code().to_string(),
+            reason_code: reason_code.map(str::to_string),
+            legacy_reader_adapter_id: legacy_reader_adapter_id.map(str::to_string),
+            candidate_count,
+            complete_tuple_count,
+        }
+    }
+}
+
+/// One complete, fixed-order server-owned read.  Only `candidates` enter the
+/// canonical comparator; the five receipts preserve all non-candidate states.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M4LegacyServerOwnedReadBatch {
+    pub(crate) reader_receipts: Vec<M4LegacyReaderReceipt>,
+    pub(crate) candidates: Vec<M4LegacyReadCandidate>,
+}
+
+fn m4r06_reader_id(kind: M4LegacyReadSourceKind) -> &'static str {
+    match kind {
+        M4LegacyReadSourceKind::SecretaryReadModelDeterministicSummary => {
+            "m4-legacy-reader:secretary-read-model/v1"
+        }
+        M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection => {
+            "m4-legacy-reader:right-rail-work-item/v1"
+        }
+        M4LegacyReadSourceKind::RuntimeAttentionProjection => {
+            "m4-legacy-reader:runtime-attention/v1"
+        }
+        M4LegacyReadSourceKind::ReactPendingActionVisibility => {
+            "m4-legacy-reader:react-pending-action/v1"
+        }
+        M4LegacyReadSourceKind::MemoryDailyInboxCandidate => {
+            "m4-legacy-reader:memory-daily-inbox/v1"
+        }
+    }
+}
+
+fn m4r06_source_surface_code(kind: M4LegacyReadSourceKind) -> &'static str {
+    match kind {
+        M4LegacyReadSourceKind::SecretaryReadModelDeterministicSummary => {
+            "SERVER_LEGACY_SECRETARY_READ_MODEL_PRIMITIVES"
+        }
+        M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection => {
+            "M2_WORK_ITEM_RIGHT_RAIL_PROJECTION"
+        }
+        M4LegacyReadSourceKind::RuntimeAttentionProjection => "SERVER_RUNTIME_ATTENTION_PROJECTION",
+        M4LegacyReadSourceKind::ReactPendingActionVisibility => {
+            "RENDERER_LOCAL_PENDING_ACTION_VISIBILITY"
+        }
+        M4LegacyReadSourceKind::MemoryDailyInboxCandidate => "SERVER_MEMORY_DAILY_CANDIDATE_STORE",
+    }
+}
+
+fn validate_m4r06_server_owned_read_batch(
+    server_owned_read: &M4LegacyServerOwnedReadBatch,
+) -> Result<(), String> {
+    validate_m4r06_reader_receipts(&server_owned_read.reader_receipts)?;
+    for (receipt, kind) in server_owned_read
+        .reader_receipts
+        .iter()
+        .zip(M4LegacyReadSourceKind::ALL)
+    {
+        let complete_candidates = server_owned_read
+            .candidates
+            .iter()
+            .filter(|candidate| candidate.legacy_source_kind == kind)
+            .count() as u64;
+        if complete_candidates != receipt.complete_tuple_count {
+            return Err("m4r06_legacy_reader_candidate_count_invalid".to_string());
+        }
+    }
+    Ok(())
+}
+
+fn validate_m4r06_reader_receipts(reader_receipts: &[M4LegacyReaderReceipt]) -> Result<(), String> {
+    if reader_receipts.len() != M4LegacyReadSourceKind::ALL.len() {
+        return Err("m4r06_legacy_reader_receipts_invalid".to_string());
+    }
+    for (receipt, kind) in reader_receipts.iter().zip(M4LegacyReadSourceKind::ALL) {
+        if receipt.legacy_source_kind != kind.code()
+            || receipt.reader_id != m4r06_reader_id(kind)
+            || receipt.source_surface_code != m4r06_source_surface_code(kind)
+        {
+            return Err("m4r06_legacy_reader_receipts_invalid".to_string());
+        }
+        let adapter_is_work_item = receipt.legacy_reader_adapter_id.as_deref()
+            == Some(crate::m4_source_owner_schema::M4_WORK_ITEM_SOURCE_ADAPTER_ID);
+        match receipt.read_state.as_str() {
+            "OBSERVED"
+                if kind == M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection
+                    && receipt.reason_code.is_none()
+                    && adapter_is_work_item
+                    && receipt.candidate_count > 0
+                    && receipt.complete_tuple_count == receipt.candidate_count => {}
+            "EMPTY"
+                if receipt.reason_code.as_deref() == Some(M4R06_EMPTY_SERVER_SURFACE)
+                    && receipt.legacy_reader_adapter_id.is_none()
+                    && receipt.candidate_count == 0
+                    && receipt.complete_tuple_count == 0 => {}
+            "UNJOINABLE"
+                if receipt.reason_code.as_deref() == Some(M4R06_UNJOINABLE_NO_EXACT_TUPLE)
+                    && receipt.legacy_reader_adapter_id.is_none()
+                    && receipt.complete_tuple_count == 0 => {}
+            "QUARANTINED"
+                if matches!(
+                    receipt.reason_code.as_deref(),
+                    Some(M4R06_READER_UNAVAILABLE | M4R06_READER_REJECTED)
+                ) && receipt.legacy_reader_adapter_id.is_none()
+                    && receipt.complete_tuple_count == 0 => {}
+            _ => return Err("m4r06_legacy_reader_receipt_invalid".to_string()),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn m4_legacy_test_right_rail_observed_batch(
+    candidates: Vec<M4LegacyReadCandidate>,
+) -> M4LegacyServerOwnedReadBatch {
+    assert!(candidates.iter().all(|candidate| {
+        candidate.legacy_source_kind
+            == M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection
+    }));
+    let reader_receipts = M4LegacyReadSourceKind::ALL
         .into_iter()
-        .map(|legacy_source_kind| M4LegacyReadCandidate {
-            legacy_source_kind,
-            legacy_item_ref: None,
-            source_owner_ref: None,
-            scope_ref: None,
-            source_type: None,
-            canonical_source_object_id: None,
-            source_revision: None,
-            source_owner_watermark: None,
-            source_link: None,
-            source_status_code: None,
-            priority_reason_code: None,
-            scope_source_watermark: None,
+        .map(|kind| {
+            let candidate_count = candidates
+                .iter()
+                .filter(|candidate| candidate.legacy_source_kind == kind)
+                .count() as u64;
+            if kind == M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection
+                && candidate_count > 0
+            {
+                M4LegacyReaderReceipt::new(
+                    kind,
+                    M4LegacyReaderReadState::Observed,
+                    None,
+                    Some(crate::m4_source_owner_schema::M4_WORK_ITEM_SOURCE_ADAPTER_ID),
+                    candidate_count,
+                    candidate_count,
+                )
+            } else {
+                M4LegacyReaderReceipt::new(
+                    kind,
+                    M4LegacyReaderReadState::Empty,
+                    Some(M4R06_EMPTY_SERVER_SURFACE),
+                    None,
+                    0,
+                    0,
+                )
+            }
         })
-        .collect()
+        .collect();
+    M4LegacyServerOwnedReadBatch {
+        reader_receipts,
+        candidates,
+    }
 }
 
 /// A scrubbed, non-authoritative observation from one legacy read surface.
@@ -784,6 +976,7 @@ pub(crate) struct M4LegacyReadCompatibilityReport {
     pub(crate) scope_ref: String,
     pub(crate) scope_source_watermark: String,
     pub(crate) inventory: Vec<M4LegacyReadSourceInventoryEntry>,
+    pub(crate) reader_receipts: Vec<M4LegacyReaderReceipt>,
     pub(crate) rows: Vec<M4LegacyReadParityRow>,
 }
 
@@ -839,6 +1032,7 @@ pub(crate) struct M4LegacyReadCompatibilityReportDto {
     pub(crate) scope_ref: String,
     pub(crate) scope_source_watermark: String,
     pub(crate) inventory: Vec<M4LegacyReadSourceInventoryEntry>,
+    pub(crate) reader_receipts: Vec<M4LegacyReaderReceipt>,
     pub(crate) rows: Vec<M4LegacyReadParityRowDto>,
 }
 
@@ -879,6 +1073,7 @@ impl From<M4LegacyReadCompatibilityReport> for M4LegacyReadCompatibilityReportDt
             scope_ref: report.scope_ref,
             scope_source_watermark: report.scope_source_watermark,
             inventory: report.inventory,
+            reader_receipts: report.reader_receipts,
             rows: report.rows.into_iter().map(Into::into).collect(),
         }
     }
@@ -938,11 +1133,12 @@ impl From<M4SourceLinkRead> for M4LegacyReadSourceLinkDto {
 /// returned read result; this function has no storage or owner side effects.
 pub(crate) fn build_m4_legacy_shadow_parity_report(
     canonical_snapshot: &M4LegacyCanonicalReadSnapshot,
-    legacy_candidates: &[M4LegacyReadCandidate],
+    server_owned_read: &M4LegacyServerOwnedReadBatch,
 ) -> Result<M4LegacyReadCompatibilityReport, String> {
     validate_m4c08_canonical_snapshot(canonical_snapshot)?;
+    validate_m4r06_server_owned_read_batch(server_owned_read)?;
 
-    let mut ordered_candidates = legacy_candidates.to_vec();
+    let mut ordered_candidates = server_owned_read.candidates.to_vec();
     ordered_candidates.sort_by(|left, right| {
         (
             left.legacy_source_kind.code(),
@@ -986,6 +1182,7 @@ pub(crate) fn build_m4_legacy_shadow_parity_report(
         scope_ref: canonical_snapshot.scope_ref.clone(),
         scope_source_watermark: canonical_snapshot.scope_source_watermark.clone(),
         inventory: m4_legacy_read_source_inventory(),
+        reader_receipts: server_owned_read.reader_receipts.clone(),
         rows,
     };
     validate_m4c08_legacy_read_compatibility_report(&report)?;
@@ -1323,6 +1520,22 @@ fn validate_m4c08_legacy_read_compatibility_report(
         || report.inventory != m4_legacy_read_source_inventory()
     {
         return Err("m4c08_compatibility_report_invalid".to_string());
+    }
+    validate_m4r06_reader_receipts(&report.reader_receipts)
+        .map_err(|_| "m4c08_compatibility_report_invalid".to_string())?;
+    for (receipt, kind) in report
+        .reader_receipts
+        .iter()
+        .zip(M4LegacyReadSourceKind::ALL)
+    {
+        let row_count = report
+            .rows
+            .iter()
+            .filter(|row| row.legacy_source_kind == kind.code())
+            .count() as u64;
+        if row_count != receipt.complete_tuple_count {
+            return Err("m4c08_compatibility_report_invalid".to_string());
+        }
     }
     let mut canonical_by_legacy_identity =
         BTreeMap::<(String, String), (String, M4LegacyCanonicalSourceRead)>::new();
@@ -1855,7 +2068,7 @@ mod tests {
             sources: vec![canonical.clone()],
         };
         let exact = M4LegacyReadCandidate {
-            legacy_source_kind: M4LegacyReadSourceKind::SecretaryReadModelDeterministicSummary,
+            legacy_source_kind: M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection,
             legacy_item_ref: Some(opaque("legacy-item", 'c')),
             source_owner_ref: Some(canonical.source_owner_ref.clone()),
             scope_ref: Some(canonical.scope_ref.clone()),
@@ -1868,27 +2081,12 @@ mod tests {
             priority_reason_code: Some(canonical.priority_reason_code.clone()),
             scope_source_watermark: Some(snapshot.scope_source_watermark.clone()),
         };
-        let inventory_only = M4LegacyReadCandidate {
-            legacy_source_kind: M4LegacyReadSourceKind::MemoryDailyInboxCandidate,
-            legacy_item_ref: None,
-            source_owner_ref: None,
-            scope_ref: None,
-            source_type: None,
-            canonical_source_object_id: None,
-            source_revision: None,
-            source_owner_watermark: None,
-            source_link: None,
-            source_status_code: None,
-            priority_reason_code: None,
-            scope_source_watermark: None,
-        };
-        let inventory_report = build_m4_legacy_shadow_parity_report(&snapshot, &[inventory_only])
-            .expect("inventory-only C08 candidate becomes a report row");
-        assert_eq!(
-            inventory_report.rows[0].reason_code.as_deref(),
-            Some("M4C08_LEGACY_CANDIDATE_INVALID"),
-            "a missing tuple is quarantined rather than guessed"
-        );
+        let empty_report = build_m4_legacy_shadow_parity_report(
+            &snapshot,
+            &m4_legacy_test_right_rail_observed_batch(Vec::new()),
+        )
+        .expect("an actually empty reader creates no synthetic comparator row");
+        assert!(empty_report.rows.is_empty());
 
         let mut conflicting_canonical = canonical.clone();
         conflicting_canonical.source_revision = 8;
@@ -1899,9 +2097,11 @@ mod tests {
             scope_source_watermark: snapshot.scope_source_watermark.clone(),
             sources: vec![canonical.clone(), conflicting_canonical],
         };
-        let ambiguous_report =
-            build_m4_legacy_shadow_parity_report(&ambiguous_snapshot, &[exact.clone()])
-                .expect("ambiguous source identity remains a report-only quarantine");
+        let ambiguous_report = build_m4_legacy_shadow_parity_report(
+            &ambiguous_snapshot,
+            &m4_legacy_test_right_rail_observed_batch(vec![exact.clone()]),
+        )
+        .expect("ambiguous source identity remains a report-only quarantine");
         assert_eq!(
             ambiguous_report.rows[0].reason_code.as_deref(),
             Some("M4C08_CANONICAL_SOURCE_AMBIGUOUS"),
@@ -1909,14 +2109,15 @@ mod tests {
         );
 
         let mut same_canonical_other_legacy_surface = exact.clone();
-        same_canonical_other_legacy_surface.legacy_source_kind =
-            M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection;
         same_canonical_other_legacy_surface.legacy_item_ref = Some(opaque("legacy-item", 'e'));
         let canonical_dedupe_report = build_m4_legacy_shadow_parity_report(
             &snapshot,
-            &[exact.clone(), same_canonical_other_legacy_surface],
+            &m4_legacy_test_right_rail_observed_batch(vec![
+                exact.clone(),
+                same_canonical_other_legacy_surface,
+            ]),
         )
-        .expect("different legacy surfaces may point to one canonical source");
+        .expect("distinct right-rail legacy items may point to one canonical source");
         assert_eq!(
             canonical_dedupe_report
                 .rows
@@ -1940,15 +2141,17 @@ mod tests {
                 .filter(|row| row.dedupe_disposition == "DUPLICATE_DISPLAY_ONLY")
                 .count(),
             1,
-            "different legacy kinds retain ordinary canonical de-duplication"
+            "right-rail candidates retain ordinary canonical de-duplication"
         );
 
         let mut mismatched = exact.clone();
-        mismatched.legacy_source_kind = M4LegacyReadSourceKind::RuntimeAttentionProjection;
         mismatched.source_status_code = Some("OPEN".to_string());
 
-        let report = build_m4_legacy_shadow_parity_report(&snapshot, &[mismatched, exact])
-            .expect("build C08 parity report");
+        let report = build_m4_legacy_shadow_parity_report(
+            &snapshot,
+            &m4_legacy_test_right_rail_observed_batch(vec![mismatched, exact]),
+        )
+        .expect("build C08 parity report");
         assert_eq!(report.mode, "M4_PRIMARY_LEGACY_READ_ONLY_FALLBACK");
         assert_eq!(
             report.parity_matrix_version,
@@ -2438,5 +2641,58 @@ mod tests {
             reason: "DATABASE_PATH_PRIVATE_TMP".to_string(),
         };
         assert!(validate_m4c07_daily_report_envelope(&unsafe_reason).is_err());
+    }
+
+    #[test]
+    fn m4r06_preliminary_scope_watermark_change_quarantines_row_without_rewriting_receipt() {
+        let canonical = M4LegacyCanonicalSourceRead {
+            source_owner_ref: "workflow-owner".to_string(),
+            scope_ref: "scope:personal:primary".to_string(),
+            source_type: M4_WORKFLOW_ATTENTION_SOURCE_TYPE.to_string(),
+            canonical_source_object_id: "work-item-r06".to_string(),
+            source_revision: 7,
+            source_owner_watermark: opaque("watermark", 'a'),
+            source_link: m4c04_source_link("work-item-r06", 7),
+            source_status_code: "OPEN".to_string(),
+            priority_reason_code: "ACTIVE_CHANGED_ATTENTION".to_string(),
+        };
+        let final_snapshot = M4LegacyCanonicalReadSnapshot {
+            scope_ref: canonical.scope_ref.clone(),
+            scope_source_watermark: "b".repeat(64),
+            sources: vec![canonical.clone()],
+        };
+        let candidate = M4LegacyReadCandidate {
+            legacy_source_kind: M4LegacyReadSourceKind::RightRailNotificationAndTodoProjection,
+            legacy_item_ref: Some(opaque("legacy-item", 'c')),
+            source_owner_ref: Some(canonical.source_owner_ref.clone()),
+            scope_ref: Some(canonical.scope_ref.clone()),
+            source_type: Some(canonical.source_type.clone()),
+            canonical_source_object_id: Some(canonical.canonical_source_object_id.clone()),
+            source_revision: Some(canonical.source_revision),
+            source_owner_watermark: Some(canonical.source_owner_watermark.clone()),
+            source_link: Some(canonical.source_link.clone()),
+            source_status_code: Some(canonical.source_status_code.clone()),
+            priority_reason_code: Some(canonical.priority_reason_code.clone()),
+            // Captured before the final canonical reread changed the scope.
+            scope_source_watermark: Some("a".repeat(64)),
+        };
+        let batch = m4_legacy_test_right_rail_observed_batch(vec![candidate]);
+        let report = build_m4_legacy_shadow_parity_report(&final_snapshot, &batch)
+            .expect("scope race remains a diagnostic-only report");
+
+        assert_eq!(report.reader_receipts[1].read_state, "OBSERVED");
+        assert_eq!(report.reader_receipts[1].complete_tuple_count, 1);
+        assert_eq!(report.rows.len(), 1);
+        assert_eq!(report.rows[0].disposition, "QUARANTINED");
+        assert_eq!(
+            report.rows[0].reason_code.as_deref(),
+            Some("M4C08_SCOPE_WATERMARK_MISMATCH")
+        );
+        assert!(
+            guarded_m4_legacy_read_only_fallback(&report)
+                .expect("guarded fallback stays readable")
+                .is_empty(),
+            "an OBSERVED preliminary read must not impersonate final parity"
+        );
     }
 }

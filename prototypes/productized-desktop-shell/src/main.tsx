@@ -9,6 +9,7 @@ import {
   initializeWorkflowState,
   loadSecretaryConversation,
   loadSecretaryHomeContext,
+  loadSecretaryLegacyReadCompatibilityReport,
   loadWorkflowStateSnapshot,
   operateSecretaryCoordination,
   operateSecretaryPersonalObject,
@@ -2163,6 +2164,245 @@ async function installM4R05OrdinaryConversationTauriIpcBridge() {
   }
 }
 
+// M4R06 observes the ordinary App's own guarded Home fallback in one isolated
+// debug launch. The backend supplies its fixed existing UNAVAILABLE envelope;
+// this bridge only opens the rendered Board and records DOM facts. It never
+// invents a Home result or reads the compatibility report for that UI phase.
+const M4R06_IPC_READY_EVENT = "syn-m4r06-ordinary-legacy-read-ui-ready";
+const M4R06_IPC_INVOKE_EVENT = "syn-m4r06-ordinary-legacy-read-invoke";
+const M4R06_IPC_RESULT_EVENT = "syn-m4r06-ordinary-legacy-read-result";
+const M4R06_IPC_SCHEMA_VERSION = "syn_m4r06_ordinary_legacy_read_ipc.v1";
+const M4R06_COMMAND_SURFACE =
+  "ordinary_zero_arg_load_secretary_legacy_read_compatibility_report_ipc";
+const M4R06_DOM_WAIT_MS = 20_000;
+
+type M4R06OrdinaryLegacyReadInvocation = {
+  schema_version: typeof M4R06_IPC_SCHEMA_VERSION;
+  phase: "read_and_replay";
+  operation: "ui_fallback" | "first_read" | "exact_replay";
+  nonce: string;
+};
+
+type M4R06UiFallbackEvidence = {
+  open_conversation_clicks: number;
+  compatibility_fallback_roots: number;
+  parity_primary_attention_rows: number;
+  non_parity_rows_visible: number;
+  source_route_controls: number;
+  nested_summary_source_route_controls: number;
+  board_coordination_action_controls: number;
+  board_personal_action_controls: number;
+  source_route_clicks: number;
+  // These raw route/display references cross only this short-lived IPC event.
+  // Rust joins them to the server report and serializes hashes only.
+  source_route_ref: string;
+  source_owner_ref: string;
+  source_object_type: string;
+  canonical_source_object_id: string;
+};
+
+function isM4R06Invocation(value: unknown): value is M4R06OrdinaryLegacyReadInvocation {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<M4R06OrdinaryLegacyReadInvocation>;
+  return candidate.schema_version === M4R06_IPC_SCHEMA_VERSION
+    && candidate.phase === "read_and_replay"
+    && (candidate.operation === "ui_fallback"
+      || candidate.operation === "first_read"
+      || candidate.operation === "exact_replay")
+    && typeof candidate.nonce === "string"
+    && /^[a-f0-9]{32}$/.test(candidate.nonce);
+}
+
+function m4r06ErrorFamily(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("ui_fallback")) return "ui_fallback_rejected";
+  if (message.includes("legacy_read")) return "legacy_read_rejected";
+  if (message.includes("report_not_ready") || message.includes("READY")) return "report_not_ready";
+  return "renderer_rejected";
+}
+
+function m4r06Delay(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function m4r06IsVisibleConnected(element: Element): element is HTMLElement {
+  if (!(element instanceof HTMLElement) || !element.isConnected) return false;
+  const style = window.getComputedStyle(element);
+  const rectangle = element.getBoundingClientRect();
+  return style.display !== "none"
+    && style.visibility !== "hidden"
+    && rectangle.width > 0
+    && rectangle.height > 0;
+}
+
+async function m4r06WaitForUniqueVisibleElement(
+  scope: ParentNode,
+  selector: string,
+  deadline: number,
+  family: string,
+  predicate: (element: HTMLElement) => boolean = () => true,
+): Promise<HTMLElement> {
+  while (Date.now() < deadline) {
+    const matches = Array.from(scope.querySelectorAll<HTMLElement>(selector));
+    if (matches.length > 1) throw new Error(`${family}_cardinality`);
+    if (matches.length === 1 && m4r06IsVisibleConnected(matches[0]) && predicate(matches[0])) {
+      return matches[0];
+    }
+    await m4r06Delay(50);
+  }
+  const matches = Array.from(scope.querySelectorAll<HTMLElement>(selector));
+  if (matches.length !== 1) throw new Error(`${family}_cardinality`);
+  throw new Error(`${family}_not_visible_or_not_ready`);
+}
+
+async function m4r06ObserveActualUiFallback(): Promise<M4R06UiFallbackEvidence> {
+  // This is one shared deadline: first perform the real navigation click,
+  // then wait for the already-triggered guarded read to render the Board.
+  const deadline = Date.now() + M4R06_DOM_WAIT_MS;
+  const openControl = await m4r06WaitForUniqueVisibleElement(
+    document,
+    '[data-secretary-open-conversation="true"]',
+    deadline,
+    "m4r06_open_conversation",
+  );
+  if (!(openControl instanceof HTMLButtonElement) || openControl.disabled) {
+    throw new Error("m4r06_open_conversation_not_interactive");
+  }
+  openControl.click();
+
+  const board = await m4r06WaitForUniqueVisibleElement(
+    document,
+    '[data-secretary-compatibility-fallback="true"]',
+    deadline,
+    "m4r06_compatibility_fallback",
+    (element) => element.dataset.secretaryBoardState === "degraded",
+  );
+  const routeControls = Array.from(
+    board.querySelectorAll<HTMLElement>('[data-secretary-source-route-action="OPEN"]'),
+  );
+  if (routeControls.length !== 1) throw new Error("m4r06_source_route_cardinality");
+  const routeControl = routeControls[0];
+  if (!(routeControl instanceof HTMLButtonElement)
+    || routeControl.disabled
+    || !m4r06IsVisibleConnected(routeControl)) {
+    throw new Error("m4r06_source_route_not_interactive");
+  }
+  const attentionRows = Array.from(
+    board.querySelectorAll<HTMLElement>(".secretary-board-attention-row"),
+  );
+  if (attentionRows.length !== 1 || !m4r06IsVisibleConnected(attentionRows[0])) {
+    throw new Error("m4r06_guarded_attention_row_contract_invalid");
+  }
+  const sourceRouteRef = routeControl.dataset.secretarySourceRouteRef ?? "";
+  const sourceOwnerRef = routeControl.dataset.secretarySourceOwner ?? "";
+  const sourceObjectType = routeControl.dataset.secretarySourceObjectType ?? "";
+  const canonicalSourceObjectId = routeControl.dataset.secretarySourceObjectId ?? "";
+  if (!sourceRouteRef || !sourceOwnerRef || !sourceObjectType || !canonicalSourceObjectId) {
+    throw new Error("m4r06_source_route_display_tuple_missing");
+  }
+  let sourceRouteClicks = 0;
+  const observeRouteClick = () => { sourceRouteClicks += 1; };
+  routeControl.addEventListener("click", observeRouteClick);
+  try {
+    // Do not dispatch the source route: R06 proves it is visible and bound,
+    // while keeping the guarded board read-only.
+    await m4r06Delay(0);
+  } finally {
+    routeControl.removeEventListener("click", observeRouteClick);
+  }
+  const boardCoordinationActionControls = board.querySelectorAll(
+    "[data-secretary-action]",
+  ).length;
+  const boardPersonalActionControls = board.querySelectorAll(
+    "[data-secretary-personal-action]",
+  ).length;
+  const nestedSummarySourceRouteControls = board.querySelectorAll(
+    "button.secretary-brief-source-link",
+  ).length;
+  if (boardCoordinationActionControls !== 0
+    || boardPersonalActionControls !== 0
+    || nestedSummarySourceRouteControls !== 0) {
+    throw new Error("m4r06_guarded_board_control_visibility_invalid");
+  }
+  return {
+    open_conversation_clicks: 1,
+    compatibility_fallback_roots: 1,
+    // The guarded renderer leaves exactly its PARITY + PRIMARY WorkItem row
+    // visible; a second attention row would expose a non-eligible candidate.
+    parity_primary_attention_rows: 1,
+    non_parity_rows_visible: 0,
+    source_route_controls: 1,
+    nested_summary_source_route_controls: nestedSummarySourceRouteControls,
+    board_coordination_action_controls: boardCoordinationActionControls,
+    board_personal_action_controls: boardPersonalActionControls,
+    source_route_clicks: sourceRouteClicks,
+    source_route_ref: sourceRouteRef,
+    source_owner_ref: sourceOwnerRef,
+    source_object_type: sourceObjectType,
+    canonical_source_object_id: canonicalSourceObjectId,
+  };
+}
+
+async function installM4R06OrdinaryLegacyReadTauriIpcBridge() {
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  try {
+    await listen<M4R06OrdinaryLegacyReadInvocation>(M4R06_IPC_INVOKE_EVENT, async ({ payload }) => {
+      if (!isM4R06Invocation(payload)) return;
+      let zeroArgLoadCalls = 0;
+      try {
+        if (payload.operation === "ui_fallback") {
+          const uiFallbackEvidence = await m4r06ObserveActualUiFallback();
+          await emit(M4R06_IPC_RESULT_EVENT, {
+            schema_version: M4R06_IPC_SCHEMA_VERSION,
+            phase: payload.phase,
+            operation: payload.operation,
+            nonce: payload.nonce,
+            outcome: "PASS",
+            zero_arg_load_calls: zeroArgLoadCalls,
+            report: null,
+            ui_fallback_evidence: uiFallbackEvidence,
+            error_family: null,
+          });
+          return;
+        }
+        zeroArgLoadCalls += 1;
+        const envelope = await loadSecretaryLegacyReadCompatibilityReport();
+        if (envelope.status !== "READY") throw new Error("m4r06_report_not_ready");
+        await emit(M4R06_IPC_RESULT_EVENT, {
+          schema_version: M4R06_IPC_SCHEMA_VERSION,
+          phase: payload.phase,
+          operation: payload.operation,
+          nonce: payload.nonce,
+          outcome: "PASS",
+          zero_arg_load_calls: zeroArgLoadCalls,
+          report: envelope.report,
+          ui_fallback_evidence: null,
+          error_family: null,
+        });
+      } catch (error) {
+        await emit(M4R06_IPC_RESULT_EVENT, {
+          schema_version: M4R06_IPC_SCHEMA_VERSION,
+          phase: payload.phase,
+          operation: payload.operation,
+          nonce: payload.nonce,
+          outcome: "REJECTED",
+          zero_arg_load_calls: zeroArgLoadCalls,
+          report: null,
+          ui_fallback_evidence: null,
+          error_family: m4r06ErrorFamily(error),
+        });
+      }
+    });
+    await emit(M4R06_IPC_READY_EVENT, {
+      schema_version: M4R06_IPC_SCHEMA_VERSION,
+      surface: M4R06_COMMAND_SURFACE,
+      operations: ["ui_fallback", "first_read", "exact_replay"],
+    });
+  } catch {
+    // Rust owns bounded readiness and terminal receipt publication.
+  }
+}
+
 class BootErrorBoundary extends React.Component<BootErrorBoundaryProps, BootErrorBoundaryState> {
   state: BootErrorBoundaryState = { error: null };
 
@@ -2227,6 +2467,7 @@ void installM4R02OrdinaryCompositionTauriIpcBridge();
 void installM4R03OrdinaryClockTauriIpcBridge();
 void installM4R04OrdinaryRouteTauriIpcBridge();
 void installM4R05OrdinaryConversationTauriIpcBridge();
+void installM4R06OrdinaryLegacyReadTauriIpcBridge();
 
 window.addEventListener("error", (event) => {
   const root = document.getElementById("root");

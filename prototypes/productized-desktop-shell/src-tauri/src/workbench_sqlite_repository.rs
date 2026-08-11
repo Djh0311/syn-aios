@@ -114,6 +114,17 @@ pub(crate) enum M4SourceOwnerNavigationTargetRead {
     },
 }
 
+/// Value-free, native-rebuilt WorkItem publications that may be observed by
+/// the R06 right-rail shadow reader.  This is intentionally narrower than a
+/// generic outbox browser: it exposes only already-delivered, current
+/// WorkItem attention publications and never a pending owner command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum M4LegacyWorkItemSourceRead {
+    Empty,
+    Observed(Vec<crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1>),
+    Rejected { candidate_count: u64 },
+}
+
 /// A lease for the single M2 reference-slice projection capability.  This is
 /// intentionally not a reusable dispatch or provider lease: the only effect
 /// it can represent is the committed workflow-state SQLite → JSON projection.
@@ -594,6 +605,251 @@ impl WorkbenchSqliteRepository {
             .commit()
             .map_err(|_| "m4_source_route_owner_read_commit_failed".to_string())?;
         Ok(target)
+    }
+
+    /// Read the real WorkItem rows behind the old right-rail todo surface.
+    ///
+    /// This is a query-only proof path, not an outbox consumer: every row is
+    /// first required to be terminally delivered, then reloaded through the
+    /// existing exact-publication verifier, and finally rebuilt from the
+    /// native event/receipt/current-snapshot/WorkItem record in the same
+    /// deferred transaction.  A stale or malformed source is returned as a
+    /// bounded rejection; it is never repaired or partially promoted.
+    pub(crate) fn read_current_delivered_work_item_legacy_sources(
+        &self,
+    ) -> Result<M4LegacyWorkItemSourceRead, String> {
+        let mut connection = self.configured_read_connection()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Deferred)
+            .map_err(|_| "m4r06_owner_reader_transaction_failed".to_string())?;
+        crate::m4_source_owner_schema::verify_m4_source_owner_overlay(&transaction)
+            .map_err(|_| "m4r06_owner_reader_overlay_invalid".to_string())?;
+
+        // Choose the latest native WorkItem publication for each canonical
+        // object before interpreting its status.  Filtering status first
+        // would resurrect an old actionable todo after a later native update
+        // made the object ineligible for the right rail.
+        let latest_rows = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT publication_sequence, publication_id, adapter_id, publication_kind,
+                            source_owner_ref, object_type, canonical_object_id,
+                            source_revision, source_event_id, source_owner_watermark,
+                            native_scope_seal, opaque_route_ref, payload_hash,
+                            owner_status_code, dispatch_status, terminal_receipt_kind,
+                            terminal_receipt_ref
+                     FROM m4_source_owner_publications
+                     WHERE adapter_id = ?1
+                       AND publication_kind = 'WORK_ITEM_ATTENTION'
+                       AND source_owner_ref = ?2
+                       AND object_type = 'workflow_attention'
+                       AND publication_sequence IN (
+                            SELECT MAX(latest.publication_sequence)
+                            FROM m4_source_owner_publications AS latest
+                            WHERE latest.adapter_id = ?1
+                              AND latest.publication_kind = 'WORK_ITEM_ATTENTION'
+                              AND latest.source_owner_ref = ?2
+                              AND latest.object_type = 'workflow_attention'
+                            GROUP BY latest.canonical_object_id
+                       )
+                     ORDER BY canonical_object_id, publication_sequence",
+                )
+                .map_err(|_| "m4r06_owner_reader_query_prepare_failed".to_string())?;
+            let rows = statement
+                .query_map(
+                    params![
+                        crate::m4_source_owner_schema::M4_WORK_ITEM_SOURCE_ADAPTER_ID,
+                        crate::m4_source_owner_schema::M4_WORK_ITEM_SOURCE_OWNER_REF,
+                    ],
+                    |row| {
+                        Ok((
+                            row.get::<_, i64>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(4)?,
+                            row.get::<_, String>(5)?,
+                            row.get::<_, String>(6)?,
+                            row.get::<_, i64>(7)?,
+                            row.get::<_, String>(8)?,
+                            row.get::<_, String>(9)?,
+                            row.get::<_, String>(10)?,
+                            row.get::<_, String>(11)?,
+                            row.get::<_, String>(12)?,
+                            row.get::<_, String>(13)?,
+                            row.get::<_, String>(14)?,
+                            row.get::<_, Option<String>>(15)?,
+                            row.get::<_, Option<String>>(16)?,
+                        ))
+                    },
+                )
+                .map_err(|_| "m4r06_owner_reader_query_failed".to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| "m4r06_owner_reader_row_failed".to_string())?;
+            rows
+        };
+        let latest_candidate_count = latest_rows.len() as u64;
+        // Validate every latest publication before deciding whether its mapped
+        // status belongs on the right rail. A malformed or undelivered
+        // terminal record must be rejected; it may not suppress an older
+        // active fact by being classified as a false empty surface.
+        let mut rebuilt_rows = Vec::with_capacity(latest_rows.len());
+        for (
+            publication_sequence,
+            publication_id,
+            adapter_id,
+            publication_kind,
+            source_owner_ref,
+            object_type,
+            canonical_object_id,
+            source_revision,
+            source_event_id,
+            source_owner_watermark,
+            native_scope_seal,
+            opaque_route_ref,
+            payload_hash,
+            owner_status_code,
+            dispatch_status,
+            terminal_receipt_kind,
+            terminal_receipt_ref,
+        ) in latest_rows
+        {
+            let Ok(publication_sequence) = u64::try_from(publication_sequence) else {
+                transaction
+                    .commit()
+                    .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+                return Ok(M4LegacyWorkItemSourceRead::Rejected {
+                    candidate_count: latest_candidate_count,
+                });
+            };
+            let Ok(source_revision) = u64::try_from(source_revision) else {
+                transaction
+                    .commit()
+                    .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+                return Ok(M4LegacyWorkItemSourceRead::Rejected {
+                    candidate_count: latest_candidate_count,
+                });
+            };
+            if dispatch_status != "DELIVERED"
+                || terminal_receipt_kind.as_deref() != Some("M4_INGESTION")
+            {
+                transaction
+                    .commit()
+                    .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+                return Ok(M4LegacyWorkItemSourceRead::Rejected {
+                    candidate_count: latest_candidate_count,
+                });
+            }
+            let Some(m4_ingestion_receipt_id) = terminal_receipt_ref else {
+                transaction
+                    .commit()
+                    .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+                return Ok(M4LegacyWorkItemSourceRead::Rejected {
+                    candidate_count: latest_candidate_count,
+                });
+            };
+            let expected = crate::m4_source_owner_schema::M4SourceOwnerPublicationExpectationV1 {
+                publication_sequence,
+                publication_id,
+                adapter_id,
+                publication_kind,
+                source_owner_ref,
+                object_type,
+                canonical_object_id,
+                source_revision,
+                source_event_id,
+                source_owner_watermark,
+                native_scope_seal,
+                opaque_route_ref,
+                payload_hash,
+                m4_ingestion_receipt_id,
+            };
+            let stored =
+                match crate::m4_source_owner_schema::load_current_delivered_source_owner_publication(
+                    &transaction,
+                    &expected,
+                ) {
+                    Ok(stored) => stored,
+                    Err(_) => {
+                        transaction
+                            .commit()
+                            .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+                        return Ok(M4LegacyWorkItemSourceRead::Rejected {
+                            candidate_count: latest_candidate_count,
+                        });
+                    }
+                };
+            let receipt_ids = {
+                let mut statement = transaction
+                    .prepare(
+                        "SELECT receipt.receipt_id
+                         FROM events AS event
+                         JOIN command_receipts AS receipt ON receipt.command_id = event.command_id
+                         WHERE event.event_id = ?1
+                         ORDER BY receipt.receipt_id
+                         LIMIT 2",
+                    )
+                    .map_err(|_| "m4r06_owner_reader_receipt_prepare_failed".to_string())?;
+                let receipt_rows = statement
+                    .query_map([stored.owner_native_event_id.as_str()], |row| {
+                        row.get::<_, String>(0)
+                    })
+                    .map_err(|_| "m4r06_owner_reader_receipt_query_failed".to_string())?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| "m4r06_owner_reader_receipt_row_failed".to_string())?;
+                receipt_rows
+            };
+            let [receipt_id] = receipt_ids.as_slice() else {
+                transaction
+                    .commit()
+                    .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+                return Ok(M4LegacyWorkItemSourceRead::Rejected {
+                    candidate_count: latest_candidate_count,
+                });
+            };
+            let rebuilt = crate::m4_source_owner_schema::build_m4_work_item_source_publication(
+                &transaction,
+                &stored.owner_native_event_id,
+                receipt_id,
+                &stored.canonical_object_id,
+                &stored.owner_status_code,
+            );
+            match rebuilt {
+                Ok(rebuilt) if rebuilt == stored => {
+                    match m4r06_work_item_status_is_attention_eligible(&owner_status_code) {
+                        Ok(true) => rebuilt_rows.push(stored),
+                        // The exact latest terminal/informational native fact
+                        // has been proved, so it can legitimately remove an
+                        // older right-rail todo.
+                        Ok(false) => {}
+                        Err(_) => {
+                            transaction
+                                .commit()
+                                .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+                            return Ok(M4LegacyWorkItemSourceRead::Rejected {
+                                candidate_count: latest_candidate_count,
+                            });
+                        }
+                    }
+                }
+                _ => {
+                    transaction
+                        .commit()
+                        .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+                    return Ok(M4LegacyWorkItemSourceRead::Rejected {
+                        candidate_count: latest_candidate_count,
+                    });
+                }
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|_| "m4r06_owner_reader_commit_failed".to_string())?;
+        if rebuilt_rows.is_empty() {
+            Ok(M4LegacyWorkItemSourceRead::Empty)
+        } else {
+            Ok(M4LegacyWorkItemSourceRead::Observed(rebuilt_rows))
+        }
     }
 
     pub(crate) fn append_audit(
@@ -6293,6 +6549,34 @@ fn serialized_record(value: &Value) -> Result<(String, String), String> {
     Ok((sha256_hex(&record_json), record_json))
 }
 
+/// Reuse the registered owner-status mapper and M4's automatic-open-loop
+/// predicate, rather than maintaining an R06-specific WorkItem status list.
+/// This keeps `ready_to_dispatch` and any future mapper-backed active status
+/// observable while terminal/informational owner states suppress stale todos.
+pub(crate) fn m4r06_work_item_status_is_attention_eligible(
+    owner_status_code: &str,
+) -> Result<bool, String> {
+    let mapped =
+        crate::m4_source_owner_schema::RegisteredWorkItemSourceOwnerMapper::map(owner_status_code)?;
+    let source_status =
+        crate::m4_secretary_domain::M4SourceStatus::parse(mapped.source_status_code)
+            .ok_or_else(|| "m4r06_work_item_mapper_source_status_invalid".to_string())?;
+    let attention = crate::m4_secretary_domain::M4AttentionSignals {
+        external_commitment: mapped.attention.external_commitment,
+        time_sensitive: mapped.attention.time_sensitive,
+        requires_user_decision: mapped.attention.requires_user_decision,
+        source_blocked: mapped.attention.source_blocked,
+        attention_required: mapped.attention.attention_required,
+        material_change: mapped.attention.material_change,
+    };
+    Ok(
+        crate::m4_secretary_domain::m4_source_status_and_attention_is_open_loop(
+            source_status,
+            &attention,
+        ),
+    )
+}
+
 fn map_m4_source_owner_rebuild_error(error: RepositoryMutationError) -> String {
     match error {
         RepositoryMutationError::Sqlite(SqlError::QueryReturnedNoRows) => {
@@ -8063,6 +8347,351 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    fn m4r06_seed_native_work_item_publication(
+        repository: &WorkbenchSqliteRepository,
+        owner_status: &str,
+        delivered: bool,
+        corrupt_payload_hash: bool,
+    ) -> crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1 {
+        const PROJECT_ID: &str = "project:m4r06-owner";
+        const WORKFLOW_ID: &str = "workflow:m4r06-owner";
+        const NODE_ID: &str = "node:m4r06-owner";
+        const WORK_ITEM_ID: &str = "work-item:m4r06-owner";
+        const EVENT_ID: &str = "event:m4r06-owner:7";
+        const RECEIPT_ID: &str = "receipt:m4r06-owner:7";
+        const COMMAND_ID: &str = "command:m4r06-owner:7";
+        const SOURCE_REF: &str = "workflow_state:project:m4r06-owner:workflow:m4r06-owner";
+
+        let project = json!({ "project_id": PROJECT_ID });
+        let workflow = json!({ "workflow_id": WORKFLOW_ID, "project_id": PROJECT_ID });
+        let node = json!({ "node_id": NODE_ID, "workflow_id": WORKFLOW_ID });
+        let work_item = json!({
+            "work_item_id": WORK_ITEM_ID,
+            "workflow_id": WORKFLOW_ID,
+            "current_node_id": NODE_ID,
+            "state": owner_status,
+            "workflow_revision_after": 7,
+        });
+        let encode = |value: &Value| {
+            let record_json = serde_json::to_string(value).expect("serialize R06 owner fixture");
+            (sha256_hex(&record_json), record_json)
+        };
+        let (project_hash, project_json) = encode(&project);
+        let (workflow_hash, workflow_json) = encode(&workflow);
+        let (node_hash, node_json) = encode(&node);
+        let (work_hash, work_json) = encode(&work_item);
+        let status_hash = sha256_hex(owner_status);
+
+        let (publication, _) = repository
+            .with_immediate_transaction("m4r06_seed_native_work_item", None, |transaction| {
+                transaction
+                    .execute(
+                        "INSERT INTO projects (project_id, source_id, record_hash, record_json)
+                         VALUES (?1, 'm4r06-fixture', ?2, ?3)",
+                        params![PROJECT_ID, project_hash, project_json],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                transaction
+                    .execute(
+                        "INSERT INTO workflows
+                         (workflow_id, project_id, source_id, record_hash, record_json)
+                         VALUES (?1, ?2, 'm4r06-fixture', ?3, ?4)",
+                        params![WORKFLOW_ID, PROJECT_ID, workflow_hash, workflow_json],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                transaction
+                    .execute(
+                        "INSERT INTO workflow_nodes
+                         (node_id, workflow_id, source_id, record_hash, record_json)
+                         VALUES (?1, ?2, 'm4r06-fixture', ?3, ?4)",
+                        params![NODE_ID, WORKFLOW_ID, node_hash, node_json],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                transaction
+                    .execute(
+                        "INSERT INTO work_items
+                         (work_item_id, workflow_id, node_id, source_id, record_hash, record_json)
+                         VALUES (?1, ?2, NULL, 'm4r06-fixture', ?3, ?4)",
+                        params![WORK_ITEM_ID, WORKFLOW_ID, work_hash, work_json],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                transaction
+                    .execute(
+                        "INSERT INTO commands (command_id, registered_at)
+                         VALUES (?1, '2026-08-10T10:00:00.000Z')",
+                        [COMMAND_ID],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                transaction
+                    .execute(
+                        "INSERT INTO command_receipts (
+                            receipt_id, command_id, idempotency_key, request_hash,
+                            actor_id, scope_ref, policy_decision_ref, status,
+                            accepted_at, result_ref, result_hash, committed_revision, created_at
+                         ) VALUES (
+                            ?1, ?2, 'idem:m4r06-owner:7', ?3,
+                            'user', 'scope:m4r06-owner', 'policy:allowed', 'COMMITTED',
+                            '2026-08-10T10:00:00.000Z', 'result:m4r06-owner:7', ?3, 7,
+                            '2026-08-10T10:00:00.000Z'
+                         )",
+                        params![RECEIPT_ID, COMMAND_ID, status_hash],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                transaction
+                    .execute(
+                        "INSERT INTO events (
+                            event_id, event_type, occurred_at, actor_id, scope_ref,
+                            source_ref, source_revision, command_id, schema_version,
+                            sensitivity, payload_hash, created_at
+                         ) VALUES (
+                            ?1, 'WorkItemStateUpdated', '2026-08-10T10:00:00.000Z', 'user',
+                            'scope:m4r06-owner', ?2, '7', ?3,
+                            '1.0.0', 'INTERNAL', ?4, '2026-08-10T10:00:00.000Z'
+                         )",
+                        params![EVENT_ID, SOURCE_REF, COMMAND_ID, status_hash],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                transaction
+                    .execute(
+                        "INSERT INTO projectors (projector_id, projector_version, registered_at)
+                         VALUES ('workflow_projector', 'm4r06-fixture.v1',
+                                 '2026-08-10T10:00:00.000Z')",
+                        [],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                transaction
+                    .execute(
+                        "INSERT INTO current_snapshots (
+                            object_ref, object_revision, source_watermark,
+                            snapshot_hash, projector_id, built_at
+                         ) VALUES (
+                            ?1, 7, ?2, ?3, 'workflow_projector',
+                            '2026-08-10T10:00:00.000Z'
+                         )",
+                        params![SOURCE_REF, EVENT_ID, "a".repeat(64)],
+                    )
+                    .map_err(RepositoryMutationError::Sqlite)?;
+                let publication =
+                    crate::m4_source_owner_schema::build_m4_work_item_source_publication(
+                        transaction,
+                        EVENT_ID,
+                        RECEIPT_ID,
+                        WORK_ITEM_ID,
+                        owner_status,
+                    )?;
+                crate::m4_source_owner_schema::append_m4_work_item_source_publication(
+                    transaction,
+                    &publication,
+                )?;
+                Ok(publication)
+            })
+            .expect("seed exact native WorkItem publication");
+
+        if delivered || corrupt_payload_hash {
+            repository
+                .with_immediate_transaction("m4r06_set_owner_publication_terminal", None, |transaction| {
+                    let changed = transaction
+                        .execute(
+                            "UPDATE m4_source_owner_publications
+                             SET dispatch_status = CASE WHEN ?1 THEN 'DELIVERED' ELSE dispatch_status END,
+                                 terminal_receipt_kind = CASE WHEN ?1 THEN 'M4_INGESTION' ELSE terminal_receipt_kind END,
+                                 terminal_receipt_ref = CASE WHEN ?1 THEN 'receipt:m4r06-ingestion' ELSE terminal_receipt_ref END,
+                                 terminal_at_ms = CASE WHEN ?1 THEN 1 ELSE terminal_at_ms END,
+                                 payload_hash = CASE WHEN ?2 THEN ?3 ELSE payload_hash END
+                             WHERE publication_id = ?4",
+                            params![delivered, corrupt_payload_hash, "f".repeat(64), publication.publication_id],
+                        )
+                        .map_err(RepositoryMutationError::Sqlite)?;
+                    if changed != 1 {
+                        return Err(RepositoryMutationError::Message(
+                            "m4r06_fixture_publication_missing".to_string(),
+                        ));
+                    }
+                    Ok(())
+                })
+                .expect("set R06 owner publication terminal fixture");
+        }
+        publication
+    }
+
+    fn m4r06_owner_reader_counts(repository: &WorkbenchSqliteRepository) -> (i64, i64, i64, i64) {
+        let connection = repository
+            .configured_connection()
+            .expect("open R06 owner reader count connection");
+        (
+            connection
+                .query_row(
+                    "SELECT COUNT(*) FROM m4_source_owner_publications",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("count publications"),
+            connection
+                .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
+                .expect("count events"),
+            connection
+                .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| {
+                    row.get(0)
+                })
+                .expect("count receipts"),
+            connection
+                .query_row("SELECT COUNT(*) FROM work_items", [], |row| row.get(0))
+                .expect("count work items"),
+        )
+    }
+
+    #[test]
+    fn m4r06_ready_to_dispatch_latest_publication_is_observed_without_owner_writes() {
+        let (repository, path) = test_repository("m4r06-ready-to-dispatch-observed");
+        m4r06_seed_native_work_item_publication(&repository, "ready_to_dispatch", true, false);
+        let before = m4r06_owner_reader_counts(&repository);
+
+        let outcome = repository
+            .read_current_delivered_work_item_legacy_sources()
+            .expect("query-only R06 WorkItem reader");
+        let M4LegacyWorkItemSourceRead::Observed(publications) = outcome else {
+            panic!("ready_to_dispatch must remain observable: {outcome:?}");
+        };
+        assert_eq!(publications.len(), 1);
+        assert_eq!(
+            publications[0].adapter_id,
+            crate::m4_source_owner_schema::RegisteredWorkItemSourceOwnerMapper::ADAPTER_ID
+        );
+        assert_eq!(
+            m4r06_owner_reader_counts(&repository),
+            before,
+            "reader wrote owner facts"
+        );
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn m4r06_terminal_is_empty_only_after_exact_delivery_and_malformed_latest_is_rejected() {
+        let (exact_repository, exact_path) = test_repository("m4r06-terminal-exact-empty");
+        m4r06_seed_native_work_item_publication(&exact_repository, "accepted", true, false);
+        assert_eq!(
+            exact_repository
+                .read_current_delivered_work_item_legacy_sources()
+                .expect("exact terminal owner read"),
+            M4LegacyWorkItemSourceRead::Empty,
+            "an exact latest terminal native fact legitimately clears the right rail"
+        );
+        let _ = fs::remove_file(exact_path);
+
+        let (undelivered_repository, undelivered_path) =
+            test_repository("m4r06-terminal-undelivered-rejected");
+        m4r06_seed_native_work_item_publication(&undelivered_repository, "accepted", false, false);
+        assert!(matches!(
+            undelivered_repository
+                .read_current_delivered_work_item_legacy_sources()
+                .expect("undelivered terminal owner read"),
+            M4LegacyWorkItemSourceRead::Rejected { .. }
+        ));
+        let _ = fs::remove_file(undelivered_path);
+
+        let (malformed_repository, malformed_path) =
+            test_repository("m4r06-terminal-malformed-rejected");
+        m4r06_seed_native_work_item_publication(&malformed_repository, "accepted", true, true);
+        assert!(matches!(
+            malformed_repository
+                .read_current_delivered_work_item_legacy_sources()
+                .expect("malformed terminal owner read"),
+            M4LegacyWorkItemSourceRead::Rejected { .. }
+        ));
+        let _ = fs::remove_file(malformed_path);
+    }
+
+    #[test]
+    fn m4r06_real_ready_to_dispatch_owner_to_m4_to_parity_is_observed_without_read_writes() {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time")
+            .as_nanos();
+        let requested_root =
+            std::env::temp_dir().join(format!("syn-m4c03-m4r06-owner-m4-parity-{nanos}"));
+        fs::create_dir_all(&requested_root).expect("create R06 owner/M4 parity fixture root");
+        let root =
+            fs::canonicalize(&requested_root).expect("canonical R06 owner/M4 parity fixture root");
+        let owner_path = root.join("owner-workbench.sqlite3");
+        let owner_repository = WorkbenchSqliteRepository::open_rehearsal(&owner_path)
+            .expect("open exact native WorkItem owner repository");
+        let publication = m4r06_seed_native_work_item_publication(
+            &owner_repository,
+            "ready_to_dispatch",
+            false,
+            false,
+        );
+        let m4_repository =
+            crate::m4_secretary_repository::M4SecretarySqliteRepository::open_isolated_fixture(
+                &root,
+            )
+            .expect("open isolated M4 repository");
+        m4_repository
+            .set_test_server_utc_now("2026-08-10T12:00:00.000Z")
+            .expect("fix M4 fixture server clock");
+        let dispatched = crate::m4_source_dispatcher::dispatch_pending_m4_source_owner_outbox(
+            &owner_repository,
+            &m4_repository,
+            "m4r06-real-owner-parity",
+            8,
+        )
+        .expect("dispatch actual owner WorkItem publication into M4");
+        assert_eq!(dispatched.delivered_count, 1);
+        assert_eq!(dispatched.quarantined_count, 0);
+        assert!(dispatched.drained);
+
+        let preliminary_scope_watermark = m4_repository
+            .read_attention_snapshot(crate::m4_secretary_domain::m4_primary_scope_ref())
+            .expect("read preliminary M4 scope watermark")
+            .scope_source_watermark;
+        let owner_before = m4r06_owner_reader_counts(&owner_repository);
+        let outcome = owner_repository
+            .read_current_delivered_work_item_legacy_sources()
+            .expect("read exact delivered WorkItem owner publication");
+        let M4LegacyWorkItemSourceRead::Observed(publications) = outcome else {
+            panic!("ready_to_dispatch owner must be OBSERVED after real M4 delivery: {outcome:?}");
+        };
+        assert_eq!(publications.len(), 1);
+        assert_eq!(publications[0].publication_id, publication.publication_id);
+        let candidates = publications
+            .iter()
+            .map(|source| {
+                crate::m4_legacy_readers::work_item_candidate(source, &preliminary_scope_watermark)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .expect("derive exact R06 WorkItem legacy tuple");
+        let batch =
+            crate::m4_secretary_read_model::m4_legacy_test_right_rail_observed_batch(candidates);
+        let report = m4_repository
+            .read_legacy_read_compatibility_report(
+                crate::m4_secretary_domain::m4_primary_scope_ref(),
+                &batch,
+            )
+            .expect("canonical M4 reread and R06 parity comparison");
+        assert_eq!(report.reader_receipts[1].read_state, "OBSERVED");
+        assert_eq!(
+            report.reader_receipts[1]
+                .legacy_reader_adapter_id
+                .as_deref(),
+            Some(crate::m4_source_owner_schema::RegisteredWorkItemSourceOwnerMapper::ADAPTER_ID)
+        );
+        assert!(report.reader_receipts[1].candidate_count > 0);
+        assert_eq!(
+            report.reader_receipts[1].candidate_count,
+            report.reader_receipts[1].complete_tuple_count
+        );
+        assert_eq!(report.rows.len(), 1);
+        assert_eq!(report.rows[0].disposition, "PARITY");
+        assert_eq!(report.rows[0].dedupe_disposition, "PRIMARY");
+        assert_eq!(
+            m4r06_owner_reader_counts(&owner_repository),
+            owner_before,
+            "owner read/comparison path wrote native facts"
+        );
+
+        let _ = fs::remove_dir_all(root);
     }
 
     fn test_repository(name: &str) -> (WorkbenchSqliteRepository, PathBuf) {

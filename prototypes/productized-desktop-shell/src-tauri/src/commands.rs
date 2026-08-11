@@ -109,7 +109,6 @@ const M4C08_LEGACY_READ_COMPATIBILITY_UNAVAILABLE: &str =
 async fn load_secretary_legacy_read_compatibility_report(
     state: tauri::State<'_, AppState>,
 ) -> Result<m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope, String> {
-    let candidates = m4_secretary_read_model::m4_legacy_read_inventory_only_candidates();
     #[cfg(not(test))]
     {
         let Some(repository) = state.m4_secretary_repository.clone() else {
@@ -119,12 +118,33 @@ async fn load_secretary_legacy_read_compatibility_report(
                 ),
             );
         };
+        let Some(registry) = state.m4_legacy_read_registry.clone() else {
+            return Ok(
+                m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::unavailable(
+                    M4C08_LEGACY_READ_COMPATIBILITY_UNAVAILABLE,
+                ),
+            );
+        };
+        // Debug-only ordinary-App evidence observes the real zero-argument
+        // command boundary. In normal product launches this is a no-op; the
+        // hook owns no renderer input and cannot alter the report contents.
+        m4r06_ordinary_legacy_read_driver::record_zero_arg_legacy_report_load()?;
         return Ok(tauri::async_runtime::spawn_blocking(move || {
-            repository
-                .read_legacy_read_compatibility_report(
-                    crate::m4_secretary_domain::m4_primary_scope_ref(),
-                    &candidates,
-                )
+            registry
+                .read_server_owned_legacy_candidates()
+                .and_then(|server_owned_read| {
+                    repository
+                        .read_legacy_read_compatibility_report(
+                            crate::m4_secretary_domain::m4_primary_scope_ref(),
+                            &server_owned_read,
+                        )
+                        .map_err(|_| "m4r06_legacy_canonical_reread_unavailable".to_string())
+                        .and_then(|report| {
+                            registry
+                                .verify_work_item_owner_cut(&server_owned_read)
+                                .map(|()| report)
+                        })
+                })
                 .map(m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::ready)
                 .unwrap_or_else(|_| {
                     m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::unavailable(
@@ -141,7 +161,7 @@ async fn load_secretary_legacy_read_compatibility_report(
     }
     #[cfg(test)]
     {
-        let _ = (state, candidates);
+        let _ = state;
         Ok(
             m4_secretary_read_model::M4LegacyReadCompatibilityReportEnvelope::unavailable(
                 M4C08_LEGACY_READ_COMPATIBILITY_UNAVAILABLE,
@@ -8858,24 +8878,14 @@ mod fnd004a_ownership_tests {
 
 #[cfg(test)]
 mod m4c08_legacy_read_compatibility_command_tests {
-    use super::*;
-
     #[test]
-    fn m4c08_command_uses_server_fixed_inventory_only_candidates() {
-        let candidates = m4_secretary_read_model::m4_legacy_read_inventory_only_candidates();
-        assert_eq!(candidates.len(), 5);
-        assert!(candidates.iter().all(|candidate| {
-            candidate.legacy_item_ref.is_none()
-                && candidate.source_owner_ref.is_none()
-                && candidate.scope_ref.is_none()
-                && candidate.source_type.is_none()
-                && candidate.canonical_source_object_id.is_none()
-                && candidate.source_revision.is_none()
-                && candidate.source_owner_watermark.is_none()
-                && candidate.source_link.is_none()
-                && candidate.source_status_code.is_none()
-                && candidate.priority_reason_code.is_none()
-                && candidate.scope_source_watermark.is_none()
-        }));
+    fn m4r06_command_reads_the_installed_server_owned_registry() {
+        let source = include_str!("commands.rs");
+        let command_start = source
+            .find("async fn load_secretary_legacy_read_compatibility_report")
+            .expect("R06 command remains registered");
+        let command_source = &source[command_start..];
+        assert!(command_source.contains("m4_legacy_read_registry"));
+        assert!(command_source.contains("read_server_owned_legacy_candidates"));
     }
 }

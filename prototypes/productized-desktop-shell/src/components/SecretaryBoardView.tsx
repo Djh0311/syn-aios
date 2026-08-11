@@ -49,8 +49,17 @@ export function SecretaryBoardView({
   const openDeepLink = onOpenDeepLink ?? (() => undefined);
   const reload = onReloadSecretaryHome ?? (() => undefined);
   const state = presentationState ?? home.state;
+  // The single source-route control in the guarded view belongs to the
+  // verified attention row. Do not mirror it into the nested summary or the
+  // generic module list: neither is another authority surface for fallback.
+  const moduleEntries = compatibilityFallback ? [] : home.module_entries;
   return (
-    <section className="secretary-board" data-secretary-board-state={state} aria-label="持续 Secretary 情境">
+    <section
+      className="secretary-board"
+      data-secretary-board-state={state}
+      data-secretary-compatibility-fallback={compatibilityFallback ? "true" : undefined}
+      aria-label="持续 Secretary 情境"
+    >
       <header className="secretary-board-head">
         <div>
           <p className="eyebrow">持续 Secretary</p>
@@ -133,17 +142,27 @@ export function SecretaryBoardView({
         </section>
 
         <aside className="secretary-board-side" aria-label="情境摘要与专业入口">
-          <SecretaryBrief
-            home={home}
-            presentationState={compatibilityFallback ? null : presentationState}
-            onOpenDeepLink={openDeepLink}
-            onReload={reload}
-          />
+          {compatibilityFallback ? (
+            <section className="secretary-brief secretary-brief-state" aria-label="Secretary 只读兼容回退">
+              <p className="eyebrow">只读兼容回退</p>
+              <h3>旧摘要仅作只读显示</h3>
+              <p className="muted small-note">
+                精确回源只保留在左侧已核验关注项；这里不复制第二枚来源控件，也不恢复协调写入。
+              </p>
+            </section>
+          ) : (
+            <SecretaryBrief
+              home={home}
+              presentationState={presentationState}
+              onOpenDeepLink={openDeepLink}
+              onReload={reload}
+            />
+          )}
           <section className="secretary-board-modules" aria-label="专业模块入口">
             <p className="eyebrow">专业模块入口</p>
-            {home.module_entries.length ? (
+            {moduleEntries.length ? (
               <ul>
-                {home.module_entries.map((entry) => {
+                {moduleEntries.map((entry) => {
                   const ownerResolved = isSecretaryModuleEntryOwnerResolved(entry);
                   const routePending = isPendingSourceRoute(sourceRouteState, entry.deep_link);
                   return (
@@ -167,7 +186,9 @@ export function SecretaryBoardView({
                 })}
               </ul>
             ) : (
-              <p className="muted small-note">没有可打开的来源模块入口。</p>
+              <p className="muted small-note">
+                {compatibilityFallback ? "兼容回退只保留上方已核验关注项的一条回源入口。" : "没有可打开的来源模块入口。"}
+              </p>
             )}
           </section>
         </aside>

@@ -7,15 +7,21 @@
 允许动：
 
 - prototypes/productized-desktop-shell/src-tauri/src/commands.rs
+- prototypes/productized-desktop-shell/src-tauri/src/index_host_app_entrypoints.rs
 - prototypes/productized-desktop-shell/src-tauri/src/lib.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m4_legacy_readers.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m4r06_ordinary_legacy_read_driver.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_domain.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_read_model.rs
+- prototypes/productized-desktop-shell/src-tauri/src/secretary_agent.rs
+- prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_repository.rs
 - prototypes/productized-desktop-shell/src/App.tsx
 - prototypes/productized-desktop-shell/src/components/SecretaryBoardView.tsx
 - prototypes/productized-desktop-shell/src/lib/secretaryReadModel.ts
 - prototypes/productized-desktop-shell/src/lib/tauri.ts
 - prototypes/productized-desktop-shell/src/lib/types/
+- prototypes/productized-desktop-shell/src/main.tsx
 - prototypes/productized-desktop-shell/tests/
 - prototypes/productized-desktop-shell/scripts/
 - docs/harness/

@@ -77,6 +77,7 @@ mod m3_role_session_read_model;
 mod m3_role_session_repository;
 mod m3_role_session_schema;
 mod m4_acceptance;
+mod m4_legacy_readers;
 mod m4_secretary_conversation;
 mod m4_secretary_domain;
 mod m4_secretary_read_model;
@@ -91,6 +92,7 @@ mod m4r02_ordinary_composition_driver;
 mod m4r03_ordinary_clock_driver;
 mod m4r04_ordinary_route_driver;
 mod m4r05_ordinary_conversation_driver;
+mod m4r06_ordinary_legacy_read_driver;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;
@@ -120,6 +122,11 @@ struct AppState {
     // ordinary Tauri constructor installs it.
     #[cfg(not(test))]
     m4_secretary_repository: Option<m4_secretary_repository::M4SecretarySqliteRepository>,
+    // R06 owns a separate query-only registry.  Only ordinary composition
+    // installs it; acceptance/legacy hosts must return the fixed unavailable
+    // envelope instead of reconstructing legacy data from renderer state.
+    #[cfg(not(test))]
+    m4_legacy_read_registry: Option<m4_legacy_readers::M4LegacyReadRegistry>,
     #[cfg(not(test))]
     m4_secretary_conversation_runtime:
         m4_secretary_conversation::M4SecretaryConversationRuntimeSlot,
@@ -160,6 +167,8 @@ impl AppState {
                     #[cfg(not(test))]
                     m4_secretary_repository: Some(installed.repository),
                     #[cfg(not(test))]
+                    m4_legacy_read_registry: None,
+                    #[cfg(not(test))]
                     m4_secretary_conversation_runtime: Default::default(),
                     #[cfg(not(test))]
                     m4_source_route_registry: None,
@@ -174,6 +183,8 @@ impl AppState {
                 m3_role_session_read_runtime,
                 #[cfg(not(test))]
                 m4_secretary_repository: None,
+                #[cfg(not(test))]
+                m4_legacy_read_registry: None,
                 #[cfg(not(test))]
                 m4_secretary_conversation_runtime: Default::default(),
                 #[cfg(not(test))]
@@ -192,6 +203,8 @@ impl AppState {
             m3_role_session_read_runtime: Default::default(),
             #[cfg(not(test))]
             m4_secretary_repository: None,
+            #[cfg(not(test))]
+            m4_legacy_read_registry: None,
             #[cfg(not(test))]
             m4_secretary_conversation_runtime: Default::default(),
             #[cfg(not(test))]
@@ -288,6 +301,12 @@ impl AppState {
                 &product_data_paths.workflow_state_path,
                 m4_secretary_repository.clone(),
             );
+        #[cfg(not(test))]
+        let m4_legacy_read_registry = m4_legacy_readers::M4LegacyReadRegistry::new(
+            &product_data_paths.index_path,
+            &product_data_paths.workflow_state_path,
+            m4_secretary_repository.clone(),
+        );
         Ok(Self {
             index_path: product_data_paths.index_path,
             tasks_path: product_data_paths.tasks_path,
@@ -295,6 +314,8 @@ impl AppState {
             m3_role_session_read_runtime,
             #[cfg(not(test))]
             m4_secretary_repository: Some(m4_secretary_repository),
+            #[cfg(not(test))]
+            m4_legacy_read_registry: Some(m4_legacy_read_registry),
             #[cfg(not(test))]
             m4_secretary_conversation_runtime,
             #[cfg(not(test))]
@@ -436,10 +457,14 @@ include!("commands.rs");
 include!("command_registry.rs");
 
 fn read_index(state: &AppState) -> Result<Value, String> {
-    let text = fs::read_to_string(&state.index_path)
-        .map_err(|error| format!("无法读取索引文件 {}：{error}", state.index_path.display()))?;
+    read_index_at_path(&state.index_path)
+}
+
+fn read_index_at_path(index_path: &Path) -> Result<Value, String> {
+    let text = fs::read_to_string(index_path)
+        .map_err(|error| format!("无法读取索引文件 {}：{error}", index_path.display()))?;
     serde_json::from_str(&text)
-        .map_err(|error| format!("索引 JSON 解析失败 {}：{error}", state.index_path.display()))
+        .map_err(|error| format!("索引 JSON 解析失败 {}：{error}", index_path.display()))
 }
 
 fn load_codex_session_transcript_for_index(
@@ -1672,6 +1697,62 @@ fn build_snapshot(state: &AppState, index: &Value, tasks_text: &str) -> Workbenc
 fn session_source_mode_for_process() -> SessionSourceMode {
     acceptance_runtime_profile::session_source_mode_for_process()
         .expect("acceptance runtime profile must resolve before session source use")
+}
+
+/// Replays exactly the server-side continuation-preview chain used by the
+/// ordinary Workbench snapshot, but returns only the runtime-attention
+/// observations required by R06.  It reads no renderer cache or task payload
+/// and does not write an empty sidecar on absence.
+pub(crate) fn derive_runtime_session_attention_for_legacy_reader(
+    index_path: &Path,
+    workflow_state_path: &Path,
+    server_read_timestamp: &str,
+) -> Result<Vec<RuntimeSessionAttention>, String> {
+    let session_source_mode = acceptance_runtime_profile::session_source_mode_for_process()?;
+    derive_runtime_session_attention_for_legacy_reader_with_session_mode(
+        index_path,
+        workflow_state_path,
+        server_read_timestamp,
+        session_source_mode,
+    )
+}
+
+fn derive_runtime_session_attention_for_legacy_reader_with_session_mode(
+    index_path: &Path,
+    workflow_state_path: &Path,
+    server_read_timestamp: &str,
+    session_source_mode: SessionSourceMode,
+) -> Result<Vec<RuntimeSessionAttention>, String> {
+    let index = read_index_at_path(index_path)?;
+    let mut projects = parse_projects(&index);
+    let (sessions, _) = load_sessions(&index, session_source_mode);
+    overlay_project_thread_counts(&mut projects, &sessions);
+    let workflow_state = read_workflow_state_snapshot(workflow_state_path)?;
+    if workflow_state.exists && !workflow_state.initialized {
+        return Err(m4_legacy_readers::M4R06_WORKFLOW_SNAPSHOT_REJECTED.to_string());
+    }
+    let agent_adapters =
+        derive_agent_adapter_descriptors(&sessions, &projects, Some(&workflow_state), None);
+    let session_operations = derive_session_operation_descriptors(&agent_adapters);
+    let provider_availability =
+        derive_provider_availability_summaries(&agent_adapters, &session_operations);
+    let session_continuation_previews = derive_session_continuation_previews(
+        &agent_adapters,
+        &session_operations,
+        &provider_availability,
+        Some(&workflow_state),
+    );
+    let session_continuation_store =
+        session_continuation_store::load_store(workflow_state_path, server_read_timestamp)?;
+    let runtime_generated_at = optional_string(&index, "generated_at")
+        .unwrap_or_else(|| session_continuation_store.updated_at.clone());
+    let (runtime_session_attention, _) =
+        runtime_session_attention::derive_runtime_session_attention(
+            &session_continuation_previews,
+            &session_continuation_store,
+            &runtime_generated_at,
+        );
+    Ok(runtime_session_attention)
 }
 
 fn build_snapshot_with_session_source(

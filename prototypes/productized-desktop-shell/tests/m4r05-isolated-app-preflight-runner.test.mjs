@@ -70,6 +70,10 @@ const policyStart = launcher.indexOf(
   "function normalizeInheritedMarkerNames(",
   suiteStart,
 );
+const m4r06Start = launcher.indexOf(
+  "function m4r06OrdinaryLegacyReadReceiptPath(",
+  suiteStart,
+);
 assert.ok(
   readerStart >= 0
     && spawnStart > readerStart
@@ -77,6 +81,7 @@ assert.ok(
     && killStart > closeStart
     && phaseStart > killStart
     && suiteStart > phaseStart
+    && m4r06Start > suiteStart
     && policyStart > suiteStart,
   "M4R05 runner source slices 缺失或顺序错误",
 );
@@ -128,7 +133,10 @@ assert.ok(
   "必须 receipt→仍活→精确 SIGKILL；第二 phase 必须真实 exit0",
 );
 
-const suite = launcher.slice(suiteStart, policyStart);
+// R06 is installed immediately after the R05 suite. Keep this legacy suite
+// slice bounded to its own implementation so the R06 R02 preparation is not
+// mistaken for an R05 dependency.
+const suite = launcher.slice(suiteStart, m4r06Start);
 assert.ok(
   suite.includes('phase: "two_rounds_arm"')
     && suite.includes('phase: "restart_continue_failure"')

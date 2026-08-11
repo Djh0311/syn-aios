@@ -267,6 +267,52 @@ export const M4_LEGACY_READ_SOURCE_KINDS = Object.freeze([
 
 export type M4LegacyReadSourceKind = (typeof M4_LEGACY_READ_SOURCE_KINDS)[number];
 
+export const M4_LEGACY_READ_RECEIPT_STATES = Object.freeze([
+  "OBSERVED",
+  "EMPTY",
+  "UNJOINABLE",
+  "QUARANTINED",
+] as const);
+
+export type M4LegacyReadReaderReceiptState = (typeof M4_LEGACY_READ_RECEIPT_STATES)[number];
+
+const M4_LEGACY_READ_WORK_ITEM_READER_ADAPTER_ID = "registered-work-item-source-owner-mapper.v1" as const;
+const M4_LEGACY_READ_EMPTY_REASON = "M4R06_EMPTY_SERVER_SURFACE" as const;
+const M4_LEGACY_READ_UNJOINABLE_REASON = "M4R06_UNJOINABLE_NO_EXACT_TUPLE" as const;
+const M4_LEGACY_READ_READER_QUARANTINE_REASONS = new Set([
+  "M4R06_READER_UNAVAILABLE",
+  "M4R06_READER_REJECTED",
+]);
+
+// The registry is server-owned, but the renderer pins the named read-only
+// receipt boundary so a route or adapter can never be guessed from a legacy
+// source kind. The order deliberately matches M4_LEGACY_READ_SOURCE_KINDS.
+const M4_LEGACY_READ_RECEIPT_SPECS: Readonly<Record<M4LegacyReadSourceKind, Readonly<{
+  reader_id: string;
+  source_surface_code: string;
+}>>> = Object.freeze({
+  SECRETARY_READ_MODEL_DETERMINISTIC_SUMMARY: Object.freeze({
+    reader_id: "m4-legacy-reader:secretary-read-model/v1",
+    source_surface_code: "SERVER_LEGACY_SECRETARY_READ_MODEL_PRIMITIVES",
+  }),
+  RIGHT_RAIL_NOTIFICATION_AND_TODO_PROJECTION: Object.freeze({
+    reader_id: "m4-legacy-reader:right-rail-work-item/v1",
+    source_surface_code: "M2_WORK_ITEM_RIGHT_RAIL_PROJECTION",
+  }),
+  RUNTIME_ATTENTION_PROJECTION: Object.freeze({
+    reader_id: "m4-legacy-reader:runtime-attention/v1",
+    source_surface_code: "SERVER_RUNTIME_ATTENTION_PROJECTION",
+  }),
+  REACT_PENDING_ACTION_VISIBILITY: Object.freeze({
+    reader_id: "m4-legacy-reader:react-pending-action/v1",
+    source_surface_code: "RENDERER_LOCAL_PENDING_ACTION_VISIBILITY",
+  }),
+  MEMORY_DAILY_INBOX_CANDIDATE: Object.freeze({
+    reader_id: "m4-legacy-reader:memory-daily-inbox/v1",
+    source_surface_code: "SERVER_MEMORY_DAILY_CANDIDATE_STORE",
+  }),
+});
+
 export type M4LegacyReadSourceLinkDto = Readonly<{
   link_kind: string;
   source_owner_ref: string;
@@ -310,6 +356,20 @@ export type M4LegacyReadSourceInventoryEntryDto = Readonly<{
   write_authority: typeof M4_LEGACY_READ_WRITE_AUTHORITY_NONE;
 }>;
 
+// Reader receipts are acceptance evidence only. They never carry a source
+// link, candidate body, or renderer-routable identity, and they never enter
+// the guarded fallback projection.
+export type M4LegacyReadReaderReceiptDto = Readonly<{
+  legacy_source_kind: M4LegacyReadSourceKind;
+  reader_id: string;
+  source_surface_code: string;
+  read_state: M4LegacyReadReaderReceiptState;
+  reason_code: string | null;
+  legacy_reader_adapter_id: string | null;
+  candidate_count: number;
+  complete_tuple_count: number;
+}>;
+
 export type M4LegacyReadCompatibilityReportDto = Readonly<{
   schema_version: typeof M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION;
   parity_matrix_version: typeof M4_LEGACY_READ_PARITY_MATRIX_VERSION;
@@ -318,6 +378,7 @@ export type M4LegacyReadCompatibilityReportDto = Readonly<{
   scope_ref: string;
   scope_source_watermark: string;
   inventory: readonly M4LegacyReadSourceInventoryEntryDto[];
+  reader_receipts: readonly M4LegacyReadReaderReceiptDto[];
   rows: readonly M4LegacyReadParityRowDto[];
 }>;
 
@@ -1635,7 +1696,10 @@ export function parseSecretaryLegacyReadCompatibilityReportEnvelope(
 function m4LegacyParseReport(value: unknown): M4LegacyReadCompatibilityReportDto {
   const raw = m4LegacyExactObject(
     value,
-    ["schema_version", "parity_matrix_version", "mode", "rollback_mode", "scope_ref", "scope_source_watermark", "inventory", "rows"],
+    [
+      "schema_version", "parity_matrix_version", "mode", "rollback_mode", "scope_ref", "scope_source_watermark",
+      "inventory", "reader_receipts", "rows",
+    ],
     "legacy_read_report",
   );
   if (raw.schema_version !== M4_LEGACY_READ_COMPATIBILITY_SCHEMA_VERSION
@@ -1652,8 +1716,26 @@ function m4LegacyParseReport(value: unknown): M4LegacyReadCompatibilityReportDto
     || inventory.some((entry, index) => entry.legacy_source_kind !== M4_LEGACY_READ_SOURCE_KINDS[index])) {
     throw new Error("m4_secretary_legacy_read_inventory_invalid");
   }
+  const reader_receipts = m4LegacyArray(raw.reader_receipts, "legacy_read_report.reader_receipts")
+    .map((receipt, index) => m4LegacyParseReaderReceipt(receipt, index));
+  if (reader_receipts.length !== M4_LEGACY_READ_SOURCE_KINDS.length
+    || reader_receipts.some((receipt, index) => receipt.legacy_source_kind !== M4_LEGACY_READ_SOURCE_KINDS[index])) {
+    throw new Error("m4_secretary_legacy_read_reader_receipts_invalid");
+  }
   const rows = m4LegacyArray(raw.rows, "legacy_read_report.rows")
     .map((row, index) => m4LegacyParseParityRow(row, index, scope_ref, scope_source_watermark));
+  const rowCountsBySourceKind = new Map<M4LegacyReadSourceKind, number>();
+  for (const row of rows) {
+    rowCountsBySourceKind.set(
+      row.legacy_source_kind,
+      (rowCountsBySourceKind.get(row.legacy_source_kind) ?? 0) + 1,
+    );
+  }
+  for (const receipt of reader_receipts) {
+    if ((rowCountsBySourceKind.get(receipt.legacy_source_kind) ?? 0) !== receipt.complete_tuple_count) {
+      throw new Error("m4_secretary_legacy_read_reader_receipt_row_count_invalid");
+    }
+  }
   const primaryCounts = new Map<string, number>();
   const canonicalByLegacyIdentity = new Map<string, { dedupeKey: string; canonicalSource: M4LegacyCanonicalSourceReadDto }>();
   for (const row of rows) {
@@ -1689,6 +1771,7 @@ function m4LegacyParseReport(value: unknown): M4LegacyReadCompatibilityReportDto
     scope_ref,
     scope_source_watermark,
     inventory: Object.freeze(inventory),
+    reader_receipts: Object.freeze(reader_receipts),
     rows: Object.freeze(rows),
   });
 }
@@ -1724,6 +1807,79 @@ function m4LegacyParseInventoryEntry(value: unknown, index: number): M4LegacyRea
     legacy_source_kind: m4LegacySourceKind(raw.legacy_source_kind, `${field}.legacy_source_kind`),
     compatibility_role: M4_LEGACY_READ_SOURCE_REF_ONLY_ROLE,
     write_authority: M4_LEGACY_READ_WRITE_AUTHORITY_NONE,
+  });
+}
+
+function m4LegacyParseReaderReceipt(value: unknown, index: number): M4LegacyReadReaderReceiptDto {
+  const field = `legacy_read_report.reader_receipts[${index}]`;
+  const raw = m4LegacyExactObject(
+    value,
+    [
+      "legacy_source_kind", "reader_id", "source_surface_code", "read_state", "reason_code",
+      "legacy_reader_adapter_id", "candidate_count", "complete_tuple_count",
+    ],
+    field,
+  );
+  const legacy_source_kind = m4LegacySourceKind(raw.legacy_source_kind, `${field}.legacy_source_kind`);
+  const expected = M4_LEGACY_READ_RECEIPT_SPECS[legacy_source_kind];
+  const reader_id = m4LegacyReaderId(raw.reader_id, `${field}.reader_id`);
+  const source_surface_code = m4LegacyCode(raw.source_surface_code, `${field}.source_surface_code`);
+  const read_state = m4LegacyReaderReceiptState(
+    m4LegacyCode(raw.read_state, `${field}.read_state`),
+    `${field}.read_state`,
+  );
+  const reason_code = raw.reason_code === null ? null : m4LegacyCode(raw.reason_code, `${field}.reason_code`);
+  const legacy_reader_adapter_id = raw.legacy_reader_adapter_id === null
+    ? null
+    : m4LegacyReaderAdapterId(raw.legacy_reader_adapter_id, `${field}.legacy_reader_adapter_id`);
+  const candidate_count = m4LegacyCount(raw.candidate_count, `${field}.candidate_count`);
+  const complete_tuple_count = m4LegacyCount(raw.complete_tuple_count, `${field}.complete_tuple_count`);
+
+  if (legacy_source_kind !== M4_LEGACY_READ_SOURCE_KINDS[index]
+    || reader_id !== expected.reader_id
+    || source_surface_code !== expected.source_surface_code
+    || complete_tuple_count > candidate_count) {
+    throw new Error("m4_secretary_legacy_read_reader_receipt_binding_invalid");
+  }
+
+  const isWorkItemReader = legacy_source_kind === "RIGHT_RAIL_NOTIFICATION_AND_TODO_PROJECTION";
+  if (read_state === "OBSERVED") {
+    if (!isWorkItemReader
+      || reason_code !== null
+      || legacy_reader_adapter_id !== M4_LEGACY_READ_WORK_ITEM_READER_ADAPTER_ID
+      || candidate_count === 0
+      || complete_tuple_count === 0
+      || complete_tuple_count !== candidate_count) {
+      throw new Error("m4_secretary_legacy_read_reader_receipt_observed_invalid");
+    }
+  } else if (read_state === "EMPTY") {
+    if (reason_code !== M4_LEGACY_READ_EMPTY_REASON
+      || legacy_reader_adapter_id !== null
+      || candidate_count !== 0
+      || complete_tuple_count !== 0) {
+      throw new Error("m4_secretary_legacy_read_reader_receipt_empty_invalid");
+    }
+  } else if (read_state === "UNJOINABLE") {
+    if (reason_code !== M4_LEGACY_READ_UNJOINABLE_REASON
+      || legacy_reader_adapter_id !== null
+      || complete_tuple_count !== 0) {
+      throw new Error("m4_secretary_legacy_read_reader_receipt_unjoinable_invalid");
+    }
+  } else if (!M4_LEGACY_READ_READER_QUARANTINE_REASONS.has(reason_code ?? "")
+    || legacy_reader_adapter_id !== null
+    || complete_tuple_count !== 0) {
+    throw new Error("m4_secretary_legacy_read_reader_receipt_quarantined_invalid");
+  }
+
+  return Object.freeze({
+    legacy_source_kind,
+    reader_id,
+    source_surface_code,
+    read_state,
+    reason_code,
+    legacy_reader_adapter_id,
+    candidate_count,
+    complete_tuple_count,
   });
 }
 
@@ -1913,6 +2069,29 @@ function m4LegacyCode(value: unknown, field: string): string {
   return code;
 }
 
+function m4LegacyReaderId(value: unknown, field: string): string {
+  const readerId = m4LegacyString(value, field);
+  if (!/^m4-legacy-reader:[a-z0-9-]+\/v[1-9][0-9]*$/.test(readerId)) {
+    throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  }
+  return readerId;
+}
+
+function m4LegacyReaderAdapterId(value: unknown, field: string): string {
+  const adapterId = m4LegacyString(value, field);
+  if (adapterId !== M4_LEGACY_READ_WORK_ITEM_READER_ADAPTER_ID) {
+    throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  }
+  return adapterId;
+}
+
+function m4LegacyCount(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+  }
+  return value;
+}
+
 function m4LegacySourceKind(value: unknown, field: string): M4LegacyReadSourceKind {
   const sourceKind = m4LegacyCode(value, field);
   if (!M4_LEGACY_READ_SOURCE_KINDS.includes(sourceKind as M4LegacyReadSourceKind)) {
@@ -1923,6 +2102,13 @@ function m4LegacySourceKind(value: unknown, field: string): M4LegacyReadSourceKi
 
 function m4LegacyDisposition(value: string, field: string): "PARITY" | "QUARANTINED" {
   if (value === "PARITY" || value === "QUARANTINED") return value;
+  throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
+}
+
+function m4LegacyReaderReceiptState(value: string, field: string): M4LegacyReadReaderReceiptState {
+  if (M4_LEGACY_READ_RECEIPT_STATES.includes(value as M4LegacyReadReaderReceiptState)) {
+    return value as M4LegacyReadReaderReceiptState;
+  }
   throw new Error(`m4_secretary_legacy_read_invalid_${field}`);
 }
 

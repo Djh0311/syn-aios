@@ -558,6 +558,209 @@ const M4R05_ORDINARY_CONVERSATION_WORKBENCH_DATABASE_FIELDS = [
   "catalog_file_count",
   "catalog_labels_and_bytes_sha256",
 ];
+const M4R06_ORDINARY_LEGACY_READ_MODE_ARG =
+  "--m4r06-ordinary-legacy-read";
+const M4R06_ORDINARY_LEGACY_READ_DRIVER_ENV =
+  "SYN_M4R06_ORDINARY_LEGACY_READ_DRIVER";
+const M4R06_ORDINARY_LEGACY_READ_PHASE_ENV =
+  "SYN_M4R06_ORDINARY_LEGACY_READ_PHASE";
+const M4R06_ORDINARY_LEGACY_READ_NONCE_ENV =
+  "SYN_M4R06_ORDINARY_LEGACY_READ_NONCE";
+const M4R06_ORDINARY_LEGACY_READ_DRIVER_VALUE =
+  "ordinary-real-legacy-read-parity-v1";
+const M4R06_ORDINARY_LEGACY_READ_MARKER_ENV_NAMES = [
+  M4R06_ORDINARY_LEGACY_READ_DRIVER_ENV,
+  M4R06_ORDINARY_LEGACY_READ_PHASE_ENV,
+  M4R06_ORDINARY_LEGACY_READ_NONCE_ENV,
+];
+const M4R06_ORDINARY_LEGACY_READ_PHASE = "read_and_replay";
+const M4R06_ORDINARY_LEGACY_READ_RECEIPT_FILE =
+  "m4r06-ordinary-legacy-read-read_and_replay.json";
+const M4R06_ORDINARY_LEGACY_READ_RECEIPT_SCHEMA =
+  "syn.m4.remediation.behavior-receipt.v1";
+const M4R06_ORDINARY_LEGACY_READ_COMPOSITE_SCHEMA =
+  "syn.m4.remediation.behavior-receipt.v1";
+const M4R06_ORDINARY_LEGACY_READ_COMPOSITE_FILE =
+  "m4r06-ordinary-legacy-read-composite-receipt.json";
+const M4R06_ORDINARY_LEGACY_READ_PORTABLE_REPORT_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../docs/harness/reports/M4R06-real-legacy-shadow-parity-fallback-behavior-receipt.json",
+);
+const M4R06_ORDINARY_LEGACY_READ_MODE_CONFLICT =
+  "m4r06_ordinary_legacy_read_mode_conflict";
+const M4R06_ORDINARY_LEGACY_READ_OUTPUT_MAX_BYTES = 16 * 1024;
+const M4R06_ORDINARY_LEGACY_READ_RECEIPT_MAX_BYTES = 64 * 1024;
+// Rust has a 110s terminal watchdog covering renderer readiness, one actual
+// guarded-fallback DOM phase, two report reads, and four DB snapshots. Keep
+// a 15s outer margin for receipt publication and controlled exit without
+// creating another App launch.
+const M4R06_ORDINARY_LEGACY_READ_PHASE_TIMEOUT_MS = 125 * 1000;
+const M4R06_ORDINARY_LEGACY_READ_CHILD_CLOSE_GRACE_MS = 2 * 1000;
+const M4R06_ORDINARY_LEGACY_READ_SOURCE_KINDS = [
+  "SECRETARY_READ_MODEL_DETERMINISTIC_SUMMARY",
+  "RIGHT_RAIL_NOTIFICATION_AND_TODO_PROJECTION",
+  "RUNTIME_ATTENTION_PROJECTION",
+  "REACT_PENDING_ACTION_VISIBILITY",
+  "MEMORY_DAILY_INBOX_CANDIDATE",
+];
+const M4R06_ORDINARY_LEGACY_READ_READER_SPECS = [
+  {
+    legacy_source_kind: "SECRETARY_READ_MODEL_DETERMINISTIC_SUMMARY",
+    reader_id: "m4-legacy-reader:secretary-read-model/v1",
+    source_surface_code: "SERVER_LEGACY_SECRETARY_READ_MODEL_PRIMITIVES",
+  },
+  {
+    legacy_source_kind: "RIGHT_RAIL_NOTIFICATION_AND_TODO_PROJECTION",
+    reader_id: "m4-legacy-reader:right-rail-work-item/v1",
+    source_surface_code: "M2_WORK_ITEM_RIGHT_RAIL_PROJECTION",
+  },
+  {
+    legacy_source_kind: "RUNTIME_ATTENTION_PROJECTION",
+    reader_id: "m4-legacy-reader:runtime-attention/v1",
+    source_surface_code: "SERVER_RUNTIME_ATTENTION_PROJECTION",
+  },
+  {
+    legacy_source_kind: "REACT_PENDING_ACTION_VISIBILITY",
+    reader_id: "m4-legacy-reader:react-pending-action/v1",
+    source_surface_code: "RENDERER_LOCAL_PENDING_ACTION_VISIBILITY",
+  },
+  {
+    legacy_source_kind: "MEMORY_DAILY_INBOX_CANDIDATE",
+    reader_id: "m4-legacy-reader:memory-daily-inbox/v1",
+    source_surface_code: "SERVER_MEMORY_DAILY_CANDIDATE_STORE",
+  },
+];
+const M4R06_ORDINARY_LEGACY_READ_WORK_ITEM_SOURCE_KIND =
+  "RIGHT_RAIL_NOTIFICATION_AND_TODO_PROJECTION";
+const M4R06_ORDINARY_LEGACY_READ_WORK_ITEM_SOURCE_OBJECT_TYPE =
+  "workflow_attention";
+const M4R06_ORDINARY_LEGACY_READ_INGESTION_ADAPTER_ID =
+  "registered-work-item-source-owner-mapper.v1";
+const M4R06_ORDINARY_LEGACY_READ_EMPTY_REASON = "M4R06_EMPTY_SERVER_SURFACE";
+const M4R06_ORDINARY_LEGACY_READ_UNJOINABLE_REASON =
+  "M4R06_UNJOINABLE_NO_EXACT_TUPLE";
+const M4R06_ORDINARY_LEGACY_READ_QUARANTINE_REASONS = new Set([
+  "M4R06_READER_UNAVAILABLE",
+  "M4R06_READER_REJECTED",
+]);
+const M4R06_ORDINARY_LEGACY_READ_PASS_RECEIPT_FIELDS = [
+  "schema_version",
+  "task_package",
+  "phase",
+  "launch_ordinal",
+  "process_id_sha256",
+  "profile_fingerprint",
+  "nonce_sha256",
+  "outcome",
+  "portable",
+  "ordinary_constructor",
+  "ordinary_composition",
+  "command_registry_surface",
+  "acceptance_wrapper_calls",
+  "direct_repository_seed_calls",
+  "manual_legacy_candidate_calls",
+  "zero_arg_load_calls",
+  "actual_legacy_report_load_calls",
+  "synthetic_home_unavailable_trigger",
+  "actual_ui_fallback_visible",
+  "ui_fallback",
+  "r02_preparation",
+  "first_report_sha256",
+  "exact_replay_report_sha256",
+  "exact_replay_matches_first_read",
+  "reader_receipts",
+  "work_item_parity",
+  "guarded_fallback",
+  "database",
+  "error_family",
+];
+const M4R06_ORDINARY_LEGACY_READ_R02_PREPARATION_FIELDS = [
+  "r02_readback_receipt_sha256",
+  "r02_ingestion_adapter_id_sha256",
+  "same_profile",
+  "ingestion_adapter_matches_work_item_reader",
+];
+const M4R06_ORDINARY_LEGACY_READ_READER_RECEIPT_FIELDS = [
+  "legacy_source_kind",
+  "reader_id_sha256",
+  "source_surface_code",
+  "read_state",
+  "reason_code",
+  "legacy_reader_adapter_id_sha256",
+  "candidate_count",
+  "complete_tuple_count",
+];
+const M4R06_ORDINARY_LEGACY_READ_WORK_ITEM_FIELDS = [
+  "legacy_source_kind",
+  "canonical_source_object_id_sha256",
+  "source_owner_ref_sha256",
+  "source_revision",
+  "r02_ingestion_adapter_id_sha256",
+  "reader_adapter_matches_r02_ingestion",
+  "owner_publication_rows",
+  "m4_current_rows",
+  "m4_provenance_rows",
+  "parity_primary_rows",
+];
+const M4R06_ORDINARY_LEGACY_READ_GUARDED_FALLBACK_FIELDS = [
+  "eligible_row_count",
+  "eligible_rows_all_parity_primary",
+];
+const M4R06_ORDINARY_LEGACY_READ_UI_FALLBACK_FIELDS = [
+  "open_conversation_clicks",
+  "compatibility_fallback_roots",
+  "parity_primary_attention_rows",
+  "non_parity_rows_visible",
+  "source_route_controls",
+  "nested_summary_source_route_controls",
+  "board_coordination_action_controls",
+  "board_personal_action_controls",
+  "source_route_clicks",
+  "source_route_ref_sha256",
+  "source_owner_ref_sha256",
+  "source_object_type",
+  "canonical_source_object_id_sha256",
+  "source_revision",
+  "exact_work_item_parity_binding",
+];
+const M4R06_ORDINARY_LEGACY_READ_DATABASE_FIELDS = [
+  "m4_snapshot_scope",
+  "independent_daily_scheduler_tables_excluded",
+  "baseline",
+  "after_ui_fallback",
+  "after_first_read",
+  "after_exact_replay",
+  "ui_fallback_zero_owner_delta",
+  "ui_fallback_zero_m4_delta",
+  "ui_fallback_zero_coordination_delta",
+  "ui_fallback_zero_effect_delta",
+  "ui_fallback_zero_writeback_delta",
+  "first_read_zero_owner_delta",
+  "first_read_zero_m4_delta",
+  "first_read_zero_coordination_delta",
+  "first_read_zero_effect_delta",
+  "first_read_zero_writeback_delta",
+  "exact_replay_zero_owner_delta",
+  "exact_replay_zero_m4_delta",
+  "exact_replay_zero_coordination_delta",
+  "exact_replay_zero_effect_delta",
+  "exact_replay_zero_writeback_delta",
+  "read_only_query_only_connection_count",
+];
+const M4R06_ORDINARY_LEGACY_READ_SNAPSHOT_FIELDS = [
+  "owner",
+  "m4",
+  "coordination",
+  "effects",
+  "writeback",
+];
+const M4R06_ORDINARY_LEGACY_READ_FINGERPRINT_FIELDS = [
+  "sqlite_integrity_check",
+  "foreign_key_violation_rows",
+  "table_count",
+  "record_count",
+  "canonical_record_hashes_sha256",
+];
 const M2_REFERENCE_SLICE_DRIVER_ENV = "SYN_M2_R4_REFERENCE_SLICE_DRIVER";
 const M2_REFERENCE_SLICE_ATTEMPT_ENV = "SYN_M2_R4_REFERENCE_SLICE_ATTEMPT";
 const M2_REFERENCE_SLICE_PHASE_ENV = "SYN_M2_R4_REFERENCE_SLICE_PHASE";
@@ -1069,6 +1272,132 @@ async function writeM4R05PortableReport(value) {
       || (metadata.mode & 0o777) !== MODE_0600
     ) {
       throw new Error("m4r05 portable report metadata invalid");
+    }
+  } catch (error) {
+    try {
+      await unlink(temporaryPath);
+    } catch {
+      // rename success or absent temp requires no cleanup.
+    }
+    throw error;
+  }
+}
+
+function m4r06PortableReportContractFailure(value) {
+  const rawLeak = m4r06RawEvidenceLeak(value);
+  if (rawLeak) return "raw_evidence";
+  return m4r02FirstInvalidField([
+    [
+      "schema",
+      value?.schema_version === M4R06_ORDINARY_LEGACY_READ_COMPOSITE_SCHEMA,
+    ],
+    ["task_package", value?.task_package === "M4R06"],
+    ["phase", value?.phase === M4R06_ORDINARY_LEGACY_READ_PHASE],
+    ["outcome", value?.outcome === "PASS"],
+    ["portable", value?.portable === true],
+    ["ordinary_composition", value?.ordinary_composition === true],
+    ["acceptance_wrapper_calls", value?.acceptance_wrapper_calls === 0],
+    ["direct_repository_seed_calls", value?.direct_repository_seed_calls === 0],
+    ["manual_legacy_candidate_calls", value?.manual_legacy_candidate_calls === 0],
+    ["synthetic_fixture_only", value?.synthetic_fixture_only === true],
+    [
+      "synthetic_home_unavailable_trigger",
+      value?.synthetic_home_unavailable_trigger === true,
+    ],
+    [
+      "synthetic_trigger_scope",
+      value?.synthetic_trigger_scope === "HOME_UNAVAILABLE_ONE_SHOT",
+    ],
+    [
+      "ordinary_reader_report_observed",
+      value?.ordinary_reader_report_observed === true,
+    ],
+    [
+      "ordinary_dom_fallback_observed",
+      value?.ordinary_dom_fallback_observed === true,
+    ],
+    ["actual_ui_fallback_visible", value?.actual_ui_fallback_visible === true],
+    [
+      "ui_fallback_exact_binding",
+      value?.ui_fallback?.exact_work_item_parity_binding === true,
+    ],
+    [
+      "zero_arg_load_calls",
+      value?.report_evidence?.zero_arg_load_calls === 2,
+    ],
+    [
+      "actual_legacy_report_load_calls",
+      value?.report_evidence?.actual_legacy_report_load_calls === 3,
+    ],
+    [
+      "reader_receipts",
+      Array.isArray(value?.report_evidence?.reader_receipts)
+        && value.report_evidence.reader_receipts.length
+          === M4R06_ORDINARY_LEGACY_READ_SOURCE_KINDS.length,
+    ],
+  ]);
+}
+
+async function writeM4R06PortableReport(value, rootCompositePath) {
+  const contractFailure = m4r06PortableReportContractFailure(value);
+  if (contractFailure) {
+    throw new Error(`m4r06 portable report contract invalid: ${contractFailure}`);
+  }
+  const rootMetadata = await lstat(rootCompositePath);
+  if (
+    !rootMetadata.isFile()
+    || rootMetadata.isSymbolicLink()
+    || (rootMetadata.mode & 0o777) !== MODE_0600
+  ) {
+    throw new Error("m4r06 root composite metadata invalid");
+  }
+  const rootCompositeBytes = await readFile(rootCompositePath);
+  const expectedRootCompositeBytes = Buffer.from(
+    `${JSON.stringify(value, null, 2)}\n`,
+    "utf8",
+  );
+  if (
+    !rootCompositeBytes.equals(expectedRootCompositeBytes)
+    || sha256(rootCompositeBytes) !== sha256(expectedRootCompositeBytes)
+  ) {
+    throw new Error("m4r06 root composite bytes invalid");
+  }
+  const reportDirectory = dirname(
+    M4R06_ORDINARY_LEGACY_READ_PORTABLE_REPORT_PATH,
+  );
+  await mkdir(reportDirectory, { recursive: true });
+  const temporaryPath = join(
+    reportDirectory,
+    `.M4R06-real-legacy-shadow-parity-fallback-${randomBytes(12).toString("hex")}.tmp`,
+  );
+  try {
+    await writeFile(temporaryPath, rootCompositeBytes, {
+      flag: "wx",
+      mode: MODE_0600,
+    });
+    await chmod(temporaryPath, MODE_0600);
+    await rename(
+      temporaryPath,
+      M4R06_ORDINARY_LEGACY_READ_PORTABLE_REPORT_PATH,
+    );
+    const metadata = await lstat(
+      M4R06_ORDINARY_LEGACY_READ_PORTABLE_REPORT_PATH,
+    );
+    if (
+      !metadata.isFile()
+      || metadata.isSymbolicLink()
+      || (metadata.mode & 0o777) !== MODE_0600
+    ) {
+      throw new Error("m4r06 portable report metadata invalid");
+    }
+    const portableBytes = await readFile(
+      M4R06_ORDINARY_LEGACY_READ_PORTABLE_REPORT_PATH,
+    );
+    if (
+      !rootCompositeBytes.equals(portableBytes)
+      || sha256(rootCompositeBytes) !== sha256(portableBytes)
+    ) {
+      throw new Error("m4r06 portable report readback mismatch");
     }
   } catch (error) {
     try {
@@ -7076,6 +7405,921 @@ async function runM4R05OrdinaryConversationSuite({
   return composite;
 }
 
+function m4r06OrdinaryLegacyReadReceiptPath(root) {
+  return join(
+    root,
+    "runtime-artifacts",
+    M4R06_ORDINARY_LEGACY_READ_RECEIPT_FILE,
+  );
+}
+
+function m4r06IsNonnegativeInteger(value) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function m4r06IsBoundedCode(value) {
+  return typeof value === "string"
+    && /^[A-Za-z0-9_.:-]{1,256}$/.test(value)
+    && value.trim() === value;
+}
+
+function m4r06RawEvidenceLeak(value) {
+  const forbiddenKeys = new Set([
+    "profile_path",
+    "profile_root",
+    "owner_db_path",
+    "m4_db_path",
+    "receipt_root",
+    "canonical_source_object_id",
+    "source_owner_ref",
+    "source_route_ref",
+    "opaque_route_ref",
+    "source_object_ref",
+    "source_object_id",
+    "reader_id",
+    "legacy_reader_adapter_id",
+    "legacy_item_ref",
+    "scope_ref",
+    "scope_source_watermark",
+    "nonce",
+    "process_id",
+  ]);
+  const visit = (current, path = "$") => {
+    if (Array.isArray(current)) {
+      for (let index = 0; index < current.length; index += 1) {
+        const leak = visit(current[index], `${path}[${index}]`);
+        if (leak) return leak;
+      }
+      return null;
+    }
+    if (current && typeof current === "object") {
+      for (const [key, nested] of Object.entries(current)) {
+        if (forbiddenKeys.has(key)) return `${path}.${key}`;
+        const leak = visit(nested, `${path}.${key}`);
+        if (leak) return leak;
+      }
+      return null;
+    }
+    if (typeof current !== "string") return null;
+    if (
+      current.startsWith("/")
+      || current.includes("\\")
+      || current.startsWith("owner:")
+      || current.startsWith("m4-legacy-reader:")
+      || current.startsWith("syn-r4-")
+      || /^[a-f0-9]{32}$/.test(current)
+    ) {
+      return path;
+    }
+    return null;
+  };
+  return visit(value);
+}
+
+function m4r06FingerprintFailure(value) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R06_ORDINARY_LEGACY_READ_FINGERPRINT_FIELDS,
+  )) return "fingerprint_fields";
+  return m4r02FirstInvalidField([
+    ["integrity", value.sqlite_integrity_check === "ok"],
+    ["foreign_keys", value.foreign_key_violation_rows === 0],
+    ["table_count", m4r06IsNonnegativeInteger(value.table_count)],
+    ["record_count", m4r06IsNonnegativeInteger(value.record_count)],
+    ["hash", m4r02IsLowerHexSha256(value.canonical_record_hashes_sha256)],
+  ]);
+}
+
+function m4r06DatabaseSnapshotFailure(value) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R06_ORDINARY_LEGACY_READ_SNAPSHOT_FIELDS,
+  )) return "snapshot_fields";
+  for (const field of M4R06_ORDINARY_LEGACY_READ_SNAPSHOT_FIELDS) {
+    const failure = m4r06FingerprintFailure(value[field]);
+    if (failure) return `${field}_${failure}`;
+  }
+  return null;
+}
+
+function m4r06DatabaseContractFailure(value) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R06_ORDINARY_LEGACY_READ_DATABASE_FIELDS,
+  )) return "database_fields";
+  for (const field of [
+    "baseline",
+    "after_ui_fallback",
+    "after_first_read",
+    "after_exact_replay",
+  ]) {
+    const failure = m4r06DatabaseSnapshotFailure(value[field]);
+    if (failure) return `${field}_${failure}`;
+  }
+  const zeroDeltaFields = [
+    "ui_fallback_zero_owner_delta",
+    "ui_fallback_zero_m4_delta",
+    "ui_fallback_zero_coordination_delta",
+    "ui_fallback_zero_effect_delta",
+    "ui_fallback_zero_writeback_delta",
+    "first_read_zero_owner_delta",
+    "first_read_zero_m4_delta",
+    "first_read_zero_coordination_delta",
+    "first_read_zero_effect_delta",
+    "first_read_zero_writeback_delta",
+    "exact_replay_zero_owner_delta",
+    "exact_replay_zero_m4_delta",
+    "exact_replay_zero_coordination_delta",
+    "exact_replay_zero_effect_delta",
+    "exact_replay_zero_writeback_delta",
+  ];
+  const invalidZeroDelta = zeroDeltaFields.find((field) => value[field] !== true);
+  if (invalidZeroDelta) return invalidZeroDelta;
+  const exactBaseline = m4r05CanonicalJson(value.baseline);
+  return m4r02FirstInvalidField([
+    [
+      "snapshot_scope",
+      value.m4_snapshot_scope
+        === "READER_RELATED_M4_EXCLUDING_INDEPENDENT_DAILY_SCHEDULER",
+    ],
+    [
+      "daily_scheduler_excluded",
+      value.independent_daily_scheduler_tables_excluded === true,
+    ],
+    [
+      "read_only_connections",
+      value.read_only_query_only_connection_count === 10,
+    ],
+    [
+      "ui_fallback_snapshot_exact",
+      m4r05CanonicalJson(value.after_ui_fallback) === exactBaseline,
+    ],
+    [
+      "first_read_snapshot_exact",
+      m4r05CanonicalJson(value.after_first_read) === exactBaseline,
+    ],
+    [
+      "exact_replay_snapshot_exact",
+      m4r05CanonicalJson(value.after_exact_replay) === exactBaseline,
+    ],
+  ]);
+}
+
+function m4r06ReaderReceiptContractFailure(value, expectedSpec, expectedAdapterHash) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R06_ORDINARY_LEGACY_READ_READER_RECEIPT_FIELDS,
+  )) return "reader_fields";
+  const expectedKind = expectedSpec.legacy_source_kind;
+  const expectedWorkItem = expectedKind
+    === M4R06_ORDINARY_LEGACY_READ_WORK_ITEM_SOURCE_KIND;
+  const commonFailure = m4r02FirstInvalidField([
+    ["kind", value.legacy_source_kind === expectedKind],
+    ["reader_id", value.reader_id_sha256 === sha256(expectedSpec.reader_id)],
+    [
+      "source_surface",
+      value.source_surface_code === expectedSpec.source_surface_code,
+    ],
+    [
+      "read_state",
+      ["OBSERVED", "EMPTY", "UNJOINABLE", "QUARANTINED"].includes(
+        value.read_state,
+      ),
+    ],
+    [
+      "reason_code",
+      value.reason_code === null || m4r06IsBoundedCode(value.reason_code),
+    ],
+    [
+      "adapter_hash",
+      value.legacy_reader_adapter_id_sha256 === null
+        || m4r02IsLowerHexSha256(value.legacy_reader_adapter_id_sha256),
+    ],
+    ["candidate_count", m4r06IsNonnegativeInteger(value.candidate_count)],
+    [
+      "complete_tuple_count",
+      m4r06IsNonnegativeInteger(value.complete_tuple_count)
+        && value.complete_tuple_count <= value.candidate_count,
+    ],
+  ]);
+  if (commonFailure) return commonFailure;
+  if (value.read_state === "OBSERVED") {
+    return m4r02FirstInvalidField([
+      ["observed_work_item", expectedWorkItem],
+      ["observed_reason", value.reason_code === null],
+      [
+        "observed_adapter",
+        value.legacy_reader_adapter_id_sha256 === expectedAdapterHash,
+      ],
+      ["observed_candidates", value.candidate_count > 0],
+      [
+        "observed_complete",
+        value.complete_tuple_count === value.candidate_count,
+      ],
+    ]);
+  }
+  if (value.read_state === "EMPTY") {
+    return m4r02FirstInvalidField([
+      ["empty_reason", value.reason_code === M4R06_ORDINARY_LEGACY_READ_EMPTY_REASON],
+      ["empty_adapter", value.legacy_reader_adapter_id_sha256 === null],
+      ["empty_candidates", value.candidate_count === 0],
+      ["empty_complete", value.complete_tuple_count === 0],
+    ]);
+  }
+  if (value.read_state === "UNJOINABLE") {
+    return m4r02FirstInvalidField([
+      [
+        "unjoinable_reason",
+        value.reason_code === M4R06_ORDINARY_LEGACY_READ_UNJOINABLE_REASON,
+      ],
+      ["unjoinable_adapter", value.legacy_reader_adapter_id_sha256 === null],
+      ["unjoinable_complete", value.complete_tuple_count === 0],
+    ]);
+  }
+  return m4r02FirstInvalidField([
+    [
+      "quarantined_reason",
+      M4R06_ORDINARY_LEGACY_READ_QUARANTINE_REASONS.has(value.reason_code),
+    ],
+    ["quarantined_adapter", value.legacy_reader_adapter_id_sha256 === null],
+    ["quarantined_complete", value.complete_tuple_count === 0],
+  ]);
+}
+
+function m4r06ReceiptIdentityFailure({
+  value,
+  expectedNonceSha256,
+  expectedProfileFingerprint,
+  expectedProcessIdSha256,
+}) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R06_ORDINARY_LEGACY_READ_PASS_RECEIPT_FIELDS,
+  )) return "top_level_fields";
+  return m4r02FirstInvalidField([
+    ["schema", value.schema_version === M4R06_ORDINARY_LEGACY_READ_RECEIPT_SCHEMA],
+    ["task_package", value.task_package === "M4R06"],
+    ["phase", value.phase === M4R06_ORDINARY_LEGACY_READ_PHASE],
+    ["launch_ordinal", value.launch_ordinal === 4],
+    ["process_id", value.process_id_sha256 === expectedProcessIdSha256],
+    ["profile", value.profile_fingerprint === expectedProfileFingerprint],
+    ["nonce", value.nonce_sha256 === expectedNonceSha256],
+    [
+      "command_registry_surface",
+      value.command_registry_surface
+        === "ordinary_zero_arg_load_secretary_legacy_read_compatibility_report_ipc",
+    ],
+  ]);
+}
+
+function m4r06RejectedReceiptContractFailure(value) {
+  const emptyEvidenceFields = [
+    "acceptance_wrapper_calls",
+    "direct_repository_seed_calls",
+    "manual_legacy_candidate_calls",
+    "zero_arg_load_calls",
+    "actual_legacy_report_load_calls",
+    "synthetic_home_unavailable_trigger",
+    "actual_ui_fallback_visible",
+    "ui_fallback",
+    "r02_preparation",
+    "first_report_sha256",
+    "exact_replay_report_sha256",
+    "exact_replay_matches_first_read",
+    "reader_receipts",
+    "work_item_parity",
+    "guarded_fallback",
+    "database",
+  ];
+  const nonemptyEvidence = emptyEvidenceFields.find((field) => value[field] !== null);
+  if (nonemptyEvidence) return nonemptyEvidence;
+  return m4r02FirstInvalidField([
+    ["outcome", value.outcome === "REJECTED"],
+    ["portable", value.portable === false],
+    ["ordinary_constructor", typeof value.ordinary_constructor === "boolean"],
+    [
+      "ordinary_composition",
+      value.ordinary_composition === value.ordinary_constructor,
+    ],
+    ["error_family", m4r06IsBoundedCode(value.error_family)],
+  ]);
+}
+
+function m4r06PassReceiptContractFailure({
+  value,
+  expectedNonceSha256,
+  expectedProfileFingerprint,
+  expectedProcessIdSha256,
+  expectedR02ReadbackReceiptSha256,
+  expectedR02AdapterId,
+}) {
+  const identityFailure = m4r06ReceiptIdentityFailure({
+    value,
+    expectedNonceSha256,
+    expectedProfileFingerprint,
+    expectedProcessIdSha256,
+  });
+  if (identityFailure) return identityFailure;
+  const expectedAdapterHash = sha256(expectedR02AdapterId);
+  const commonFailure = m4r02FirstInvalidField([
+    ["outcome", value.outcome === "PASS"],
+    ["portable", value.portable === true],
+    ["ordinary_constructor", value.ordinary_constructor === true],
+    ["ordinary_composition", value.ordinary_composition === true],
+    [
+      "command_registry_surface",
+      value.command_registry_surface
+        === "ordinary_zero_arg_load_secretary_legacy_read_compatibility_report_ipc",
+    ],
+    ["acceptance_wrapper_calls", value.acceptance_wrapper_calls === 0],
+    ["direct_repository_seed_calls", value.direct_repository_seed_calls === 0],
+    ["manual_legacy_candidate_calls", value.manual_legacy_candidate_calls === 0],
+    ["zero_arg_load_calls", value.zero_arg_load_calls === 2],
+    ["actual_legacy_report_load_calls", value.actual_legacy_report_load_calls === 3],
+    ["synthetic_home_unavailable_trigger", value.synthetic_home_unavailable_trigger === true],
+    ["actual_ui_fallback_visible", value.actual_ui_fallback_visible === true],
+    ["first_report_hash", m4r02IsLowerHexSha256(value.first_report_sha256)],
+    [
+      "exact_replay_report_hash",
+      m4r02IsLowerHexSha256(value.exact_replay_report_sha256),
+    ],
+    ["exact_replay", value.exact_replay_matches_first_read === true],
+    [
+      "exact_replay_hash_binding",
+      value.first_report_sha256 === value.exact_replay_report_sha256,
+    ],
+    ["error_family", value.error_family === null],
+  ]);
+  if (commonFailure) return commonFailure;
+  if (!m4r02HasExactObjectFields(
+    value.r02_preparation,
+    M4R06_ORDINARY_LEGACY_READ_R02_PREPARATION_FIELDS,
+  )) return "r02_preparation_fields";
+  const r02Failure = m4r02FirstInvalidField([
+    [
+      "r02_readback_receipt",
+      value.r02_preparation.r02_readback_receipt_sha256
+        === expectedR02ReadbackReceiptSha256,
+    ],
+    [
+      "r02_adapter_hash",
+      value.r02_preparation.r02_ingestion_adapter_id_sha256 === expectedAdapterHash,
+    ],
+    ["r02_same_profile", value.r02_preparation.same_profile === true],
+    [
+      "r02_adapter_match",
+      value.r02_preparation.ingestion_adapter_matches_work_item_reader === true,
+    ],
+  ]);
+  if (r02Failure) return r02Failure;
+  if (
+    M4R06_ORDINARY_LEGACY_READ_READER_SPECS.length
+      !== M4R06_ORDINARY_LEGACY_READ_SOURCE_KINDS.length
+    || M4R06_ORDINARY_LEGACY_READ_READER_SPECS.some(
+      (spec, index) => spec.legacy_source_kind
+        !== M4R06_ORDINARY_LEGACY_READ_SOURCE_KINDS[index],
+    )
+  ) return "reader_spec_order";
+  if (!Array.isArray(value.reader_receipts)
+    || value.reader_receipts.length !== M4R06_ORDINARY_LEGACY_READ_SOURCE_KINDS.length) {
+    return "reader_receipts_cardinality";
+  }
+  for (let index = 0; index < value.reader_receipts.length; index += 1) {
+    const failure = m4r06ReaderReceiptContractFailure(
+      value.reader_receipts[index],
+      M4R06_ORDINARY_LEGACY_READ_READER_SPECS[index],
+      expectedAdapterHash,
+    );
+    if (failure) return `reader_${index}_${failure}`;
+  }
+  if (!m4r02HasExactObjectFields(
+    value.work_item_parity,
+    M4R06_ORDINARY_LEGACY_READ_WORK_ITEM_FIELDS,
+  )) return "work_item_fields";
+  const workItemFailure = m4r02FirstInvalidField([
+    [
+      "work_item_kind",
+      value.work_item_parity.legacy_source_kind
+        === M4R06_ORDINARY_LEGACY_READ_WORK_ITEM_SOURCE_KIND,
+    ],
+    [
+      "work_item_canonical_id",
+      m4r02IsLowerHexSha256(value.work_item_parity.canonical_source_object_id_sha256),
+    ],
+    [
+      "work_item_owner_ref",
+      m4r02IsLowerHexSha256(value.work_item_parity.source_owner_ref_sha256),
+    ],
+    [
+      "work_item_revision",
+      m4r02IsCanonicalRevision(value.work_item_parity.source_revision),
+    ],
+    [
+      "work_item_adapter_hash",
+      value.work_item_parity.r02_ingestion_adapter_id_sha256 === expectedAdapterHash,
+    ],
+    [
+      "work_item_adapter_match",
+      value.work_item_parity.reader_adapter_matches_r02_ingestion === true,
+    ],
+    ["owner_publication_rows", value.work_item_parity.owner_publication_rows === 1],
+    ["m4_current_rows", value.work_item_parity.m4_current_rows === 1],
+    ["m4_provenance_rows", value.work_item_parity.m4_provenance_rows === 1],
+    ["parity_primary_rows", value.work_item_parity.parity_primary_rows === 1],
+  ]);
+  if (workItemFailure) return workItemFailure;
+  if (!m4r02HasExactObjectFields(
+    value.guarded_fallback,
+    M4R06_ORDINARY_LEGACY_READ_GUARDED_FALLBACK_FIELDS,
+  )) return "guarded_fallback_fields";
+  const fallbackFailure = m4r02FirstInvalidField([
+    [
+      "eligible_row_count",
+      m4r06IsNonnegativeInteger(value.guarded_fallback.eligible_row_count)
+        && value.guarded_fallback.eligible_row_count > 0,
+    ],
+    [
+      "eligible_rows_all_parity_primary",
+      value.guarded_fallback.eligible_rows_all_parity_primary === true,
+    ],
+  ]);
+  if (fallbackFailure) return fallbackFailure;
+  if (!m4r02HasExactObjectFields(
+    value.ui_fallback,
+    M4R06_ORDINARY_LEGACY_READ_UI_FALLBACK_FIELDS,
+  )) return "ui_fallback_fields";
+  const uiFallbackFailure = m4r02FirstInvalidField([
+    ["open_conversation_clicks", value.ui_fallback.open_conversation_clicks === 1],
+    ["fallback_roots", value.ui_fallback.compatibility_fallback_roots === 1],
+    ["parity_primary_rows", value.ui_fallback.parity_primary_attention_rows === 1],
+    ["non_parity_rows", value.ui_fallback.non_parity_rows_visible === 0],
+    ["source_route_controls", value.ui_fallback.source_route_controls === 1],
+    ["nested_summary_route_controls", value.ui_fallback.nested_summary_source_route_controls === 0],
+    ["board_coordination_controls", value.ui_fallback.board_coordination_action_controls === 0],
+    ["board_personal_controls", value.ui_fallback.board_personal_action_controls === 0],
+    ["source_route_clicks", value.ui_fallback.source_route_clicks === 0],
+    ["source_route_hash", m4r02IsLowerHexSha256(value.ui_fallback.source_route_ref_sha256)],
+    ["source_owner_hash", m4r02IsLowerHexSha256(value.ui_fallback.source_owner_ref_sha256)],
+    [
+      "source_type",
+      value.ui_fallback.source_object_type
+        === M4R06_ORDINARY_LEGACY_READ_WORK_ITEM_SOURCE_OBJECT_TYPE,
+    ],
+    ["canonical_id_hash", m4r02IsLowerHexSha256(value.ui_fallback.canonical_source_object_id_sha256)],
+    ["source_revision", m4r02IsCanonicalRevision(value.ui_fallback.source_revision)],
+    ["exact_work_item_parity_binding", value.ui_fallback.exact_work_item_parity_binding === true],
+    [
+      "work_item_route_owner_binding",
+      value.ui_fallback.source_owner_ref_sha256
+        === value.work_item_parity.source_owner_ref_sha256,
+    ],
+    [
+      "work_item_route_id_binding",
+      value.ui_fallback.canonical_source_object_id_sha256
+        === value.work_item_parity.canonical_source_object_id_sha256,
+    ],
+    [
+      "work_item_route_revision_binding",
+      value.ui_fallback.source_revision === value.work_item_parity.source_revision,
+    ],
+  ]);
+  if (uiFallbackFailure) return uiFallbackFailure;
+  return m4r06DatabaseContractFailure(value.database);
+}
+
+async function readM4R06OrdinaryLegacyReadReceipt({
+  root,
+  expectedNonceSha256,
+  expectedProfileFingerprint,
+  expectedProcessIdSha256,
+  expectedR02ReadbackReceiptSha256,
+  expectedR02AdapterId,
+  visibilityDeadline,
+  abortWhen,
+}) {
+  const path = m4r06OrdinaryLegacyReadReceiptPath(root);
+  while (true) {
+    try {
+      const metadata = await lstat(path);
+      if (
+        !metadata.isFile()
+        || metadata.isSymbolicLink()
+        || (metadata.mode & 0o777) !== MODE_0600
+        || metadata.size > M4R06_ORDINARY_LEGACY_READ_RECEIPT_MAX_BYTES
+      ) {
+        const error = new Error("m4r06_ordinary_legacy_read_receipt_metadata_invalid");
+        error.failureFamily = "receipt_invalid_metadata";
+        throw error;
+      }
+      const bytes = await readFile(path);
+      const value = JSON.parse(bytes.toString("utf8"));
+      const identityFailure = m4r06ReceiptIdentityFailure({
+        value,
+        expectedNonceSha256,
+        expectedProfileFingerprint,
+        expectedProcessIdSha256,
+      });
+      if (identityFailure) {
+        const error = new Error(
+          `m4r06_ordinary_legacy_read_receipt_binding_invalid:${identityFailure}`,
+        );
+        error.failureFamily = `receipt_binding_${identityFailure}`;
+        throw error;
+      }
+      if (
+        value?.outcome === "REJECTED"
+        && /^[a-z0-9_:-]{1,160}$/.test(value.error_family ?? "")
+      ) {
+        const rejectedFailure = m4r06RejectedReceiptContractFailure(value);
+        if (rejectedFailure) {
+          const error = new Error(
+            `m4r06_ordinary_legacy_read_rejected_receipt_invalid:${rejectedFailure}`,
+          );
+          error.failureFamily = `rejected_receipt_${rejectedFailure}`;
+          throw error;
+        }
+        const rawLeak = m4r06RawEvidenceLeak(value);
+        if (rawLeak) {
+          const error = new Error(`m4r06_ordinary_legacy_read_raw_rejected_receipt:${rawLeak}`);
+          error.failureFamily = "raw_rejected_receipt";
+          throw error;
+        }
+        const error = new Error(
+          `m4r06_ordinary_legacy_read_driver_${value.error_family}`,
+        );
+        error.failureFamily = `driver_${value.error_family}`;
+        throw error;
+      }
+      const failure = m4r06PassReceiptContractFailure({
+        value,
+        expectedNonceSha256,
+        expectedProfileFingerprint,
+        expectedProcessIdSha256,
+        expectedR02ReadbackReceiptSha256,
+        expectedR02AdapterId,
+      });
+      if (failure) {
+        const error = new Error(
+          `m4r06_ordinary_legacy_read_receipt_contract_invalid:${failure}`,
+        );
+        error.failureFamily = `receipt_contract_${failure}`;
+        throw error;
+      }
+      const rawLeak = m4r06RawEvidenceLeak(value);
+      if (rawLeak) {
+        const error = new Error(`m4r06_ordinary_legacy_read_raw_receipt:${rawLeak}`);
+        error.failureFamily = "raw_receipt";
+        throw error;
+      }
+      return { path, sha256: sha256(bytes), value };
+    } catch (error) {
+      if (error?.code === "ENOENT" && Date.now() < visibilityDeadline) {
+        if (abortWhen()) {
+          const closedError = new Error(
+            "m4r06_ordinary_legacy_read_child_closed_before_receipt",
+          );
+          closedError.failureFamily = "child_closed_before_receipt";
+          throw closedError;
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+        continue;
+      }
+      if (typeof error?.failureFamily === "string") throw error;
+      const receiptError = new Error("m4r06_ordinary_legacy_read_receipt_invalid");
+      receiptError.failureFamily = error instanceof SyntaxError
+        ? "receipt_invalid_json"
+        : "receipt_invalid_io";
+      throw receiptError;
+    }
+  }
+}
+
+function spawnM4R06OrdinaryLegacyReadApp({
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  nonce,
+}) {
+  const environment = {
+    ...normalBuildEnvironment,
+    [PROFILE_ENV]: profilePath,
+    [REENTRY_CAPABILITY_ENV]: reentryCapability,
+    [M4R06_ORDINARY_LEGACY_READ_DRIVER_ENV]:
+      M4R06_ORDINARY_LEGACY_READ_DRIVER_VALUE,
+    [M4R06_ORDINARY_LEGACY_READ_PHASE_ENV]: M4R06_ORDINARY_LEGACY_READ_PHASE,
+    [M4R06_ORDINARY_LEGACY_READ_NONCE_ENV]: nonce,
+  };
+  const child = spawn(debugAppExecutablePath, [], {
+    cwd: desktopRoot,
+    env: environment,
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let boundedOutput = "";
+  let closed = false;
+  child.stdout?.on("data", (chunk) => {
+    boundedOutput = `${boundedOutput}${chunk.toString("utf8")}`
+      .slice(-M4R06_ORDINARY_LEGACY_READ_OUTPUT_MAX_BYTES);
+  });
+  child.stderr?.on("data", (chunk) => {
+    boundedOutput = `${boundedOutput}${chunk.toString("utf8")}`
+      .slice(-M4R06_ORDINARY_LEGACY_READ_OUTPUT_MAX_BYTES);
+  });
+  const closePromise = new Promise((resolveClose) => {
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      closed = true;
+      resolveClose(result);
+    };
+    child.once("error", () => settle({
+      exit_code: null,
+      launched: false,
+      signal: null,
+    }));
+    child.once("close", (code, signal) => settle({
+      exit_code: code,
+      launched: true,
+      signal: signal ?? null,
+    }));
+  });
+  return {
+    child,
+    closePromise,
+    output: () => boundedOutput,
+    isClosed: () => closed,
+  };
+}
+
+async function closeM4R06AppAtDeadline(process, timeoutMs) {
+  let timer;
+  const timeout = new Promise((resolveTimeout) => {
+    timer = setTimeout(() => resolveTimeout({ timed_out: true }), timeoutMs);
+  });
+  const result = await Promise.race([process.closePromise, timeout]);
+  clearTimeout(timer);
+  if (!result.timed_out) return { ...result, timed_out: false };
+  if (typeof process.child.pid === "number") {
+    try {
+      process.child.kill("SIGKILL");
+    } catch {
+      // The close event can win the exact deadline race.
+    }
+  }
+  let closeGraceTimer;
+  const killed = await Promise.race([
+    process.closePromise,
+    new Promise((resolveGrace) => {
+      closeGraceTimer = setTimeout(
+        () => resolveGrace({ close_unconfirmed: true }),
+        M4R06_ORDINARY_LEGACY_READ_CHILD_CLOSE_GRACE_MS,
+      );
+    }),
+  ]);
+  clearTimeout(closeGraceTimer);
+  if (killed.close_unconfirmed) {
+    return {
+      exit_code: null,
+      launched: true,
+      signal: "SIGKILL_UNCONFIRMED",
+      timed_out: true,
+    };
+  }
+  return { ...killed, timed_out: true };
+}
+
+function m4r06DriverFailureFamily(output, launch) {
+  const driverFailure = output.match(
+    /M4R06 ordinary legacy-read (?:driver|early setup|early watchdog) failed:([a-z0-9_:-]{1,160})/,
+  );
+  if (driverFailure) return `driver_${driverFailure[1]}`;
+  if (launch.timed_out) return "phase_timeout";
+  if (!launch.launched) return "child_spawn";
+  if (launch.signal !== null) return `child_signal_${launch.signal.toLowerCase()}`;
+  return `child_exit_${launch.exit_code ?? "unknown"}`;
+}
+
+async function runM4R06OrdinaryLegacyReadPhase({
+  root,
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  expectedProfileFingerprint,
+  expectedR02ReadbackReceiptSha256,
+  expectedR02AdapterId,
+}) {
+  const nonce = randomBytes(16).toString("hex");
+  const process = spawnM4R06OrdinaryLegacyReadApp({
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    nonce,
+  });
+  const pid = process.child.pid;
+  if (!Number.isSafeInteger(pid)) {
+    const error = new Error("m4r06_ordinary_legacy_read_child_spawn");
+    error.failureFamily = "child_spawn";
+    error.phase = M4R06_ORDINARY_LEGACY_READ_PHASE;
+    throw error;
+  }
+  const deadline = Date.now() + M4R06_ORDINARY_LEGACY_READ_PHASE_TIMEOUT_MS;
+  try {
+    const receipt = await readM4R06OrdinaryLegacyReadReceipt({
+      root,
+      expectedNonceSha256: sha256(nonce),
+      expectedProfileFingerprint,
+      expectedProcessIdSha256: sha256(String(pid)),
+      expectedR02ReadbackReceiptSha256,
+      expectedR02AdapterId,
+      visibilityDeadline: deadline,
+      abortWhen: process.isClosed,
+    });
+    const launch = await closeM4R06AppAtDeadline(
+      process,
+      Math.max(1, deadline - Date.now()),
+    );
+    if (
+      launch.timed_out
+      || !launch.launched
+      || launch.exit_code !== 0
+      || launch.signal !== null
+    ) {
+      const failureFamily = m4r06DriverFailureFamily(process.output(), launch);
+      const error = new Error(`m4r06_ordinary_legacy_read_${failureFamily}`);
+      error.failureFamily = failureFamily;
+      error.launch = launch;
+      throw error;
+    }
+    return {
+      phase: M4R06_ORDINARY_LEGACY_READ_PHASE,
+      launch,
+      app_pid_sha256: sha256(String(pid)),
+      receipt_sha256: receipt.sha256,
+      receipt: receipt.value,
+    };
+  } catch (error) {
+    if (!process.isClosed()) {
+      const launch = await closeM4R06AppAtDeadline(process, 1);
+      error.launch ??= launch;
+    }
+    error.phase = M4R06_ORDINARY_LEGACY_READ_PHASE;
+    throw error;
+  }
+}
+
+function m4r06LaunchSummary(entry, launchOrdinal) {
+  return {
+    launch_ordinal: launchOrdinal,
+    phase: entry.phase,
+    app_process_id_sha256: entry.receipt.process_id_sha256,
+    receipt_sha256: entry.receipt_sha256,
+    exit_code: entry.launch.exit_code,
+    signal: entry.launch.signal,
+    timed_out: entry.launch.timed_out,
+  };
+}
+
+async function runM4R06OrdinaryLegacyReadSuite({
+  root,
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  buildResult,
+}) {
+  const r02Preparation = await runM4R02OrdinaryCompositionSuite({
+    root,
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    buildResult,
+  });
+  const r02Readback = r02Preparation.launches.find(
+    (entry) => entry.phase === "readback",
+  );
+  const expectedProfileFingerprint = sha256(await readFile(profilePath));
+  const expectedR02AdapterId = r02Readback?.receipt?.subject?.ingestion_adapter_id;
+  const r02PreparationFailure = m4r02FirstInvalidField([
+    ["r02_launch_count", r02Preparation.launches.length === 3],
+    ["r02_readback", r02Readback !== undefined],
+    [
+      "r02_profile",
+      r02Readback?.receipt?.profile_fingerprint === expectedProfileFingerprint,
+    ],
+    [
+      "r02_adapter",
+      expectedR02AdapterId === M4R06_ORDINARY_LEGACY_READ_INGESTION_ADAPTER_ID,
+    ],
+    [
+      "r02_work_item_state",
+      r02Readback?.receipt?.subject?.work_item_state === "ready_to_dispatch",
+    ],
+  ]);
+  if (r02PreparationFailure) {
+    const error = new Error(
+      `m4r06_ordinary_legacy_read_r02_preparation_invalid:${r02PreparationFailure}`,
+    );
+    error.failureFamily = `r02_preparation_${r02PreparationFailure}`;
+    error.phase = "readback";
+    throw error;
+  }
+  const r06Read = await runM4R06OrdinaryLegacyReadPhase({
+    root,
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    expectedProfileFingerprint,
+    expectedR02ReadbackReceiptSha256: r02Readback.receipt_sha256,
+    expectedR02AdapterId,
+  });
+  const allLaunches = [...r02Preparation.launches, r06Read];
+  const crossLaunchFailure = m4r02FirstInvalidField([
+    ["exact_app_launches", allLaunches.length === 4],
+    [
+      "same_profile",
+      allLaunches.every(
+        (entry) => entry.receipt.profile_fingerprint === expectedProfileFingerprint,
+      ),
+    ],
+    [
+      "distinct_app_processes",
+      new Set(allLaunches.map((entry) => entry.receipt.process_id_sha256)).size
+        === 4,
+    ],
+    ["r06_exit_zero", r06Read.launch.exit_code === 0],
+    ["r06_ordinary_composition", r06Read.receipt.ordinary_composition === true],
+  ]);
+  if (crossLaunchFailure) {
+    const error = new Error(
+      `m4r06_ordinary_legacy_read_cross_launch_invalid:${crossLaunchFailure}`,
+    );
+    error.failureFamily = `cross_launch_${crossLaunchFailure}`;
+    error.launch = r06Read.launch;
+    error.phase = r06Read.phase;
+    throw error;
+  }
+  const composite = {
+    schema_version: M4R06_ORDINARY_LEGACY_READ_COMPOSITE_SCHEMA,
+    task_package: "M4R06",
+    phase: M4R06_ORDINARY_LEGACY_READ_PHASE,
+    outcome: "PASS",
+    portable: true,
+    evidence_family: "ordinary_legacy_read_parity_and_exact_replay",
+    evidence_level: "ISOLATED_PRODUCT_APP",
+    synthetic_fixture_only: true,
+    synthetic_trigger_scope: "HOME_UNAVAILABLE_ONE_SHOT",
+    ordinary_reader_report_observed: true,
+    ordinary_dom_fallback_observed: true,
+    ordinary_composition: true,
+    acceptance_wrapper_calls: 0,
+    direct_repository_seed_calls: 0,
+    manual_legacy_candidate_calls: 0,
+    synthetic_home_unavailable_trigger:
+      r06Read.receipt.synthetic_home_unavailable_trigger,
+    actual_ui_fallback_visible: r06Read.receipt.actual_ui_fallback_visible,
+    ui_fallback: r06Read.receipt.ui_fallback,
+    r02_preparation: r06Read.receipt.r02_preparation,
+    report_evidence: {
+      first_report_sha256: r06Read.receipt.first_report_sha256,
+      exact_replay_report_sha256: r06Read.receipt.exact_replay_report_sha256,
+      exact_replay_matches_first_read:
+        r06Read.receipt.exact_replay_matches_first_read,
+      zero_arg_load_calls: r06Read.receipt.zero_arg_load_calls,
+      actual_legacy_report_load_calls:
+        r06Read.receipt.actual_legacy_report_load_calls,
+      reader_receipts: r06Read.receipt.reader_receipts,
+    },
+    work_item_parity: r06Read.receipt.work_item_parity,
+    guarded_fallback: r06Read.receipt.guarded_fallback,
+    database: r06Read.receipt.database,
+    launch_contract: {
+      expected_app_launches: 4,
+      r02_preparation_launches: r02Preparation.launches.map((entry, index) =>
+        m4r06LaunchSummary(entry, index + 1)),
+      r06_read_and_replay_launch: m4r06LaunchSummary(r06Read, 4),
+      same_profile: true,
+      distinct_app_processes: true,
+    },
+    isolation_boundary: {
+      real_model_attempts: 0,
+      real_provider_attempts: 0,
+      external_connector_attempts: 0,
+      external_network_writes: 0,
+      real_codex_message_attempts: 0,
+    },
+    build: buildResult,
+  };
+  const rawLeak = m4r06RawEvidenceLeak(composite);
+  if (rawLeak) {
+    const error = new Error(`m4r06_ordinary_legacy_read_raw_composite:${rawLeak}`);
+    error.failureFamily = "raw_composite";
+    error.launch = r06Read.launch;
+    error.phase = r06Read.phase;
+    throw error;
+  }
+  return composite;
+}
+
 // This policy is intentionally pure: it runs before the launcher creates a
 // root, scrubs inherited environment, builds, or spawns a child.  Values are
 // never returned or logged; marker names are normalized only as a fixed
@@ -7094,6 +8338,7 @@ function resolveLauncherModeConflict({
   m4r03ServerClockMode = false,
   m4r04OrdinaryRouteMode = false,
   m4r05OrdinaryConversationMode = false,
+  m4r06OrdinaryLegacyReadMode = false,
   inheritedM2ReferenceSliceMarkers,
   inheritedM3C07ModeMarker,
   inheritedM4C09ModeMarker = false,
@@ -7101,6 +8346,7 @@ function resolveLauncherModeConflict({
   inheritedM4R03OrdinaryClockMarkers = [],
   inheritedM4R04OrdinaryRouteMarkers = [],
   inheritedM4R05OrdinaryConversationMarkers = [],
+  inheritedM4R06OrdinaryLegacyReadMarkers = [],
 }) {
   if (
     [
@@ -7111,10 +8357,24 @@ function resolveLauncherModeConflict({
       m4r03ServerClockMode,
       m4r04OrdinaryRouteMode,
       m4r05OrdinaryConversationMode,
+      m4r06OrdinaryLegacyReadMode,
     ].filter(Boolean)
       .length > 1
   ) {
     return "mode_argument";
+  }
+  if (
+    inheritedM4R06OrdinaryLegacyReadMarkers.length > 0
+    || (m4r06OrdinaryLegacyReadMode
+      && (inheritedM2ReferenceSliceMarkers.length > 0
+        || inheritedM3C07ModeMarker
+        || inheritedM4C09ModeMarker
+        || inheritedM4R02OrdinaryCompositionMarkers.length > 0
+        || inheritedM4R03OrdinaryClockMarkers.length > 0
+        || inheritedM4R04OrdinaryRouteMarkers.length > 0
+        || inheritedM4R05OrdinaryConversationMarkers.length > 0))
+  ) {
+    return M4R06_ORDINARY_LEGACY_READ_MODE_CONFLICT;
   }
   if (
     inheritedM4R05OrdinaryConversationMarkers.length > 0
@@ -7194,6 +8454,9 @@ const m4r04OrdinaryRouteMode = launcherArguments.includes(
 const m4r05OrdinaryConversationMode = launcherArguments.includes(
   M4R05_ORDINARY_CONVERSATION_MODE_ARG,
 );
+const m4r06OrdinaryLegacyReadMode = launcherArguments.includes(
+  M4R06_ORDINARY_LEGACY_READ_MODE_ARG,
+);
 const inheritedM2ReferenceSliceMarkers = normalizeInheritedMarkerNames(
   process.env,
   M2_REFERENCE_SLICE_MARKER_ENV_NAMES,
@@ -7216,6 +8479,10 @@ const inheritedM4R05OrdinaryConversationMarkers = normalizeInheritedMarkerNames(
   process.env,
   M4R05_ORDINARY_CONVERSATION_MARKER_ENV_NAMES,
 );
+const inheritedM4R06OrdinaryLegacyReadMarkers = normalizeInheritedMarkerNames(
+  process.env,
+  M4R06_ORDINARY_LEGACY_READ_MARKER_ENV_NAMES,
+);
 const launcherModeConflict = resolveLauncherModeConflict({
   m2ReferenceSliceMode,
   m3c07IsolatedMode,
@@ -7224,6 +8491,7 @@ const launcherModeConflict = resolveLauncherModeConflict({
   m4r03ServerClockMode,
   m4r04OrdinaryRouteMode,
   m4r05OrdinaryConversationMode,
+  m4r06OrdinaryLegacyReadMode,
   inheritedM2ReferenceSliceMarkers,
   inheritedM3C07ModeMarker,
   inheritedM4C09ModeMarker,
@@ -7231,6 +8499,7 @@ const launcherModeConflict = resolveLauncherModeConflict({
   inheritedM4R03OrdinaryClockMarkers,
   inheritedM4R04OrdinaryRouteMarkers,
   inheritedM4R05OrdinaryConversationMarkers,
+  inheritedM4R06OrdinaryLegacyReadMarkers,
 });
 const m2M3ReceiptModesMutuallyExclusive =
   !(m2ReferenceSliceMode && m3c07IsolatedMode);
@@ -7244,6 +8513,7 @@ const launcherModeArgumentsValid =
     m4r03ServerClockMode,
     m4r04OrdinaryRouteMode,
     m4r05OrdinaryConversationMode,
+    m4r06OrdinaryLegacyReadMode,
   ].filter(Boolean).length <= 1;
 const homeInitialViewConfigPinned =
   !Object.hasOwn(process.env, "VITE_STAGE_K_INITIAL_VIEW") ||
@@ -7280,6 +8550,10 @@ let m4r05OrdinaryConversationSuite = null;
 let m4r05OrdinaryConversationErrorFamily = null;
 let m4r05OrdinaryConversationFailedLaunch = null;
 let m4r05OrdinaryConversationFailedPhase = null;
+let m4r06OrdinaryLegacyReadSuite = null;
+let m4r06OrdinaryLegacyReadErrorFamily = null;
+let m4r06OrdinaryLegacyReadFailedLaunch = null;
+let m4r06OrdinaryLegacyReadFailedPhase = null;
 
 try {
   if (!launcherModeArgumentsValid) {
@@ -7325,6 +8599,9 @@ try {
     delete normalBuildEnvironment[M4R05_ORDINARY_CONVERSATION_DRIVER_ENV];
     delete normalBuildEnvironment[M4R05_ORDINARY_CONVERSATION_PHASE_ENV];
     delete normalBuildEnvironment[M4R05_ORDINARY_CONVERSATION_NONCE_ENV];
+    delete normalBuildEnvironment[M4R06_ORDINARY_LEGACY_READ_DRIVER_ENV];
+    delete normalBuildEnvironment[M4R06_ORDINARY_LEGACY_READ_PHASE_ENV];
+    delete normalBuildEnvironment[M4R06_ORDINARY_LEGACY_READ_NONCE_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_DRIVER_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_ATTEMPT_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_PHASE_ENV];
@@ -7524,6 +8801,35 @@ try {
                 ? error.phase
                 : null;
             failureStage = "m4r05_ordinary_conversation";
+            process.exitCode = 1;
+          }
+        } else if (m4r06OrdinaryLegacyReadMode) {
+          try {
+            m4r06OrdinaryLegacyReadSuite =
+              await runM4R06OrdinaryLegacyReadSuite({
+                root,
+                normalBuildEnvironment,
+                profilePath: join(root, PROFILE_FILE_NAME),
+                reentryCapability,
+                buildResult,
+              });
+            launchResult = m4r06OrdinaryLegacyReadSuite
+              .launch_contract.r06_read_and_replay_launch ?? launchResult;
+          } catch (error) {
+            m4r06OrdinaryLegacyReadErrorFamily =
+              typeof error?.failureFamily === "string"
+              && /^[a-z0-9_:-]{1,160}$/.test(error.failureFamily)
+                ? error.failureFamily
+                : "unclassified";
+            m4r06OrdinaryLegacyReadFailedLaunch =
+              error?.launch && typeof error.launch === "object"
+                ? error.launch
+                : null;
+            m4r06OrdinaryLegacyReadFailedPhase =
+              error?.phase === M4R06_ORDINARY_LEGACY_READ_PHASE
+                ? error.phase
+                : null;
+            failureStage = "m4r06_ordinary_legacy_read";
             process.exitCode = 1;
           }
         } else if (m3c07IsolatedMode) {
@@ -7775,6 +9081,32 @@ try {
               && process.env.CODEX_HOME === initialCodexHome,
             home_initial_view_config_pinned: homeInitialViewConfigPinned,
           }
+      : m4r06OrdinaryLegacyReadMode
+        ? {
+            ...(m4r06OrdinaryLegacyReadSuite ?? {
+              schema_version: M4R06_ORDINARY_LEGACY_READ_COMPOSITE_SCHEMA,
+              task_package: "M4R06",
+              phase: M4R06_ORDINARY_LEGACY_READ_PHASE,
+              outcome: "REJECTED",
+              portable: false,
+              evidence_family: "ordinary_legacy_read_parity_and_exact_replay",
+              evidence_level: "ISOLATED_PRODUCT_APP",
+              synthetic_fixture_only: true,
+              ordinary_composition: false,
+              error_family:
+                m4r06OrdinaryLegacyReadErrorFamily ?? "unclassified",
+              failed_phase: m4r06OrdinaryLegacyReadFailedPhase,
+              failed_launch: m4r06OrdinaryLegacyReadFailedLaunch,
+              expected_app_launches: 4,
+              launches: [],
+              build: buildResult,
+            }),
+            ...(failureStage ? { failure_stage: failureStage } : {}),
+            environment_unchanged:
+              process.env.HOME === initialHome
+              && process.env.CODEX_HOME === initialCodexHome,
+            home_initial_view_config_pinned: homeInitialViewConfigPinned,
+          }
       : m3c07IsolatedMode
         ? {
             ...m3c07ReadinessReceipt(
@@ -7821,27 +9153,27 @@ try {
         process.env.HOME === initialHome && process.env.CODEX_HOME === initialCodexHome,
       home_initial_view_config_pinned: homeInitialViewConfigPinned,
       };
-    await writeJson(
-      join(
-        root,
-        m2ReferenceSliceMode
-          ? "m2-reference-slice-suite-receipt.json"
-          : m4r02OrdinaryCompositionMode
-            ? M4R02_ORDINARY_COMPOSITION_COMPOSITE_FILE
-          : m4r03ServerClockMode
-            ? M4R03_SERVER_CLOCK_COMPOSITE_FILE
-          : m4r04OrdinaryRouteMode
-            ? M4R04_ORDINARY_ROUTE_COMPOSITE_FILE
-          : m4r05OrdinaryConversationMode
-            ? M4R05_ORDINARY_CONVERSATION_COMPOSITE_FILE
-          : m3c07IsolatedMode
-            ? M3C07_READINESS_RECEIPT_FILE_NAME
-            : m4c09IsolatedMode
-              ? M4C09_READINESS_RECEIPT_FILE_NAME
-              : RECEIPT_FILE_NAME,
-      ),
-      receipt,
+    const rootCompositePath = join(
+      root,
+      m2ReferenceSliceMode
+        ? "m2-reference-slice-suite-receipt.json"
+        : m4r02OrdinaryCompositionMode
+          ? M4R02_ORDINARY_COMPOSITION_COMPOSITE_FILE
+        : m4r03ServerClockMode
+          ? M4R03_SERVER_CLOCK_COMPOSITE_FILE
+        : m4r04OrdinaryRouteMode
+          ? M4R04_ORDINARY_ROUTE_COMPOSITE_FILE
+        : m4r05OrdinaryConversationMode
+          ? M4R05_ORDINARY_CONVERSATION_COMPOSITE_FILE
+        : m4r06OrdinaryLegacyReadMode
+          ? M4R06_ORDINARY_LEGACY_READ_COMPOSITE_FILE
+        : m3c07IsolatedMode
+          ? M3C07_READINESS_RECEIPT_FILE_NAME
+          : m4c09IsolatedMode
+            ? M4C09_READINESS_RECEIPT_FILE_NAME
+            : RECEIPT_FILE_NAME,
     );
+    await writeJson(rootCompositePath, receipt);
     if (
       m4r03ServerClockMode
       && m4r03ServerClockSuite?.outcome === "PASS"
@@ -7877,6 +9209,30 @@ try {
       && m4r05RawEvidenceLeak(receipt) === null
     ) {
       await writeM4R05PortableReport(receipt);
+    }
+    if (
+      m4r06OrdinaryLegacyReadMode
+      && m4r06OrdinaryLegacyReadSuite?.outcome === "PASS"
+      && !failureStage
+      && receipt.outcome === "PASS"
+      && receipt.portable === true
+      && receipt.ordinary_composition === true
+      && receipt.acceptance_wrapper_calls === 0
+      && receipt.direct_repository_seed_calls === 0
+      && receipt.manual_legacy_candidate_calls === 0
+      && receipt.synthetic_fixture_only === true
+      && receipt.synthetic_home_unavailable_trigger === true
+      && receipt.synthetic_trigger_scope === "HOME_UNAVAILABLE_ONE_SHOT"
+      && receipt.ordinary_reader_report_observed === true
+      && receipt.ordinary_dom_fallback_observed === true
+      && receipt.actual_ui_fallback_visible === true
+      && receipt.ui_fallback?.exact_work_item_parity_binding === true
+      && receipt.report_evidence?.zero_arg_load_calls === 2
+      && receipt.report_evidence?.actual_legacy_report_load_calls === 3
+      && m4r06RawEvidenceLeak(receipt) === null
+      && m4r06PortableReportContractFailure(receipt) === null
+    ) {
+      await writeM4R06PortableReport(receipt, rootCompositePath);
     }
     process.stdout.write(`${JSON.stringify(receipt)}\n`);
     if (parentSignalToReraise) {

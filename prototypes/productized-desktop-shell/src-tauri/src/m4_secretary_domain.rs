@@ -788,12 +788,23 @@ pub(crate) fn m4_priority_reason(signals: &M4AttentionSignals) -> Result<M4Prior
 }
 
 pub(crate) fn m4_automatic_open_loop(source: &M4AdmittedWorkflowAttentionSource) -> bool {
-    !source.source_status.is_terminal()
-        && (source.attention_signals.external_commitment
-            || source.attention_signals.time_sensitive
-            || source.attention_signals.requires_user_decision
-            || source.attention_signals.source_blocked
-            || source.attention_signals.attention_required)
+    m4_source_status_and_attention_is_open_loop(source.source_status, &source.attention_signals)
+}
+
+/// The single automatic-open-loop predicate shared by admitted M4 sources
+/// and owner-side readers.  Callers must first obtain the status and flags
+/// from their registered mapper; this function deliberately contains no
+/// owner-specific status table.
+pub(crate) fn m4_source_status_and_attention_is_open_loop(
+    source_status: M4SourceStatus,
+    attention: &M4AttentionSignals,
+) -> bool {
+    !source_status.is_terminal()
+        && (attention.external_commitment
+            || attention.time_sensitive
+            || attention.requires_user_decision
+            || attention.source_blocked
+            || attention.attention_required)
 }
 
 pub(crate) fn m4_source_identity_key(

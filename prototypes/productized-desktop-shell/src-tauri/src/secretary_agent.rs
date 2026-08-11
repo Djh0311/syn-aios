@@ -413,6 +413,13 @@ pub(crate) async fn load_secretary_home_context(
 ) -> Result<SecretaryHomeContextEnvelope, String> {
     #[cfg(not(test))]
     {
+        // The isolated R06 driver consumes one existing unavailable envelope
+        // before the ordinary Home read. That makes the ordinary App take its
+        // guarded legacy-report fallback path without assigning a production
+        // failure cause to the synthetic trigger.
+        if crate::m4r06_ordinary_legacy_read_driver::consume_synthetic_home_unavailable_trigger()? {
+            return Ok(SecretaryHomeContextEnvelope::unavailable());
+        }
         let runtime = state.m3_role_session_read_runtime.clone();
         let Some(repository) = state.m4_secretary_repository.clone() else {
             return Ok(SecretaryHomeContextEnvelope::unavailable());
@@ -953,11 +960,9 @@ fn validate_secretary_personal_object_request(
                 || title.trim() != title
                 || title.chars().count() > 160
                 || title.chars().any(char::is_control)
-                || due_at_utc
-                    .as_deref()
-                    .is_some_and(|value| {
-                        crate::m4_secretary_domain::m4_parse_rfc3339_utc_key(value).is_none()
-                    })
+                || due_at_utc.as_deref().is_some_and(|value| {
+                    crate::m4_secretary_domain::m4_parse_rfc3339_utc_key(value).is_none()
+                })
             {
                 return Err(invalid());
             }
