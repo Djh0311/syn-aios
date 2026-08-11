@@ -57,6 +57,13 @@ function readyEnvelope() {
         }],
         personal_actions: [],
       },
+      local_objects: {
+        personal_actions: [],
+        notifications: [],
+        reminders: [],
+        decisions: [],
+        reminder_owner_refs: [],
+      },
       model_enhancement: null,
     },
   };

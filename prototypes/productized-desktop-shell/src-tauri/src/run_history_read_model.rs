@@ -82,6 +82,7 @@ enum ProposalStatusLite {
     Confirmed,
     Rejected,
     Superseded,
+    Expired,
     ChangesRequested,
 }
 
@@ -279,6 +280,13 @@ fn derive_state(
                 "exact",
             );
         }
+        ProposalStatusLite::Expired => {
+            return (
+                "expired".to_string(),
+                "显式期限已到，方案已关闭".to_string(),
+                "exact",
+            );
+        }
         ProposalStatusLite::ChangesRequested => {
             return (
                 "changes_requested".to_string(),
@@ -423,6 +431,7 @@ fn map_status(status: &crate::ProjectConsultationProposalStatus) -> ProposalStat
         }
         crate::ProjectConsultationProposalStatus::Rejected => ProposalStatusLite::Rejected,
         crate::ProjectConsultationProposalStatus::Superseded => ProposalStatusLite::Superseded,
+        crate::ProjectConsultationProposalStatus::Expired => ProposalStatusLite::Expired,
     }
 }
 

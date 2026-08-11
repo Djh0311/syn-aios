@@ -367,6 +367,10 @@ export function WorkItemOrchestrationCard({
                   project_root: project.project_root,
                   work_item_id: workItem.work_item_id,
                   next_state: nextState,
+                  // Mint once when the pending action is created. Confirmation
+                  // and any ambiguous-transport retry reuse this same opaque
+                  // reference; the server owns the real command identity.
+                  client_request_ref: globalThis.crypto.randomUUID().replaceAll("-", ""),
                 },
               })
             }

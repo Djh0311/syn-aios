@@ -39,9 +39,17 @@ import type {
   M4SecretaryHandoffOutcomeDto,
   M4SecretaryHomeContextEnvelopeDto,
   M4SecretaryInvocationReceiptDto,
+  M4SecretaryLocalObjectsDto,
   M4SecretaryModelEnhancementOutcomeDto,
   M4SecretaryOpaqueRef,
+  M4SecretaryPersonalObjectActionCode,
+  M4SecretaryPersonalObjectRequestDto,
   M4SecretaryPersonalActionBriefItemDto,
+  M4SecretaryPersonalActionLocalDto,
+  M4SecretaryNotificationLocalDto,
+  M4SecretaryReminderLocalDto,
+  M4SecretaryDecisionLocalDto,
+  M4SecretarySourceLinkDto,
   M4SecretarySourceBackedBriefItemDto,
   SecretaryHomeAttentionItem,
   SecretaryHomeHandoff,
@@ -1956,6 +1964,21 @@ const M4_HOME_COORDINATION_ACTIONS = new Set<M4SecretaryCoordinationActionCode>(
   "OPEN_LOOP_CARRY_OVER",
 ]);
 
+const M4_HOME_PERSONAL_OBJECT_ACTIONS = new Set<M4SecretaryPersonalObjectActionCode>([
+  "PERSONAL_ACTION_CREATE",
+  "PERSONAL_ACTION_COMPLETE",
+  "PERSONAL_ACTION_CANCEL",
+  "PERSONAL_ACTION_REOPEN",
+  "REMINDER_CREATE",
+  "REMINDER_SNOOZE",
+  "REMINDER_DISMISS",
+  "REMINDER_CANCEL",
+  "NOTIFICATION_READ",
+  "NOTIFICATION_DISMISS",
+  "DECISION_READ",
+  "DECISION_DISMISS",
+]);
+
 // The Rust boundary deliberately accepts only an opaque, content-addressed
 // reference for idempotency. Mint it from fresh entropy and hash that entropy
 // so the renderer never sends a plain UUID that the server will reject.
@@ -2011,6 +2034,105 @@ export function createSecretaryCoordinationActionRequest(
     idempotency_key,
     ...(snoozed_until_utc === null ? {} : { snoozed_until_utc }),
   });
+}
+
+// Ordinary local-object commands are also a closed, deny-unknown boundary.
+// The renderer supplies only user intent, an existing object/revision and an
+// opaque idempotency key; identity, role, scope and source authority stay on
+// the server. Reminder fire and Decision owner transitions are absent.
+export function createSecretaryPersonalObjectRequest(
+  input: M4SecretaryPersonalObjectRequestDto,
+): M4SecretaryPersonalObjectRequestDto {
+  const base = m4HomeAllowedObject(
+    input,
+    [
+      "action", "title", "due_at_utc", "item_ref", "expected_revision",
+      "owner_ref", "scheduled_for_utc", "iana_timezone", "snoozed_until_utc",
+      "idempotency_key",
+    ],
+    "personal_object_request",
+  );
+  const action = m4HomeCode(base.action, "personal_object_request.action").toUpperCase() as M4SecretaryPersonalObjectActionCode;
+  if (!M4_HOME_PERSONAL_OBJECT_ACTIONS.has(action)) {
+    throw new Error("m4_secretary_home_invalid_personal_object_action");
+  }
+  const idempotency = (raw: Record<string, unknown>) =>
+    m4HomeOpaqueReference(raw.idempotency_key, "personal_object_request.idempotency_key");
+  const revisionOperation = (
+    allowedActions: readonly M4SecretaryPersonalObjectActionCode[],
+    prefix: string,
+  ): M4SecretaryPersonalObjectRequestDto => {
+    if (!allowedActions.includes(action)) throw new Error("m4_secretary_home_personal_object_action_matrix_invalid");
+    const raw = m4HomeExactObject(
+      base,
+      ["action", "item_ref", "expected_revision", "idempotency_key"],
+      "personal_object_request",
+    );
+    const item_ref = m4HomeReference(raw.item_ref, "personal_object_request.item_ref");
+    if (!item_ref.startsWith(prefix)) throw new Error("m4_secretary_home_personal_object_item_action_mismatch");
+    return Object.freeze({
+      action,
+      item_ref,
+      expected_revision: m4HomeCanonicalRevision(raw.expected_revision, "personal_object_request.expected_revision"),
+      idempotency_key: idempotency(raw),
+    }) as M4SecretaryPersonalObjectRequestDto;
+  };
+
+  if (action === "PERSONAL_ACTION_CREATE") {
+    const raw = m4HomeAllowedObject(base, ["action", "title", "due_at_utc", "idempotency_key"], "personal_object_request");
+    for (const key of ["action", "title", "idempotency_key"]) {
+      if (!(key in raw)) throw new Error(`m4_secretary_home_missing_personal_object_request_field:${key}`);
+    }
+    const dueAt = raw.due_at_utc === undefined || raw.due_at_utc === null
+      ? null
+      : m4PersonalObjectUtc(raw.due_at_utc, "personal_object_request.due_at_utc");
+    return Object.freeze({
+      action,
+      title: m4PersonalObjectTitle(raw.title, "personal_object_request.title"),
+      ...(dueAt === null ? {} : { due_at_utc: dueAt }),
+      idempotency_key: idempotency(raw),
+    });
+  }
+  if (action === "REMINDER_CREATE") {
+    const raw = m4HomeExactObject(
+      base,
+      ["action", "owner_ref", "scheduled_for_utc", "iana_timezone", "idempotency_key"],
+      "personal_object_request",
+    );
+    return Object.freeze({
+      action,
+      owner_ref: m4HomeReference(raw.owner_ref, "personal_object_request.owner_ref"),
+      scheduled_for_utc: m4PersonalObjectUtc(raw.scheduled_for_utc, "personal_object_request.scheduled_for_utc"),
+      iana_timezone: m4PersonalObjectIanaTimezone(raw.iana_timezone, "personal_object_request.iana_timezone"),
+      idempotency_key: idempotency(raw),
+    });
+  }
+  if (action === "REMINDER_SNOOZE") {
+    const raw = m4HomeExactObject(
+      base,
+      ["action", "item_ref", "expected_revision", "snoozed_until_utc", "idempotency_key"],
+      "personal_object_request",
+    );
+    const item_ref = m4HomeReference(raw.item_ref, "personal_object_request.item_ref");
+    if (!item_ref.startsWith("reminder:")) throw new Error("m4_secretary_home_personal_object_item_action_mismatch");
+    return Object.freeze({
+      action,
+      item_ref,
+      expected_revision: m4HomeCanonicalRevision(raw.expected_revision, "personal_object_request.expected_revision"),
+      snoozed_until_utc: m4PersonalObjectUtc(raw.snoozed_until_utc, "personal_object_request.snoozed_until_utc"),
+      idempotency_key: idempotency(raw),
+    });
+  }
+  if (action.startsWith("PERSONAL_ACTION_")) {
+    return revisionOperation(["PERSONAL_ACTION_COMPLETE", "PERSONAL_ACTION_CANCEL", "PERSONAL_ACTION_REOPEN"], "personal-action:");
+  }
+  if (action.startsWith("REMINDER_")) {
+    return revisionOperation(["REMINDER_DISMISS", "REMINDER_CANCEL"], "reminder:");
+  }
+  if (action.startsWith("NOTIFICATION_")) {
+    return revisionOperation(["NOTIFICATION_READ", "NOTIFICATION_DISMISS"], "notification:");
+  }
+  return revisionOperation(["DECISION_READ", "DECISION_DISMISS"], "decision-projection:");
 }
 
 export function parseSecretaryCoordinationActionReceipt(value: unknown): M4SecretaryCoordinationActionReceiptDto {
@@ -2095,7 +2217,11 @@ function m4HomeReadyReadModel(
       .map(m4HomePersonalActionFromM4)
       .sort((left, right) => left.personal_action_ref.localeCompare(right.personal_action_ref)),
   );
-  const state = attentionItems.length || personalActions.length ? "ready" : "empty";
+  const localObjectCount = outcome.local_objects.personal_actions.length
+    + outcome.local_objects.notifications.length
+    + outcome.local_objects.reminders.length
+    + outcome.local_objects.decisions.length;
+  const state = attentionItems.length || personalActions.length || localObjectCount ? "ready" : "empty";
   return Object.freeze({
     schema_version: M4_HOME_SCHEMA_VERSION,
     state,
@@ -2116,6 +2242,7 @@ function m4HomeReadyReadModel(
     }),
     attention_items: attentionItems,
     personal_actions: personalActions,
+    local_objects: outcome.local_objects,
     module_entries: m4HomeModuleEntries(attentionItems),
     model_enhancement: outcome.model_enhancement ?? m4HomeNotRequestedModelEnhancement(),
     handoff: handoff ?? m4HomeNotLoadedHandoff(),
@@ -2139,6 +2266,7 @@ function m4HomeUnavailableReadModel(recoveryCode: string): SecretaryHomeReadMode
     }),
     attention_items: Object.freeze([]),
     personal_actions: Object.freeze([]),
+    local_objects: m4HomeEmptyLocalObjects(),
     module_entries: Object.freeze([]),
     model_enhancement: m4HomeNotRequestedModelEnhancement(),
     handoff: m4HomeNotLoadedHandoff(),
@@ -2157,6 +2285,7 @@ function m4HomeLoadingReadModel(): SecretaryHomeReadModel {
     role_session_recovery: Object.freeze({ status: "LOADING", role_session_ref: null, context_ref: null, recovery_code: null }),
     attention_items: Object.freeze([]),
     personal_actions: Object.freeze([]),
+    local_objects: m4HomeEmptyLocalObjects(),
     module_entries: Object.freeze([]),
     model_enhancement: m4HomeNotRequestedModelEnhancement(),
     handoff: m4HomeNotLoadedHandoff(),
@@ -2195,6 +2324,7 @@ function m4HomeCompatibilityReadModel(context: SecretaryContext, degradationCode
     }),
     attention_items: attentionItems,
     personal_actions: Object.freeze([]),
+    local_objects: m4HomeEmptyLocalObjects(),
     module_entries: m4HomeMergeModuleEntries([...m4HomeModuleEntries(attentionItems), ...actionEntries]),
     model_enhancement: m4HomeNotRequestedModelEnhancement(),
     handoff: m4HomeNotLoadedHandoff(),
@@ -2256,6 +2386,7 @@ function m4HomeGuardedLegacyCompatibilityReadModel(
     }),
     attention_items: attentionItems,
     personal_actions: Object.freeze([]),
+    local_objects: m4HomeEmptyLocalObjects(),
     module_entries: m4HomeModuleEntries(attentionItems),
     model_enhancement: m4HomeNotRequestedModelEnhancement(),
     handoff: m4HomeNotLoadedHandoff(),
@@ -2424,16 +2555,164 @@ function m4HomeNotLoadedHandoff(): SecretaryHomeHandoff {
 }
 
 function m4HomeParseApplicationOutcome(value: unknown): M4SecretaryApplicationOutcomeDto {
-  const raw = m4HomeExactObject(value, ["context", "deterministic_brief", "model_enhancement"], "application_outcome");
+  const raw = m4HomeExactObject(value, ["context", "deterministic_brief", "local_objects", "model_enhancement"], "application_outcome");
   const context = m4HomeParseContext(raw.context);
   const deterministic_brief = m4HomeParseDeterministicBrief(raw.deterministic_brief);
+  const local_objects = m4HomeParseLocalObjects(raw.local_objects);
   if (context.context_ref !== deterministic_brief.context_ref || context.scope_source_watermark !== deterministic_brief.scope_source_watermark) {
     throw new Error("m4_secretary_home_context_brief_mismatch");
+  }
+  const briefPersonalActions = new Map(
+    deterministic_brief.personal_actions.map((item) => [item.personal_action_ref, item] as const),
+  );
+  if (briefPersonalActions.size !== local_objects.personal_actions.length) {
+    throw new Error("m4_secretary_home_personal_action_overlay_mismatch");
+  }
+  for (const localAction of local_objects.personal_actions) {
+    const briefAction = briefPersonalActions.get(localAction.personal_action_id);
+    if (!briefAction
+      || briefAction.explicit_user_command_ref !== localAction.explicit_user_command_ref
+      || briefAction.status_code !== localAction.status
+      || briefAction.due_at_utc !== localAction.due_at_utc
+      || briefAction.coordination_revision !== localAction.revision) {
+      throw new Error("m4_secretary_home_personal_action_overlay_mismatch");
+    }
   }
   return Object.freeze({
     context,
     deterministic_brief,
+    local_objects,
     model_enhancement: raw.model_enhancement === null ? null : m4HomeParseModelEnhancement(raw.model_enhancement),
+  });
+}
+
+function m4HomeParseLocalObjects(value: unknown): M4SecretaryLocalObjectsDto {
+  const raw = m4HomeExactObject(
+    value,
+    ["personal_actions", "notifications", "reminders", "decisions", "reminder_owner_refs"],
+    "application_outcome.local_objects",
+  );
+  const reminderOwnerRefs = m4HomeArray(raw.reminder_owner_refs, "local_objects.reminder_owner_refs")
+    .map((item, index) => m4HomeReference(item, `local_objects.reminder_owner_refs[${index}]`));
+  if (new Set(reminderOwnerRefs).size !== reminderOwnerRefs.length) {
+    throw new Error("m4_secretary_home_duplicate_reminder_owner_ref");
+  }
+  return Object.freeze({
+    personal_actions: Object.freeze(m4HomeArray(raw.personal_actions, "local_objects.personal_actions").map(m4HomeParseLocalPersonalAction)),
+    notifications: Object.freeze(m4HomeArray(raw.notifications, "local_objects.notifications").map(m4HomeParseLocalNotification)),
+    reminders: Object.freeze(m4HomeArray(raw.reminders, "local_objects.reminders").map(m4HomeParseLocalReminder)),
+    decisions: Object.freeze(m4HomeArray(raw.decisions, "local_objects.decisions").map(m4HomeParseLocalDecision)),
+    reminder_owner_refs: Object.freeze(reminderOwnerRefs),
+  });
+}
+
+function m4HomeParseLocalPersonalAction(value: unknown, index: number): M4SecretaryPersonalActionLocalDto {
+  const field = `local_objects.personal_actions[${index}]`;
+  const raw = m4HomeExactObject(
+    value,
+    ["personal_action_id", "explicit_user_command_ref", "title", "status", "due_at_utc", "revision"],
+    field,
+  );
+  const status = m4HomeFiniteCode(raw.status, `${field}.status`, ["OPEN", "COMPLETED", "CANCELLED"] as const);
+  return Object.freeze({
+    personal_action_id: m4HomePrefixedReference(raw.personal_action_id, `${field}.personal_action_id`, "personal-action:"),
+    explicit_user_command_ref: m4HomeReference(raw.explicit_user_command_ref, `${field}.explicit_user_command_ref`),
+    title: m4PersonalObjectTitle(raw.title, `${field}.title`),
+    status,
+    due_at_utc: m4HomeOptionalUtc(raw.due_at_utc, `${field}.due_at_utc`),
+    revision: m4HomeCanonicalRevision(raw.revision, `${field}.revision`),
+  });
+}
+
+function m4HomeParseLocalSourceLink(value: unknown, field: string): M4SecretarySourceLinkDto {
+  const raw = m4HomeExactObject(
+    value,
+    ["link_kind", "source_owner_ref", "object_type", "canonical_source_object_id", "expected_source_revision", "opaque_route_ref"],
+    field,
+  );
+  return Object.freeze({
+    link_kind: m4HomeCode(raw.link_kind, `${field}.link_kind`),
+    source_owner_ref: m4HomeReference(raw.source_owner_ref, `${field}.source_owner_ref`),
+    object_type: m4HomeCode(raw.object_type, `${field}.object_type`),
+    canonical_source_object_id: m4HomeReference(raw.canonical_source_object_id, `${field}.canonical_source_object_id`),
+    expected_source_revision: m4HomeCanonicalRevision(raw.expected_source_revision, `${field}.expected_source_revision`),
+    opaque_route_ref: m4HomeReference(raw.opaque_route_ref, `${field}.opaque_route_ref`),
+  });
+}
+
+function m4HomeParseLocalNotification(value: unknown, index: number): M4SecretaryNotificationLocalDto {
+  const field = `local_objects.notifications[${index}]`;
+  const raw = m4HomeExactObject(
+    value,
+    [
+      "notification_id", "source_ref", "subject_ref", "notification_purpose_code", "delivery_channel", "status",
+      "created_at_utc", "delivered_at_utc", "read_at_utc", "dismissed_at_utc", "revision",
+    ],
+    field,
+  );
+  const delivery_channel = m4HomeFiniteCode(raw.delivery_channel, `${field}.delivery_channel`, ["IN_APP"] as const);
+  const status = m4HomeFiniteCode(raw.status, `${field}.status`, ["PENDING", "DELIVERED", "READ", "DISMISSED"] as const);
+  return Object.freeze({
+    notification_id: m4HomePrefixedReference(raw.notification_id, `${field}.notification_id`, "notification:"),
+    source_ref: m4HomeParseLocalSourceLink(raw.source_ref, `${field}.source_ref`),
+    subject_ref: m4HomeReference(raw.subject_ref, `${field}.subject_ref`),
+    notification_purpose_code: m4HomeCode(raw.notification_purpose_code, `${field}.notification_purpose_code`),
+    delivery_channel,
+    status,
+    created_at_utc: m4HomeUtc(raw.created_at_utc, `${field}.created_at_utc`),
+    delivered_at_utc: m4HomeOptionalUtc(raw.delivered_at_utc, `${field}.delivered_at_utc`),
+    read_at_utc: m4HomeOptionalUtc(raw.read_at_utc, `${field}.read_at_utc`),
+    dismissed_at_utc: m4HomeOptionalUtc(raw.dismissed_at_utc, `${field}.dismissed_at_utc`),
+    revision: m4HomeCanonicalRevision(raw.revision, `${field}.revision`),
+  });
+}
+
+function m4HomeParseLocalReminder(value: unknown, index: number): M4SecretaryReminderLocalDto {
+  const field = `local_objects.reminders[${index}]`;
+  const raw = m4HomeExactObject(
+    value,
+    [
+      "reminder_id", "owner_ref", "explicit_schedule_command_id", "scheduled_for_utc", "iana_timezone",
+      "status", "last_fired_at_utc", "snoozed_until_utc", "revision",
+    ],
+    field,
+  );
+  const status = m4HomeFiniteCode(raw.status, `${field}.status`, ["SCHEDULED", "FIRED", "SNOOZED", "DISMISSED", "CANCELLED"] as const);
+  return Object.freeze({
+    reminder_id: m4HomePrefixedReference(raw.reminder_id, `${field}.reminder_id`, "reminder:"),
+    owner_ref: m4HomeReference(raw.owner_ref, `${field}.owner_ref`),
+    explicit_schedule_command_id: m4HomeReference(raw.explicit_schedule_command_id, `${field}.explicit_schedule_command_id`),
+    scheduled_for_utc: m4HomeUtc(raw.scheduled_for_utc, `${field}.scheduled_for_utc`),
+    iana_timezone: m4PersonalObjectIanaTimezone(raw.iana_timezone, `${field}.iana_timezone`),
+    status,
+    last_fired_at_utc: m4HomeOptionalUtc(raw.last_fired_at_utc, `${field}.last_fired_at_utc`),
+    snoozed_until_utc: m4HomeOptionalUtc(raw.snoozed_until_utc, `${field}.snoozed_until_utc`),
+    revision: m4HomeCanonicalRevision(raw.revision, `${field}.revision`),
+  });
+}
+
+function m4HomeParseLocalDecision(value: unknown, index: number): M4SecretaryDecisionLocalDto {
+  const field = `local_objects.decisions[${index}]`;
+  const raw = m4HomeExactObject(
+    value,
+    [
+      "decision_projection_id", "source_identity_key", "source_event_key", "source_ref", "owner_status",
+      "local_visibility_status", "decision_by_utc", "source_revision", "revision",
+    ],
+    field,
+  );
+  const owner_status = m4HomeFiniteCode(raw.owner_status, `${field}.owner_status`, ["OPEN", "ANSWERED", "EXPIRED", "WITHDRAWN"] as const);
+  const local_visibility_status = m4HomeFiniteCode(raw.local_visibility_status, `${field}.local_visibility_status`, ["UNREAD", "READ", "DISMISSED"] as const);
+  return Object.freeze({
+    decision_projection_id: m4HomePrefixedReference(raw.decision_projection_id, `${field}.decision_projection_id`, "decision-projection:"),
+    source_identity_key: m4HomeOpaqueReference(raw.source_identity_key, `${field}.source_identity_key`),
+    source_event_key: m4HomeOpaqueReference(raw.source_event_key, `${field}.source_event_key`),
+    source_ref: m4HomeReference(raw.source_ref, `${field}.source_ref`),
+    owner_status,
+    local_visibility_status,
+    decision_by_utc: m4HomeOptionalUtc(raw.decision_by_utc, `${field}.decision_by_utc`),
+    source_revision: m4HomeCanonicalRevision(raw.source_revision, `${field}.source_revision`),
+    revision: m4HomeCanonicalRevision(raw.revision, `${field}.revision`),
   });
 }
 
@@ -2597,6 +2876,12 @@ function m4HomeReference(value: unknown, field: string): string {
   return reference;
 }
 
+function m4HomePrefixedReference(value: unknown, field: string, prefix: string): string {
+  const reference = m4HomeReference(value, field);
+  if (!reference.startsWith(prefix)) throw new Error(`m4_secretary_home_invalid_${field}`);
+  return reference;
+}
+
 function m4HomeOpaqueReference(value: unknown, field: string): string {
   const reference = m4HomeReference(value, field);
   if (!/^[a-z][a-z0-9._-]{0,63}:sha256:[a-f0-9]{64}$/.test(reference)) {
@@ -2615,6 +2900,16 @@ function m4HomeCode(value: unknown, field: string): string {
   const code = m4HomeString(value, field);
   if (!/^[A-Za-z0-9_:-]{1,128}$/.test(code)) throw new Error(`m4_secretary_home_invalid_${field}`);
   return code;
+}
+
+function m4HomeFiniteCode<const T extends readonly string[]>(
+  value: unknown,
+  field: string,
+  allowed: T,
+): T[number] {
+  const code = m4HomeCode(value, field).toUpperCase();
+  if (!(allowed as readonly string[]).includes(code)) throw new Error(`m4_secretary_home_invalid_${field}`);
+  return code as T[number];
 }
 
 function m4HomeOptionalReference(value: unknown, field: string): string | null {
@@ -2650,6 +2945,40 @@ function m4HomeUtc(value: unknown, field: string): string {
 
 function m4HomeOptionalUtc(value: unknown, field: string): string | null {
   return value === null ? null : m4HomeUtc(value, field);
+}
+
+function m4PersonalObjectUtc(value: unknown, field: string): string {
+  const timestamp = m4HomeUtc(value, field);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/.test(timestamp)) {
+    throw new Error(`m4_secretary_home_invalid_${field}`);
+  }
+  return timestamp;
+}
+
+function m4PersonalObjectTitle(value: unknown, field: string): string {
+  const title = m4HomeString(value, field);
+  if (title.trim() !== title || [...title].length > 160 || /[\u0000-\u001f\u007f]/.test(title)) {
+    throw new Error(`m4_secretary_home_invalid_${field}`);
+  }
+  return title;
+}
+
+function m4PersonalObjectIanaTimezone(value: unknown, field: string): string {
+  const timezone = m4HomeString(value, field);
+  if (timezone.length > 128 || !/^[A-Za-z0-9_+\-]+(?:\/[A-Za-z0-9_+\-]+)*$/.test(timezone)) {
+    throw new Error(`m4_secretary_home_invalid_${field}`);
+  }
+  return timezone;
+}
+
+function m4HomeEmptyLocalObjects(): M4SecretaryLocalObjectsDto {
+  return Object.freeze({
+    personal_actions: Object.freeze([]),
+    notifications: Object.freeze([]),
+    reminders: Object.freeze([]),
+    decisions: Object.freeze([]),
+    reminder_owner_refs: Object.freeze([]),
+  });
 }
 
 function m4HomeCompareNullableUtc(left: string | null, right: string | null): number {

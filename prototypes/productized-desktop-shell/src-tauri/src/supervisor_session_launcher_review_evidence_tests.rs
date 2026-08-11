@@ -71,6 +71,7 @@ fn station4_byte_review_proposal(
         created_by_role: crate::ProjectConsultationProposalCreatorRole::ProjectConsultant,
         suggest_workflow: true,
         tasks: vec![],
+        expires_at_ms: None,
         created_at_ms: 0,
         updated_at_ms: 0,
     }

@@ -172,6 +172,19 @@ pub(crate) struct RepositoryAuditEntry {
     pub(crate) payload: Value,
 }
 
+/// One ordered proposal-owner fact in the narrow create/supersede batch.
+///
+/// The caller assigns the exact event-local owner revision.  The repository
+/// then persists every proposal, audit and sealed M4 publication in one
+/// `IMMEDIATE` transaction, preserving the supplied order as publication
+/// order.  This is deliberately not a generic multi-table mutation API.
+#[derive(Clone, Debug)]
+pub(crate) struct ProjectProposalSupersessionBatchEntry {
+    pub(crate) proposal: Value,
+    pub(crate) audit: RepositoryAuditEntry,
+    pub(crate) owner_store_revision: i64,
+}
+
 /// Narrow reservation material for an M2 server-owned execution grant.  This
 /// is intentionally not a generic dispatch rebind/force-write API: it only
 /// permits the exact C4 prepared record to be consumed in the same SQLite
@@ -305,6 +318,134 @@ impl WorkbenchSqliteRepository {
         Ok(repository)
     }
 
+    pub(crate) fn claim_next_m4_source_owner_publication(
+        &self,
+        claimer_id: &str,
+        now_ms: i64,
+    ) -> Result<crate::m4_source_owner_schema::M4SourceOwnerClaimOutcomeV1, String> {
+        self.with_immediate_transaction(
+            "claim_next_m4_source_owner_publication",
+            None,
+            |transaction| {
+                crate::m4_source_owner_schema::claim_next_source_publication(
+                    transaction,
+                    claimer_id,
+                    now_ms,
+                )
+            },
+        )
+        .map(|(outcome, _)| outcome)
+    }
+
+    pub(crate) fn record_m4_source_owner_publication_retry(
+        &self,
+        claim: &crate::m4_source_owner_schema::M4ClaimedSourceOwnerPublicationV1,
+        error_code: &str,
+        now_ms: i64,
+    ) -> Result<crate::m4_source_owner_schema::M4SourceOwnerRetryOutcomeV1, String> {
+        self.with_immediate_transaction(
+            "record_m4_source_owner_publication_retry",
+            None,
+            |transaction| {
+                crate::m4_source_owner_schema::record_source_publication_retry(
+                    transaction,
+                    claim,
+                    error_code,
+                    now_ms,
+                )
+            },
+        )
+        .map(|(outcome, _)| outcome)
+    }
+
+    pub(crate) fn quarantine_claimed_m4_source_owner_publication(
+        &self,
+        claim: &crate::m4_source_owner_schema::M4ClaimedSourceOwnerPublicationV1,
+        reason_code: &str,
+        now_ms: i64,
+    ) -> Result<String, String> {
+        self.with_immediate_transaction(
+            "quarantine_claimed_m4_source_owner_publication",
+            None,
+            |transaction| {
+                crate::m4_source_owner_schema::quarantine_claimed_source_publication(
+                    transaction,
+                    claim,
+                    reason_code,
+                    now_ms,
+                )
+            },
+        )
+        .map(|(receipt, _)| receipt)
+    }
+
+    pub(crate) fn record_m4_source_owner_candidate_conflict(
+        &self,
+        candidate: &crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1,
+        reason_code: &str,
+        now_ms: i64,
+    ) -> Result<String, String> {
+        self.with_immediate_transaction(
+            "record_m4_source_owner_candidate_conflict",
+            None,
+            |transaction| {
+                crate::m4_source_owner_schema::record_source_publication_candidate_conflict(
+                    transaction,
+                    candidate,
+                    reason_code,
+                    now_ms,
+                )
+            },
+        )
+        .map(|(receipt, _)| receipt)
+    }
+
+    pub(crate) fn record_m4_source_owner_candidate_rejection(
+        &self,
+        candidate: &crate::m4_source_owner_schema::M4SourceOwnerCandidateRejectionV1,
+        reason_code: &str,
+        now_ms: i64,
+    ) -> Result<String, String> {
+        self.with_immediate_transaction(
+            "record_m4_source_owner_candidate_rejection",
+            None,
+            |transaction| {
+                crate::m4_source_owner_schema::record_source_owner_candidate_rejection(
+                    transaction,
+                    candidate,
+                    reason_code,
+                    now_ms,
+                )
+            },
+        )
+        .map(|(receipt, _)| receipt)
+    }
+
+    pub(crate) fn mark_m4_source_owner_publication_terminal(
+        &self,
+        claim: &crate::m4_source_owner_schema::M4ClaimedSourceOwnerPublicationV1,
+        terminal_status: crate::m4_source_owner_schema::M4SourceOwnerTerminalStatusV1,
+        ingestion_receipt_ref: &str,
+        error_code: Option<&str>,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        self.with_immediate_transaction(
+            "mark_m4_source_owner_publication_terminal",
+            None,
+            |transaction| {
+                crate::m4_source_owner_schema::mark_source_publication_terminal(
+                    transaction,
+                    claim,
+                    terminal_status,
+                    ingestion_receipt_ref,
+                    error_code,
+                    now_ms,
+                )
+            },
+        )
+        .map(|_| ())
+    }
+
     pub(crate) fn append_audit(
         &self,
         audit: &RepositoryAuditEntry,
@@ -350,10 +491,267 @@ impl WorkbenchSqliteRepository {
             .map_err(|error| format!("m2_workflow_state_sidecar_quarantine_manifest:{error}"))
     }
 
+    /// Atomically supersede one or more still-open proposals and create their
+    /// same-scope replacement.  Entries must be ordered as superseded proposal
+    /// ids followed by the newly created proposal, with contiguous owner
+    /// revisions.  Every native fact, audit and M4 publication is committed by
+    /// one `IMMEDIATE` transaction; JSON projection remains a post-commit
+    /// responsibility of the proposal store.
+    pub(crate) fn record_proposal_supersession_batch_with_m4_publications(
+        &self,
+        entries: &[ProjectProposalSupersessionBatchEntry],
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        if entries.len() < 2 {
+            return Err("proposal_supersession_batch_requires_old_and_new".to_string());
+        }
+
+        struct PreparedEntry<'a> {
+            proposal_id: String,
+            project_id: String,
+            workflow_id: String,
+            record_hash: String,
+            record_json: String,
+            entry: &'a ProjectProposalSupersessionBatchEntry,
+        }
+
+        let mut proposal_ids = BTreeSet::new();
+        let mut audit_ids = BTreeSet::new();
+        let first_revision = entries[0].owner_store_revision;
+        if first_revision <= 0 {
+            return Err("proposal_supersession_batch_revision_out_of_range".to_string());
+        }
+        let first_project_id = required_text(&entries[0].proposal, "project_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let first_workflow_id = required_text(&entries[0].proposal, "workflow_id")
+            .map_err(|error| error.describe())?
+            .to_string();
+        let replacement_proposal_id = required_text(
+            &entries.last().expect("batch length checked above").proposal,
+            "proposal_id",
+        )
+        .map_err(|error| error.describe())?
+        .to_string();
+        let mut prepared = Vec::with_capacity(entries.len());
+
+        for (index, entry) in entries.iter().enumerate() {
+            let expected_revision =
+                first_revision
+                    .checked_add(i64::try_from(index).map_err(|_| {
+                        "proposal_supersession_batch_revision_out_of_range".to_string()
+                    })?)
+                    .ok_or_else(|| "proposal_supersession_batch_revision_overflow".to_string())?;
+            if entry.owner_store_revision != expected_revision {
+                return Err(format!(
+                    "proposal_supersession_batch_revision_not_contiguous:index={index}:expected={expected_revision}:actual={}",
+                    entry.owner_store_revision
+                ));
+            }
+
+            let proposal_id = required_text(&entry.proposal, "proposal_id")
+                .map_err(|error| error.describe())?
+                .to_string();
+            let project_id = required_text(&entry.proposal, "project_id")
+                .map_err(|error| error.describe())?
+                .to_string();
+            let workflow_id = required_text(&entry.proposal, "workflow_id")
+                .map_err(|error| error.describe())?
+                .to_string();
+            let status =
+                required_text(&entry.proposal, "status").map_err(|error| error.describe())?;
+            let expected_status = if index + 1 == entries.len() {
+                "pending_user_confirmation"
+            } else {
+                "superseded"
+            };
+            let expected_event_type = if index + 1 == entries.len() {
+                "project_consultation_proposal_created"
+            } else {
+                "project_consultation_proposal_superseded"
+            };
+            if project_id != first_project_id || workflow_id != first_workflow_id {
+                return Err("proposal_supersession_batch_scope_mismatch".to_string());
+            }
+            if status != expected_status {
+                return Err(format!(
+                    "proposal_supersession_batch_status_invalid:index={index}:expected={expected_status}:actual={status}"
+                ));
+            }
+            if entry.audit.target_kind != "project_consultation_proposal"
+                || entry.audit.target_id != proposal_id
+                || entry
+                    .audit
+                    .payload
+                    .get("audit_event_id")
+                    .and_then(Value::as_str)
+                    != Some(entry.audit.event_id.as_str())
+                || entry
+                    .audit
+                    .payload
+                    .get("event_type")
+                    .and_then(Value::as_str)
+                    != Some(expected_event_type)
+                || entry
+                    .audit
+                    .payload
+                    .get("proposal_id")
+                    .and_then(Value::as_str)
+                    != Some(proposal_id.as_str())
+                || entry
+                    .audit
+                    .payload
+                    .get("project_id")
+                    .and_then(Value::as_str)
+                    != Some(project_id.as_str())
+                || entry
+                    .audit
+                    .payload
+                    .get("workflow_id")
+                    .and_then(Value::as_str)
+                    != Some(workflow_id.as_str())
+                || entry
+                    .audit
+                    .payload
+                    .get("after_status")
+                    .and_then(Value::as_str)
+                    != Some(expected_status)
+            {
+                return Err(format!(
+                    "proposal_supersession_batch_audit_binding_invalid:index={index}"
+                ));
+            }
+            if index + 1 != entries.len()
+                && !entry
+                    .audit
+                    .payload
+                    .get("reason")
+                    .and_then(Value::as_str)
+                    .is_some_and(|reason| {
+                        reason.ends_with(&format!(
+                            "replacement_proposal_id={replacement_proposal_id}"
+                        ))
+                    })
+            {
+                return Err(format!(
+                    "proposal_supersession_batch_replacement_binding_invalid:index={index}"
+                ));
+            }
+            if !proposal_ids.insert(proposal_id.clone()) {
+                return Err("proposal_supersession_batch_duplicate_proposal".to_string());
+            }
+            if !audit_ids.insert(entry.audit.event_id.clone()) {
+                return Err("proposal_supersession_batch_duplicate_audit".to_string());
+            }
+            let (record_hash, record_json) = serialized_record(&entry.proposal)?;
+            prepared.push(PreparedEntry {
+                proposal_id,
+                project_id,
+                workflow_id,
+                record_hash,
+                record_json,
+                entry,
+            });
+        }
+
+        let conflict_candidate = std::cell::RefCell::new(
+            None::<crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1>,
+        );
+        let transaction_result = self.with_immediate_transaction(
+            "record_proposal_supersession_batch_with_m4_publications",
+            failure,
+            |transaction| {
+                let mut rows_touched = 0usize;
+                for prepared_entry in &prepared {
+                    rows_touched += transaction
+                        .execute(
+                            "INSERT INTO project_proposals (proposal_id, project_id, workflow_id, source_id, record_hash, record_json)
+                             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                             ON CONFLICT(proposal_id) DO UPDATE SET
+                                project_id = excluded.project_id,
+                                workflow_id = excluded.workflow_id,
+                                source_id = excluded.source_id,
+                                record_hash = excluded.record_hash,
+                                record_json = excluded.record_json",
+                            params![
+                                prepared_entry.proposal_id,
+                                prepared_entry.project_id,
+                                prepared_entry.workflow_id,
+                                REPOSITORY_SOURCE_ID,
+                                prepared_entry.record_hash,
+                                prepared_entry.record_json,
+                            ],
+                        )
+                        .map_err(RepositoryMutationError::Sqlite)?;
+                    rows_touched +=
+                        append_audit_in_transaction(transaction, &prepared_entry.entry.audit)?;
+                    let publication =
+                        crate::m4_source_owner_schema::build_m4_proposal_source_publication(
+                            transaction,
+                            &prepared_entry.proposal_id,
+                            &prepared_entry.entry.audit.event_id,
+                            prepared_entry.entry.owner_store_revision,
+                        )?;
+                    *conflict_candidate.borrow_mut() = Some(publication.clone());
+                    crate::m4_source_owner_schema::append_m4_proposal_source_publication(
+                        transaction,
+                        &publication,
+                    )?;
+                    rows_touched += 1;
+                }
+                Ok(rows_touched)
+            },
+        );
+        let (rows_touched, busy_retries) = match transaction_result {
+            Ok(result) => result,
+            Err(error) => {
+                if error.contains("m4_source_owner_publication_idempotency_conflict") {
+                    if let Some(candidate) = conflict_candidate.borrow().as_ref() {
+                        self.record_m4_source_owner_candidate_conflict(
+                            candidate,
+                            "IDEMPOTENCY_PAYLOAD_CONFLICT",
+                            crate::unix_timestamp_ms(),
+                        )?;
+                    }
+                }
+                return Err(error);
+            }
+        };
+        Ok(RepositoryReceipt {
+            rows_touched,
+            busy_retries,
+        })
+    }
+
     pub(crate) fn record_proposal_with_audit(
         &self,
         proposal: &Value,
         audit: &RepositoryAuditEntry,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        self.record_proposal_with_audit_internal(proposal, audit, None, failure)
+    }
+
+    pub(crate) fn record_proposal_with_audit_and_m4_publication(
+        &self,
+        proposal: &Value,
+        audit: &RepositoryAuditEntry,
+        owner_store_revision: i64,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        self.record_proposal_with_audit_internal(
+            proposal,
+            audit,
+            Some(owner_store_revision),
+            failure,
+        )
+    }
+
+    fn record_proposal_with_audit_internal(
+        &self,
+        proposal: &Value,
+        audit: &RepositoryAuditEntry,
+        owner_store_revision: Option<i64>,
         failure: Option<RepositoryFailurePoint>,
     ) -> Result<RepositoryReceipt, String> {
         let proposal_id = required_text(proposal, "proposal_id")
@@ -362,7 +760,10 @@ impl WorkbenchSqliteRepository {
         let project_id = optional_text(proposal, "project_id").map(ToString::to_string);
         let workflow_id = optional_text(proposal, "workflow_id").map(ToString::to_string);
         let (record_hash, record_json) = serialized_record(proposal)?;
-        let (rows_touched, busy_retries) = self.with_immediate_transaction(
+        let conflict_candidate = std::cell::RefCell::new(
+            None::<crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1>,
+        );
+        let transaction_result = self.with_immediate_transaction(
             "record_proposal_with_audit",
             failure,
             |transaction| {
@@ -386,9 +787,42 @@ impl WorkbenchSqliteRepository {
                         ],
                     )
                     .map_err(RepositoryMutationError::Sqlite)?;
-                Ok(proposal_rows + append_audit_in_transaction(transaction, audit)?)
+                let audit_rows = append_audit_in_transaction(transaction, audit)?;
+                let publication_rows = if let Some(store_revision) = owner_store_revision {
+                    let publication =
+                        crate::m4_source_owner_schema::build_m4_proposal_source_publication(
+                            transaction,
+                            &proposal_id,
+                            &audit.event_id,
+                            store_revision,
+                        )?;
+                    *conflict_candidate.borrow_mut() = Some(publication.clone());
+                    crate::m4_source_owner_schema::append_m4_proposal_source_publication(
+                        transaction,
+                        &publication,
+                    )?;
+                    1
+                } else {
+                    0
+                };
+                Ok(proposal_rows + audit_rows + publication_rows)
             },
-        )?;
+        );
+        let (rows_touched, busy_retries) = match transaction_result {
+            Ok(result) => result,
+            Err(error) => {
+                if error.contains("m4_source_owner_publication_idempotency_conflict") {
+                    if let Some(candidate) = conflict_candidate.borrow().as_ref() {
+                        self.record_m4_source_owner_candidate_conflict(
+                            candidate,
+                            "IDEMPOTENCY_PAYLOAD_CONFLICT",
+                            crate::unix_timestamp_ms(),
+                        )?;
+                    }
+                }
+                return Err(error);
+            }
+        };
         Ok(RepositoryReceipt {
             rows_touched,
             busy_retries,
@@ -400,6 +834,40 @@ impl WorkbenchSqliteRepository {
         proposal: &Value,
         decision: &Value,
         audit: &RepositoryAuditEntry,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        self.record_proposal_decision_with_audit_internal(
+            proposal,
+            decision,
+            audit,
+            None,
+            failure,
+        )
+    }
+
+    pub(crate) fn record_proposal_decision_with_audit_and_m4_publication(
+        &self,
+        proposal: &Value,
+        decision: &Value,
+        audit: &RepositoryAuditEntry,
+        owner_store_revision: i64,
+        failure: Option<RepositoryFailurePoint>,
+    ) -> Result<RepositoryReceipt, String> {
+        self.record_proposal_decision_with_audit_internal(
+            proposal,
+            decision,
+            audit,
+            Some(owner_store_revision),
+            failure,
+        )
+    }
+
+    fn record_proposal_decision_with_audit_internal(
+        &self,
+        proposal: &Value,
+        decision: &Value,
+        audit: &RepositoryAuditEntry,
+        owner_store_revision: Option<i64>,
         failure: Option<RepositoryFailurePoint>,
     ) -> Result<RepositoryReceipt, String> {
         let proposal_id = required_text(proposal, "proposal_id")
@@ -420,7 +888,10 @@ impl WorkbenchSqliteRepository {
         let workflow_id = optional_text(proposal, "workflow_id").map(ToString::to_string);
         let (proposal_hash, proposal_json) = serialized_record(proposal)?;
         let (decision_hash, decision_json) = serialized_record(decision)?;
-        let (rows_touched, busy_retries) = self.with_immediate_transaction(
+        let conflict_candidate = std::cell::RefCell::new(
+            None::<crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1>,
+        );
+        let transaction_result = self.with_immediate_transaction(
             "record_proposal_decision_with_audit",
             failure,
             |transaction| {
@@ -462,11 +933,42 @@ impl WorkbenchSqliteRepository {
                         ],
                     )
                     .map_err(RepositoryMutationError::Sqlite)?;
-                Ok(proposal_rows
-                    + decision_rows
-                    + append_audit_in_transaction(transaction, audit)?)
+                let audit_rows = append_audit_in_transaction(transaction, audit)?;
+                let publication_rows = if let Some(store_revision) = owner_store_revision {
+                    let publication =
+                        crate::m4_source_owner_schema::build_m4_proposal_source_publication(
+                            transaction,
+                            &proposal_id,
+                            &audit.event_id,
+                            store_revision,
+                        )?;
+                    *conflict_candidate.borrow_mut() = Some(publication.clone());
+                    crate::m4_source_owner_schema::append_m4_proposal_source_publication(
+                        transaction,
+                        &publication,
+                    )?;
+                    1
+                } else {
+                    0
+                };
+                Ok(proposal_rows + decision_rows + audit_rows + publication_rows)
             },
-        )?;
+        );
+        let (rows_touched, busy_retries) = match transaction_result {
+            Ok(result) => result,
+            Err(error) => {
+                if error.contains("m4_source_owner_publication_idempotency_conflict") {
+                    if let Some(candidate) = conflict_candidate.borrow().as_ref() {
+                        self.record_m4_source_owner_candidate_conflict(
+                            candidate,
+                            "IDEMPOTENCY_PAYLOAD_CONFLICT",
+                            crate::unix_timestamp_ms(),
+                        )?;
+                    }
+                }
+                return Err(error);
+            }
+        };
         Ok(RepositoryReceipt {
             rows_touched,
             busy_retries,
@@ -1604,6 +2106,27 @@ impl WorkbenchSqliteRepository {
             })
     }
 
+    /// Stable pre-command snapshot used to identify a rejected owner
+    /// candidate after its transaction rolls back.  It is rebuilt from the
+    /// current authoritative SQLite records at the current owner revision;
+    /// unlike the attempted post-state it contains no fresh event id and does
+    /// not change between exact retries of the same rejected command.
+    pub(crate) fn m2_workflow_state_authoritative_snapshot_hash(
+        &self,
+        project_ref: &str,
+        workflow_id: &str,
+        revision: i64,
+    ) -> Result<String, String> {
+        let connection = self.configured_connection()?;
+        m2_workflow_state_sidecar_snapshot_from_authoritative_sqlite(
+            &connection,
+            project_ref,
+            workflow_id,
+            revision,
+        )
+        .map(|snapshot| snapshot.snapshot_hash)
+    }
+
     fn immediate_transaction_attempt<T>(
         &self,
         failure: Option<RepositoryFailurePoint>,
@@ -1930,6 +2453,68 @@ impl<'transaction> WorkflowStateSidecarRepositoryV1<'transaction> {
         .map_err(RepositoryMutationError::Message)
     }
 
+    /// Resolve an ordinary product retry before choosing a fresh aggregate
+    /// revision.  This read runs under the same IMMEDIATE transaction as the
+    /// later revision read and command UoW, so two first attempts cannot race
+    /// into different request hashes for one server-sealed identity.
+    pub(crate) fn find_command_receipt_by_command_id(
+        &self,
+        command_id: &str,
+    ) -> RepositoryMutationResult<Option<(String, String, String, String)>> {
+        self.transaction
+            .query_row(
+                "SELECT receipt_id, idempotency_key, request_hash, status
+                 FROM command_receipts
+                 WHERE command_id = ?1",
+                [command_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .optional()
+            .map_err(RepositoryMutationError::Sqlite)
+    }
+
+    /// Transaction-scoped form of the exact imported-source binding read.
+    /// Server-sealed ordinary commands call this only after proving that no
+    /// immutable receipt already owns the derived command identity.
+    pub(crate) fn authoritative_revision(
+        &self,
+        workflow_id: &str,
+        work_item_id: &str,
+    ) -> RepositoryMutationResult<i64> {
+        self.transaction
+            .query_row(
+                "SELECT COALESCE(meta.revision, 0)
+                 FROM work_items AS item
+                 JOIN workflow_state_meta AS meta ON meta.source_id = item.source_id
+                 WHERE item.work_item_id = ?1 AND item.workflow_id = ?2",
+                params![work_item_id, workflow_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(RepositoryMutationError::Sqlite)?
+            .ok_or_else(|| {
+                RepositoryMutationError::Message(format!(
+                    "m2_workflow_state_meta_binding_missing:work_item_id={work_item_id}"
+                ))
+            })
+    }
+
+    pub(crate) fn authoritative_snapshot_hash(
+        &self,
+        project_ref: &str,
+        workflow_id: &str,
+        revision: i64,
+    ) -> RepositoryMutationResult<String> {
+        m2_workflow_state_sidecar_snapshot_from_authoritative_sqlite(
+            self.transaction,
+            project_ref,
+            workflow_id,
+            revision,
+        )
+        .map(|snapshot| snapshot.snapshot_hash)
+        .map_err(RepositoryMutationError::Message)
+    }
+
     pub(crate) fn write_domain_state(
         &self,
         work_item_after: &Value,
@@ -2052,12 +2637,12 @@ pub(crate) fn m2_workflow_state_sidecar_snapshot_from_projection(
 }
 
 fn m2_workflow_state_sidecar_snapshot_from_authoritative_sqlite(
-    transaction: &Transaction<'_>,
+    connection: &Connection,
     project_ref: &str,
     workflow_id: &str,
     revision: i64,
 ) -> Result<M2WorkflowStateSidecarSnapshot, String> {
-    let workflow_json: String = transaction
+    let workflow_json: String = connection
         .query_row(
             "SELECT record_json FROM workflows WHERE workflow_id = ?1",
             [workflow_id],
@@ -2068,13 +2653,13 @@ fn m2_workflow_state_sidecar_snapshot_from_authoritative_sqlite(
         .ok_or_else(|| format!("m2_workflow_state_snapshot_workflow_missing:{workflow_id}"))?;
     let workflow = parse_m2_workflow_state_snapshot_record("workflow", &workflow_json)?;
     let nodes = load_m2_workflow_state_snapshot_records(
-        transaction,
+        connection,
         "workflow_nodes",
         "node_id",
         workflow_id,
     )?;
     let work_items = load_m2_workflow_state_snapshot_records(
-        transaction,
+        connection,
         "work_items",
         "work_item_id",
         workflow_id,
@@ -2090,7 +2675,7 @@ fn m2_workflow_state_sidecar_snapshot_from_authoritative_sqlite(
 }
 
 fn load_m2_workflow_state_snapshot_records(
-    transaction: &Transaction<'_>,
+    connection: &Connection,
     table: &str,
     key_column: &str,
     workflow_id: &str,
@@ -2098,7 +2683,7 @@ fn load_m2_workflow_state_snapshot_records(
     let query = format!(
         "SELECT record_json FROM {table} WHERE workflow_id = ?1 ORDER BY {key_column}"
     );
-    let mut statement = transaction
+    let mut statement = connection
         .prepare(&query)
         .map_err(|error| format!("m2_workflow_state_snapshot_{table}_prepare:{error}"))?;
     let rows = statement
@@ -6669,6 +7254,223 @@ mod tests {
                 && !source.contains(&full_projection_writer)
                 && !source.contains(&full_projection_exporter),
             "row mutations must not serialize or export a full workflow projection"
+        );
+    }
+
+    #[test]
+    fn proposal_owner_fact_audit_and_expiry_publication_share_one_uow() {
+        let (repository, _) = test_repository("m4-proposal-owner-uow");
+        let proposal = json!({
+            "proposal_id": "proposal:m4-owner-uow",
+            "project_id": "project:m4-owner-uow",
+            "workflow_id": "workflow:m4-owner-uow",
+            "status": "expired",
+            "expires_at_ms": 1_786_000_000_000_i64
+        });
+        let audit_payload = json!({
+            "audit_event_id": "audit:proposal:m4-owner-uow:expired",
+            "project_id": "project:m4-owner-uow",
+            "workflow_id": "workflow:m4-owner-uow",
+            "proposal_id": "proposal:m4-owner-uow",
+            "after_status": "expired",
+            "created_at_ms": 1_786_000_000_001_i64
+        });
+        let audit = RepositoryAuditEntry {
+            event_id: "audit:proposal:m4-owner-uow:expired".to_string(),
+            target_kind: "project_consultation_proposal".to_string(),
+            target_id: "proposal:m4-owner-uow".to_string(),
+            payload: audit_payload,
+        };
+        let error = repository
+            .record_proposal_with_audit_and_m4_publication(
+                &proposal,
+                &audit,
+                9,
+                Some(RepositoryFailurePoint::BeforeCommit),
+            )
+            .expect_err("injected rollback must reject whole owner UoW");
+        assert!(error.contains("injected_failure_before_commit"), "{error}");
+        let connection = repository.configured_connection().expect("inspect rollback");
+        for table in [
+            "project_proposals",
+            "workflow_audit_events",
+            "m4_source_owner_publications",
+        ] {
+            let count: i64 = connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+                .expect("count owner UoW table");
+            assert_eq!(count, 0, "{table} must roll back with publication");
+        }
+        drop(connection);
+
+        repository
+            .record_proposal_with_audit_and_m4_publication(&proposal, &audit, 9, None)
+            .expect("commit proposal owner UoW");
+        let connection = repository.configured_connection().expect("inspect commit");
+        let publication: (String, i64, String, String) = connection
+            .query_row(
+                "SELECT owner_status_code, source_revision, due_at_utc, dispatch_status
+                 FROM m4_source_owner_publications",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("read committed source publication");
+        assert_eq!(publication.0, "expired");
+        assert_eq!(publication.1, 9);
+        assert_eq!(
+            publication.2,
+            crate::m2_clock::utc_rfc3339_at_epoch_ms(1_786_000_000_000)
+        );
+        assert_eq!(publication.3, "PENDING");
+    }
+
+    #[test]
+    fn m4r02_proposal_supersession_batch_is_ordered_and_before_commit_rolls_back_every_fact() {
+        let (repository, _) = test_repository("m4-proposal-supersession-batch");
+        let entry = |proposal_id: &str,
+                     status: &str,
+                     event_suffix: &str,
+                     event_type: &str,
+                     revision: i64| {
+            let event_id = format!("audit:proposal:{event_suffix}");
+            ProjectProposalSupersessionBatchEntry {
+                proposal: json!({
+                    "proposal_id": proposal_id,
+                    "project_id": "project:m4-supersession",
+                    "workflow_id": "workflow:m4-supersession",
+                    "status": status,
+                    "updated_at_ms": 1_786_300_000_000_i64
+                }),
+                audit: RepositoryAuditEntry {
+                    event_id: event_id.clone(),
+                    target_kind: "project_consultation_proposal".to_string(),
+                    target_id: proposal_id.to_string(),
+                    payload: json!({
+                        "audit_event_id": event_id,
+                        "event_type": event_type,
+                        "project_id": "project:m4-supersession",
+                        "workflow_id": "workflow:m4-supersession",
+                        "proposal_id": proposal_id,
+                        "after_status": status,
+                        "reason": if status == "superseded" {
+                            "owner supersession;replacement_proposal_id=proposal:c"
+                        } else {
+                            "created"
+                        },
+                        "created_at_ms": 1_786_300_000_000_i64
+                    }),
+                },
+                owner_store_revision: revision,
+            }
+        };
+        let entries = vec![
+            entry(
+                "proposal:a",
+                "superseded",
+                "a-superseded",
+                "project_consultation_proposal_superseded",
+                11,
+            ),
+            entry(
+                "proposal:b",
+                "superseded",
+                "b-superseded",
+                "project_consultation_proposal_superseded",
+                12,
+            ),
+            entry(
+                "proposal:c",
+                "pending_user_confirmation",
+                "c-created",
+                "project_consultation_proposal_created",
+                13,
+            ),
+        ];
+
+        let mut unbound_entries = entries.clone();
+        unbound_entries[0].audit.payload["reason"] =
+            Value::String("owner supersession without replacement binding".to_string());
+        let binding_error = repository
+            .record_proposal_supersession_batch_with_m4_publications(&unbound_entries, None)
+            .expect_err("superseded audit must name the opaque replacement proposal");
+        assert!(
+            binding_error.contains("proposal_supersession_batch_replacement_binding_invalid"),
+            "{binding_error}"
+        );
+
+        let error = repository
+            .record_proposal_supersession_batch_with_m4_publications(
+                &entries,
+                Some(RepositoryFailurePoint::BeforeCommit),
+            )
+            .expect_err("BeforeCommit must roll back the complete supersession batch");
+        assert!(error.contains("injected_failure_before_commit"), "{error}");
+        let connection = repository
+            .configured_connection()
+            .expect("inspect rollback");
+        for table in [
+            "project_proposals",
+            "workflow_audit_events",
+            "m4_source_owner_publications",
+        ] {
+            let count: i64 = connection
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .expect("count rolled-back supersession table");
+            assert_eq!(count, 0, "{table} must have zero partial batch rows");
+        }
+        drop(connection);
+
+        repository
+            .record_proposal_supersession_batch_with_m4_publications(&entries, None)
+            .expect("commit ordered supersession batch");
+        let connection = repository
+            .configured_connection()
+            .expect("inspect committed batch");
+        let publications = {
+            let mut statement = connection
+                .prepare(
+                    "SELECT canonical_object_id, owner_status_code, source_revision,
+                            owner_native_watermark
+                     FROM m4_source_owner_publications ORDER BY publication_sequence",
+                )
+                .expect("prepare ordered publication query");
+            statement
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, String>(3)?,
+                    ))
+                })
+                .expect("query ordered publications")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("collect ordered publications")
+        };
+        assert_eq!(
+            publications,
+            vec![
+                (
+                    "proposal:a".to_string(),
+                    "superseded".to_string(),
+                    11,
+                    "11".to_string()
+                ),
+                (
+                    "proposal:b".to_string(),
+                    "superseded".to_string(),
+                    12,
+                    "12".to_string()
+                ),
+                (
+                    "proposal:c".to_string(),
+                    "pending_user_confirmation".to_string(),
+                    13,
+                    "13".to_string(),
+                ),
+            ]
         );
     }
 

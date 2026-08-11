@@ -6644,7 +6644,16 @@ fn record_formal_memory_lifecycle_operation(
 fn initialize_workflow_state(
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateMutationResult, String> {
-    initialize_workflow_state_at(&state.workflow_state_path)
+    let mut result = initialize_workflow_state_at(&state.workflow_state_path)?;
+    if crate::ordinary_product_storage_bootstrap::restart_required_after_initialization(
+        &state.workflow_state_path,
+    )? {
+        result.message.push_str(&format!(
+            " {}（需要重启以启用普通产品 DB 主写；重启前仍保持单一 JSON writer。）",
+            crate::ordinary_product_storage_bootstrap::ORDINARY_PRODUCT_STORAGE_RESTART_REQUIRED_MARKER
+        ));
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -7190,6 +7199,7 @@ fn execute_experiment_node_dispatch_at(
             project_root: project_root.to_string(),
             work_item_id: work_item_id.clone(),
             next_state: "ready_to_dispatch".to_string(),
+            client_request_ref: None,
             command_id: None,
             idempotency_key: None,
             expected_revision: None,

@@ -1924,12 +1924,8 @@ export type WorkItemStateUpdateRequest = {
   project_root: string;
   work_item_id: string;
   next_state: string;
-  /** Stable identity for one logical state-mutation command/retry. */
-  command_id?: string;
-  /** Must be resent with command_id to request receipt replay. */
-  idempotency_key?: string;
-  /** Caller-observed M2 workflow-state-sidecar revision. */
-  expected_revision?: number;
+  /** Opaque retry reference; the server derives command identity and CAS revision. */
+  client_request_ref?: string;
 };
 
 export type WorkflowNodeSessionBindRequest = {

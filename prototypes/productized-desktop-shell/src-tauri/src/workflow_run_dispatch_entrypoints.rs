@@ -452,6 +452,12 @@ fn update_work_item_state_at(
     {
         return update_work_item_state_db_primary(path, request, &repository);
     }
+    if crate::ordinary_product_storage_bootstrap::is_ordinary_product_workflow_state_path(path) {
+        return Err(
+            crate::ordinary_product_storage_bootstrap::ORDINARY_PRODUCT_STORAGE_RESTART_REQUIRED_MARKER
+                .to_string(),
+        );
+    }
 
     let timestamp = unix_timestamp_string();
     let mut value = read_workflow_state_value(path)?;
@@ -550,6 +556,8 @@ fn with_explicit_m2_port_provenance(
     if explicit_m2_identity {
         let caller_mode = if command_id.starts_with("workflow-state-sidecar.m2.r4:") {
             "R4_ACCEPTANCE"
+        } else if command_id.starts_with("workflow-state-sidecar.product.v1:") {
+            "SERVER_SEALED_PRODUCT_REQUEST"
         } else {
             "EXPLICIT_M2_REQUEST"
         };
@@ -562,6 +570,196 @@ fn with_explicit_m2_port_provenance(
         });
     }
     snapshot
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WorkItemStateCommandIdentityMode {
+    GuardedLegacy,
+    ExplicitM2,
+    ServerSealedProduct,
+}
+
+impl WorkItemStateCommandIdentityMode {
+    fn carries_versioned_revision(self) -> bool {
+        !matches!(self, Self::GuardedLegacy)
+    }
+}
+
+fn server_sealed_work_item_command_identity(
+    request: &WorkItemStateUpdateRequest,
+    workflow_id: &str,
+    next_state: &str,
+    current_node_id: &str,
+) -> Result<(String, String), String> {
+    let client_request_ref = request
+        .client_request_ref
+        .as_deref()
+        .ok_or_else(|| "work_item_client_request_ref_required".to_string())?;
+    if client_request_ref.len() != 32
+        || !client_request_ref
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return Err("work_item_client_request_ref_invalid".to_string());
+    }
+
+    // Every semantic owner field has already crossed the index/workflow/work
+    // item admission above.  Only fixed hashes leave this server-side seal;
+    // project paths and raw client references never become command ids.
+    let command_material = serde_json::to_string(&serde_json::json!({
+        "domain": "syn.workflow-state-sidecar.server-sealed-command.v1",
+        "actor_id": "user",
+        "scope_owner": "ordinary_product_workflow",
+        "project_root": request.project_root,
+        "workflow_id": workflow_id,
+        "work_item_id": request.work_item_id,
+        "client_request_ref": client_request_ref,
+    }))
+    .map_err(|error| format!("work_item_server_identity_serialize_failed:{error}"))?;
+    let command_state_material = serde_json::to_string(&serde_json::json!({
+        "schema_version": "workflow-state-sidecar.command-state.v1",
+        "repository_port_version": crate::workbench_sqlite_repository::M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION,
+        "after_state": next_state,
+        "current_node_id": current_node_id,
+    }))
+    .map_err(|error| format!("work_item_server_state_serialize_failed:{error}"))?;
+    let idempotency_material = serde_json::to_string(&serde_json::json!({
+        "domain": "syn.workflow-state-sidecar.server-sealed-idempotency.v1",
+        "command_material_sha256": crate::utils::hash::sha256_hex(&command_material),
+        "next_state": next_state,
+        "command_state_sha256": crate::utils::hash::sha256_hex(&command_state_material),
+    }))
+    .map_err(|error| format!("work_item_server_idempotency_serialize_failed:{error}"))?;
+    Ok((
+        format!(
+            "workflow-state-sidecar.product.v1:{}",
+            crate::utils::hash::sha256_hex(&command_material)
+        ),
+        format!(
+            "idem:workflow-state-sidecar.product.v1:{}",
+            crate::utils::hash::sha256_hex(&idempotency_material)
+        ),
+    ))
+}
+
+fn explicit_m2_identity_values_are_bounded(command_id: &str, idempotency_key: &str) -> bool {
+    !command_id.is_empty()
+        && command_id.trim() == command_id
+        && command_id.len() <= 512
+        && !idempotency_key.is_empty()
+        && idempotency_key.trim() == idempotency_key
+        && idempotency_key.len() <= 512
+}
+
+fn explicit_m2_idempotency_matches_command(command_id: &str, idempotency_key: &str) -> bool {
+    idempotency_key == format!("idem:{command_id}")
+}
+
+fn ordinary_product_explicit_m2_identity_allowed(
+    command_id: &str,
+    idempotency_key: &str,
+) -> bool {
+    if !explicit_m2_identity_values_are_bounded(command_id, idempotency_key) {
+        return false;
+    }
+    cfg!(test)
+        || (explicit_m2_idempotency_matches_command(command_id, idempotency_key)
+            && matches!(
+                crate::m2_r4_reference_slice_driver::current_reference_command_is_registered(
+                    command_id
+                ),
+                Ok(true)
+            ))
+}
+
+enum ServerSealedCommandResolution {
+    Replay {
+        receipt_id: String,
+    },
+    Fresh {
+        command: crate::m2_workflow_state::UpdateWorkItemStateCommand,
+        request_hash: String,
+        authoritative_snapshot_hash: String,
+    },
+}
+
+fn resolve_server_sealed_work_item_command_in_transaction(
+    port: &crate::workbench_sqlite_repository::WorkflowStateSidecarRepositoryV1<'_>,
+    request: &WorkItemStateUpdateRequest,
+    workflow_id: &str,
+    next_state: &str,
+    current_node_id: &str,
+    command_id: &str,
+    idempotency_key: &str,
+) -> Result<
+    ServerSealedCommandResolution,
+    crate::workbench_sqlite_repository::RepositoryMutationError,
+> {
+    if let Some((receipt_id, existing_idempotency_key, _existing_hash, status)) =
+        port.find_command_receipt_by_command_id(command_id)?
+    {
+        if existing_idempotency_key != idempotency_key {
+            return Err(
+                crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                    "work_item_client_request_ref_identity_conflict".to_string(),
+                ),
+            );
+        }
+        if matches!(
+            status.as_str(),
+            "COMMITTED" | "EXTERNAL_PENDING" | "EXTERNAL_RESULT"
+        ) {
+            return Ok(ServerSealedCommandResolution::Replay { receipt_id });
+        }
+        return Err(
+            crate::workbench_sqlite_repository::RepositoryMutationError::Message(format!(
+                "m2_existing_receipt_not_successful:receipt_id={receipt_id},status={status}"
+            )),
+        );
+    }
+
+    // This is intentionally after the receipt lookup and in the same
+    // IMMEDIATE transaction. A concurrent exact request either owns the first
+    // revision or observes its immutable receipt; it never invents rev+1 for
+    // the same logical command.
+    let authoritative_revision = port.authoritative_revision(workflow_id, &request.work_item_id)?;
+    let authoritative_snapshot_hash = port.authoritative_snapshot_hash(
+        &request.project_root,
+        workflow_id,
+        authoritative_revision,
+    )?;
+    let command_state_json = serde_json::to_string(&serde_json::json!({
+        "schema_version": "workflow-state-sidecar.command-state.v1",
+        "repository_port_version": crate::workbench_sqlite_repository::M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION,
+        "after_state": next_state,
+        "current_node_id": current_node_id,
+    }))
+    .map_err(|error| {
+        crate::workbench_sqlite_repository::RepositoryMutationError::Message(format!(
+            "m2_command_state_serialize_failed:{error}"
+        ))
+    })?;
+    let command = crate::m2_workflow_state::UpdateWorkItemStateCommand {
+        command_id: command_id.to_string(),
+        idempotency_key: idempotency_key.to_string(),
+        actor_id: "user".to_string(),
+        scope_ref: format!("workflow:{}", request.project_root),
+        project_id: request.project_root.clone(),
+        workflow_id: workflow_id.to_string(),
+        work_item_id: request.work_item_id.clone(),
+        expected_revision: Some(authoritative_revision),
+        new_status: Some(crate::m2_workflow_state::WorkItemStatus::from_str(
+            next_state,
+        )),
+        new_state_json: Some(command_state_json),
+    };
+    let request_hash =
+        crate::m2_update_work_item_state::update_work_item_state_request_hash(&command);
+    Ok(ServerSealedCommandResolution::Fresh {
+        command,
+        request_hash,
+        authoritative_snapshot_hash,
+    })
 }
 
 fn update_work_item_state_db_primary(
@@ -594,38 +792,69 @@ fn update_work_item_state_db_primary(
         .unwrap_or_else(|| "draft".to_string());
     let next_state = request.next_state.trim();
     let current_node_id = workflow_node_for_work_item_state(&workflow_id, next_state);
-    // A caller that supplies the complete v1 command identity opts into the
-    // M2 reference-slice port.  Existing M1 callers intentionally provide no
-    // identity fields; they retain their historical compatibility path rather
-    // than being made to guess an M2 sidecar revision.  Partial identity is
-    // never accepted, so this cannot silently downgrade an M2 command.
-    let (command_id, idempotency_key, expected_revision, explicit_m2_identity) = match (
-        request.command_id.as_deref().filter(|value| !value.trim().is_empty()),
-        request
-            .idempotency_key
-            .as_deref()
-            .filter(|value| !value.trim().is_empty()),
+    // Three disjoint compatibility modes exist. Ordinary product callers send
+    // only a retry reference; the server seals every command field and reads
+    // the CAS revision under the owning transaction. Historical no-identity
+    // calls retain their guarded behavior. Raw explicit identities are kept
+    // only for unit fixtures and the already-registered R4 driver.
+    let client_request_ref = request
+        .client_request_ref
+        .as_deref()
+        .filter(|value| !value.trim().is_empty());
+    if request.client_request_ref.is_some() && client_request_ref.is_none() {
+        return Err("work_item_client_request_ref_invalid".to_string());
+    }
+    // Mode selection is based on field presence, not normalized content.
+    // An explicitly supplied empty identity must never collapse into the
+    // legacy no-identity path; the explicit-mode validators reject it below.
+    let supplied_command_id = request.command_id.as_deref();
+    let supplied_idempotency_key = request.idempotency_key.as_deref();
+    let (command_id, idempotency_key, expected_revision, identity_mode) = match (
+        client_request_ref,
+        supplied_command_id,
+        supplied_idempotency_key,
+        request.expected_revision,
     ) {
-        (None, None) => {
+        (None, None, None, None) => {
             let command_id = format!(
                 "workflow-state-sidecar.m2.v1:{}",
                 crate::m2_clock::uuid_v7()
             );
-            (command_id.clone(), format!("idem:{command_id}"), None, false)
+            (
+                command_id.clone(),
+                format!("idem:{command_id}"),
+                None,
+                WorkItemStateCommandIdentityMode::GuardedLegacy,
+            )
         }
-        (Some(command_id), Some(idempotency_key)) => {
-            let expected_revision = request.expected_revision.ok_or_else(|| {
-                "m2_command_identity_requires_expected_revision".to_string()
-            })?;
+        (None, Some(command_id), Some(idempotency_key), Some(expected_revision)) => {
+            if !ordinary_product_explicit_m2_identity_allowed(command_id, idempotency_key) {
+                return Err("work_item_explicit_m2_identity_reserved".to_string());
+            }
             (
                 command_id.to_string(),
                 idempotency_key.to_string(),
                 Some(expected_revision),
-                true,
+                WorkItemStateCommandIdentityMode::ExplicitM2,
             )
         }
-        _ => return Err("m2_command_identity_pair_required".to_string()),
+        (Some(_), None, None, None) => {
+            let (command_id, idempotency_key) = server_sealed_work_item_command_identity(
+                request,
+                &workflow_id,
+                next_state,
+                &current_node_id,
+            )?;
+            (
+                command_id,
+                idempotency_key,
+                None,
+                WorkItemStateCommandIdentityMode::ServerSealedProduct,
+            )
+        }
+        _ => return Err("work_item_command_identity_mode_conflict".to_string()),
     };
+    let explicit_m2_identity = identity_mode.carries_versioned_revision();
     let command_state_json = serde_json::to_string(&serde_json::json!({
         "schema_version": "workflow-state-sidecar.command-state.v1",
         "repository_port_version": crate::workbench_sqlite_repository::M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION,
@@ -633,7 +862,11 @@ fn update_work_item_state_db_primary(
         "current_node_id": current_node_id,
     }))
     .map_err(|error| format!("m2_command_state_serialize_failed:{error}"))?;
-    let m2_command = crate::m2_workflow_state::UpdateWorkItemStateCommand {
+    let m2_command = (!matches!(
+        identity_mode,
+        WorkItemStateCommandIdentityMode::ServerSealedProduct
+    ))
+    .then(|| crate::m2_workflow_state::UpdateWorkItemStateCommand {
         command_id: command_id.clone(),
         idempotency_key: idempotency_key.clone(),
         actor_id: "user".to_string(),
@@ -642,78 +875,77 @@ fn update_work_item_state_db_primary(
         workflow_id: workflow_id.clone(),
         work_item_id: request.work_item_id.clone(),
         expected_revision,
-        new_status: Some(crate::m2_workflow_state::WorkItemStatus::from_str(next_state)),
+        new_status: Some(crate::m2_workflow_state::WorkItemStatus::from_str(
+            next_state,
+        )),
         new_state_json: Some(command_state_json),
-    };
-    let request_hash = crate::m2_update_work_item_state::update_work_item_state_request_hash(&m2_command);
+    });
+    let resolved_request_hash = std::cell::RefCell::new(None::<String>);
+    let rejection_authoritative_snapshot_hash = std::cell::RefCell::new(None::<String>);
 
-    // 幂等预检：同键同 hash → 返回既有 receipt（零新增行、零业务变更）；同键不同 hash → conflict
-    match repository.find_command_receipt_for_idempotency(&command_id, &idempotency_key)? {
-        Some((existing_receipt_id, existing_hash, existing_status))
-            if existing_hash == request_hash =>
-        {
-            // The normal workflow-state sidecar projection is internal and
-            // rebuildable, so its owning command is complete at COMMITTED.
-            // An explicitly armed R4 effect moves the *same* completed owner
-            // receipt to EXTERNAL_PENDING; an exact duplicate must still
-            // return that immutable receipt and must never create a second
-            // mutation/outbox row while the independent result is pending.
-            // Older scratch receipts may retain EXTERNAL_RESULT from the
-            // superseded local-projection outbox experiment; preserve only
-            // their replay compatibility without treating degraded receipts
-            // as successful commands.
-            if matches!(
-                existing_status.as_str(),
-                "COMMITTED" | "EXTERNAL_PENDING" | "EXTERNAL_RESULT"
-            ) {
-                let snapshot = with_explicit_m2_port_provenance(
-                    read_workflow_state_snapshot(path)?,
-                    explicit_m2_identity,
-                    &command_id,
-                );
-                return Ok(WorkflowStateMutationResult {
-                    message: format!(
-                        "幂等重放：该状态推进命令已处理，返回既有 receipt，未新增任何变更：{} -> {}",
-                        work_item_state_label(&before_state),
-                        work_item_state_label(next_state)
-                    ),
-                    path: path.display().to_string(),
-                    backup_path: None,
-                    audit_event_id: format!("idempotent-replay:{}", existing_receipt_id),
-                    receipt_id: Some(existing_receipt_id),
-                    first_initialize: false,
-                    snapshot,
-                });
+    if let Some(m2_command) = m2_command.as_ref() {
+        let request_hash =
+            crate::m2_update_work_item_state::update_work_item_state_request_hash(m2_command);
+        *resolved_request_hash.borrow_mut() = Some(request_hash.clone());
+
+        // Explicit/legacy compatibility preflight remains unchanged. The
+        // server-sealed mode performs this decision only inside IMMEDIATE.
+        match repository.find_command_receipt_for_idempotency(&command_id, &idempotency_key)? {
+            Some((existing_receipt_id, existing_hash, existing_status))
+                if existing_hash == request_hash =>
+            {
+                if matches!(
+                    existing_status.as_str(),
+                    "COMMITTED" | "EXTERNAL_PENDING" | "EXTERNAL_RESULT"
+                ) {
+                    let snapshot = with_explicit_m2_port_provenance(
+                        read_workflow_state_snapshot(path)?,
+                        explicit_m2_identity,
+                        &command_id,
+                    );
+                    return Ok(WorkflowStateMutationResult {
+                        message: format!(
+                            "幂等重放：该状态推进命令已处理，返回既有 receipt，未新增任何变更：{} -> {}",
+                            work_item_state_label(&before_state),
+                            work_item_state_label(next_state)
+                        ),
+                        path: path.display().to_string(),
+                        backup_path: None,
+                        audit_event_id: format!("idempotent-replay:{existing_receipt_id}"),
+                        receipt_id: Some(existing_receipt_id),
+                        first_initialize: false,
+                        snapshot,
+                    });
+                }
+                return Err(format!(
+                    "m2_existing_receipt_not_successful:receipt_id={existing_receipt_id},status={existing_status}"
+                ));
             }
-            return Err(format!(
-                "m2_existing_receipt_not_successful:receipt_id={existing_receipt_id},status={existing_status}"
-            ));
+            Some((_, existing_hash, _)) => {
+                return Err(format!(
+                    "idempotent_conflict: command_id={}, idempotency_key={}, existing_hash={}, new_hash={}",
+                    command_id, idempotency_key, existing_hash, request_hash
+                ));
+            }
+            None => {}
         }
-        Some((_, existing_hash, _)) => {
-            return Err(format!(
-                "idempotent_conflict: command_id={}, idempotency_key={}, existing_hash={}, new_hash={}",
-                command_id, idempotency_key, existing_hash, request_hash
-            ));
-        }
-        None => {}
-    }
 
-    // A completed command is replayed from its immutable receipt before
-    // comparing the now-advanced aggregate revision.  A new explicit M2
-    // command still performs its authoritative revision preflight before any
-    // policy or domain write, so a stale command cannot create a denial or
-    // partial side effect.
-    if explicit_m2_identity {
-        let authoritative_revision = repository.m2_workflow_state_sidecar_revision(
-            &workflow_id,
-            &request.work_item_id,
-        )?;
-        if expected_revision != Some(authoritative_revision) {
+        let authoritative_revision =
+            repository.m2_workflow_state_sidecar_revision(&workflow_id, &request.work_item_id)?;
+        if matches!(identity_mode, WorkItemStateCommandIdentityMode::ExplicitM2)
+            && expected_revision != Some(authoritative_revision)
+        {
             return Err(format!(
                 "m2_workflow_state_expected_revision_stale:expected={},actual={authoritative_revision}",
                 expected_revision.expect("explicit M2 identity has expected revision")
             ));
         }
+        *rejection_authoritative_snapshot_hash.borrow_mut() =
+            Some(repository.m2_workflow_state_authoritative_snapshot_hash(
+                &request.project_root,
+                &workflow_id,
+                authoritative_revision,
+            )?);
     }
 
     // Policy 预检（真闸：control_core 状态转换表）；非法转换走 M2 denial receipt（同一事务落盘），
@@ -721,21 +953,63 @@ fn update_work_item_state_db_primary(
     if let Err(policy_reason) =
         control_core::validate_work_item_state_transition(&before_state, next_state)
     {
+        let replay_receipt_id = std::cell::RefCell::new(None::<String>);
         repository
             .with_m2_reference_command_transaction(
-            "update_work_item_state_m2_denial",
-            &command_id,
-            None,
-            |transaction| {
-                crate::workbench_sqlite_repository::WorkflowStateSidecarRepositoryV1::new(
+                "update_work_item_state_m2_denial",
+                &command_id,
+                None,
+                |transaction| {
+                let port = crate::workbench_sqlite_repository::WorkflowStateSidecarRepositoryV1::new(
                     transaction,
                     crate::workbench_sqlite_repository::M2WorkflowStateSidecarConsumerId::UpdateWorkItemStateDbPrimary,
-                )
-                .execute_update(m2_command.clone())?;
+                );
+                let command = if let Some(command) = m2_command.as_ref() {
+                    command.clone()
+                } else {
+                    match resolve_server_sealed_work_item_command_in_transaction(
+                        &port,
+                        request,
+                        &workflow_id,
+                        next_state,
+                        &current_node_id,
+                        &command_id,
+                        &idempotency_key,
+                    )? {
+                        ServerSealedCommandResolution::Replay { receipt_id } => {
+                            *replay_receipt_id.borrow_mut() = Some(receipt_id);
+                            return Ok(());
+                        }
+                        ServerSealedCommandResolution::Fresh { command, .. } => command,
+                    }
+                };
+                let result = port.execute_update(command)?;
+                if result.receipt.status != crate::m2_dto::CommandReceiptStatus::Denied {
+                    return Err(crate::workbench_sqlite_repository::RepositoryMutationError::Message(
+                        "m2_policy_denial_receipt_missing".to_string(),
+                    ));
+                }
                 Ok(()) as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>
             },
             )
             .map_err(|e| format!("update_work_item_state_m2_denial: {}", e))?;
+        if let Some(receipt_id) = replay_receipt_id.into_inner() {
+            let snapshot = with_explicit_m2_port_provenance(
+                read_workflow_state_snapshot(path)?,
+                explicit_m2_identity,
+                &command_id,
+            );
+            return Ok(WorkflowStateMutationResult {
+                message: "幂等重放：该状态推进命令已处理，返回既有 receipt，未新增任何变更。"
+                    .to_string(),
+                path: path.display().to_string(),
+                backup_path: None,
+                audit_event_id: format!("idempotent-replay:{receipt_id}"),
+                receipt_id: Some(receipt_id),
+                first_initialize: false,
+                snapshot,
+            });
+        }
         return Err(policy_reason);
     }
 
@@ -803,7 +1077,10 @@ fn update_work_item_state_db_primary(
     let applied_workflow_revision = std::cell::RefCell::new(None::<i64>);
     let applied_event_id = std::cell::RefCell::new(None::<String>);
     let applied_snapshot_hash = std::cell::RefCell::new(None::<String>);
-    repository
+    let m4_conflict_candidate = std::cell::RefCell::new(
+        None::<crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1>,
+    );
+    let transaction_result = repository
         .with_m2_reference_command_transaction(
             "update_work_item_state_m2_wired",
             &command_id,
@@ -813,8 +1090,39 @@ fn update_work_item_state_db_primary(
                 transaction,
                 crate::workbench_sqlite_repository::M2WorkflowStateSidecarConsumerId::UpdateWorkItemStateDbPrimary,
             );
+            let command = if let Some(command) = m2_command.as_ref() {
+                command.clone()
+            } else {
+                match resolve_server_sealed_work_item_command_in_transaction(
+                    &port,
+                    request,
+                    &workflow_id,
+                    next_state,
+                    &current_node_id,
+                    &command_id,
+                    &idempotency_key,
+                )? {
+                    ServerSealedCommandResolution::Replay { receipt_id } => {
+                        *replay_receipt_id.borrow_mut() = Some(receipt_id);
+                        return Ok(()) as Result<
+                            (),
+                            crate::workbench_sqlite_repository::RepositoryMutationError,
+                        >;
+                    }
+                    ServerSealedCommandResolution::Fresh {
+                        command,
+                        request_hash,
+                        authoritative_snapshot_hash,
+                    } => {
+                        *resolved_request_hash.borrow_mut() = Some(request_hash);
+                        *rejection_authoritative_snapshot_hash.borrow_mut() =
+                            Some(authoritative_snapshot_hash);
+                        command
+                    }
+                }
+            };
             // M2 UoW 全链（policy → idempotency → domain state → event → audit → receipt → snapshot）
-            let m2_result = port.execute_update(m2_command.clone())?;
+            let m2_result = port.execute_update(command)?;
             if m2_result.event.event_type == "WorkItemStateUpdateIdempotent" {
                 *replay_receipt_id.borrow_mut() = Some(m2_result.receipt.receipt_id);
                 return Ok(())
@@ -874,6 +1182,26 @@ fn update_work_item_state_db_primary(
                 },
             )?;
 
+            // M4R02 registered-source publication is an owning fact of this
+            // ordinary WorkItem command.  Build it by rereading the just-
+            // committed native event/receipt/snapshot/domain rows, then append
+            // it before the same IMMEDIATE transaction can commit.  A failed
+            // provenance check therefore rolls the WorkItem mutation back as
+            // one UoW; there is no post-command best-effort wrapper.
+            let m4_publication =
+                crate::m4_source_owner_schema::build_m4_work_item_source_publication(
+                    transaction,
+                    &m2_result.event.event_id,
+                    &m2_result.receipt.receipt_id,
+                    &request.work_item_id,
+                    next_state,
+                )?;
+            *m4_conflict_candidate.borrow_mut() = Some(m4_publication.clone());
+            crate::m4_source_owner_schema::append_m4_work_item_source_publication(
+                transaction,
+                &m4_publication,
+            )?;
+
             // DAT-004/008 has exactly one optional external-effect branch:
             // the debug R4 driver must prove its full attempt/nonce/command
             // binding before this production UoW reaches the repository.  The
@@ -903,8 +1231,48 @@ fn update_work_item_state_db_primary(
 
             Ok(()) as Result<(), crate::workbench_sqlite_repository::RepositoryMutationError>
         },
-        )
-        .map_err(|e| format!("update_work_item_state_m2_wired: {}", e))?;
+        );
+    if let Err(error) = transaction_result {
+        if error.contains("m4_source_owner_identifier_invalid") {
+            let request_hash = resolved_request_hash.borrow().clone().ok_or_else(|| {
+                "ordinary_product_work_item_source_rejection_hash_missing".to_string()
+            })?;
+            let authoritative_snapshot_hash = rejection_authoritative_snapshot_hash
+                .borrow()
+                .clone()
+                .ok_or_else(|| {
+                    "ordinary_product_work_item_source_rejection_snapshot_missing".to_string()
+                })?;
+            let candidate = crate::m4_source_owner_schema::build_m4_work_item_candidate_rejection(
+                &command_id,
+                &idempotency_key,
+                &request_hash,
+                &authoritative_snapshot_hash,
+                next_state,
+            )
+            .map_err(|_| "ordinary_product_work_item_source_rejection_record_failed".to_string())?;
+            repository
+                .record_m4_source_owner_candidate_rejection(
+                    &candidate,
+                    "OWNER_PUBLICATION_IDENTIFIER_REJECTED",
+                    crate::unix_timestamp_ms(),
+                )
+                .map_err(|_| {
+                    "ordinary_product_work_item_source_rejection_record_failed".to_string()
+                })?;
+            return Err("ordinary_product_work_item_source_publication_rejected".to_string());
+        }
+        if error.contains("m4_source_owner_publication_idempotency_conflict") {
+            if let Some(candidate) = m4_conflict_candidate.borrow().as_ref() {
+                repository.record_m4_source_owner_candidate_conflict(
+                    candidate,
+                    "IDEMPOTENCY_PAYLOAD_CONFLICT",
+                    crate::unix_timestamp_ms(),
+                )?;
+            }
+        }
+        return Err(format!("update_work_item_state_m2_wired: {error}"));
+    }
 
     if let Some(receipt_id) = replay_receipt_id.into_inner() {
         let snapshot = with_explicit_m2_port_provenance(
@@ -968,8 +1336,11 @@ fn update_work_item_state_db_primary(
                 )?;
                 // T2 投影失败验收门（debug-only）：武装时注入确定性投影失败，验证 fail-closed/降级语义。
                 #[cfg(debug_assertions)]
-                if let Some(injected) = crate::m2_r4_reference_slice_driver::
-                    injected_current_reference_command_failure("projection-fail", &command_id)?
+                if let Some(injected) =
+                    crate::m2_r4_reference_slice_driver::injected_current_reference_command_failure(
+                        "projection-fail",
+                        &command_id,
+                    )?
                 {
                     return Err(injected);
                 }
@@ -1954,4 +2325,10 @@ fn inspect_task_package_authorization_at(
         unix_timestamp_ms(),
         &format!("write-task-package-auth-check-{}", unix_timestamp_nanos()),
     )
+}
+
+#[cfg(test)]
+mod m4_source_owner_candidate_rejection_tests {
+    use super::*;
+    include!("workflow_run_dispatch_entrypoints_m4r02_tests.rs");
 }

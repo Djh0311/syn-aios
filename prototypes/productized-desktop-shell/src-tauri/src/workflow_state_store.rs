@@ -81,6 +81,10 @@ pub(crate) fn write_validated(
     let lock_path = workflow_state_lock_path(path)?;
     let write_id = format!("validated-write:{}:{}", std::process::id(), write_nonce());
     let _lock = StoreLock::acquire(&lock_path, &write_id)?;
+    // The ordinary JSON-to-DB cutover and every JSON writer share this lock.
+    // Recheck authority only after acquiring it: a different process may have
+    // published the DB-primary config after this process cached JsonOnly.
+    crate::workbench_sqlite_storage_mode::require_ordinary_json_projection_write_authority(path)?;
     let current = if path.exists() {
         Some(read_value(path)?)
     } else {
@@ -107,6 +111,27 @@ pub(crate) fn write_validated(
         &next,
         &format!("validated-{}-{}", std::process::id(), write_nonce()),
     )
+}
+
+/// Run one storage cutover operation under the exact lock used by ordinary
+/// workflow JSON writers. The lock is intentionally fail-closed rather than
+/// stale-timeout based: startup can retry after the owning process exits, and
+/// a crash marker requires explicit inspection instead of guessing ownership.
+pub(crate) fn with_exclusive_workflow_state_lock<T>(
+    path: &Path,
+    operation_id: &str,
+    operation: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let lock_path = workflow_state_lock_path(path)?;
+    let lock_id = format!(
+        "{}:{}:{}:{}",
+        operation_id,
+        std::process::id(),
+        write_nonce(),
+        crate::utils::hash::sha256_hex(&path.display().to_string())
+    );
+    let _lock = StoreLock::acquire(&lock_path, &lock_id)?;
+    operation()
 }
 
 pub(crate) fn backup_file(path: &Path, timestamp: &str) -> Result<PathBuf, String> {

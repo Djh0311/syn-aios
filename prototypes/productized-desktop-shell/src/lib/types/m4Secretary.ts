@@ -77,9 +77,78 @@ export type M4SecretaryModelEnhancementOutcomeDto = Readonly<{
   recovery_code: string | null;
 }>;
 
+// Renderer-only local coordination objects. These values are read from the
+// same server-owned M4 snapshot as the deterministic brief, but are kept out
+// of that model-facing brief. In particular, a PersonalAction title is shown
+// only through this local DTO.
+export type M4SecretarySourceLinkDto = Readonly<{
+  link_kind: string;
+  source_owner_ref: M4SecretaryTypedRef;
+  object_type: string;
+  canonical_source_object_id: M4SecretaryTypedRef;
+  expected_source_revision: M4SecretaryCanonicalRevision;
+  opaque_route_ref: M4SecretaryOpaqueRef;
+}>;
+
+export type M4SecretaryPersonalActionLocalDto = Readonly<{
+  personal_action_id: M4SecretaryTypedRef;
+  explicit_user_command_ref: M4SecretaryOpaqueRef;
+  title: string;
+  status: "OPEN" | "COMPLETED" | "CANCELLED";
+  due_at_utc: string | null;
+  revision: M4SecretaryCanonicalRevision;
+}>;
+
+export type M4SecretaryNotificationLocalDto = Readonly<{
+  notification_id: M4SecretaryTypedRef;
+  source_ref: M4SecretarySourceLinkDto;
+  subject_ref: M4SecretaryTypedRef;
+  notification_purpose_code: string;
+  delivery_channel: "IN_APP";
+  status: "PENDING" | "DELIVERED" | "READ" | "DISMISSED";
+  created_at_utc: string;
+  delivered_at_utc: string | null;
+  read_at_utc: string | null;
+  dismissed_at_utc: string | null;
+  revision: M4SecretaryCanonicalRevision;
+}>;
+
+export type M4SecretaryReminderLocalDto = Readonly<{
+  reminder_id: M4SecretaryTypedRef;
+  owner_ref: M4SecretaryTypedRef;
+  explicit_schedule_command_id: M4SecretaryOpaqueRef;
+  scheduled_for_utc: string;
+  iana_timezone: string;
+  status: "SCHEDULED" | "FIRED" | "SNOOZED" | "DISMISSED" | "CANCELLED";
+  last_fired_at_utc: string | null;
+  snoozed_until_utc: string | null;
+  revision: M4SecretaryCanonicalRevision;
+}>;
+
+export type M4SecretaryDecisionLocalDto = Readonly<{
+  decision_projection_id: M4SecretaryTypedRef;
+  source_identity_key: M4SecretaryOpaqueRef;
+  source_event_key: M4SecretaryOpaqueRef;
+  source_ref: M4SecretaryTypedRef;
+  owner_status: "OPEN" | "ANSWERED" | "EXPIRED" | "WITHDRAWN";
+  local_visibility_status: "UNREAD" | "READ" | "DISMISSED";
+  decision_by_utc: string | null;
+  source_revision: M4SecretaryCanonicalRevision;
+  revision: M4SecretaryCanonicalRevision;
+}>;
+
+export type M4SecretaryLocalObjectsDto = Readonly<{
+  personal_actions: readonly M4SecretaryPersonalActionLocalDto[];
+  notifications: readonly M4SecretaryNotificationLocalDto[];
+  reminders: readonly M4SecretaryReminderLocalDto[];
+  decisions: readonly M4SecretaryDecisionLocalDto[];
+  reminder_owner_refs: readonly M4SecretaryTypedRef[];
+}>;
+
 export type M4SecretaryApplicationOutcomeDto = Readonly<{
   context: M4SecretaryContextDto;
   deterministic_brief: M4SecretaryDeterministicBriefDto;
+  local_objects: M4SecretaryLocalObjectsDto;
   model_enhancement: M4SecretaryModelEnhancementOutcomeDto | null;
 }>;
 
@@ -151,6 +220,66 @@ export type M4SecretaryCoordinationActionReceiptDto = Readonly<{
   outcome_code: string;
   replayed: boolean;
 }>;
+
+export type M4SecretaryPersonalObjectActionCode =
+  | "PERSONAL_ACTION_CREATE"
+  | "PERSONAL_ACTION_COMPLETE"
+  | "PERSONAL_ACTION_CANCEL"
+  | "PERSONAL_ACTION_REOPEN"
+  | "REMINDER_CREATE"
+  | "REMINDER_SNOOZE"
+  | "REMINDER_DISMISS"
+  | "REMINDER_CANCEL"
+  | "NOTIFICATION_READ"
+  | "NOTIFICATION_DISMISS"
+  | "DECISION_READ"
+  | "DECISION_DISMISS";
+
+export type M4SecretaryPersonalObjectRequestDto =
+  | Readonly<{
+      action: "PERSONAL_ACTION_CREATE";
+      title: string;
+      due_at_utc?: string | null;
+      idempotency_key: M4SecretaryOpaqueRef;
+    }>
+  | Readonly<{
+      action: "PERSONAL_ACTION_COMPLETE" | "PERSONAL_ACTION_CANCEL" | "PERSONAL_ACTION_REOPEN";
+      item_ref: M4SecretaryTypedRef;
+      expected_revision: M4SecretaryCanonicalRevision;
+      idempotency_key: M4SecretaryOpaqueRef;
+    }>
+  | Readonly<{
+      action: "REMINDER_CREATE";
+      owner_ref: M4SecretaryTypedRef;
+      scheduled_for_utc: string;
+      iana_timezone: string;
+      idempotency_key: M4SecretaryOpaqueRef;
+    }>
+  | Readonly<{
+      action: "REMINDER_SNOOZE";
+      item_ref: M4SecretaryTypedRef;
+      expected_revision: M4SecretaryCanonicalRevision;
+      snoozed_until_utc: string;
+      idempotency_key: M4SecretaryOpaqueRef;
+    }>
+  | Readonly<{
+      action: "REMINDER_DISMISS" | "REMINDER_CANCEL";
+      item_ref: M4SecretaryTypedRef;
+      expected_revision: M4SecretaryCanonicalRevision;
+      idempotency_key: M4SecretaryOpaqueRef;
+    }>
+  | Readonly<{
+      action: "NOTIFICATION_READ" | "NOTIFICATION_DISMISS";
+      item_ref: M4SecretaryTypedRef;
+      expected_revision: M4SecretaryCanonicalRevision;
+      idempotency_key: M4SecretaryOpaqueRef;
+    }>
+  | Readonly<{
+      action: "DECISION_READ" | "DECISION_DISMISS";
+      item_ref: M4SecretaryTypedRef;
+      expected_revision: M4SecretaryCanonicalRevision;
+      idempotency_key: M4SecretaryOpaqueRef;
+    }>;
 
 export type SecretaryHomeLoadState = "loading" | "ready" | "empty" | "degraded" | "error";
 
@@ -257,6 +386,7 @@ export type SecretaryHomeReadModel = Readonly<{
   role_session_recovery: SecretaryHomeRoleSessionRecovery;
   attention_items: readonly SecretaryHomeAttentionItem[];
   personal_actions: readonly SecretaryHomePersonalAction[];
+  local_objects: M4SecretaryLocalObjectsDto;
   module_entries: readonly SecretaryProfessionalModuleEntry[];
   model_enhancement: SecretaryHomeModelEnhancement;
   handoff: SecretaryHomeHandoff;

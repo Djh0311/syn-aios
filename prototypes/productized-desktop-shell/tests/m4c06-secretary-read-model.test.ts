@@ -1,5 +1,6 @@
 import {
   createSecretaryCoordinationActionRequest,
+  createSecretaryPersonalObjectRequest,
   deriveSecretaryHomeReadModel,
   mintSecretaryCoordinationIdempotencyKey,
   parseSecretaryCoordinationActionReceipt,
@@ -47,8 +48,10 @@ function personalAction(input: Partial<Record<string, unknown>> = {}) {
 function readyEnvelope(input: {
   attention_items?: readonly Record<string, unknown>[];
   personal_actions?: readonly Record<string, unknown>[];
+  local_objects?: Record<string, unknown>;
   model_enhancement?: Record<string, unknown> | null;
 } = {}) {
+  const briefPersonalActions = input.personal_actions ?? [personalAction()];
   return {
     status: "READY",
     application_outcome: {
@@ -79,7 +82,60 @@ function readyEnvelope(input: {
             change_hash: hash("a"),
           }),
         ],
-        personal_actions: input.personal_actions ?? [personalAction()],
+        personal_actions: briefPersonalActions,
+      },
+      local_objects: input.local_objects ?? {
+        personal_actions: briefPersonalActions.map((action) => ({
+          personal_action_id: action.personal_action_ref,
+          explicit_user_command_ref: action.explicit_user_command_ref,
+          title: "只在本地对象读面显示的标题",
+          status: action.status_code,
+          due_at_utc: action.due_at_utc,
+          revision: action.coordination_revision,
+        })),
+        notifications: [{
+          notification_id: "notification:fixture-a",
+          source_ref: {
+            link_kind: "INTERNAL_ROUTE",
+            source_owner_ref: "owner:workflow",
+            object_type: "workflow_attention",
+            canonical_source_object_id: "workflow-object:fixture-a",
+            expected_source_revision: "18446744073709551615",
+            opaque_route_ref: `route:sha256:${hash("a")}`,
+          },
+          subject_ref: `source-event:sha256:${hash("b")}`,
+          notification_purpose_code: "SOURCE_ATTENTION_PUBLISHED",
+          delivery_channel: "IN_APP",
+          status: "DELIVERED",
+          created_at_utc: "2026-08-10T09:00:00Z",
+          delivered_at_utc: "2026-08-10T09:00:00Z",
+          read_at_utc: null,
+          dismissed_at_utc: null,
+          revision: "2",
+        }],
+        reminders: [{
+          reminder_id: "reminder:fixture-a",
+          owner_ref: "personal-action:fixture-a",
+          explicit_schedule_command_id: `schedule-command:sha256:${hash("c")}`,
+          scheduled_for_utc: "2026-08-11T09:00:00Z",
+          iana_timezone: "Asia/Shanghai",
+          status: "SCHEDULED",
+          last_fired_at_utc: null,
+          snoozed_until_utc: null,
+          revision: "1",
+        }],
+        decisions: [{
+          decision_projection_id: "decision-projection:fixture-a",
+          source_identity_key: `source-identity:sha256:${hash("d")}`,
+          source_event_key: `source-event:sha256:${hash("e")}`,
+          source_ref: "proposal:fixture-a",
+          owner_status: "OPEN",
+          local_visibility_status: "UNREAD",
+          decision_by_utc: null,
+          source_revision: "18446744073709551615",
+          revision: "1",
+        }],
+        reminder_owner_refs: ["personal-action:fixture-a", `source-identity:sha256:${hash("d")}`],
       },
       model_enhancement: input.model_enhancement ?? null,
     },
@@ -126,6 +182,16 @@ function readyEnvelope(input: {
     model.personal_actions[0]?.coordination_revision === "4" && model.personal_actions[0]?.explicit_user_command_ref === "user-command:opaque-a",
     "independent PersonalAction retains its canonical revision and explicit user-command ref",
   );
+  assert(
+    model.local_objects.personal_actions[0]?.title === "只在本地对象读面显示的标题"
+      && !JSON.stringify(model.deterministic_brief).includes("只在本地对象读面显示的标题"),
+    "PersonalAction title stays visible locally and absent from the model-facing deterministic brief",
+  );
+  assert(
+    model.local_objects.notifications[0]?.source_ref.expected_source_revision === "18446744073709551615"
+      && model.local_objects.decisions[0]?.source_revision === "18446744073709551615",
+    "local source and Decision revisions preserve full u64 decimal text",
+  );
 }
 
 // 3) A ready C05 result is a durable server-resolved RoleSession/context
@@ -149,7 +215,11 @@ function readyEnvelope(input: {
 // summary is explicitly degraded and never recovers a RoleSession.
 {
   const empty = deriveSecretaryHomeReadModel({
-    home_context: parseSecretaryHomeContextEnvelope(readyEnvelope({ attention_items: [], personal_actions: [] })),
+    home_context: parseSecretaryHomeContextEnvelope(readyEnvelope({
+      attention_items: [],
+      personal_actions: [],
+      local_objects: { personal_actions: [], notifications: [], reminders: [], decisions: [], reminder_owner_refs: [] },
+    })),
   });
   assert(empty.state === "empty" && empty.role_session_recovery.status === "RESTORED", "an authoritative empty brief is not a load failure");
 
@@ -164,6 +234,16 @@ function readyEnvelope(input: {
       && unavailable.role_session_recovery.status === "UNAVAILABLE"
       && unavailable.degradation_code === "M3_BINDING_UNAVAILABLE",
     "unavailable M4/M3 state remains explicit without a hidden identity fallback",
+  );
+
+  const rustShapeUnavailable = parseSecretaryHomeContextEnvelope({
+    status: "unavailable",
+    reason: "M4C05_CONTEXT_UNAVAILABLE",
+  });
+  assert(
+    rustShapeUnavailable.status === "UNAVAILABLE"
+      && rustShapeUnavailable.reason === "M4C05_CONTEXT_UNAVAILABLE",
+    "the lowercase Rust Home envelope keeps a stable machine-readable degradation code",
   );
 }
 
@@ -295,6 +375,41 @@ function readyEnvelope(input: {
     plainUuidRejected = true;
   }
   assert(plainUuidRejected, "plain UUID idempotency keys fail before invoking Rust");
+}
+
+// 8) The local-object bridge is a finite deny-unknown sum. It admits ordinary
+// user transitions, but has no Reminder fire, Decision-owner or authority
+// fields for the renderer to send.
+{
+  const idempotencyKey = `secretary-ui:sha256:${hash("f")}`;
+  const create = createSecretaryPersonalObjectRequest({
+    action: "PERSONAL_ACTION_CREATE",
+    title: "准备季度复盘",
+    due_at_utc: "2026-08-12T09:00:00Z",
+    idempotency_key: idempotencyKey,
+  });
+  assert(create.action === "PERSONAL_ACTION_CREATE" && create.title === "准备季度复盘", "local PersonalAction creation crosses the closed bridge");
+  const decision = createSecretaryPersonalObjectRequest({
+    action: "DECISION_DISMISS",
+    item_ref: "decision-projection:fixture-a",
+    expected_revision: "18446744073709551615",
+    idempotency_key: idempotencyKey,
+  });
+  assert(decision.action === "DECISION_DISMISS", "Decision local visibility transition retains its canonical revision");
+
+  for (const invalid of [
+    { action: "REMINDER_FIRE", item_ref: "reminder:fixture-a", expected_revision: "1", idempotency_key: idempotencyKey },
+    { action: "DECISION_READ", item_ref: "decision-projection:fixture-a", expected_revision: "1", idempotency_key: idempotencyKey, owner_status: "ANSWERED" },
+    { action: "NOTIFICATION_READ", item_ref: "notification:fixture-a", expected_revision: "1", idempotency_key: idempotencyKey, scope_ref: "scope:personal:other" },
+  ]) {
+    let rejected = false;
+    try {
+      createSecretaryPersonalObjectRequest(invalid as never);
+    } catch {
+      rejected = true;
+    }
+    assert(rejected, `personal-object boundary rejects ${invalid.action} or renderer authority`);
+  }
 }
 
 console.log("m4c06-secretary-read-model: authoritative M4 parser/view-model assertions passed");

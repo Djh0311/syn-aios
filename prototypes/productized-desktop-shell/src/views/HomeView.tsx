@@ -4,12 +4,14 @@
 // interaction harness may evaluate it as a plain function, and all transport /
 // action state therefore belongs to App. The only truth rendered here is the
 // typed M4 Secretary home read model supplied by that host.
-import type { ReactNode } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { EmptyState, FactRow, ListRow } from "../components/SpecPrimitives";
 import { listRowTimeLabel, projectName } from "../lib/format";
 import { deriveDailyMemoryCandidateInbox } from "../lib/memoryDailyLoop";
 import type {
   M4SecretaryCoordinationActionCode,
+  M4SecretaryPersonalObjectActionCode,
+  M4SecretaryPersonalObjectRequestDto,
   SecretaryHomeAttentionItem,
   SecretaryHomeReadModel,
   SecretaryTypedDeepLinkDescriptor,
@@ -46,12 +48,30 @@ export type SecretaryCoordinationViewState =
     }>
   | Readonly<{ phase: "failed"; action: M4SecretaryCoordinationActionCode; error_code: string }>;
 
+type StripIdempotency<T> = T extends Readonly<{ idempotency_key: string }>
+  ? Omit<T, "idempotency_key">
+  : never;
+
+export type SecretaryPersonalObjectIntent = StripIdempotency<M4SecretaryPersonalObjectRequestDto>;
+
+export type SecretaryPersonalObjectViewState =
+  | Readonly<{ phase: "pending"; action: M4SecretaryPersonalObjectActionCode }>
+  | Readonly<{
+      phase: "succeeded";
+      action: M4SecretaryPersonalObjectActionCode;
+      command_receipt_ref: string;
+      outcome_code: string;
+    }>
+  | Readonly<{ phase: "failed"; action: M4SecretaryPersonalObjectActionCode; error_code: string }>;
+
 type HomeViewProps = {
   // M4C06 path. App always supplies this authoritative projection.
   secretaryHome?: SecretaryHomeReadModel;
   presentationState?: "loading" | "error" | null;
   coordinationStates?: Readonly<Record<string, SecretaryCoordinationViewState>>;
+  personalObjectStates?: Readonly<Record<string, SecretaryPersonalObjectViewState>>;
   onOperateCoordination?: (intent: SecretaryCoordinationIntent) => void;
+  onOperatePersonalObject?: (intent: SecretaryPersonalObjectIntent) => void;
   onOpenDeepLink?: (descriptor: SecretaryTypedDeepLinkDescriptor) => void;
   onReloadSecretaryHome?: () => void;
   // Compatibility-only fields keep the pre-M4 render dispatcher type-safe.
@@ -71,6 +91,7 @@ type SecretaryHomeAction = Readonly<{
 }>;
 
 const EMPTY_COORDINATION_STATES: Readonly<Record<string, SecretaryCoordinationViewState>> = Object.freeze({});
+const EMPTY_PERSONAL_OBJECT_STATES: Readonly<Record<string, SecretaryPersonalObjectViewState>> = Object.freeze({});
 
 // This is a visibly loading compatibility shell only. It contains no identity,
 // role, context, scope, attention item or source truth.
@@ -89,6 +110,13 @@ const LOADING_HOME: SecretaryHomeReadModel = Object.freeze({
   }),
   attention_items: Object.freeze([]),
   personal_actions: Object.freeze([]),
+  local_objects: Object.freeze({
+    personal_actions: Object.freeze([]),
+    notifications: Object.freeze([]),
+    reminders: Object.freeze([]),
+    decisions: Object.freeze([]),
+    reminder_owner_refs: Object.freeze([]),
+  }),
   module_entries: Object.freeze([]),
   model_enhancement: Object.freeze({
     status: "NOT_REQUESTED",
@@ -112,7 +140,9 @@ export function HomeView({
   secretaryHome,
   presentationState = null,
   coordinationStates = EMPTY_COORDINATION_STATES,
+  personalObjectStates = EMPTY_PERSONAL_OBJECT_STATES,
   onOperateCoordination,
+  onOperatePersonalObject,
   onOpenDeepLink,
   onReloadSecretaryHome,
   snapshot,
@@ -154,6 +184,11 @@ export function HomeView({
         <section className="secretary-home-empty" aria-label="秘书情境为空">
           <strong>当前情境很干净。</strong>
           <p>已恢复同一 Secretary 情境，但没有需要持续看住的关注项或个人行动。</p>
+          <SecretaryPersonalObjects
+            home={home}
+            states={personalObjectStates}
+            onOperate={onOperatePersonalObject}
+          />
           <SecretaryAvailability home={home} />
         </section>
       ) : (
@@ -186,7 +221,11 @@ export function HomeView({
           </section>
 
           <aside className="secretary-home-secondary" aria-label="持续情境与边界">
-            <SecretaryPersonalActions home={home} />
+            <SecretaryPersonalObjects
+              home={home}
+              states={personalObjectStates}
+              onOperate={onOperatePersonalObject}
+            />
             <SecretaryAvailability home={home} />
             <SecretaryModuleEntries home={home} onOpenDeepLink={onOpenDeepLink} />
           </aside>
@@ -501,32 +540,353 @@ function SecretaryCoordinationFeedback({ state }: { state?: SecretaryCoordinatio
   );
 }
 
-function SecretaryPersonalActions({ home }: { home: SecretaryHomeReadModel }) {
+function SecretaryPersonalObjects({
+  home,
+  states,
+  onOperate,
+}: {
+  home: SecretaryHomeReadModel;
+  states: Readonly<Record<string, SecretaryPersonalObjectViewState>>;
+  onOperate?: (intent: SecretaryPersonalObjectIntent) => void;
+}) {
+  const reminderOwnerRefs = [...new Set([
+    ...home.local_objects.reminder_owner_refs,
+    ...home.local_objects.personal_actions.map((action) => action.personal_action_id),
+  ])];
+
+  const createPersonalAction = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onOperate) return;
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get("title") ?? "").trim();
+    const dueAtUtc = localDateTimeToUtc(String(form.get("due_at_local") ?? ""));
+    if (!title) return;
+    onOperate({
+      action: "PERSONAL_ACTION_CREATE",
+      title,
+      ...(dueAtUtc ? { due_at_utc: dueAtUtc } : {}),
+    });
+  };
+
+  const createReminder = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!onOperate) return;
+    const form = new FormData(event.currentTarget);
+    const ownerRef = String(form.get("owner_ref") ?? "");
+    const scheduledForUtc = localDateTimeToUtc(String(form.get("scheduled_for_local") ?? ""));
+    const ianaTimezone = String(form.get("iana_timezone") ?? "").trim();
+    if (!ownerRef || !scheduledForUtc || !ianaTimezone) return;
+    onOperate({
+      action: "REMINDER_CREATE",
+      owner_ref: ownerRef,
+      scheduled_for_utc: scheduledForUtc,
+      iana_timezone: ianaTimezone,
+    });
+  };
+
   return (
-    <section className="secretary-personal-actions" aria-labelledby="secretary-personal-actions-title">
-      <div className="secretary-section-head compact">
-        <div>
-          <p className="eyebrow">explicit personal action</p>
-          <h2 id="secretary-personal-actions-title">个人行动</h2>
+    <div className="secretary-personal-object-stack">
+      <section className="secretary-personal-actions" aria-labelledby="secretary-personal-actions-title">
+        <div className="secretary-section-head compact">
+          <div>
+            <p className="eyebrow">explicit personal action</p>
+            <h2 id="secretary-personal-actions-title">个人行动</h2>
+          </div>
+          <span className="secretary-section-count">{home.local_objects.personal_actions.length}</span>
         </div>
-        <span className="secretary-section-count">{home.personal_actions.length}</span>
+        <form className="secretary-local-create" onSubmit={createPersonalAction}>
+          <label>
+            <span>行动标题</span>
+            <input name="title" type="text" maxLength={160} required placeholder="例如：整理周会结论" disabled={!onOperate} />
+          </label>
+          <label>
+            <span>到期（可选）</span>
+            <input name="due_at_local" type="datetime-local" disabled={!onOperate} />
+          </label>
+          <button className="secondary-button secretary-local-submit" type="submit" disabled={!onOperate || states["personal-action:create"]?.phase === "pending"}>
+            新建个人行动
+          </button>
+          <SecretaryPersonalObjectFeedback state={states["personal-action:create"]} />
+        </form>
+        {home.local_objects.personal_actions.length ? (
+          <ul>
+            {home.local_objects.personal_actions.map((action) => {
+              const state = states[action.personal_action_id];
+              const pending = state?.phase === "pending";
+              return (
+                <li key={action.personal_action_id}>
+                  <strong>{action.title}</strong>
+                  <span><code>{action.status}</code> · 到期 {displayUtc(action.due_at_utc)}</span>
+                  <small><code>{action.personal_action_id}</code> · 修订 {action.revision}</small>
+                  <div className="secretary-local-actions">
+                    {action.status === "OPEN" ? (
+                      <>
+                        <SecretaryPersonalObjectButton
+                          action="PERSONAL_ACTION_COMPLETE"
+                          label="完成"
+                          disabled={pending || !onOperate}
+                          onClick={() => onOperate?.({ action: "PERSONAL_ACTION_COMPLETE", item_ref: action.personal_action_id, expected_revision: action.revision })}
+                        />
+                        <SecretaryPersonalObjectButton
+                          action="PERSONAL_ACTION_CANCEL"
+                          label="取消"
+                          disabled={pending || !onOperate}
+                          onClick={() => onOperate?.({ action: "PERSONAL_ACTION_CANCEL", item_ref: action.personal_action_id, expected_revision: action.revision })}
+                        />
+                      </>
+                    ) : (
+                      <SecretaryPersonalObjectButton
+                        action="PERSONAL_ACTION_REOPEN"
+                        label="重新打开"
+                        disabled={pending || !onOperate}
+                        onClick={() => onOperate?.({ action: "PERSONAL_ACTION_REOPEN", item_ref: action.personal_action_id, expected_revision: action.revision })}
+                      />
+                    )}
+                  </div>
+                  <SecretaryPersonalObjectFeedback state={state} />
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="secretary-inline-empty">没有独立创建的个人行动；OpenLoop 不会在这里被复制成 Todo。</p>
+        )}
+      </section>
+
+      <section className="secretary-personal-actions secretary-local-object-card" aria-labelledby="secretary-reminders-title">
+        <div className="secretary-section-head compact">
+          <div>
+            <p className="eyebrow">server clock reminder</p>
+            <h2 id="secretary-reminders-title">提醒</h2>
+          </div>
+          <span className="secretary-section-count">{home.local_objects.reminders.length}</span>
+        </div>
+        <form className="secretary-local-create" onSubmit={createReminder}>
+          <label>
+            <span>关联对象</span>
+            <select name="owner_ref" required disabled={!onOperate || reminderOwnerRefs.length === 0}>
+              <option value="">选择一个现有对象</option>
+              {reminderOwnerRefs.map((ownerRef) => <option key={ownerRef} value={ownerRef}>{ownerRef}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>提醒时间</span>
+            <input name="scheduled_for_local" type="datetime-local" required disabled={!onOperate || reminderOwnerRefs.length === 0} />
+          </label>
+          <label>
+            <span>IANA 时区</span>
+            <input name="iana_timezone" type="text" defaultValue="Asia/Shanghai" required maxLength={128} disabled={!onOperate || reminderOwnerRefs.length === 0} />
+          </label>
+          <button className="secondary-button secretary-local-submit" type="submit" disabled={!onOperate || reminderOwnerRefs.length === 0}>
+            安排提醒
+          </button>
+          {reminderOwnerRefs.length === 0 ? <p className="secretary-inline-empty">先创建个人行动，或等待来源关注对象进入当前情境。</p> : null}
+        </form>
+        {home.local_objects.reminders.length ? (
+          <ul>
+            {home.local_objects.reminders.map((reminder) => {
+              const state = states[reminder.reminder_id];
+              const pending = state?.phase === "pending";
+              const canSnooze = reminder.status === "SCHEDULED" || reminder.status === "FIRED";
+              const canDismiss = reminder.status === "SCHEDULED" || reminder.status === "FIRED" || reminder.status === "SNOOZED";
+              const canCancel = reminder.status === "SCHEDULED" || reminder.status === "SNOOZED";
+              return (
+                <li key={reminder.reminder_id}>
+                  <strong>{displayUtc(reminder.snoozed_until_utc ?? reminder.scheduled_for_utc)}</strong>
+                  <span><code>{reminder.status}</code> · {reminder.iana_timezone}</span>
+                  <small>关联 <code>{reminder.owner_ref}</code> · 修订 {reminder.revision}</small>
+                  <div className="secretary-local-actions">
+                    {canSnooze ? (
+                      <SecretaryPersonalObjectButton
+                        action="REMINDER_SNOOZE"
+                        label="稍后提醒"
+                        disabled={pending || !onOperate}
+                        onClick={() => onOperate?.({
+                          action: "REMINDER_SNOOZE",
+                          item_ref: reminder.reminder_id,
+                          expected_revision: reminder.revision,
+                          snoozed_until_utc: defaultSnoozeUtc(),
+                        })}
+                      />
+                    ) : null}
+                    {canDismiss ? (
+                      <SecretaryPersonalObjectButton
+                        action="REMINDER_DISMISS"
+                        label="忽略"
+                        disabled={pending || !onOperate}
+                        onClick={() => onOperate?.({ action: "REMINDER_DISMISS", item_ref: reminder.reminder_id, expected_revision: reminder.revision })}
+                      />
+                    ) : null}
+                    {canCancel ? (
+                      <SecretaryPersonalObjectButton
+                        action="REMINDER_CANCEL"
+                        label="取消"
+                        disabled={pending || !onOperate}
+                        onClick={() => onOperate?.({ action: "REMINDER_CANCEL", item_ref: reminder.reminder_id, expected_revision: reminder.revision })}
+                      />
+                    ) : null}
+                  </div>
+                  <SecretaryPersonalObjectFeedback state={state} />
+                </li>
+              );
+            })}
+          </ul>
+        ) : <p className="secretary-inline-empty">当前没有已安排的本地提醒。</p>}
+      </section>
+
+      <SecretaryNotificationList home={home} states={states} onOperate={onOperate} />
+      <SecretaryDecisionList home={home} states={states} onOperate={onOperate} />
+    </div>
+  );
+}
+
+function SecretaryNotificationList({
+  home,
+  states,
+  onOperate,
+}: {
+  home: SecretaryHomeReadModel;
+  states: Readonly<Record<string, SecretaryPersonalObjectViewState>>;
+  onOperate?: (intent: SecretaryPersonalObjectIntent) => void;
+}) {
+  return (
+    <section className="secretary-personal-actions secretary-local-object-card" aria-labelledby="secretary-notifications-title">
+      <div className="secretary-section-head compact">
+        <div><p className="eyebrow">source event delivery</p><h2 id="secretary-notifications-title">通知</h2></div>
+        <span className="secretary-section-count">{home.local_objects.notifications.length}</span>
       </div>
-      {home.personal_actions.length ? (
+      {home.local_objects.notifications.length ? (
         <ul>
-          {home.personal_actions.map((action) => (
-            <li key={action.personal_action_ref}>
-              <code>{action.personal_action_ref}</code>
-              <span>{action.status_code}</span>
-              <span>到期 {displayUtc(action.due_at_utc)}</span>
-              <small>显式用户命令：<code>{action.explicit_user_command_ref}</code></small>
-            </li>
-          ))}
+          {home.local_objects.notifications.map((notification) => {
+            const state = states[notification.notification_id];
+            const pending = state?.phase === "pending";
+            return (
+              <li key={notification.notification_id}>
+                <strong>{notification.notification_purpose_code}</strong>
+                <span><code>{notification.status}</code> · {displayUtc(notification.created_at_utc)}</span>
+                <small>来源 <code>{notification.source_ref.source_owner_ref}</code> · 修订 {notification.revision}</small>
+                <div className="secretary-local-actions">
+                  {notification.status === "DELIVERED" ? (
+                    <SecretaryPersonalObjectButton
+                      action="NOTIFICATION_READ"
+                      label="标为已读"
+                      disabled={pending || !onOperate}
+                      onClick={() => onOperate?.({ action: "NOTIFICATION_READ", item_ref: notification.notification_id, expected_revision: notification.revision })}
+                    />
+                  ) : null}
+                  {notification.status === "DELIVERED" || notification.status === "READ" ? (
+                    <SecretaryPersonalObjectButton
+                      action="NOTIFICATION_DISMISS"
+                      label="收起"
+                      disabled={pending || !onOperate}
+                      onClick={() => onOperate?.({ action: "NOTIFICATION_DISMISS", item_ref: notification.notification_id, expected_revision: notification.revision })}
+                    />
+                  ) : null}
+                </div>
+                <SecretaryPersonalObjectFeedback state={state} />
+              </li>
+            );
+          })}
         </ul>
-      ) : (
-        <p className="secretary-inline-empty">没有独立创建的个人行动；OpenLoop 不会在这里被复制成 Todo。</p>
-      )}
+      ) : <p className="secretary-inline-empty">当前没有本地通知。</p>}
     </section>
   );
+}
+
+function SecretaryDecisionList({
+  home,
+  states,
+  onOperate,
+}: {
+  home: SecretaryHomeReadModel;
+  states: Readonly<Record<string, SecretaryPersonalObjectViewState>>;
+  onOperate?: (intent: SecretaryPersonalObjectIntent) => void;
+}) {
+  return (
+    <section className="secretary-personal-actions secretary-local-object-card" aria-labelledby="secretary-decisions-title">
+      <div className="secretary-section-head compact">
+        <div><p className="eyebrow">owner / local dual axis</p><h2 id="secretary-decisions-title">待决策</h2></div>
+        <span className="secretary-section-count">{home.local_objects.decisions.length}</span>
+      </div>
+      {home.local_objects.decisions.length ? (
+        <ul>
+          {home.local_objects.decisions.map((decision) => {
+            const state = states[decision.decision_projection_id];
+            const pending = state?.phase === "pending";
+            return (
+              <li key={decision.decision_projection_id}>
+                <strong>来源状态 <code>{decision.owner_status}</code></strong>
+                <span>本地显示 <code>{decision.local_visibility_status}</code> · 截止 {displayUtc(decision.decision_by_utc)}</span>
+                <small><code>{decision.source_ref}</code> · 来源修订 {decision.source_revision}</small>
+                <div className="secretary-local-actions">
+                  {decision.local_visibility_status === "UNREAD" ? (
+                    <SecretaryPersonalObjectButton
+                      action="DECISION_READ"
+                      label="标为已读"
+                      disabled={pending || !onOperate}
+                      onClick={() => onOperate?.({ action: "DECISION_READ", item_ref: decision.decision_projection_id, expected_revision: decision.revision })}
+                    />
+                  ) : null}
+                  {decision.local_visibility_status !== "DISMISSED" ? (
+                    <SecretaryPersonalObjectButton
+                      action="DECISION_DISMISS"
+                      label="从本地收起"
+                      disabled={pending || !onOperate}
+                      onClick={() => onOperate?.({ action: "DECISION_DISMISS", item_ref: decision.decision_projection_id, expected_revision: decision.revision })}
+                    />
+                  ) : null}
+                </div>
+                <SecretaryPersonalObjectFeedback state={state} />
+              </li>
+            );
+          })}
+        </ul>
+      ) : <p className="secretary-inline-empty">当前没有来源发布的决策请求。</p>}
+    </section>
+  );
+}
+
+function SecretaryPersonalObjectButton({
+  action,
+  label,
+  disabled,
+  onClick,
+}: {
+  action: M4SecretaryPersonalObjectActionCode;
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className="secondary-button secretary-home-action"
+      type="button"
+      data-secretary-personal-action={action}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SecretaryPersonalObjectFeedback({ state }: { state?: SecretaryPersonalObjectViewState }) {
+  if (!state) return null;
+  if (state.phase === "pending") return <p className="secretary-coordination-feedback is-pending" aria-live="polite">正在记录本地对象动作…</p>;
+  if (state.phase === "succeeded") {
+    return <p className="secretary-coordination-feedback is-succeeded" aria-live="polite">已记录 {state.outcome_code}；正在读回最新状态。</p>;
+  }
+  return <p className="secretary-coordination-feedback is-failed" aria-live="assertive">记录失败：<code>{state.error_code}</code>。可重试。</p>;
+}
+
+function localDateTimeToUtc(value: string): string | null {
+  if (!value) return null;
+  const timestamp = new Date(value);
+  return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : null;
+}
+
+function defaultSnoozeUtc(): string {
+  return new Date(Date.now() + 60 * 60 * 1_000).toISOString();
 }
 
 function SecretaryAvailability({ home }: { home: SecretaryHomeReadModel }) {

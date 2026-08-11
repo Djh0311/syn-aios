@@ -7,8 +7,8 @@
 
 use crate::m4_secretary_domain::m4_parse_rfc3339_utc_key;
 use crate::m4_secretary_read_model::{
-    sort_m4c04_coordination_snapshot, M4CoordinationSnapshot, M4InboxItemRead, M4OpenLoopRead,
-    M4SourceLinkRead,
+    sort_m4c04_coordination_snapshot, M4CoordinationSnapshot, M4DecisionRead, M4InboxItemRead,
+    M4NotificationRead, M4OpenLoopRead, M4PersonalActionRead, M4ReminderRead, M4SourceLinkRead,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -529,11 +529,85 @@ pub(crate) struct M4SecretaryModelEnhancementOutcome {
     pub(crate) recovery_code: Option<String>,
 }
 
+/// Renderer-only local objects.  PersonalAction titles are intentionally
+/// carried here and never copied into the deterministic/model-facing brief.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct M4SecretaryLocalSourceLink {
+    pub(crate) link_kind: String,
+    pub(crate) source_owner_ref: String,
+    pub(crate) object_type: String,
+    pub(crate) canonical_source_object_id: String,
+    /// Decimal text keeps the full u64 owner revision across JSON/JavaScript.
+    pub(crate) expected_source_revision: String,
+    pub(crate) opaque_route_ref: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct M4SecretaryLocalNotification {
+    pub(crate) notification_id: String,
+    pub(crate) source_ref: M4SecretaryLocalSourceLink,
+    pub(crate) subject_ref: String,
+    pub(crate) notification_purpose_code: String,
+    pub(crate) delivery_channel: String,
+    pub(crate) status: String,
+    pub(crate) created_at_utc: String,
+    pub(crate) delivered_at_utc: Option<String>,
+    pub(crate) read_at_utc: Option<String>,
+    pub(crate) dismissed_at_utc: Option<String>,
+    pub(crate) revision: String,
+}
+
+impl From<M4NotificationRead> for M4SecretaryLocalNotification {
+    fn from(notification: M4NotificationRead) -> Self {
+        let M4SourceLinkRead {
+            link_kind,
+            source_owner_ref,
+            object_type,
+            canonical_source_object_id,
+            expected_source_revision,
+            opaque_route_ref,
+        } = notification.source_ref;
+        Self {
+            notification_id: notification.notification_id,
+            source_ref: M4SecretaryLocalSourceLink {
+                link_kind,
+                source_owner_ref,
+                object_type,
+                canonical_source_object_id,
+                expected_source_revision: expected_source_revision.to_string(),
+                opaque_route_ref,
+            },
+            subject_ref: notification.subject_ref,
+            notification_purpose_code: notification.notification_purpose_code,
+            delivery_channel: notification.delivery_channel,
+            status: notification.status,
+            created_at_utc: notification.created_at_utc,
+            delivered_at_utc: notification.delivered_at_utc,
+            read_at_utc: notification.read_at_utc,
+            dismissed_at_utc: notification.dismissed_at_utc,
+            revision: notification.revision,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct M4SecretaryLocalObjects {
+    pub(crate) personal_actions: Vec<M4PersonalActionRead>,
+    pub(crate) notifications: Vec<M4SecretaryLocalNotification>,
+    pub(crate) reminders: Vec<M4ReminderRead>,
+    pub(crate) decisions: Vec<M4DecisionRead>,
+    pub(crate) reminder_owner_refs: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) struct M4SecretaryApplicationOutcome {
     pub(crate) context: M4SecretaryContext,
     pub(crate) deterministic_brief: M4SecretaryDeterministicBrief,
+    pub(crate) local_objects: M4SecretaryLocalObjects,
     pub(crate) model_enhancement: Option<M4SecretaryModelEnhancementOutcome>,
 }
 
@@ -706,9 +780,34 @@ where
             attention_items,
             personal_actions,
         };
+        let reminder_owner_refs = snapshot
+            .inbox_items
+            .iter()
+            .map(|item| item.source_identity_key.clone())
+            .chain(
+                snapshot
+                    .open_loops
+                    .iter()
+                    .map(|item| item.source_identity_key.clone()),
+            )
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let local_objects = M4SecretaryLocalObjects {
+            personal_actions: snapshot.personal_actions,
+            notifications: snapshot
+                .notifications
+                .into_iter()
+                .map(M4SecretaryLocalNotification::from)
+                .collect(),
+            reminders: snapshot.reminders,
+            decisions: snapshot.decisions,
+            reminder_owner_refs,
+        };
         Ok(M4SecretaryApplicationOutcome {
             context,
             deterministic_brief,
+            local_objects,
             model_enhancement: None,
         })
     }
@@ -1472,6 +1571,7 @@ mod tests {
             personal_actions: vec![personal_action()],
             notifications: Vec::<M4NotificationRead>::new(),
             reminders: Vec::<M4ReminderRead>::new(),
+            decisions: Vec::new(),
             owner_writeback_receipts: Vec::<M4OwnerWritebackReceiptRead>::new(),
         }
     }
@@ -2046,7 +2146,7 @@ mod tests {
     }
 
     #[test]
-    fn m4c05_serialized_dtos_and_receipts_exclude_raw_sensitive_content() {
+    fn m4c05_model_facing_dtos_and_receipts_exclude_raw_sensitive_content() {
         let role = FakeRoleSessionPort::new();
         let snapshot = FakeSnapshotPort::new(coordination_snapshot());
         let handoff_ref = opaque("handoff", "serialized-return");
@@ -2065,9 +2165,13 @@ mod tests {
         let handoff_outcome = service(&role, &snapshot, &handoff, &ledger, &model)
             .read_handoff_receipt(&handoff_ref)
             .expect("serialize handoff outcome");
-        let serialized = format!(
-            "{}{}",
-            serde_json::to_string(&outcome).expect("serialize application DTO"),
+        let model_facing_serialized = format!(
+            "{}{}{}{}",
+            serde_json::to_string(&outcome.context).expect("serialize context DTO"),
+            serde_json::to_string(&outcome.deterministic_brief)
+                .expect("serialize deterministic brief DTO"),
+            serde_json::to_string(&outcome.model_enhancement)
+                .expect("serialize model enhancement DTO"),
             serde_json::to_string(&handoff_outcome).expect("serialize handoff DTO")
         );
 
@@ -2081,10 +2185,15 @@ mod tests {
             "RAW_TOOL_OUTPUT",
         ] {
             assert!(
-                !serialized.contains(raw),
-                "serialized M4C05 DTO leaked raw content marker {raw}"
+                !model_facing_serialized.contains(raw),
+                "model-facing M4C05 DTO leaked raw content marker {raw}"
             );
         }
+        assert_eq!(
+            outcome.local_objects.personal_actions[0].title,
+            "USER_TEXT_SHOULD_NOT_SURFACE",
+            "the renderer-only local object retains the user-authored title"
+        );
 
         let receipt = outcome
             .model_enhancement

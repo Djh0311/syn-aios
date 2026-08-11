@@ -26,6 +26,18 @@ const LOCK_NAME: &str = ".project-proposals.v1.lock";
 const LOCK_RETRY_COUNT: usize = 5;
 const LOCK_RETRY_DELAY: Duration = Duration::from_millis(100);
 
+// DB-primary proposal writes delegate to the repository transaction that
+// constructs and validates the scrubbed `M4SourceOwnerOutboxEnvelopeV1` beside
+// the proposal/audit fact. The envelope deliberately never crosses back into
+// this JSON projection layer after commit.
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ProjectConsultationProposalExpirySweepOutcome {
+    pub(crate) expired_proposal_id: Option<String>,
+    pub(crate) store_revision: Option<i64>,
+    pub(crate) drained: bool,
+}
+
 pub(crate) fn sidecar_path(workflow_state_path: &Path) -> Result<PathBuf, String> {
     store_paths::sidecar_path(workflow_state_path, SIDECAR_NAME, "项目咨询方案")
 }
@@ -97,6 +109,12 @@ fn create_proposal_with_resident_idempotency(
     resident_idempotency_key: Option<&str>,
 ) -> Result<CreateProjectConsultationProposalOutput, String> {
     validate_create_input(input)?;
+    if input
+        .expires_at_ms
+        .is_some_and(|deadline_ms| deadline_ms <= timestamp_ms)
+    {
+        return Err("project_consultation_proposal_explicit_deadline_must_be_future".to_string());
+    }
     let project_id_value = input
         .project_id
         .clone()
@@ -106,6 +124,22 @@ fn create_proposal_with_resident_idempotency(
         .clone()
         .unwrap_or_else(|| default_workflow_id(&input.project_root));
     ensure_workflow_identity(workflow_state_path, &project_id_value, &workflow_id_value)?;
+
+    let owner_repository =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+            workflow_state_path,
+            "project_consultation_proposal_create",
+        )?;
+    if owner_repository.is_none()
+        && crate::ordinary_product_storage_bootstrap::is_ordinary_product_workflow_state_path(
+            workflow_state_path,
+        )
+    {
+        return Err(
+            crate::ordinary_product_storage_bootstrap::ORDINARY_PRODUCT_STORAGE_RESTART_REQUIRED_MARKER
+                .to_string(),
+        );
+    }
 
     let sidecar = sidecar_path(workflow_state_path)?;
     ensure_sidecar_parent(&sidecar)?;
@@ -155,15 +189,46 @@ fn create_proposal_with_resident_idempotency(
         }
     }
     validate_expected_revision(input.expected_store_revision, store.revision)?;
+    let mut superseded_indices = store
+        .proposals
+        .iter()
+        .enumerate()
+        .filter(|(_, proposal)| {
+            proposal.project_id == project_id_value
+                && proposal.workflow_id == workflow_id_value
+                && matches!(
+                    proposal.status,
+                    ProjectConsultationProposalStatus::Draft
+                        | ProjectConsultationProposalStatus::PendingUserConfirmation
+                )
+        })
+        .map(|(index, proposal)| (proposal.proposal_id.clone(), index))
+        .collect::<Vec<_>>();
+    sort_supersession_candidates(&mut superseded_indices);
 
+    // New owner identities are fixed-length opaque digests.  Historical
+    // proposal IDs remain read-compatible, but no newly persisted canonical
+    // object key can reproduce a project path, title, goal, or secret marker.
+    let proposal_identity_material = serde_json::to_string(&(
+        "syn.project-consultation-proposal-owner-id/v1",
+        project_id_value.as_str(),
+        workflow_id_value.as_str(),
+        input.title.as_str(),
+        input.goal_summary.as_str(),
+        timestamp_ms,
+    ))
+    .map_err(|error| format!("project_consultation_proposal_identity_serialize_failed:{error}"))?;
     let proposal_id = format!(
-        "proposal:{}:{}",
-        stable_id(&format!(
-            "{}:{}:{}:{}",
-            project_id_value, workflow_id_value, input.title, input.goal_summary
-        )),
-        timestamp_ms
+        "proposal:sha256:{}",
+        crate::utils::hash::sha256_hex(&proposal_identity_material)
     );
+    if store
+        .proposals
+        .iter()
+        .any(|existing| existing.proposal_id == proposal_id)
+    {
+        return Err("project_consultation_proposal_identity_conflict".to_string());
+    }
     let audit_event_id = format!(
         "audit:project-consultation-proposal-created:{}:{}",
         stable_id(&proposal_id),
@@ -196,6 +261,7 @@ fn create_proposal_with_resident_idempotency(
         suggest_workflow: input.suggest_workflow,
         // P2-A：方案自带任务图透传（结构化对象数组，不逐字段 trim——与 risks 同款处置）。
         tasks: input.tasks.clone(),
+        expires_at_ms: input.expires_at_ms,
         created_at_ms: timestamp_ms,
         updated_at_ms: timestamp_ms,
     };
@@ -214,27 +280,93 @@ fn create_proposal_with_resident_idempotency(
         created_at_ms: timestamp_ms,
     };
 
-    store.revision += 1;
+    let mut supersession_batch = Vec::with_capacity(superseded_indices.len() + 1);
+    for (_, index) in superseded_indices {
+        let before = store.proposals[index].status;
+        store.proposals[index].status = ProjectConsultationProposalStatus::Superseded;
+        store.proposals[index].updated_at_ms = timestamp_ms;
+        let superseded = store.proposals[index].clone();
+        let superseded_audit = ProjectConsultationProposalAuditEvent {
+            audit_event_id: format!(
+                "audit:project-consultation-proposal-superseded:{}:{}",
+                stable_id(&superseded.proposal_id),
+                timestamp_ms
+            ),
+            event_type: "project_consultation_proposal_superseded".to_string(),
+            actor_id: input.actor_id.trim().to_string(),
+            actor_role: creator_role_name(input.created_by_role).to_string(),
+            project_id: superseded.project_id.clone(),
+            workflow_id: superseded.workflow_id.clone(),
+            proposal_id: Some(superseded.proposal_id.clone()),
+            plan_authorization_id: superseded.plan_authorization_id.clone(),
+            before_status: Some(before),
+            after_status: Some(ProjectConsultationProposalStatus::Superseded),
+            reason: format!(
+                "同一项目工作流已创建更新方案；旧等待态方案由 owner 原子标记为已取代；replacement_proposal_id={}",
+                proposal.proposal_id
+            ),
+            created_at_ms: timestamp_ms,
+        };
+        store.revision = store
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| "项目咨询方案 sidecar revision 已到上限".to_string())?;
+        store.audit_events.push(superseded_audit.clone());
+        supersession_batch.push(
+            crate::workbench_sqlite_repository::ProjectProposalSupersessionBatchEntry {
+                proposal: serde_json::to_value(&superseded).map_err(|error| {
+                    format!("序列化已取代项目咨询方案 DB 主写记录失败：{error}")
+                })?,
+                audit: crate::workbench_sqlite_repository::RepositoryAuditEntry {
+                    event_id: superseded_audit.audit_event_id.clone(),
+                    target_kind: "project_consultation_proposal".to_string(),
+                    target_id: superseded.proposal_id,
+                    payload: serde_json::to_value(&superseded_audit).map_err(|error| {
+                        format!("序列化项目咨询方案取代审计 DB 主写记录失败：{error}")
+                    })?,
+                },
+                owner_store_revision: store.revision,
+            },
+        );
+    }
+    store.revision = store
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| "项目咨询方案 sidecar revision 已到上限".to_string())?;
     store.updated_at_ms = timestamp_ms;
     store.proposals.push(proposal.clone());
     store.audit_events.push(audit_event.clone());
-    if let Some(repository) =
-        crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
-    {
+    validate_store(&store)?;
+    if let Some(repository) = owner_repository {
         let proposal_value = serde_json::to_value(&proposal)
             .map_err(|error| format!("序列化项目咨询方案 DB 主写记录失败：{error}"))?;
         let audit_value = serde_json::to_value(&audit_event)
             .map_err(|error| format!("序列化项目咨询方案审计 DB 主写记录失败：{error}"))?;
-        repository.record_proposal_with_audit(
-            &proposal_value,
-            &crate::workbench_sqlite_repository::RepositoryAuditEntry {
-                event_id: audit_event.audit_event_id.clone(),
-                target_kind: "project_consultation_proposal".to_string(),
-                target_id: proposal.proposal_id.clone(),
-                payload: audit_value,
-            },
-            None,
-        )?;
+        let created_entry =
+            crate::workbench_sqlite_repository::ProjectProposalSupersessionBatchEntry {
+                proposal: proposal_value.clone(),
+                audit: crate::workbench_sqlite_repository::RepositoryAuditEntry {
+                    event_id: audit_event.audit_event_id.clone(),
+                    target_kind: "project_consultation_proposal".to_string(),
+                    target_id: proposal.proposal_id.clone(),
+                    payload: audit_value.clone(),
+                },
+                owner_store_revision: store.revision,
+            };
+        if supersession_batch.is_empty() {
+            repository.record_proposal_with_audit_and_m4_publication(
+                &proposal_value,
+                &created_entry.audit,
+                store.revision,
+                None,
+            )?;
+        } else {
+            supersession_batch.push(created_entry);
+            repository.record_proposal_supersession_batch_with_m4_publications(
+                &supersession_batch,
+                None,
+            )?;
+        }
         crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
             workflow_state_path,
             "project_consultation_proposal",
@@ -258,19 +390,20 @@ fn create_proposal_with_resident_idempotency(
 pub(crate) fn replay_db_primary_projection(
     workflow_state_path: &Path,
     proposals: &[Value],
+    decisions: &[Value],
     audit_events: &[Value],
     replace_db_primary_leading: bool,
     timestamp_ms: i64,
     write_id: &str,
 ) -> Result<usize, String> {
-    if proposals.is_empty() && audit_events.is_empty() {
+    if proposals.is_empty() && decisions.is_empty() && audit_events.is_empty() {
         return Ok(0);
     }
     let sidecar = sidecar_path(workflow_state_path)?;
     ensure_sidecar_parent(&sidecar)?;
     let _lock = StoreLock::acquire(&lock_path_for(&sidecar)?, write_id)?;
     let mut store = load_store(workflow_state_path, timestamp_ms)?;
-    let mut proposal_writes = 0_i64;
+    let mut owner_event_writes = 0_i64;
     let mut total_writes = 0;
 
     for value in proposals {
@@ -298,7 +431,36 @@ pub(crate) fn replay_db_primary_projection(
             }
         } else {
             store.proposals.push(proposal);
-            proposal_writes += 1;
+            total_writes += 1;
+        }
+    }
+
+    for value in decisions {
+        let decision: ProjectConsultationProposalDecision =
+            serde_json::from_value(value.clone())
+                .map_err(|error| format!("DB 项目咨询方案决定投影记录无法解析：{error}"))?;
+        if let Some(existing) = store
+            .decisions
+            .iter()
+            .find(|existing| existing.decision_id == decision.decision_id)
+        {
+            if existing != &decision {
+                if !replace_db_primary_leading {
+                    return Err(format!(
+                        "db_json_projection_hash_mismatch:project_proposal_decisions:{}",
+                        decision.decision_id
+                    ));
+                }
+                let index = store
+                    .decisions
+                    .iter()
+                    .position(|existing| existing.decision_id == decision.decision_id)
+                    .expect("existing proposal decision index");
+                store.decisions[index] = decision;
+                total_writes += 1;
+            }
+        } else {
+            store.decisions.push(decision);
             total_writes += 1;
         }
     }
@@ -329,6 +491,7 @@ pub(crate) fn replay_db_primary_projection(
             }
         } else {
             store.audit_events.push(audit_event);
+            owner_event_writes += 1;
             total_writes += 1;
         }
     }
@@ -336,13 +499,143 @@ pub(crate) fn replay_db_primary_projection(
     if total_writes > 0 {
         store.revision = store
             .revision
-            .checked_add(proposal_writes)
+            .checked_add(owner_event_writes)
             .ok_or_else(|| "项目咨询方案 sidecar revision 已到上限".to_string())?;
         store.updated_at_ms = timestamp_ms;
         validate_store(&store)?;
         write_store_atomic(&sidecar, &store, timestamp_ms, write_id)?;
     }
     Ok(total_writes)
+}
+
+/// Advance at most one explicitly-deadlined proposal using the server clock.
+/// One-at-a-time keeps proposal fact, expiry audit, source publication and
+/// sidecar projection on the same recoverable revision boundary.  The caller
+/// repeats while `drained` is false; absence of `expires_at_ms` is never
+/// interpreted as an implicit TTL.
+pub(crate) fn expire_due_proposals_at_server_clock(
+    workflow_state_path: &Path,
+) -> Result<ProjectConsultationProposalExpirySweepOutcome, String> {
+    let server_now_ms = crate::unix_timestamp_ms();
+    if server_now_ms < 0 {
+        return Err("project_consultation_proposal_server_clock_invalid".to_string());
+    }
+    let repository =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+            workflow_state_path,
+            "project_consultation_proposal_expiry",
+        )?
+        .ok_or_else(|| {
+            if crate::ordinary_product_storage_bootstrap::is_ordinary_product_workflow_state_path(
+                workflow_state_path,
+            ) {
+                crate::ordinary_product_storage_bootstrap::ORDINARY_PRODUCT_STORAGE_RESTART_REQUIRED_MARKER
+                    .to_string()
+            } else {
+                "project_consultation_proposal_expiry_db_primary_required".to_string()
+            }
+        })?;
+    let sidecar = sidecar_path(workflow_state_path)?;
+    ensure_sidecar_parent(&sidecar)?;
+    let write_id = format!("proposal-expiry:{}", crate::m2_clock::uuid_v7());
+    let lock = StoreLock::acquire(&lock_path_for(&sidecar)?, &write_id)?;
+    let mut store = load_store(workflow_state_path, server_now_ms)?;
+    let due_index = store
+        .proposals
+        .iter()
+        .enumerate()
+        .filter(|(_, proposal)| {
+            matches!(
+                proposal.status,
+                ProjectConsultationProposalStatus::Draft
+                    | ProjectConsultationProposalStatus::PendingUserConfirmation
+            ) && proposal
+                .expires_at_ms
+                .is_some_and(|deadline| deadline <= server_now_ms)
+        })
+        .min_by(|(_, left), (_, right)| {
+            left.expires_at_ms
+                .cmp(&right.expires_at_ms)
+                .then_with(|| left.proposal_id.cmp(&right.proposal_id))
+        })
+        .map(|(index, _)| index);
+    let Some(index) = due_index else {
+        drop(lock);
+        return Ok(ProjectConsultationProposalExpirySweepOutcome {
+            expired_proposal_id: None,
+            store_revision: None,
+            drained: true,
+        });
+    };
+
+    let before = store.proposals[index].status;
+    let explicit_deadline_ms = store.proposals[index]
+        .expires_at_ms
+        .expect("due proposal has explicit deadline");
+    store.proposals[index].status = ProjectConsultationProposalStatus::Expired;
+    store.proposals[index].updated_at_ms = server_now_ms;
+    let proposal = store.proposals[index].clone();
+    let audit_event = ProjectConsultationProposalAuditEvent {
+        audit_event_id: format!(
+            "audit:project-consultation-proposal-expired:{}:{}",
+            stable_id(&proposal.proposal_id),
+            explicit_deadline_ms
+        ),
+        event_type: "project_consultation_proposal_expired".to_string(),
+        actor_id: "project-consultation-proposal-expiry-clock".to_string(),
+        actor_role: "server_clock".to_string(),
+        project_id: proposal.project_id.clone(),
+        workflow_id: proposal.workflow_id.clone(),
+        proposal_id: Some(proposal.proposal_id.clone()),
+        plan_authorization_id: proposal.plan_authorization_id.clone(),
+        before_status: Some(before),
+        after_status: Some(ProjectConsultationProposalStatus::Expired),
+        reason: "显式方案期限已到；由服务端时钟关闭等待态。".to_string(),
+        created_at_ms: server_now_ms,
+    };
+    store.revision = store
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| "项目咨询方案 sidecar revision 已到上限".to_string())?;
+    store.updated_at_ms = server_now_ms;
+    store.audit_events.push(audit_event.clone());
+    validate_store(&store)?;
+
+    let proposal_value = serde_json::to_value(&proposal)
+        .map_err(|error| format!("序列化项目咨询方案到期 DB 主写记录失败：{error}"))?;
+    let audit_value = serde_json::to_value(&audit_event)
+        .map_err(|error| format!("序列化项目咨询方案到期审计 DB 主写记录失败：{error}"))?;
+    repository.record_proposal_with_audit_and_m4_publication(
+        &proposal_value,
+        &crate::workbench_sqlite_repository::RepositoryAuditEntry {
+            event_id: audit_event.audit_event_id.clone(),
+            target_kind: "project_consultation_proposal".to_string(),
+            target_id: proposal.proposal_id.clone(),
+            payload: audit_value,
+        },
+        store.revision,
+        None,
+    )?;
+    crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
+        workflow_state_path,
+        "project_consultation_proposal_expiry",
+        || write_store_atomic(&sidecar, &store, server_now_ms, &write_id),
+    )?;
+    let drained = !store.proposals.iter().any(|candidate| {
+        matches!(
+            candidate.status,
+            ProjectConsultationProposalStatus::Draft
+                | ProjectConsultationProposalStatus::PendingUserConfirmation
+        ) && candidate
+            .expires_at_ms
+            .is_some_and(|deadline| deadline <= server_now_ms)
+    });
+    drop(lock);
+    Ok(ProjectConsultationProposalExpirySweepOutcome {
+        expired_proposal_id: Some(proposal.proposal_id),
+        store_revision: Some(store.revision),
+        drained,
+    })
 }
 
 pub(crate) fn render_markdown(
@@ -409,6 +702,22 @@ pub(crate) fn record_decision(
         &proposal_before_update.project_id,
         &proposal_before_update.workflow_id,
     )?;
+
+    let owner_repository =
+        crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+            workflow_state_path,
+            "project_consultation_proposal_decision",
+        )?;
+    if owner_repository.is_none()
+        && crate::ordinary_product_storage_bootstrap::is_ordinary_product_workflow_state_path(
+            workflow_state_path,
+        )
+    {
+        return Err(
+            crate::ordinary_product_storage_bootstrap::ORDINARY_PRODUCT_STORAGE_RESTART_REQUIRED_MARKER
+                .to_string(),
+        );
+    }
 
     let mut linked_authorization: Option<PlanAuthorization> = None;
     let mut linked_authorization_audit: Option<PlanAuthorizationAuditEvent> = None;
@@ -534,16 +843,14 @@ pub(crate) fn record_decision(
     store.updated_at_ms = timestamp_ms;
     store.decisions.push(decision.clone());
     store.audit_events.push(audit_event.clone());
-    if let Some(repository) =
-        crate::workbench_sqlite_storage_mode::primary_repository_for_write(workflow_state_path)?
-    {
+    if let Some(repository) = owner_repository {
         let proposal_value = serde_json::to_value(&proposal)
             .map_err(|error| format!("序列化项目咨询方案决定 DB 主写记录失败：{error}"))?;
         let decision_value = serde_json::to_value(&decision)
             .map_err(|error| format!("序列化项目咨询决定 DB 主写记录失败：{error}"))?;
         let audit_value = serde_json::to_value(&audit_event)
             .map_err(|error| format!("序列化项目咨询方案决定审计 DB 主写记录失败：{error}"))?;
-        repository.record_proposal_decision_with_audit(
+        repository.record_proposal_decision_with_audit_and_m4_publication(
             &proposal_value,
             &decision_value,
             &crate::workbench_sqlite_repository::RepositoryAuditEntry {
@@ -552,6 +859,7 @@ pub(crate) fn record_decision(
                 target_id: proposal.proposal_id.clone(),
                 payload: audit_value,
             },
+            store.revision,
             None,
         )?;
         crate::workbench_sqlite_storage_mode::complete_db_primary_json_projection(
@@ -696,6 +1004,35 @@ fn validate_store(store: &ProjectConsultationProposalStoreV1) -> Result<(), Stri
             &proposal.scope_draft,
             &proposal.acceptance_criteria,
         )?;
+        if proposal.expires_at_ms.is_some_and(|deadline| deadline < 0) {
+            return Err("project_consultation_proposal_explicit_deadline_invalid".to_string());
+        }
+        if proposal.status == ProjectConsultationProposalStatus::Expired
+            && proposal.expires_at_ms.is_none()
+        {
+            return Err(
+                "project_consultation_proposal_expiry_requires_explicit_deadline".to_string(),
+            );
+        }
+    }
+    let mut decision_ids = std::collections::BTreeSet::new();
+    for decision in &store.decisions {
+        if !decision_ids.insert(decision.decision_id.as_str()) {
+            return Err(format!(
+                "project_consultation_proposal_duplicate_decision:{}",
+                decision.decision_id
+            ));
+        }
+        if !store
+            .proposals
+            .iter()
+            .any(|proposal| proposal.proposal_id == decision.proposal_id)
+        {
+            return Err(format!(
+                "project_consultation_proposal_decision_owner_missing:{}",
+                decision.decision_id
+            ));
+        }
     }
     Ok(())
 }
@@ -818,6 +1155,10 @@ fn validate_expected_revision(expected: Option<i64>, actual: i64) -> Result<(), 
         }
     }
     Ok(())
+}
+
+fn sort_supersession_candidates(candidates: &mut [(String, usize)]) {
+    candidates.sort_by(|left, right| left.0.cmp(&right.0));
 }
 
 fn find_proposal_index(
@@ -1174,6 +1515,7 @@ fn status_label(status: ProjectConsultationProposalStatus) -> &'static str {
         ProjectConsultationProposalStatus::ChangesRequested => "用户要求修改",
         ProjectConsultationProposalStatus::Rejected => "用户已拒绝",
         ProjectConsultationProposalStatus::Superseded => "已被新方案取代",
+        ProjectConsultationProposalStatus::Expired => "已到期",
     }
 }
 
@@ -1185,6 +1527,7 @@ fn status_name(status: ProjectConsultationProposalStatus) -> &'static str {
         ProjectConsultationProposalStatus::ChangesRequested => "changes_requested",
         ProjectConsultationProposalStatus::Rejected => "rejected",
         ProjectConsultationProposalStatus::Superseded => "superseded",
+        ProjectConsultationProposalStatus::Expired => "expired",
     }
 }
 
@@ -1308,6 +1651,29 @@ mod toolbox_lint_backstop_tests {
         assert!(
             error.contains("禁止 worker 唯一可用的 shell 工具"),
             "{error}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod m4r02_supersession_tests {
+    use super::*;
+
+    #[test]
+    fn m4r02_multiple_open_supersessions_are_stably_sorted_by_proposal_id() {
+        let mut candidates = vec![
+            ("proposal:z".to_string(), 0),
+            ("proposal:a".to_string(), 1),
+            ("proposal:m".to_string(), 2),
+        ];
+        sort_supersession_candidates(&mut candidates);
+        assert_eq!(
+            candidates,
+            vec![
+                ("proposal:a".to_string(), 1),
+                ("proposal:m".to_string(), 2),
+                ("proposal:z".to_string(), 0),
+            ]
         );
     }
 }

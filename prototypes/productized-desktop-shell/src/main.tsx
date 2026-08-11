@@ -2,7 +2,16 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { emit, listen } from "@tauri-apps/api/event";
 import { App } from "./App";
-import { updateWorkItemState } from "./lib/tauri";
+import {
+  bootstrapProjectWorkflow,
+  createTaskDraft,
+  initializeWorkflowState,
+  loadSecretaryHomeContext,
+  loadWorkflowStateSnapshot,
+  operateSecretaryPersonalObject,
+  updateWorkItemState,
+} from "./lib/tauri";
+import { mintSecretaryCoordinationIdempotencyKey } from "./lib/secretaryReadModel";
 import { setTauriWindowTitle } from "./lib/tauriWindow";
 import type { WorkItemStateUpdateRequest } from "./lib/types/workflow";
 import "./styles.css";
@@ -104,6 +113,484 @@ async function installM2R4TauriIpcBridge() {
   }
 }
 
+// M4R02 generic-profile proof. The host may only orchestrate this bridge in a
+// debug isolated profile. Every product mutation still crosses the same
+// tauri.ts wrappers and registered commands used by the ordinary renderer.
+const M4R02_IPC_READY_EVENT = "syn-m4r02-ordinary-composition-ui-ready";
+const M4R02_IPC_INVOKE_EVENT = "syn-m4r02-ordinary-composition-invoke";
+const M4R02_IPC_RESULT_EVENT = "syn-m4r02-ordinary-composition-result";
+const M4R02_IPC_SCHEMA_VERSION = "syn_m4r02_ordinary_composition_ipc.v1";
+const M4R02_TASK_TITLE = "SYN M4R02 ordinary product composition";
+const M4R02_TASK_OBJECTIVE = "isolated generic-profile proof through ordinary product commands";
+const M4R02_TASK_ASSIGNED_ROLE = "codex-dev";
+const M4R02_PERSONAL_ACTION_TITLE = "SYN M4R02 ordinary personal follow-up";
+const M4R02_REMINDER_SCHEDULED_FOR_UTC = "2099-01-01T00:00:00Z";
+const M4R02_HOME_READ_TIMEOUT_MS = 12_000;
+
+type M4R02Operation =
+  | "initialize"
+  | "prepare_mutation"
+  | "apply_mutation"
+  | "apply_personal_objects"
+  | "readback";
+
+type M4R02TaskInput = {
+  title: typeof M4R02_TASK_TITLE;
+  objective: typeof M4R02_TASK_OBJECTIVE;
+  assigned_role: typeof M4R02_TASK_ASSIGNED_ROLE;
+};
+
+type M4R02OrdinaryCompositionInvocation = {
+  schema_version: typeof M4R02_IPC_SCHEMA_VERSION;
+  phase: "initialize" | "mutate" | "readback";
+  operation: M4R02Operation;
+  nonce: string;
+  project_root: string;
+  task: M4R02TaskInput | null;
+  request: WorkItemStateUpdateRequest | null;
+};
+
+type M4R02PreparedMutation = {
+  nonce: string;
+  projectRoot: string;
+  workItemId: string;
+};
+
+let m4r02PreparedMutation: M4R02PreparedMutation | null = null;
+let m4r02OperationQueue: Promise<void> = Promise.resolve();
+
+function hasExactKeys(value: object, expected: readonly string[]) {
+  const actual = Object.keys(value).sort();
+  const sortedExpected = [...expected].sort();
+  return actual.length === sortedExpected.length
+    && actual.every((key, index) => key === sortedExpected[index]);
+}
+
+function isM4R02Task(value: unknown): value is M4R02TaskInput {
+  if (!value || typeof value !== "object") return false;
+  const task = value as Partial<M4R02TaskInput>;
+  return hasExactKeys(value, ["assigned_role", "objective", "title"])
+    && task.title === M4R02_TASK_TITLE
+    && task.objective === M4R02_TASK_OBJECTIVE
+    && task.assigned_role === M4R02_TASK_ASSIGNED_ROLE;
+}
+
+function isM4R02FixedUpdateRequest(
+  value: unknown,
+  projectRoot: string,
+  nonce: string,
+): value is WorkItemStateUpdateRequest {
+  if (!value || typeof value !== "object") return false;
+  const request = value as Partial<WorkItemStateUpdateRequest>;
+  return hasExactKeys(value, [
+    "client_request_ref",
+    "next_state",
+    "project_root",
+    "work_item_id",
+  ])
+    && request.project_root === projectRoot
+    && typeof request.work_item_id === "string"
+    && request.work_item_id.length > 0
+    && request.work_item_id.length <= 512
+    && !/[\\/\r\n]/.test(request.work_item_id)
+    && request.next_state === "ready_to_dispatch"
+    && request.client_request_ref === nonce;
+}
+
+function isM4R02Invocation(value: unknown): value is M4R02OrdinaryCompositionInvocation {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<M4R02OrdinaryCompositionInvocation>;
+  if (!hasExactKeys(value, [
+    "nonce",
+    "operation",
+    "phase",
+    "project_root",
+    "request",
+    "schema_version",
+    "task",
+  ])) return false;
+  if (
+    candidate.schema_version !== M4R02_IPC_SCHEMA_VERSION
+    || typeof candidate.nonce !== "string"
+    || !/^[a-f0-9]{32}$/.test(candidate.nonce)
+    || typeof candidate.project_root !== "string"
+    || candidate.project_root.length === 0
+    || candidate.project_root.length > 1024
+    || /[\r\n]/.test(candidate.project_root)
+  ) return false;
+  if (candidate.phase === "initialize" && candidate.operation === "initialize") {
+    return candidate.task === null && candidate.request === null;
+  }
+  if (candidate.phase === "mutate" && candidate.operation === "prepare_mutation") {
+    return isM4R02Task(candidate.task) && candidate.request === null;
+  }
+  if (candidate.phase === "mutate" && candidate.operation === "apply_mutation") {
+    return candidate.task === null
+      && isM4R02FixedUpdateRequest(candidate.request, candidate.project_root, candidate.nonce);
+  }
+  if (candidate.phase === "mutate" && candidate.operation === "apply_personal_objects") {
+    return candidate.task === null && candidate.request === null;
+  }
+  return candidate.phase === "readback"
+    && candidate.operation === "readback"
+    && isM4R02Task(candidate.task)
+    && candidate.request === null;
+}
+
+function findM4R02Task(
+  snapshot: Awaited<ReturnType<typeof loadWorkflowStateSnapshot>>,
+  projectRoot: string,
+) {
+  const matches = snapshot.project_workflows
+    .filter((workflow) => workflow.project_root === projectRoot)
+    .flatMap((workflow) => workflow.task_drafts)
+    .filter((task) => task.title === M4R02_TASK_TITLE);
+  if (matches.length !== 1) throw new Error("m4r02_task_cardinality_invalid");
+  return matches[0];
+}
+
+function delayM4R02(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function waitForM4R02Notification(
+  workItemId: string,
+  expectedStatus: "DELIVERED" | "READ" | "DISMISSED",
+) {
+  const deadline = Date.now() + M4R02_HOME_READ_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const home = await loadSecretaryHomeContext();
+    if (home.status === "READY") {
+      const matches = home.application_outcome.local_objects.notifications.filter(
+        (notification) => notification.source_ref.canonical_source_object_id === workItemId,
+      );
+      if (matches.length > 1) throw new Error("m4r02_notification_cardinality_invalid");
+      if (matches[0]?.status === expectedStatus) return { home, notification: matches[0] };
+    }
+    await delayM4R02(250);
+  }
+  throw new Error("m4r02_home_context_timeout");
+}
+
+async function loadM4R02ReadyHome() {
+  const home = await loadSecretaryHomeContext();
+  if (home.status !== "READY") throw new Error("m4r02_home_context_not_ready");
+  return home;
+}
+
+function findM4R02PersonalAction(
+  home: Awaited<ReturnType<typeof loadM4R02ReadyHome>>,
+) {
+  const matches = home.application_outcome.local_objects.personal_actions.filter(
+    (item) => item.title === M4R02_PERSONAL_ACTION_TITLE,
+  );
+  if (matches.length !== 1) throw new Error("m4r02_personal_action_cardinality_invalid");
+  return matches[0];
+}
+
+function findM4R02Reminder(
+  home: Awaited<ReturnType<typeof loadM4R02ReadyHome>>,
+  personalActionId: string,
+) {
+  const matches = home.application_outcome.local_objects.reminders.filter(
+    (item) => item.owner_ref === personalActionId,
+  );
+  if (matches.length !== 1) throw new Error("m4r02_reminder_cardinality_invalid");
+  return matches[0];
+}
+
+function m4r02ErrorFamily(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("home_context_timeout")) return "home_read_timeout";
+  if (message.includes("m4_secretary_home_")) return "home_read_contract";
+  if (message.includes("task_cardinality")) return "task_readback";
+  if (message.includes("notification_cardinality")) return "notification_readback";
+  if (message.includes("replay_receipt")) return "duplicate_replay";
+  if (message.includes("prepared_mutation")) return "prepare_binding";
+  return "command_rejected";
+}
+
+async function emitM4R02Result(
+  invocation: M4R02OrdinaryCompositionInvocation,
+  result: Record<string, unknown>,
+) {
+  await emit(M4R02_IPC_RESULT_EVENT, {
+    schema_version: M4R02_IPC_SCHEMA_VERSION,
+    phase: invocation.phase,
+    operation: invocation.operation,
+    nonce: invocation.nonce,
+    ...result,
+  });
+}
+
+async function runM4R02OrdinaryCompositionOperation(
+  invocation: M4R02OrdinaryCompositionInvocation,
+) {
+  switch (invocation.operation) {
+    case "initialize": {
+      const initialized = await initializeWorkflowState();
+      if (!initialized.first_initialize || !initialized.snapshot.initialized) {
+        throw new Error("m4r02_initialize_result_invalid");
+      }
+      await emitM4R02Result(invocation, {
+        outcome: "PASS",
+        initialize_audit_event_id: initialized.audit_event_id,
+        first_initialize: initialized.first_initialize,
+        workflow_initialized: initialized.snapshot.initialized,
+        restart_required: initialized.message.includes("ordinary_product_storage_restart_required"),
+        write_commands_invoked: 1,
+        client_request_ref_sent: false,
+        server_sealed_command_identity: true,
+        explicit_identity_fields_sent: false,
+      });
+      return;
+    }
+    case "prepare_mutation": {
+      const bootstrapped = await bootstrapProjectWorkflow(invocation.project_root);
+      const created = await createTaskDraft({
+        project_root: invocation.project_root,
+        title: M4R02_TASK_TITLE,
+        objective: M4R02_TASK_OBJECTIVE,
+        assigned_role: M4R02_TASK_ASSIGNED_ROLE,
+      });
+      const task = findM4R02Task(created.snapshot, invocation.project_root);
+      if (task.state !== "draft") throw new Error("m4r02_prepared_mutation_state_invalid");
+      m4r02PreparedMutation = {
+        nonce: invocation.nonce,
+        projectRoot: invocation.project_root,
+        workItemId: task.work_item_id,
+      };
+      await emitM4R02Result(invocation, {
+        outcome: "PASS",
+        bootstrap_audit_event_id: bootstrapped.audit_event_id,
+        task_create_audit_event_id: created.audit_event_id,
+        work_item_id: task.work_item_id,
+        work_item_state: task.state,
+        write_commands_invoked: 2,
+        client_request_ref_sent: false,
+        server_sealed_command_identity: true,
+        explicit_identity_fields_sent: false,
+      });
+      return;
+    }
+    case "apply_mutation": {
+      const request = invocation.request;
+      if (!request) throw new Error("m4r02_prepared_mutation_request_missing");
+      const prepared = m4r02PreparedMutation;
+      if (
+        !prepared
+        || prepared.nonce !== invocation.nonce
+        || prepared.projectRoot !== invocation.project_root
+        || prepared.workItemId !== request.work_item_id
+      ) throw new Error("m4r02_prepared_mutation_binding_invalid");
+      // Both calls cross the ordinary tauri.ts wrapper and registered command.
+      // The fixed nonce-bound client reference makes the second call an exact
+      // replay while the backend derives command identity and revision.
+      const first = await updateWorkItemState(request);
+      const replay = await updateWorkItemState(request);
+      if (!first.receipt_id || first.receipt_id !== replay.receipt_id) {
+        throw new Error("m4r02_replay_receipt_mismatch");
+      }
+      const task = findM4R02Task(first.snapshot, invocation.project_root);
+      if (task.work_item_id !== prepared.workItemId || task.state !== "ready_to_dispatch") {
+        throw new Error("m4r02_updated_task_readback_invalid");
+      }
+      const { notification } = await waitForM4R02Notification(
+        prepared.workItemId,
+        "DELIVERED",
+      );
+      await emitM4R02Result(invocation, {
+        outcome: "PASS",
+        work_item_id: prepared.workItemId,
+        work_item_state: task.state,
+        update_receipt_id: first.receipt_id,
+        replay_receipt_id: replay.receipt_id,
+        notification_id: notification.notification_id,
+        notification_status: notification.status,
+        write_commands_invoked: 2,
+        client_request_ref_sent: true,
+        server_sealed_command_identity: true,
+        explicit_identity_fields_sent: false,
+      });
+      return;
+    }
+    case "apply_personal_objects": {
+      const prepared = m4r02PreparedMutation;
+      if (
+        !prepared
+        || prepared.nonce !== invocation.nonce
+        || prepared.projectRoot !== invocation.project_root
+      ) throw new Error("m4r02_prepared_mutation_binding_invalid");
+
+      const personalActionRequest = {
+        action: "PERSONAL_ACTION_CREATE" as const,
+        title: M4R02_PERSONAL_ACTION_TITLE,
+        idempotency_key: await mintSecretaryCoordinationIdempotencyKey(),
+      };
+      const personalActionFirst = await operateSecretaryPersonalObject(personalActionRequest);
+      const personalActionReplay = await operateSecretaryPersonalObject(personalActionRequest);
+      if (
+        personalActionFirst.command_receipt_ref !== personalActionReplay.command_receipt_ref
+        || personalActionFirst.item_ref !== personalActionReplay.item_ref
+        || personalActionFirst.replayed
+        || !personalActionReplay.replayed
+      ) throw new Error("m4r02_personal_action_replay_receipt_mismatch");
+      let home = await loadM4R02ReadyHome();
+      const personalAction = findM4R02PersonalAction(home);
+      if (
+        personalAction.personal_action_id !== personalActionFirst.item_ref
+        || personalAction.status !== "OPEN"
+      ) throw new Error("m4r02_personal_action_readback_invalid");
+
+      const reminderRequest = {
+        action: "REMINDER_CREATE" as const,
+        owner_ref: personalAction.personal_action_id,
+        scheduled_for_utc: M4R02_REMINDER_SCHEDULED_FOR_UTC,
+        iana_timezone: "Asia/Shanghai",
+        idempotency_key: await mintSecretaryCoordinationIdempotencyKey(),
+      };
+      const reminderFirst = await operateSecretaryPersonalObject(reminderRequest);
+      const reminderReplay = await operateSecretaryPersonalObject(reminderRequest);
+      if (
+        reminderFirst.command_receipt_ref !== reminderReplay.command_receipt_ref
+        || reminderFirst.item_ref !== reminderReplay.item_ref
+        || reminderFirst.replayed
+        || !reminderReplay.replayed
+      ) throw new Error("m4r02_reminder_replay_receipt_mismatch");
+      home = await loadM4R02ReadyHome();
+      const reminder = findM4R02Reminder(home, personalAction.personal_action_id);
+      if (reminder.reminder_id !== reminderFirst.item_ref || reminder.status !== "SCHEDULED") {
+        throw new Error("m4r02_reminder_readback_invalid");
+      }
+
+      const delivered = await waitForM4R02Notification(prepared.workItemId, "DELIVERED");
+      const notificationRead = await operateSecretaryPersonalObject({
+        action: "NOTIFICATION_READ",
+        item_ref: delivered.notification.notification_id,
+        expected_revision: delivered.notification.revision,
+        idempotency_key: await mintSecretaryCoordinationIdempotencyKey(),
+      });
+      const read = await waitForM4R02Notification(prepared.workItemId, "READ");
+      if (notificationRead.item_ref !== read.notification.notification_id) {
+        throw new Error("m4r02_notification_read_receipt_mismatch");
+      }
+      const notificationDismiss = await operateSecretaryPersonalObject({
+        action: "NOTIFICATION_DISMISS",
+        item_ref: read.notification.notification_id,
+        expected_revision: read.notification.revision,
+        idempotency_key: await mintSecretaryCoordinationIdempotencyKey(),
+      });
+      const dismissed = await waitForM4R02Notification(prepared.workItemId, "DISMISSED");
+      if (notificationDismiss.item_ref !== dismissed.notification.notification_id) {
+        throw new Error("m4r02_notification_dismiss_receipt_mismatch");
+      }
+      if (JSON.stringify(dismissed.home.application_outcome.deterministic_brief)
+        .includes(M4R02_PERSONAL_ACTION_TITLE)) {
+        throw new Error("m4r02_personal_action_title_leaked_to_model_brief");
+      }
+
+      await emitM4R02Result(invocation, {
+        outcome: "PASS",
+        work_item_id: prepared.workItemId,
+        work_item_state: "ready_to_dispatch",
+        notification_id: dismissed.notification.notification_id,
+        notification_status: dismissed.notification.status,
+        notification_revision: dismissed.notification.revision,
+        notification_read_receipt_id: notificationRead.command_receipt_ref,
+        notification_dismiss_receipt_id: notificationDismiss.command_receipt_ref,
+        personal_action_id: personalAction.personal_action_id,
+        personal_action_status: personalAction.status,
+        personal_action_revision: personalAction.revision,
+        personal_action_receipt_id: personalActionFirst.command_receipt_ref,
+        personal_action_replay_receipt_id: personalActionReplay.command_receipt_ref,
+        reminder_id: reminder.reminder_id,
+        reminder_status: reminder.status,
+        reminder_revision: reminder.revision,
+        reminder_receipt_id: reminderFirst.command_receipt_ref,
+        reminder_replay_receipt_id: reminderReplay.command_receipt_ref,
+        personal_action_title_model_brief_absent: true,
+        write_commands_invoked: 6,
+        client_request_ref_sent: false,
+        server_sealed_command_identity: true,
+        explicit_identity_fields_sent: false,
+      });
+      return;
+    }
+    case "readback": {
+      const snapshot = await loadWorkflowStateSnapshot();
+      const task = findM4R02Task(snapshot, invocation.project_root);
+      if (task.state !== "ready_to_dispatch") throw new Error("m4r02_restart_task_state_invalid");
+      const { home, notification } = await waitForM4R02Notification(
+        task.work_item_id,
+        "DISMISSED",
+      );
+      const personalAction = findM4R02PersonalAction(home);
+      const reminder = findM4R02Reminder(home, personalAction.personal_action_id);
+      if (JSON.stringify(home.application_outcome.deterministic_brief)
+        .includes(M4R02_PERSONAL_ACTION_TITLE)) {
+        throw new Error("m4r02_personal_action_title_leaked_to_model_brief");
+      }
+      await emitM4R02Result(invocation, {
+        outcome: "PASS",
+        work_item_id: task.work_item_id,
+        work_item_state: task.state,
+        notification_id: notification.notification_id,
+        notification_status: notification.status,
+        notification_revision: notification.revision,
+        personal_action_id: personalAction.personal_action_id,
+        personal_action_status: personalAction.status,
+        personal_action_revision: personalAction.revision,
+        reminder_id: reminder.reminder_id,
+        reminder_status: reminder.status,
+        reminder_revision: reminder.revision,
+        personal_action_title_model_brief_absent: true,
+        write_commands_invoked: 0,
+        client_request_ref_sent: false,
+        server_sealed_command_identity: true,
+        explicit_identity_fields_sent: false,
+      });
+    }
+  }
+}
+
+async function installM4R02OrdinaryCompositionTauriIpcBridge() {
+  // `tauri build --debug` still performs a production Vite build, so
+  // `import.meta.env.DEV` is false in the isolated product binary.  The
+  // privileged enablement gate lives in the Rust host (debug binary + exact
+  // profile/driver/phase/nonce); this renderer listener is inert unless that
+  // host emits the bound invocation event.
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  try {
+    await listen<M4R02OrdinaryCompositionInvocation>(M4R02_IPC_INVOKE_EVENT, ({ payload }) => {
+      if (!isM4R02Invocation(payload)) return;
+      // Rust may emit the next operation while the Promise returned by the
+      // previous result event is still settling.  Queue every validated
+      // invocation so that this hand-off never drops a product command.
+      m4r02OperationQueue = m4r02OperationQueue.then(async () => {
+        try {
+          await runM4R02OrdinaryCompositionOperation(payload);
+        } catch (error) {
+          await emitM4R02Result(payload, {
+            outcome: "REJECTED",
+            write_commands_invoked: 0,
+            client_request_ref_sent: payload.operation === "apply_mutation",
+            server_sealed_command_identity: true,
+            explicit_identity_fields_sent: false,
+            error_family: m4r02ErrorFamily(error),
+          });
+        }
+      });
+    });
+    await emit(M4R02_IPC_READY_EVENT, {
+      schema_version: M4R02_IPC_SCHEMA_VERSION,
+      surface: "ordinary_registered_tauri_command_ipc",
+      phases: ["initialize", "mutate", "readback"],
+    });
+  } catch {
+    // The host has bounded readiness/result timeouts and fails closed.
+  }
+}
+
 class BootErrorBoundary extends React.Component<BootErrorBoundaryProps, BootErrorBoundaryState> {
   state: BootErrorBoundaryState = { error: null };
 
@@ -164,6 +651,7 @@ async function markFrontendLoaded() {
 mountVisibleBootProbe();
 void markFrontendLoaded();
 void installM2R4TauriIpcBridge();
+void installM4R02OrdinaryCompositionTauriIpcBridge();
 
 window.addEventListener("error", (event) => {
   const root = document.getElementById("root");

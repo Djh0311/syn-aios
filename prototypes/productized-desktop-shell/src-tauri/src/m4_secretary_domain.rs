@@ -347,6 +347,25 @@ pub(crate) const M4_ATTENTION_POLICY_REF: &str = "m4-attention-policy:v1";
 pub(crate) const M4_ATTENTION_PROJECTOR_ID: &str = "m4-inbox-open-loop-projector";
 pub(crate) const M4_ATTENTION_PROJECTOR_VERSION: i64 = 1;
 
+/// Ordinary-product owner publications are normalized by the registered
+/// dispatcher before they enter M4.  The enum keeps that finite boundary
+/// explicit; renderer input and arbitrary adapter strings never reach the
+/// downstream projection transaction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M4RegisteredPublicationKind {
+    WorkItemAttention,
+    ProposalDecision,
+}
+
+impl M4RegisteredPublicationKind {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::WorkItemAttention => "WORK_ITEM_ATTENTION",
+            Self::ProposalDecision => "PROPOSAL_DECISION",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum M4SourceStatus {
     Open,
@@ -1137,6 +1156,61 @@ pub(crate) enum M4ReminderStatus {
     Cancelled,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M4DecisionOwnerStatus {
+    Open,
+    Answered,
+    Expired,
+    Withdrawn,
+}
+
+impl M4DecisionOwnerStatus {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "OPEN" => Some(Self::Open),
+            "ANSWERED" => Some(Self::Answered),
+            "EXPIRED" => Some(Self::Expired),
+            "WITHDRAWN" => Some(Self::Withdrawn),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Open => "OPEN",
+            Self::Answered => "ANSWERED",
+            Self::Expired => "EXPIRED",
+            Self::Withdrawn => "WITHDRAWN",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M4DecisionLocalVisibilityStatus {
+    Unread,
+    Read,
+    Dismissed,
+}
+
+impl M4DecisionLocalVisibilityStatus {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "UNREAD" => Some(Self::Unread),
+            "READ" => Some(Self::Read),
+            "DISMISSED" => Some(Self::Dismissed),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Unread => "UNREAD",
+            Self::Read => "READ",
+            Self::Dismissed => "DISMISSED",
+        }
+    }
+}
+
 impl M4ReminderStatus {
     pub(crate) fn parse(value: &str) -> Option<Self> {
         match value {
@@ -1289,6 +1363,48 @@ pub(crate) struct M4Reminder {
     pub(crate) revision: u64,
 }
 
+/// A typed local projection of an owner-side proposal decision.  Owner status
+/// and local visibility are deliberately independent axes: local read/dismiss
+/// commands never manufacture an owner-side answer or expiry.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M4DecisionProjection {
+    pub(crate) decision_projection_id: String,
+    pub(crate) source_identity_key: String,
+    pub(crate) source_event_key: String,
+    pub(crate) source_ref: String,
+    pub(crate) owner_status: M4DecisionOwnerStatus,
+    pub(crate) local_visibility_status: M4DecisionLocalVisibilityStatus,
+    pub(crate) decision_by_utc: Option<String>,
+    pub(crate) source_revision: u64,
+    pub(crate) revision: u64,
+}
+
+/// Fully server-normalized publication passed from the ordinary owner outbox
+/// dispatcher into M4.  `source_object_type` is native provenance only; M4
+/// still admits the publication through its fixed structured-source adapter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M4RegisteredSourcePublication {
+    pub(crate) publication_sequence: u64,
+    pub(crate) publication_id: String,
+    pub(crate) adapter_id: String,
+    pub(crate) publication_kind: M4RegisteredPublicationKind,
+    pub(crate) native_scope_seal: String,
+    pub(crate) source_owner_ref: String,
+    pub(crate) source_object_type: String,
+    pub(crate) canonical_source_object_id: String,
+    pub(crate) source_revision: u64,
+    pub(crate) source_event_id: String,
+    pub(crate) source_owner_watermark: String,
+    pub(crate) occurred_at_utc: String,
+    pub(crate) source_status: M4SourceStatus,
+    pub(crate) decision_owner_status: Option<M4DecisionOwnerStatus>,
+    pub(crate) attention_signals: M4AttentionSignals,
+    pub(crate) due_at_utc: Option<String>,
+    pub(crate) opaque_route_ref: String,
+    pub(crate) scrubbed_summary_ref: String,
+    pub(crate) payload_hash: String,
+}
+
 pub(crate) fn m4_personal_action_id(explicit_user_command_id: &str) -> Result<String, String> {
     m4_internal_id(
         "personal-action:",
@@ -1317,6 +1433,113 @@ pub(crate) fn m4_reminder_id(
         "syn.m4.reminder/v1",
         &[owner_ref, explicit_schedule_command_id],
     )
+}
+
+pub(crate) fn m4_decision_projection_id(source_identity_key: &str) -> Result<String, String> {
+    m4_internal_id(
+        "decision-projection:",
+        "syn.m4.decision-projection/v1",
+        &[source_identity_key],
+    )
+}
+
+pub(crate) fn m4_validate_registered_source_publication(
+    publication: &M4RegisteredSourcePublication,
+) -> Result<(), String> {
+    if publication.publication_sequence == 0 {
+        return Err("m4_registered_publication_sequence_invalid".to_string());
+    }
+    for (field, value) in [
+        ("publication_id", publication.publication_id.as_str()),
+        ("adapter_id", publication.adapter_id.as_str()),
+        ("native_scope_seal", publication.native_scope_seal.as_str()),
+        ("source_owner_ref", publication.source_owner_ref.as_str()),
+        ("source_object_type", publication.source_object_type.as_str()),
+        (
+            "canonical_source_object_id",
+            publication.canonical_source_object_id.as_str(),
+        ),
+        ("source_event_id", publication.source_event_id.as_str()),
+        (
+            "source_owner_watermark",
+            publication.source_owner_watermark.as_str(),
+        ),
+        ("occurred_at_utc", publication.occurred_at_utc.as_str()),
+        ("opaque_route_ref", publication.opaque_route_ref.as_str()),
+        (
+            "scrubbed_summary_ref",
+            publication.scrubbed_summary_ref.as_str(),
+        ),
+    ] {
+        m4_validate_reference_text(field, value)?;
+    }
+    for (field, value) in [
+        ("adapter_id", publication.adapter_id.as_str()),
+        ("source_owner_ref", publication.source_owner_ref.as_str()),
+        ("source_object_type", publication.source_object_type.as_str()),
+        (
+            "canonical_source_object_id",
+            publication.canonical_source_object_id.as_str(),
+        ),
+    ] {
+        m4_validate_identifier(field, value)?;
+    }
+    for (field, value) in [
+        ("publication_id", publication.publication_id.as_str()),
+        ("native_scope_seal", publication.native_scope_seal.as_str()),
+        ("source_event_id", publication.source_event_id.as_str()),
+        (
+            "source_owner_watermark",
+            publication.source_owner_watermark.as_str(),
+        ),
+        ("opaque_route_ref", publication.opaque_route_ref.as_str()),
+        (
+            "scrubbed_summary_ref",
+            publication.scrubbed_summary_ref.as_str(),
+        ),
+    ] {
+        if !m4_is_opaque_reference(value) {
+            return Err(format!("m4_registered_publication_opaque_ref_invalid:{field}"));
+        }
+    }
+    if m4_parse_rfc3339_utc_key(&publication.occurred_at_utc).is_none()
+        || publication
+            .due_at_utc
+            .as_deref()
+            .is_some_and(|value| m4_parse_rfc3339_utc_key(value).is_none())
+    {
+        return Err("m4_registered_publication_timestamp_invalid".to_string());
+    }
+    if !m4_is_lower_hex_digest(&publication.payload_hash) {
+        return Err("m4_registered_publication_payload_hash_invalid".to_string());
+    }
+    match (
+        publication.publication_kind,
+        publication.decision_owner_status,
+    ) {
+        (M4RegisteredPublicationKind::WorkItemAttention, None)
+        | (M4RegisteredPublicationKind::ProposalDecision, Some(_)) => {}
+        _ => return Err("m4_registered_publication_kind_binding_invalid".to_string()),
+    }
+    Ok(())
+}
+
+pub(crate) fn m4_validate_decision_projection(
+    decision: &M4DecisionProjection,
+) -> Result<(), String> {
+    m4_validate_typed_reference("decision_source_identity_key", &decision.source_identity_key)?;
+    m4_validate_typed_reference("decision_source_event_key", &decision.source_event_key)?;
+    m4_validate_typed_reference("decision_source_ref", &decision.source_ref)?;
+    if decision.source_ref != decision.source_identity_key
+        || decision.decision_projection_id
+            != m4_decision_projection_id(&decision.source_identity_key)?
+    {
+        return Err("m4_decision_projection_identity_mismatch".to_string());
+    }
+    if let Some(value) = decision.decision_by_utc.as_deref() {
+        m4_validate_utc("decision_by_utc", value)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn m4_validate_inbox_item(item: &M4InboxItem) -> Result<(), String> {
@@ -2571,6 +2794,67 @@ pub(crate) fn m4_transition_reminder(
     Ok(M4StateTransitionResult {
         aggregate: next,
         previous_revision: reminder.revision,
+        idempotency_fingerprint: fingerprint,
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M4DecisionLocalTransition {
+    Read,
+    Dismiss,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M4DecisionLocalTransitionCommand {
+    pub(crate) decision_projection_id: String,
+    pub(crate) expected_revision: u64,
+    pub(crate) transition: M4DecisionLocalTransition,
+    pub(crate) metadata: M4CoordinationCommandMetadata,
+}
+
+pub(crate) fn m4_transition_decision_local_visibility(
+    decision: &M4DecisionProjection,
+    command: &M4DecisionLocalTransitionCommand,
+) -> Result<M4StateTransitionResult<M4DecisionProjection>, String> {
+    m4_validate_decision_projection(decision)?;
+    let operation = match command.transition {
+        M4DecisionLocalTransition::Read => "decision-read",
+        M4DecisionLocalTransition::Dismiss => "decision-dismiss",
+    };
+    let fingerprint = m4_require_cas(
+        operation,
+        &decision.decision_projection_id,
+        decision.revision,
+        &command.decision_projection_id,
+        command.expected_revision,
+        &command.metadata,
+        &[],
+    )?;
+    let mut next = decision.clone();
+    match command.transition {
+        M4DecisionLocalTransition::Read
+            if decision.local_visibility_status == M4DecisionLocalVisibilityStatus::Unread =>
+        {
+            next.local_visibility_status = M4DecisionLocalVisibilityStatus::Read;
+        }
+        M4DecisionLocalTransition::Dismiss
+            if matches!(
+                decision.local_visibility_status,
+                M4DecisionLocalVisibilityStatus::Unread | M4DecisionLocalVisibilityStatus::Read
+            ) =>
+        {
+            next.local_visibility_status = M4DecisionLocalVisibilityStatus::Dismissed;
+        }
+        _ => return Err("m4_decision_local_transition_not_allowed".to_string()),
+    }
+    next.revision = next
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| "m4_revision_overflow".to_string())?;
+    m4_validate_decision_projection(&next)?;
+    Ok(M4StateTransitionResult {
+        aggregate: next,
+        previous_revision: decision.revision,
         idempotency_fingerprint: fingerprint,
     })
 }

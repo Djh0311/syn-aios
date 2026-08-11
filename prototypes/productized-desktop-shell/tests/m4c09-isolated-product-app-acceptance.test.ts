@@ -32,12 +32,19 @@ assert(
 );
 for (const command of [
   "load_m4c09_acceptance_status",
-  "m4c09_run_secretary_explain",
-  "m4c09_load_secretary_home_context",
-  "m4c09_operate_secretary_coordination",
+  "secretary_agent::run_secretary_explain",
+  "secretary_agent::load_secretary_home_context",
+  "secretary_agent::operate_secretary_coordination",
+  "secretary_agent::operate_secretary_personal_object",
 ]) {
   assert(registry.includes(command), `C09 registry 缺少 ${command}`);
 }
+assert(
+  !registry.includes("m4_acceptance::m4c09_run_secretary_explain")
+    && !registry.includes("m4_acceptance::m4c09_load_secretary_home_context")
+    && !registry.includes("m4_acceptance::m4c09_operate_secretary_coordination"),
+  "R02 后普通产品 registry 必须直连 Secretary agent；历史 C09 wrapper 只保留归档，不再充当产品调用图",
+);
 assert(
   commands.includes("fn load_m4c09_acceptance_status(\n)")
     && !commands.includes("load_m4c09_acceptance_status(\n    request"),

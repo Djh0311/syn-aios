@@ -59,6 +59,7 @@ import {
   recordUserResultDecision,
   queryWorkbenchPageReadModel,
   operateSecretaryCoordination,
+  operateSecretaryPersonalObject,
   previewFormalMemoryLifecycleOperation,
   previewTaskMemoryPacket,
   runProjectWorkflowAutomationPhaseA,
@@ -103,13 +104,20 @@ import { setTauriWindowTitle } from "./lib/tauriWindow";
 import type {
   M4SecretaryCoordinationActionRequestDto,
   M4SecretaryHomeContextEnvelopeDto,
+  M4SecretaryPersonalObjectRequestDto,
   SecretaryHomeReadModel,
   SecretaryTypedDeepLinkDescriptor,
 } from "./lib/types/m4Secretary";
 import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, GlobalSupervisorReviewStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, ProjectConsultationProposalStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "./lib/types";
 import { devNavItems, homeNavItem, primaryNavItems, settingsNavItem, workspaceRailItems } from "./lib/workbenchNavigation";
 import type { NavigateHandler, NavigationFocus, RightPanelKey, ViewKey } from "./lib/workbenchNavigation";
-import { HomeView, type SecretaryCoordinationIntent, type SecretaryCoordinationViewState } from "./views/HomeView";
+import {
+  HomeView,
+  type SecretaryCoordinationIntent,
+  type SecretaryCoordinationViewState,
+  type SecretaryPersonalObjectIntent,
+  type SecretaryPersonalObjectViewState,
+} from "./views/HomeView";
 
 export { RightDetailPanel, workspaceRailItems };
 
@@ -166,6 +174,12 @@ export function App() {
   // ambiguous transport retry reuse both its idempotency key and snooze time.
   const secretaryCoordinationAttempts = useRef(
     new Map<string, Promise<M4SecretaryCoordinationActionRequestDto>>(),
+  );
+  const [secretaryPersonalObjectStates, setSecretaryPersonalObjectStates] = useState<
+    Readonly<Record<string, SecretaryPersonalObjectViewState>>
+  >({});
+  const secretaryPersonalObjectAttempts = useRef(
+    new Map<string, Promise<M4SecretaryPersonalObjectRequestDto>>(),
   );
   const [blackboardCandidateStore, setBlackboardCandidateStore] = useState<BlackboardCandidateStoreV1 | null>(null);
   const [planAuthorizationStore, setPlanAuthorizationStore] = useState<PlanAuthorizationStoreV1 | null>(null);
@@ -764,7 +778,13 @@ export function App() {
     } catch (actionError) {
       setNotice(`动作失败：${messageOf(actionError)}`);
       setError(true);
-      setPendingAction(null);
+      // An ordinary WorkItem command may have committed even when its result
+      // transport was interrupted. Keep this one pending action so retrying
+      // reuses the already-minted client_request_ref and receives the same
+      // server-owned receipt. Other action kinds preserve their old dismissal.
+      if (pendingAction.kind !== "advance-work-item-state") {
+        setPendingAction(null);
+      }
     } finally {
       setActionBusy(false);
     }
@@ -893,6 +913,52 @@ export function App() {
       }));
     }
   }, [secretaryHome]);
+
+  const operateSecretaryPersonalObjectAction = useCallback(async (intent: SecretaryPersonalObjectIntent) => {
+    if (!canOperateSecretaryReadModel(secretaryHome)) return;
+    const stateKey = secretaryPersonalObjectStateKey(intent);
+    const attemptRef = JSON.stringify(intent);
+    let requestPromise = secretaryPersonalObjectAttempts.current.get(attemptRef);
+    if (!requestPromise) {
+      requestPromise = mintSecretaryCoordinationIdempotencyKey().then((idempotencyKey) => ({
+        ...intent,
+        idempotency_key: idempotencyKey,
+      }) as M4SecretaryPersonalObjectRequestDto);
+      secretaryPersonalObjectAttempts.current.set(attemptRef, requestPromise);
+    }
+    setSecretaryPersonalObjectStates((current) => ({
+      ...current,
+      [stateKey]: { phase: "pending", action: intent.action },
+    }));
+    let requestReady = false;
+    try {
+      const request = await requestPromise;
+      requestReady = true;
+      const receipt = await operateSecretaryPersonalObject(request);
+      secretaryPersonalObjectAttempts.current.delete(attemptRef);
+      setSecretaryPersonalObjectStates((current) => ({
+        ...current,
+        [stateKey]: {
+          phase: "succeeded",
+          action: intent.action,
+          command_receipt_ref: receipt.command_receipt_ref,
+          outcome_code: receipt.outcome_code,
+        },
+      }));
+      setNotice(`秘书个人对象已记录：${receipt.outcome_code}`);
+      await reloadSecretaryHome();
+    } catch (operationError) {
+      if (!requestReady) secretaryPersonalObjectAttempts.current.delete(attemptRef);
+      setSecretaryPersonalObjectStates((current) => ({
+        ...current,
+        [stateKey]: {
+          phase: "failed",
+          action: intent.action,
+          error_code: secretaryHomeSafeErrorCode(operationError),
+        },
+      }));
+    }
+  }, [secretaryHome]);
   const pendingReviewCount =
     workflowState?.project_workflows.reduce(
       (count, workflow) => count + workflow.task_drafts.filter((task) => task.state === "ready_for_review").length,
@@ -938,7 +1004,9 @@ export function App() {
             secretaryHome={secretaryHome}
             presentationState={secretaryHomePresentationState}
             coordinationStates={secretaryCoordinationStates}
+            personalObjectStates={secretaryPersonalObjectStates}
             onOperateCoordination={(intent) => void operateSecretaryAction(intent)}
+            onOperatePersonalObject={(intent) => void operateSecretaryPersonalObjectAction(intent)}
             onOpenDeepLink={openSecretaryDeepLink}
             onReloadSecretaryHome={() => void reloadSecretaryHome()}
           />
@@ -1025,4 +1093,10 @@ function legacyProductCommandBlockedNotice(commandName: string) {
 function secretaryHomeSafeErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return /^[A-Za-z0-9_:-]{1,128}$/.test(message) ? message : "M4_SECRETARY_HOME_READ_FAILED";
+}
+
+function secretaryPersonalObjectStateKey(intent: SecretaryPersonalObjectIntent): string {
+  if ("item_ref" in intent) return intent.item_ref;
+  if (intent.action === "REMINDER_CREATE") return `reminder:create:${intent.owner_ref}`;
+  return "personal-action:create";
 }

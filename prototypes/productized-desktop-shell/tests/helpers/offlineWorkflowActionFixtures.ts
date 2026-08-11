@@ -75,7 +75,10 @@ export function buildUnbindNodeSessionAction(projectRoot: string): PendingAction
   };
 }
 
-export function buildAdvanceWorkItemStateAction(projectRoot: string): PendingAction {
+export function buildAdvanceWorkItemStateAction(
+  projectRoot: string,
+  clientRequestRef: string,
+): PendingAction {
   return {
     kind: "advance-work-item-state",
     label: "推进工作项到执行中",
@@ -87,6 +90,7 @@ export function buildAdvanceWorkItemStateAction(projectRoot: string): PendingAct
       project_root: projectRoot,
       work_item_id: "work-item:offline:001",
       next_state: "running",
+      client_request_ref: clientRequestRef,
     },
   };
 }

@@ -231,6 +231,47 @@
     }
 
     #[test]
+    fn new_task_draft_work_item_id_is_fixed_opaque_and_scrubs_owner_inputs() {
+        let dir = std::env::temp_dir().join(format!(
+            "task-draft-opaque-owner-id-{}",
+            unix_timestamp_nanos()
+        ));
+        let path = dir.join("workflow-state.v0.json");
+        let sensitive_path = "/tmp/PASSWORD-project/ACCESS_TOKEN-workspace";
+        let project = fixture_project(sensitive_path);
+        let long_marker = "SECRET-title-goal-".repeat(64);
+        let request = TaskDraftRequest {
+            project_root: sensitive_path.to_string(),
+            title: long_marker.clone(),
+            objective: format!("{long_marker}credential-objective"),
+            assigned_role: Some("codex-dev".to_string()),
+        };
+
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should exist");
+        create_task_draft_at(&path, &request).expect("sensitive task content remains valid");
+        let value = read_json_file(&path);
+        let work_item_id = value["work_items"][0]["work_item_id"]
+            .as_str()
+            .expect("opaque work item id");
+        assert!(work_item_id.starts_with("work-item:sha256:"));
+        assert_eq!(work_item_id.len(), "work-item:sha256:".len() + 64);
+        assert!(work_item_id["work-item:sha256:".len()..]
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+        for marker in [
+            "/tmp/",
+            "PASSWORD",
+            "ACCESS_TOKEN",
+            "SECRET",
+            "credential",
+        ] {
+            assert!(!work_item_id.contains(marker));
+        }
+
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn task_draft_rejects_non_index_project() {
         let dir =
             std::env::temp_dir().join(format!("task-draft-non-index-{}", unix_timestamp_string()));

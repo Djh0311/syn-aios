@@ -367,7 +367,23 @@ fn create_task_draft_at(
     let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
 
     let assigned_role = request.assigned_role.as_deref().unwrap_or("codex-dev");
-    let work_item_id = format!("work-item:{workflow_id}:{timestamp}");
+    // New WorkItem owner identities are fixed-length opaque digests.  Existing
+    // IDs remain read-compatible, while a new canonical source key can no
+    // longer reproduce a project/workflow path, title, objective, or secret.
+    let work_item_identity_material = serde_json::to_string(&(
+        "syn.workflow-state-work-item-owner-id/v1",
+        request.project_root.as_str(),
+        workflow_id.as_str(),
+        normalized_title,
+        request.objective.trim(),
+        assigned_role,
+        timestamp.as_str(),
+    ))
+    .map_err(|error| format!("workflow_work_item_identity_serialize_failed:{error}"))?;
+    let work_item_id = format!(
+        "work-item:sha256:{}",
+        crate::utils::hash::sha256_hex(&work_item_identity_material)
+    );
     let artifact_id = format!("artifact:{workflow_id}:task-package:{timestamp}");
     let audit_event_id = crate::workflow_audit::audit_event_identity(
         "task-draft",

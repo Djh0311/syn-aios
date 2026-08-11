@@ -3,9 +3,7 @@ use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-#[cfg(not(test))]
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, io::Write};
 mod acceptance_runtime_profile;
 #[cfg(test)]
@@ -34,6 +32,7 @@ mod memory_lint_engine;
 mod memory_lint_store;
 mod observation_store;
 mod operation_control;
+mod ordinary_product_storage_bootstrap;
 mod page_read_model;
 mod plan_authorization_store;
 mod project_consultation_proposal_store;
@@ -78,6 +77,9 @@ mod m3_role_session_repository;
 mod m3_role_session_read_model;
 mod m3_role_session_schema;
 mod m4_acceptance;
+mod m4r02_ordinary_composition_driver;
+mod m4_source_dispatcher;
+mod m4_source_owner_schema;
 mod m4_secretary_domain;
 mod m4_secretary_read_model;
 mod m4_secretary_repository;
@@ -177,9 +179,54 @@ impl AppState {
             return Err("m4_secretary_ordinary_constructor_rejects_acceptance_profile".to_string());
         }
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let workflow_state_path = default_workflow_state_path();
+        Self::try_new_with_ordinary_product_ports(
+            app_data_root,
+            &manifest_dir.join("../../index-kernel/codex-index.json"),
+            &manifest_dir.join("../../tasks/README.md"),
+        )
+    }
+
+    /// The isolated product replaces only infrastructure ports.  It still
+    /// enters the same ordinary constructor, repository, scheduler and
+    /// command composition as a normal Tauri launch.
+    fn try_new_with_isolated_product_profile(
+        paths: &acceptance_runtime_profile::RuntimePaths,
+    ) -> Result<Self, String> {
+        let app_data_root = paths
+            .app_data_root
+            .join("local.codex.governance.workbench");
+        fs::create_dir_all(&app_data_root)
+            .map_err(|_| "m4r02_isolated_app_data_root_create_failed".to_string())?;
+        let canonical_app_data_root = fs::canonicalize(&app_data_root)
+            .map_err(|_| "m4r02_isolated_app_data_root_unavailable".to_string())?;
+        let canonical_profile_root = fs::canonicalize(&paths.root)
+            .map_err(|_| "m4r02_isolated_profile_root_unavailable".to_string())?;
+        if canonical_app_data_root != app_data_root
+            || !canonical_app_data_root.starts_with(&canonical_profile_root)
+            || canonical_app_data_root.parent() != Some(paths.app_data_root.as_path())
+        {
+            return Err("m4r02_isolated_app_data_root_identity_mismatch".to_string());
+        }
+        Self::try_new_with_ordinary_product_ports(
+            &canonical_app_data_root,
+            &paths.index_path,
+            &paths.tasks_path,
+        )
+    }
+
+    fn try_new_with_ordinary_product_ports(
+        app_data_root: &Path,
+        product_index_seed: &Path,
+        product_tasks_seed: &Path,
+    ) -> Result<Self, String> {
         let m3_role_session_read_runtime =
             m4_secretary_domain::install_ordinary_product_secretary_runtime(app_data_root)?;
+        let product_data_paths =
+            ordinary_product_storage_bootstrap::ProductDataPaths::resolve_and_materialize(
+                app_data_root,
+                product_index_seed,
+                product_tasks_seed,
+            )?;
         #[cfg(not(test))]
         let m4_secretary_repository =
             m4_secretary_repository::M4SecretarySqliteRepository::open_ordinary_product(
@@ -193,9 +240,9 @@ impl AppState {
         #[cfg(not(test))]
         start_m4_secretary_scheduler(m4_secretary_repository.clone())?;
         Ok(Self {
-            index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
-            tasks_path: manifest_dir.join("../../tasks/README.md"),
-            workflow_state_path,
+            index_path: product_data_paths.index_path,
+            tasks_path: product_data_paths.tasks_path,
+            workflow_state_path: product_data_paths.workflow_state_path,
             m3_role_session_read_runtime,
             #[cfg(not(test))]
             m4_secretary_repository: Some(m4_secretary_repository),
@@ -206,7 +253,8 @@ impl AppState {
 /// The ordinary product owns one local mechanical timer.  Each wake-up only
 /// asks the M4 repository to process a typed TimerFired event; model/provider
 /// work remains behind the separate invocation ledger and is never started by
-/// this loop. Acceptance-profile composition never reaches this constructor.
+/// this loop. Plain isolated-product profiles reach this same constructor;
+/// only the historical legacy acceptance AppState bypasses it.
 #[cfg(not(test))]
 fn start_m4_secretary_scheduler(
     repository: m4_secretary_repository::M4SecretarySqliteRepository,
@@ -232,6 +280,61 @@ fn start_m4_secretary_scheduler(
         })
         .map(|_| ())
         .map_err(|_| "m4_secretary_scheduler_thread_spawn_failed".to_string())
+}
+
+/// Start the ordinary owner-outbox tail only after workflow DB-primary startup
+/// reconciliation has completed.  Startup recovery is synchronous; later
+/// wakes repeat the same durable claim -> M4 dedupe -> checkpoint protocol.
+fn start_m4_source_owner_dispatcher(
+    workflow_state_path: PathBuf,
+    owner_repository: workbench_sqlite_repository::WorkbenchSqliteRepository,
+    m4_repository: m4_secretary_repository::M4SecretarySqliteRepository,
+) -> Result<(), String> {
+    run_m4_source_owner_tail_cycle(
+        &workflow_state_path,
+        &owner_repository,
+        &m4_repository,
+        "m4-source-dispatcher:startup",
+    )?;
+    std::thread::Builder::new()
+        .name("syn-m4-source-owner-dispatcher".to_string())
+        .spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(5));
+            if let Err(error) = run_m4_source_owner_tail_cycle(
+                &workflow_state_path,
+                &owner_repository,
+                &m4_repository,
+                "m4-source-dispatcher:timer",
+            ) {
+                eprintln!("M4 source-owner dispatcher tick unavailable:{error}");
+            }
+        })
+        .map(|_| ())
+        .map_err(|_| "m4_source_owner_dispatcher_thread_spawn_failed".to_string())
+}
+
+fn run_m4_source_owner_tail_cycle(
+    workflow_state_path: &Path,
+    owner_repository: &workbench_sqlite_repository::WorkbenchSqliteRepository,
+    m4_repository: &m4_secretary_repository::M4SecretarySqliteRepository,
+    claimer_id: &str,
+) -> Result<(), String> {
+    for _ in 0..256 {
+        let expiry =
+            project_consultation_proposal_store::expire_due_proposals_at_server_clock(
+                workflow_state_path,
+            )?;
+        if expiry.drained {
+            break;
+        }
+    }
+    let _outcome = m4_source_dispatcher::dispatch_pending_m4_source_owner_outbox(
+        owner_repository,
+        m4_repository,
+        claimer_id,
+        m4_source_dispatcher::M4_SOURCE_DISPATCH_DEFAULT_BATCH_LIMIT,
+    )?;
+    Ok(())
 }
 
 pub fn run_workflow_machine_cli(args: Vec<String>) -> Result<String, String> {
@@ -2904,6 +3007,7 @@ mod tests {
             created_by_role: ProjectConsultationProposalCreatorRole::ProjectConsultant,
             suggest_workflow: false,
             tasks: vec![],
+            expires_at_ms: None,
             actor_id: "project-consultation-fixture".to_string(),
             expected_store_revision: None,
         }
@@ -11483,6 +11587,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                     project_root: test_root.to_string(),
                     work_item_id: wid.to_string(),
                     next_state: next.to_string(),
+                    client_request_ref: None,
                     command_id: None,
                     idempotency_key: None,
                     expected_revision: None,
@@ -11581,6 +11686,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                     project_root: test_root.to_string(),
                     work_item_id: wid1.clone(),
                     next_state: next.to_string(),
+                    client_request_ref: None,
                     command_id: None,
                     idempotency_key: None,
                     expected_revision: None,
@@ -15103,6 +15209,7 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
             project_root: project_root.to_string(),
             work_item_id: work_item_id.to_string(),
             next_state: next_state.to_string(),
+            client_request_ref: None,
             command_id: None,
             idempotency_key: None,
             expected_revision: None,

@@ -16,6 +16,9 @@ pub(crate) const M4_COORDINATION_SCHEMA_VERSION: i64 = 1;
 pub(crate) const M4_COORDINATION_SCHEMA_MARKER: &str = "syn.m4.secretary-coordination-schema/v1";
 pub(crate) const M4_DAILY_SCHEDULER_SCHEMA_VERSION: i64 = 1;
 pub(crate) const M4_DAILY_SCHEDULER_SCHEMA_MARKER: &str = "syn.m4.daily-scheduler-schema/v1";
+pub(crate) const M4_R02_PERSONAL_OBJECT_SCHEMA_VERSION: i64 = 1;
+pub(crate) const M4_R02_PERSONAL_OBJECT_SCHEMA_MARKER: &str =
+    "syn.m4.r02-personal-object-schema/v1";
 
 const M4_TABLES: [&str; 10] = [
     "m4_schema_meta",
@@ -118,6 +121,26 @@ const M4C07_INDEXES: [&str; 19] = [
 ];
 
 const M4C07_TRIGGERS: [&str; 0] = [];
+
+// M4R02 remains a third additive overlay.  It is intentionally declared
+// outside every frozen C03/C04/C07 DDL constant so their exact bytes and
+// persisted fingerprints remain unchanged.
+const M4R02_TABLES: [&str; 5] = [
+    "m4_source_provenance_index",
+    "m4_decision_request_projections",
+    "m4_decision_local_command_receipts",
+    "m4_decision_projection_events",
+    "m4_decision_projection_audit_records",
+];
+
+const M4R02_INDEXES: [&str; 4] = [
+    "m4_idx_source_provenance_publication",
+    "m4_idx_decision_projection_visibility_due",
+    "m4_idx_decision_projection_events_source",
+    "m4_idx_decision_projection_audit_subject",
+];
+
+const M4R02_TRIGGERS: [&str; 0] = [];
 
 const M4_SECRETARY_SCHEMA_DDL: &str = r#"
 CREATE TABLE m4_schema_meta (
@@ -2051,8 +2074,148 @@ CREATE INDEX m4_idx_model_invocations_trigger
 ON m4_model_invocations(trigger_event_ref, recorded_at_utc, invocation_id);
 "#;
 
-/// Install C03 plus the additive C04/C07 overlays into a fresh M4 namespace,
-/// upgrade an exact C03 or C03+C04 catalog in the caller's transaction, or
+const M4R02_PERSONAL_OBJECT_SCHEMA_DDL: &str = r#"
+CREATE TABLE m4_source_provenance_index (
+    source_event_key TEXT PRIMARY KEY NOT NULL,
+    source_identity_key TEXT NOT NULL,
+    source_revision TEXT NOT NULL CHECK(
+        typeof(source_revision) = 'text'
+        AND length(source_revision) BETWEEN 1 AND 20
+        AND source_revision NOT GLOB '*[^0-9]*'
+        AND (source_revision = '0' OR substr(source_revision, 1, 1) != '0')
+        AND (length(source_revision) < 20 OR source_revision <= '18446744073709551615')
+    ),
+    publication_sequence TEXT NOT NULL CHECK(
+        typeof(publication_sequence) = 'text'
+        AND length(publication_sequence) BETWEEN 1 AND 20
+        AND publication_sequence NOT GLOB '*[^0-9]*'
+        AND substr(publication_sequence, 1, 1) != '0'
+        AND (length(publication_sequence) < 20 OR publication_sequence <= '18446744073709551615')
+    ),
+    publication_id TEXT NOT NULL UNIQUE,
+    adapter_id TEXT NOT NULL,
+    publication_kind TEXT NOT NULL CHECK(publication_kind IN (
+        'WORK_ITEM_ATTENTION','PROPOSAL_DECISION'
+    )),
+    native_scope_seal TEXT NOT NULL,
+    source_object_type TEXT NOT NULL,
+    payload_hash TEXT NOT NULL CHECK(
+        length(payload_hash) = 64 AND payload_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    recorded_at_utc TEXT NOT NULL,
+    UNIQUE(adapter_id, publication_sequence),
+    FOREIGN KEY(source_event_key) REFERENCES m4_admitted_source_events(source_event_key)
+);
+
+CREATE INDEX m4_idx_source_provenance_publication
+ON m4_source_provenance_index(adapter_id, publication_sequence, publication_id);
+
+CREATE TABLE m4_decision_request_projections (
+    decision_projection_id TEXT PRIMARY KEY NOT NULL,
+    source_identity_key TEXT NOT NULL UNIQUE,
+    source_event_key TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    owner_status TEXT NOT NULL CHECK(owner_status IN (
+        'OPEN','ANSWERED','EXPIRED','WITHDRAWN'
+    )),
+    local_visibility_status TEXT NOT NULL CHECK(local_visibility_status IN (
+        'UNREAD','READ','DISMISSED'
+    )),
+    decision_by_utc TEXT,
+    source_revision TEXT NOT NULL CHECK(
+        typeof(source_revision) = 'text'
+        AND length(source_revision) BETWEEN 1 AND 20
+        AND source_revision NOT GLOB '*[^0-9]*'
+        AND (source_revision = '0' OR substr(source_revision, 1, 1) != '0')
+        AND (length(source_revision) < 20 OR source_revision <= '18446744073709551615')
+    ),
+    revision INTEGER NOT NULL CHECK(revision >= 1),
+    CHECK(source_ref = source_identity_key),
+    FOREIGN KEY(source_event_key) REFERENCES m4_admitted_source_events(source_event_key)
+);
+
+CREATE INDEX m4_idx_decision_projection_visibility_due
+ON m4_decision_request_projections(local_visibility_status, decision_by_utc, decision_projection_id);
+
+CREATE TABLE m4_decision_local_command_receipts (
+    command_receipt_id TEXT PRIMARY KEY NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    request_hash TEXT NOT NULL CHECK(
+        length(request_hash) = 64 AND request_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    decision_projection_id TEXT NOT NULL,
+    expected_revision INTEGER NOT NULL CHECK(expected_revision >= 1),
+    outcome_code TEXT NOT NULL CHECK(outcome_code = 'APPLIED'),
+    recorded_at_utc TEXT NOT NULL,
+    aggregate_revision INTEGER NOT NULL CHECK(aggregate_revision >= 2),
+    FOREIGN KEY(decision_projection_id)
+        REFERENCES m4_decision_request_projections(decision_projection_id)
+);
+
+CREATE TABLE m4_decision_projection_events (
+    decision_event_id TEXT PRIMARY KEY NOT NULL,
+    event_kind TEXT NOT NULL CHECK(event_kind IN (
+        'DECISION_OWNER_PROJECTED','DECISION_READ','DECISION_DISMISSED'
+    )),
+    decision_projection_id TEXT NOT NULL,
+    source_event_key TEXT NOT NULL,
+    command_receipt_id TEXT UNIQUE,
+    owner_status TEXT NOT NULL CHECK(owner_status IN (
+        'OPEN','ANSWERED','EXPIRED','WITHDRAWN'
+    )),
+    local_visibility_status TEXT NOT NULL CHECK(local_visibility_status IN (
+        'UNREAD','READ','DISMISSED'
+    )),
+    source_revision TEXT NOT NULL CHECK(
+        typeof(source_revision) = 'text'
+        AND length(source_revision) BETWEEN 1 AND 20
+        AND source_revision NOT GLOB '*[^0-9]*'
+        AND (source_revision = '0' OR substr(source_revision, 1, 1) != '0')
+        AND (length(source_revision) < 20 OR source_revision <= '18446744073709551615')
+    ),
+    projection_revision INTEGER NOT NULL CHECK(projection_revision >= 1),
+    occurred_at_utc TEXT NOT NULL,
+    payload_hash TEXT NOT NULL CHECK(
+        length(payload_hash) = 64 AND payload_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    UNIQUE(source_event_key, event_kind, projection_revision),
+    FOREIGN KEY(decision_projection_id)
+        REFERENCES m4_decision_request_projections(decision_projection_id),
+    FOREIGN KEY(source_event_key) REFERENCES m4_admitted_source_events(source_event_key),
+    FOREIGN KEY(command_receipt_id)
+        REFERENCES m4_decision_local_command_receipts(command_receipt_id)
+);
+
+CREATE INDEX m4_idx_decision_projection_events_source
+ON m4_decision_projection_events(source_event_key, projection_revision, decision_event_id);
+
+CREATE TABLE m4_decision_projection_audit_records (
+    decision_audit_id TEXT PRIMARY KEY NOT NULL,
+    decision_event_id TEXT NOT NULL UNIQUE,
+    action_code TEXT NOT NULL CHECK(action_code IN (
+        'PROJECT_OWNER_DECISION','READ_LOCAL_DECISION','DISMISS_LOCAL_DECISION'
+    )),
+    decision_code TEXT NOT NULL CHECK(decision_code IN ('PROJECTED','APPLIED')),
+    reason_code TEXT NOT NULL CHECK(reason_code IN (
+        'INTERNAL_SOURCE_EVENT','EXPLICIT_USER_COMMAND_LOCAL_VISIBILITY_ONLY'
+    )),
+    actor_ref TEXT NOT NULL,
+    scope_ref TEXT NOT NULL,
+    subject_ref TEXT NOT NULL,
+    result_hash TEXT NOT NULL CHECK(
+        length(result_hash) = 64 AND result_hash NOT GLOB '*[^0-9a-f]*'
+    ),
+    occurred_at_utc TEXT NOT NULL,
+    FOREIGN KEY(decision_event_id)
+        REFERENCES m4_decision_projection_events(decision_event_id)
+);
+
+CREATE INDEX m4_idx_decision_projection_audit_subject
+ON m4_decision_projection_audit_records(subject_ref, occurred_at_utc, decision_audit_id);
+"#;
+
+/// Install C03 plus the additive C04/C07/R02 overlays into a fresh M4 namespace,
+/// upgrade an exact earlier catalog in the caller's transaction, or
 /// verify an already-complete catalog. Partial overlays and all catalog drift
 /// fail closed; SQLite cannot reliably toggle foreign keys mid-transaction.
 pub(crate) fn ensure_m4_secretary_schema_v1(
@@ -2070,20 +2233,26 @@ pub(crate) fn ensure_m4_secretary_schema_v1(
         install_m4_secretary_base_schema_v1(transaction, installed_at_utc)?;
         install_m4c04_coordination_overlay_v1(transaction, installed_at_utc)?;
         install_m4c07_daily_scheduler_overlay_v1(transaction, installed_at_utc)?;
+        install_m4r02_personal_object_overlay_v1(transaction, installed_at_utc)?;
         return verify_m4_secretary_schema_v1(transaction);
     }
     if existing == expected_m4_base_catalog_object_names() {
         verify_m4_secretary_base_schema_v1(transaction)?;
         install_m4c04_coordination_overlay_v1(transaction, installed_at_utc)?;
         install_m4c07_daily_scheduler_overlay_v1(transaction, installed_at_utc)?;
+        install_m4r02_personal_object_overlay_v1(transaction, installed_at_utc)?;
     } else if existing == expected_m4c04_catalog_object_names() {
         verify_m4c04_secretary_schema_v1(transaction)?;
         install_m4c07_daily_scheduler_overlay_v1(transaction, installed_at_utc)?;
+        install_m4r02_personal_object_overlay_v1(transaction, installed_at_utc)?;
+    } else if existing == expected_m4c07_catalog_object_names() {
+        verify_m4c07_secretary_schema_v1(transaction)?;
+        install_m4r02_personal_object_overlay_v1(transaction, installed_at_utc)?;
     }
     verify_m4_secretary_schema_v1(transaction)
 }
 
-/// Verify the exact M4C03 + M4C04 + M4C07 catalog and its structural
+/// Verify the exact M4C03 + M4C04 + M4C07 + R02 catalog and its structural
 /// foreign-key bindings. It performs no repair or migration work and is safe
 /// to call on read-only connections that have foreign-key enforcement enabled.
 pub(crate) fn verify_m4_secretary_schema_v1(connection: &Connection) -> Result<(), String> {
@@ -2093,15 +2262,16 @@ pub(crate) fn verify_m4_secretary_schema_v1(connection: &Connection) -> Result<(
         return Err("m4_secretary_schema_drift_requires_fresh_database:catalog".to_string());
     }
     verify_no_m4_triggers_or_views(connection)?;
-    verify_schema_meta(connection, true, true)?;
+    verify_schema_meta(connection, true, true, true)?;
 
-    for (table, columns) in expected_columns(true, true) {
+    for (table, columns) in expected_columns(true, true, true) {
         verify_columns(connection, table, columns)?;
     }
-    verify_exact_catalog_sql(connection, true, true)?;
-    verify_foreign_keys(connection, true, true)?;
+    verify_exact_catalog_sql(connection, true, true, true)?;
+    verify_foreign_keys(connection, true, true, true)?;
     verify_m4c04_persisted_source_bindings(connection)?;
     verify_m4c07_persisted_daily_bindings(connection)?;
+    verify_m4r02_persisted_source_bindings(connection)?;
     verify_foreign_key_check(connection)?;
     Ok(())
 }
@@ -2112,12 +2282,12 @@ fn verify_m4_secretary_base_schema_v1(connection: &Connection) -> Result<(), Str
         return Err("m4_secretary_schema_drift_requires_fresh_database:base_catalog".to_string());
     }
     verify_no_m4_triggers_or_views(connection)?;
-    verify_schema_meta(connection, false, false)?;
-    for (table, columns) in expected_columns(false, false) {
+    verify_schema_meta(connection, false, false, false)?;
+    for (table, columns) in expected_columns(false, false, false) {
         verify_columns(connection, table, columns)?;
     }
-    verify_exact_catalog_sql(connection, false, false)?;
-    verify_foreign_keys(connection, false, false)?;
+    verify_exact_catalog_sql(connection, false, false, false)?;
+    verify_foreign_keys(connection, false, false, false)?;
     verify_foreign_key_check(connection)?;
     Ok(())
 }
@@ -2131,13 +2301,34 @@ fn verify_m4c04_secretary_schema_v1(connection: &Connection) -> Result<(), Strin
         return Err("m4_secretary_schema_drift_requires_fresh_database:c04_catalog".to_string());
     }
     verify_no_m4_triggers_or_views(connection)?;
-    verify_schema_meta(connection, true, false)?;
-    for (table, columns) in expected_columns(true, false) {
+    verify_schema_meta(connection, true, false, false)?;
+    for (table, columns) in expected_columns(true, false, false) {
         verify_columns(connection, table, columns)?;
     }
-    verify_exact_catalog_sql(connection, true, false)?;
-    verify_foreign_keys(connection, true, false)?;
+    verify_exact_catalog_sql(connection, true, false, false)?;
+    verify_foreign_keys(connection, true, false, false)?;
     verify_m4c04_persisted_source_bindings(connection)?;
+    verify_foreign_key_check(connection)?;
+    Ok(())
+}
+
+/// Verify the exact historical C03+C04+C07 catalog before installing R02.
+/// This preserves the old catalog as a valid upgrade source without weakening
+/// the final exact verifier.
+fn verify_m4c07_secretary_schema_v1(connection: &Connection) -> Result<(), String> {
+    verify_foreign_keys_enabled(connection)?;
+    if m4_catalog_object_names(connection)? != expected_m4c07_catalog_object_names() {
+        return Err("m4_secretary_schema_drift_requires_fresh_database:c07_catalog".to_string());
+    }
+    verify_no_m4_triggers_or_views(connection)?;
+    verify_schema_meta(connection, true, true, false)?;
+    for (table, columns) in expected_columns(true, true, false) {
+        verify_columns(connection, table, columns)?;
+    }
+    verify_exact_catalog_sql(connection, true, true, false)?;
+    verify_foreign_keys(connection, true, true, false)?;
+    verify_m4c04_persisted_source_bindings(connection)?;
+    verify_m4c07_persisted_daily_bindings(connection)?;
     verify_foreign_key_check(connection)?;
     Ok(())
 }
@@ -2160,6 +2351,12 @@ pub(crate) fn m4_coordination_schema_fingerprint_v1() -> String {
 pub(crate) fn m4_daily_scheduler_schema_fingerprint_v1() -> String {
     let mut hasher = Sha256::new();
     hasher.update(M4C07_DAILY_SCHEDULER_SCHEMA_DDL.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+pub(crate) fn m4_r02_personal_object_schema_fingerprint_v1() -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(M4R02_PERSONAL_OBJECT_SCHEMA_DDL.as_bytes());
     format!("{:x}", hasher.finalize())
 }
 
@@ -2232,6 +2429,29 @@ fn install_m4c07_daily_scheduler_overlay_v1(
     Ok(())
 }
 
+fn install_m4r02_personal_object_overlay_v1(
+    transaction: &Transaction<'_>,
+    installed_at_utc: &str,
+) -> Result<(), String> {
+    transaction
+        .execute_batch(M4R02_PERSONAL_OBJECT_SCHEMA_DDL)
+        .map_err(|error| format!("m4_r02_personal_object_schema_create_failed:{error}"))?;
+    transaction
+        .execute(
+            "INSERT INTO m4_schema_meta
+             (schema_marker, schema_version, catalog_fingerprint, installed_at_utc)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                M4_R02_PERSONAL_OBJECT_SCHEMA_MARKER,
+                M4_R02_PERSONAL_OBJECT_SCHEMA_VERSION,
+                m4_r02_personal_object_schema_fingerprint_v1(),
+                installed_at_utc,
+            ],
+        )
+        .map_err(|error| format!("m4_r02_personal_object_schema_marker_write_failed:{error}"))?;
+    Ok(())
+}
+
 fn verify_foreign_keys_enabled(connection: &Connection) -> Result<(), String> {
     let foreign_keys: i64 = connection
         .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
@@ -2260,12 +2480,21 @@ fn expected_m4c04_catalog_object_names() -> BTreeSet<String> {
         .collect()
 }
 
-fn expected_m4_catalog_object_names() -> BTreeSet<String> {
+fn expected_m4c07_catalog_object_names() -> BTreeSet<String> {
     expected_m4c04_catalog_object_names()
         .into_iter()
         .chain(M4C07_TABLES.iter().map(|name| format!("table:{name}")))
         .chain(M4C07_INDEXES.iter().map(|name| format!("index:{name}")))
         .chain(M4C07_TRIGGERS.iter().map(|name| format!("trigger:{name}")))
+        .collect()
+}
+
+fn expected_m4_catalog_object_names() -> BTreeSet<String> {
+    expected_m4c07_catalog_object_names()
+        .into_iter()
+        .chain(M4R02_TABLES.iter().map(|name| format!("table:{name}")))
+        .chain(M4R02_INDEXES.iter().map(|name| format!("index:{name}")))
+        .chain(M4R02_TRIGGERS.iter().map(|name| format!("trigger:{name}")))
         .collect()
 }
 
@@ -2324,6 +2553,7 @@ fn verify_schema_meta(
     connection: &Connection,
     include_m4c04: bool,
     include_m4c07: bool,
+    include_m4r02: bool,
 ) -> Result<(), String> {
     let marker = connection
         .query_row(
@@ -2349,7 +2579,8 @@ fn verify_schema_meta(
     if marker.0 != M4_SECRETARY_SCHEMA_VERSION
         || marker.1 != m4_secretary_schema_fingerprint_v1()
         || crate::m4_secretary_domain::m4_parse_rfc3339_utc_key(&marker.2).is_none()
-        || marker_count != 1 + i64::from(include_m4c04) + i64::from(include_m4c07)
+        || marker_count
+            != 1 + i64::from(include_m4c04) + i64::from(include_m4c07) + i64::from(include_m4r02)
     {
         return Err("m4_secretary_schema_drift_requires_fresh_database:marker".to_string());
     }
@@ -2412,12 +2643,39 @@ fn verify_schema_meta(
             );
         }
     }
+    if include_m4r02 {
+        let marker = connection
+            .query_row(
+                "SELECT schema_version, catalog_fingerprint, installed_at_utc
+                 FROM m4_schema_meta WHERE schema_marker = ?1",
+                [M4_R02_PERSONAL_OBJECT_SCHEMA_MARKER],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| format!("m4_r02_personal_object_marker_query_failed:{error}"))?
+            .ok_or_else(|| {
+                "m4_secretary_schema_drift_requires_fresh_database:r02_marker_missing".to_string()
+            })?;
+        if marker.0 != M4_R02_PERSONAL_OBJECT_SCHEMA_VERSION
+            || marker.1 != m4_r02_personal_object_schema_fingerprint_v1()
+            || crate::m4_secretary_domain::m4_parse_rfc3339_utc_key(&marker.2).is_none()
+        {
+            return Err("m4_secretary_schema_drift_requires_fresh_database:r02_marker".to_string());
+        }
+    }
     Ok(())
 }
 
 fn expected_columns(
     include_m4c04: bool,
     include_m4c07: bool,
+    include_m4r02: bool,
 ) -> Vec<(&'static str, &'static [&'static str])> {
     let mut columns: Vec<(&'static str, &'static [&'static str])> = vec![
         (
@@ -2974,6 +3232,84 @@ fn expected_columns(
             ),
         ]);
     }
+    if include_m4r02 {
+        columns.extend([
+            (
+                "m4_source_provenance_index",
+                &[
+                    "source_event_key",
+                    "source_identity_key",
+                    "source_revision",
+                    "publication_sequence",
+                    "publication_id",
+                    "adapter_id",
+                    "publication_kind",
+                    "native_scope_seal",
+                    "source_object_type",
+                    "payload_hash",
+                    "recorded_at_utc",
+                ][..],
+            ),
+            (
+                "m4_decision_request_projections",
+                &[
+                    "decision_projection_id",
+                    "source_identity_key",
+                    "source_event_key",
+                    "source_ref",
+                    "owner_status",
+                    "local_visibility_status",
+                    "decision_by_utc",
+                    "source_revision",
+                    "revision",
+                ][..],
+            ),
+            (
+                "m4_decision_local_command_receipts",
+                &[
+                    "command_receipt_id",
+                    "idempotency_key",
+                    "request_hash",
+                    "decision_projection_id",
+                    "expected_revision",
+                    "outcome_code",
+                    "recorded_at_utc",
+                    "aggregate_revision",
+                ][..],
+            ),
+            (
+                "m4_decision_projection_events",
+                &[
+                    "decision_event_id",
+                    "event_kind",
+                    "decision_projection_id",
+                    "source_event_key",
+                    "command_receipt_id",
+                    "owner_status",
+                    "local_visibility_status",
+                    "source_revision",
+                    "projection_revision",
+                    "occurred_at_utc",
+                    "payload_hash",
+                ][..],
+            ),
+            (
+                "m4_decision_projection_audit_records",
+                &[
+                    "decision_audit_id",
+                    "decision_event_id",
+                    "action_code",
+                    "decision_code",
+                    "reason_code",
+                    "actor_ref",
+                    "scope_ref",
+                    "subject_ref",
+                    "result_hash",
+                    "occurred_at_utc",
+                ][..],
+            ),
+        ]);
+    }
     columns
 }
 
@@ -3022,6 +3358,7 @@ fn verify_exact_catalog_sql(
     connection: &Connection,
     include_m4c04: bool,
     include_m4c07: bool,
+    include_m4r02: bool,
 ) -> Result<(), String> {
     let expected_connection = Connection::open_in_memory()
         .map_err(|error| format!("m4_secretary_schema_reference_open_failed:{error}"))?;
@@ -3040,6 +3377,13 @@ fn verify_exact_catalog_sql(
                 format!("m4_daily_scheduler_schema_reference_create_failed:{error}")
             })?;
     }
+    if include_m4r02 {
+        expected_connection
+            .execute_batch(M4R02_PERSONAL_OBJECT_SCHEMA_DDL)
+            .map_err(|error| {
+                format!("m4_r02_personal_object_schema_reference_create_failed:{error}")
+            })?;
+    }
     if m4_catalog_sql(connection)? != m4_catalog_sql(&expected_connection)? {
         return Err("m4_secretary_schema_drift_requires_fresh_database:exact_sql".to_string());
     }
@@ -3050,6 +3394,7 @@ fn verify_foreign_keys(
     connection: &Connection,
     include_m4c04: bool,
     include_m4c07: bool,
+    include_m4r02: bool,
 ) -> Result<(), String> {
     let mut requirements: Vec<(&str, &[&str])> = vec![
         ("m4_admitted_source_current", &["m4_admitted_source_events"]),
@@ -3140,6 +3485,34 @@ fn verify_foreign_keys(
             ),
         ]);
     }
+    if include_m4r02 {
+        requirements.extend([
+            (
+                "m4_source_provenance_index",
+                &["m4_admitted_source_events"][..],
+            ),
+            (
+                "m4_decision_request_projections",
+                &["m4_admitted_source_events"][..],
+            ),
+            (
+                "m4_decision_local_command_receipts",
+                &["m4_decision_request_projections"][..],
+            ),
+            (
+                "m4_decision_projection_events",
+                &[
+                    "m4_admitted_source_events",
+                    "m4_decision_local_command_receipts",
+                    "m4_decision_request_projections",
+                ][..],
+            ),
+            (
+                "m4_decision_projection_audit_records",
+                &["m4_decision_projection_events"][..],
+            ),
+        ]);
+    }
 
     for (table, targets) in requirements {
         let mut statement = connection
@@ -3220,6 +3593,51 @@ fn verify_m4c04_persisted_source_bindings(connection: &Connection) -> Result<(),
         return Err(
             "m4_secretary_schema_drift_requires_fresh_database:writeback_source_binding"
                 .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn verify_m4r02_persisted_source_bindings(connection: &Connection) -> Result<(), String> {
+    let provenance_mismatch: Option<String> = connection
+        .query_row(
+            "SELECT provenance.source_event_key
+             FROM m4_source_provenance_index AS provenance
+             JOIN m4_admitted_source_events AS source
+               ON source.source_event_key = provenance.source_event_key
+             WHERE source.source_identity_key <> provenance.source_identity_key
+                OR source.source_revision <> provenance.source_revision
+                OR source.payload_hash <> provenance.payload_hash
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("m4_r02_provenance_binding_query_failed:{error}"))?;
+    if provenance_mismatch.is_some() {
+        return Err(
+            "m4_secretary_schema_drift_requires_fresh_database:r02_provenance_binding".to_string(),
+        );
+    }
+
+    let decision_mismatch: Option<String> = connection
+        .query_row(
+            "SELECT decision.decision_projection_id
+             FROM m4_decision_request_projections AS decision
+             JOIN m4_admitted_source_events AS source
+               ON source.source_event_key = decision.source_event_key
+             WHERE source.source_identity_key <> decision.source_identity_key
+                OR source.source_revision <> decision.source_revision
+                OR decision.source_ref <> decision.source_identity_key
+             LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| format!("m4_r02_decision_binding_query_failed:{error}"))?;
+    if decision_mismatch.is_some() {
+        return Err(
+            "m4_secretary_schema_drift_requires_fresh_database:r02_decision_binding".to_string(),
         );
     }
     Ok(())
@@ -3546,8 +3964,7 @@ mod tests {
     const M4C04_COORDINATION_DDL_FINGERPRINT: &str =
         "1c42cdda7fe9bc3be6cd0d9186165d2f6246129e0b86f9d7db94d83a44020076";
 
-    const FORBIDDEN_M4C05_C06_C08_PLUS_TABLES: [&str; 5] = [
-        "m4_decision_request_projections",
+    const FORBIDDEN_M4C05_C06_C08_PLUS_TABLES: [&str; 4] = [
         "m4_secretary_contexts",
         "m4_conversation_contexts",
         "m4_handoff_requests",
@@ -3649,6 +4066,17 @@ mod tests {
             )
             .optional()
             .expect("read checkpoint accounting column")
+    }
+
+    fn schema_marker_row(connection: &Connection, schema_marker: &str) -> (i64, String, String) {
+        connection
+            .query_row(
+                "SELECT schema_version, catalog_fingerprint, installed_at_utc
+                 FROM m4_schema_meta WHERE schema_marker = ?1",
+                [schema_marker],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read exact M4 schema marker")
     }
 
     fn assert_checkpoint_admitted_source_event_column(connection: &Connection) {
@@ -3952,8 +4380,8 @@ mod tests {
             connection
                 .query_row("SELECT COUNT(*) FROM m4_schema_meta", [], |row| row
                     .get::<_, i64>(0))
-                .expect("count M4C03 plus M4C04 plus M4C07 markers"),
-            3
+                .expect("count M4C03 plus M4C04 plus M4C07 plus R02 markers"),
+            4
         );
 
         install(&mut connection);
@@ -4054,6 +4482,54 @@ mod tests {
         assert_eq!(
             m4_catalog_object_names(&connection).expect("read exact C07 upgraded catalog"),
             expected_m4_catalog_object_names()
+        );
+    }
+
+    #[test]
+    fn m4r02_schema_atomically_upgrades_exact_c07_without_rewriting_frozen_markers() {
+        let mut connection = connection_with_foreign_keys();
+        install_c04(&mut connection);
+        let transaction = connection
+            .transaction()
+            .expect("open exact historical C07 installation transaction");
+        install_m4c07_daily_scheduler_overlay_v1(&transaction, "2026-08-10T12:02:00Z")
+            .expect("install exact historical C07 overlay without R02");
+        transaction
+            .commit()
+            .expect("commit exact historical C07 catalog");
+        verify_m4c07_secretary_schema_v1(&connection)
+            .expect("verify exact historical C03+C04+C07 catalog");
+
+        let frozen_markers_before = [
+            schema_marker_row(&connection, M4_SECRETARY_SCHEMA_MARKER),
+            schema_marker_row(&connection, M4_COORDINATION_SCHEMA_MARKER),
+            schema_marker_row(&connection, M4_DAILY_SCHEDULER_SCHEMA_MARKER),
+        ];
+
+        let transaction = connection
+            .transaction()
+            .expect("open exact C07-to-R02 upgrade transaction");
+        ensure_m4_secretary_schema_v1(&transaction, "2026-08-10T12:03:00Z")
+            .expect("install only the additive R02 overlay over verified C07");
+        transaction.commit().expect("commit additive R02 overlay");
+
+        verify_m4_secretary_schema_v1(&connection).expect("verify upgraded R02 catalog");
+        let frozen_markers_after = [
+            schema_marker_row(&connection, M4_SECRETARY_SCHEMA_MARKER),
+            schema_marker_row(&connection, M4_COORDINATION_SCHEMA_MARKER),
+            schema_marker_row(&connection, M4_DAILY_SCHEDULER_SCHEMA_MARKER),
+        ];
+        assert_eq!(
+            frozen_markers_after, frozen_markers_before,
+            "R02 must not rewrite any frozen C03/C04/C07 marker"
+        );
+        assert_eq!(
+            schema_marker_row(&connection, M4_R02_PERSONAL_OBJECT_SCHEMA_MARKER),
+            (
+                M4_R02_PERSONAL_OBJECT_SCHEMA_VERSION,
+                m4_r02_personal_object_schema_fingerprint_v1(),
+                "2026-08-10T12:03:00Z".to_string(),
+            )
         );
     }
 
@@ -4242,6 +4718,7 @@ mod tests {
             .iter()
             .chain(M4C04_TABLES.iter())
             .chain(M4C07_TABLES.iter())
+            .chain(M4R02_TABLES.iter())
             .map(|name| (*name).to_string())
             .collect::<BTreeSet<_>>();
         for forbidden in FORBIDDEN_M4C05_C06_C08_PLUS_TABLES {
@@ -4259,6 +4736,7 @@ mod tests {
             .iter()
             .chain(M4C04_TABLES.iter())
             .chain(M4C07_TABLES.iter())
+            .chain(M4R02_TABLES.iter())
         {
             let mut statement = connection
                 .prepare(&format!("PRAGMA table_info({table})"))

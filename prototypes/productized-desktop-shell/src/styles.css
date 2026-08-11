@@ -12732,6 +12732,12 @@ textarea {
   flex-direction: column;
   gap: var(--space-3);
 }
+.secretary-personal-object-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
 .secretary-personal-actions,
 .secretary-availability,
 .secretary-module-entries,
@@ -12762,6 +12768,63 @@ textarea {
 }
 .secretary-personal-actions li:last-child { padding-bottom: 0; border-bottom: 0; }
 .secretary-personal-actions small { color: var(--ink-light); font-size: var(--text-2xs); }
+.secretary-personal-actions strong {
+  color: var(--ink-deep);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.secretary-local-create {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--hair);
+}
+.secretary-local-create label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--ink-light);
+  font-size: var(--text-2xs);
+  font-weight: 500;
+}
+.secretary-local-create input,
+.secretary-local-create select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-subtle);
+  color: var(--ink-deep);
+  font: inherit;
+  font-size: var(--text-xs);
+}
+.secretary-local-create input:focus-visible,
+.secretary-local-create select:focus-visible,
+.secretary-local-submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.secretary-local-create input:disabled,
+.secretary-local-create select:disabled,
+.secretary-local-submit:disabled { cursor: not-allowed; opacity: 0.58; }
+.secretary-local-submit {
+  min-height: 40px;
+  width: fit-content;
+  padding-inline: var(--space-3);
+  font-size: var(--text-xs);
+}
+.secretary-local-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.secretary-local-actions .secretary-home-action {
+  min-height: 40px;
+  padding-inline: var(--space-2);
+}
 .secretary-availability dl,
 .secretary-continuity-refs {
   display: grid;

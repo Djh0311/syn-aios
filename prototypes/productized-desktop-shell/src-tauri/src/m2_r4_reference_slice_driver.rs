@@ -511,6 +511,7 @@ fn ensure_reference_work_item_ready(
                     project_root: paths.project_root.display().to_string(),
                     work_item_id: work_item_id.to_string(),
                     next_state: "ready_to_dispatch".to_string(),
+                    client_request_ref: None,
                     command_id: None,
                     idempotency_key: None,
                     expected_revision: None,
@@ -1514,8 +1515,7 @@ fn current_reference_command_binding(
     }
     let attempt = driver_attempt()?;
     let nonce = driver_nonce()?;
-    let expected = format!("workflow-state-sidecar.m2.r4:{attempt}:{nonce}");
-    if command_id != expected {
+    if !reference_command_matches_exact_binding(command_id, &attempt, &nonce) {
         return Err("m2_r4_reference_slice_driver_command_binding_mismatch".to_string());
     }
     Ok(Some(ReferenceCommandBinding {
@@ -1523,6 +1523,18 @@ fn current_reference_command_binding(
         nonce,
         command_id: command_id.to_string(),
     }))
+}
+
+fn reference_command_matches_exact_binding(command_id: &str, attempt: &str, nonce: &str) -> bool {
+    command_id == format!("workflow-state-sidecar.m2.r4:{attempt}:{nonce}")
+}
+
+/// The narrow compatibility bridge for the historical R4 explicit-identity
+/// caller. Registration requires the active driver plus its exact
+/// attempt/nonce command binding; it deliberately does not require the
+/// separate external-effect arm.
+pub(crate) fn current_reference_command_is_registered(command_id: &str) -> Result<bool, String> {
+    Ok(current_reference_command_binding(command_id)?.is_some())
 }
 
 pub(crate) fn wait_for_current_reference_command_gate(
@@ -1672,5 +1684,25 @@ mod tests {
         assert!(baseline.get("workflow_chain_runs").is_none());
         assert!(baseline.get("workflow_execution_controls").is_none());
         assert!(baseline.get("permission_requests").is_none());
+    }
+
+    #[test]
+    fn r4_command_prefix_alone_is_not_an_exact_driver_binding() {
+        let nonce = "0123456789abcdef0123456789abcdef";
+        assert!(reference_command_matches_exact_binding(
+            &format!("workflow-state-sidecar.m2.r4:result:{nonce}"),
+            "result",
+            nonce,
+        ));
+        assert!(!reference_command_matches_exact_binding(
+            &format!("workflow-state-sidecar.m2.r4:other:{nonce}"),
+            "result",
+            nonce,
+        ));
+        assert!(!reference_command_matches_exact_binding(
+            "workflow-state-sidecar.m2.r4:result:ffffffffffffffffffffffffffffffff",
+            "result",
+            nonce,
+        ));
     }
 }

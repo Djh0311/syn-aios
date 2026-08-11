@@ -216,6 +216,8 @@ fn initialize_workbench_sqlite_db(path: &Path, path_kind: &str) -> Result<(), St
         .map_err(|error| format!("initialize workbench sqlite schema failed: {error}"))?;
     crate::workbench_sqlite_schema_m2::apply_m2_schema(&connection)
         .map_err(|error| format!("initialize workbench sqlite m2 schema failed: {error}"))?;
+    crate::m4_source_owner_schema::apply_m4_source_owner_overlay(&connection)
+        .map_err(|error| format!("initialize M4 source-owner overlay failed: {error}"))?;
     connection
         .execute(
             "INSERT OR IGNORE INTO schema_migrations (version, applied_at, description) VALUES (?1, ?2, ?3)",

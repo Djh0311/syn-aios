@@ -114,6 +114,19 @@ pub(crate) struct M4ReminderRead {
     pub(crate) revision: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M4DecisionRead {
+    pub(crate) decision_projection_id: String,
+    pub(crate) source_identity_key: String,
+    pub(crate) source_event_key: String,
+    pub(crate) source_ref: String,
+    pub(crate) owner_status: String,
+    pub(crate) local_visibility_status: String,
+    pub(crate) decision_by_utc: Option<String>,
+    pub(crate) source_revision: String,
+    pub(crate) revision: String,
+}
+
 /// The only owner-writeback facts that M4C04 may expose.
 ///
 /// In particular, this type contains neither source owner state nor a raw
@@ -141,6 +154,7 @@ pub(crate) struct M4CoordinationSnapshot {
     pub(crate) personal_actions: Vec<M4PersonalActionRead>,
     pub(crate) notifications: Vec<M4NotificationRead>,
     pub(crate) reminders: Vec<M4ReminderRead>,
+    pub(crate) decisions: Vec<M4DecisionRead>,
     pub(crate) owner_writeback_receipts: Vec<M4OwnerWritebackReceiptRead>,
 }
 
@@ -161,6 +175,9 @@ pub(crate) fn validate_m4c04_coordination_snapshot(
     }
     for reminder in &snapshot.reminders {
         validate_m4c04_reminder(reminder)?;
+    }
+    for decision in &snapshot.decisions {
+        validate_m4r02_decision(decision)?;
     }
     for receipt in &snapshot.owner_writeback_receipts {
         validate_m4c04_owner_writeback_receipt(receipt)?;
@@ -185,6 +202,10 @@ pub(crate) fn sort_m4c04_coordination_snapshot(
     snapshot
         .reminders
         .sort_by(|left, right| left.reminder_id.cmp(&right.reminder_id));
+    snapshot.decisions.sort_by(|left, right| {
+        left.decision_projection_id
+            .cmp(&right.decision_projection_id)
+    });
     snapshot.owner_writeback_receipts.sort_by(|left, right| {
         (
             &left.source_ref.source_owner_ref,
@@ -287,6 +308,31 @@ fn validate_m4c04_reminder(reminder: &M4ReminderRead) -> Result<(), String> {
     };
     if !state_is_consistent {
         return Err("m4c04_reminder_state_invalid".to_string());
+    }
+    Ok(())
+}
+
+fn validate_m4r02_decision(decision: &M4DecisionRead) -> Result<(), String> {
+    if !m4c04_has_deterministic_id(&decision.decision_projection_id, "decision-projection:")
+        || !m4c04_has_deterministic_id(&decision.source_identity_key, "source:")
+        || !m4c04_has_deterministic_id(&decision.source_event_key, "source-event:")
+        || decision.source_ref != decision.source_identity_key
+        || !matches!(
+            decision.owner_status.as_str(),
+            "OPEN" | "ANSWERED" | "EXPIRED" | "WITHDRAWN"
+        )
+        || !matches!(
+            decision.local_visibility_status.as_str(),
+            "UNREAD" | "READ" | "DISMISSED"
+        )
+        || decision
+            .decision_by_utc
+            .as_deref()
+            .is_some_and(|value| m4_parse_rfc3339_utc_key(value).is_none())
+        || !m4c04_is_canonical_u64(&decision.source_revision)
+        || !m4c04_is_canonical_u64(&decision.revision)
+    {
+        return Err("m4r02_decision_read_invalid".to_string());
     }
     Ok(())
 }
@@ -2056,6 +2102,7 @@ mod tests {
             personal_actions: vec![m4c04_personal_action('a')],
             notifications: vec![m4c04_notification('b')],
             reminders: vec![m4c04_reminder('c')],
+            decisions: Vec::new(),
             owner_writeback_receipts: vec![m4c04_owner_writeback("PENDING")],
         }
     }

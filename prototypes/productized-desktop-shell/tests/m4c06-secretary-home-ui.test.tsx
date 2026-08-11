@@ -4,6 +4,7 @@ import {
   HomeView,
   secretaryCoordinationActionsFor,
   type SecretaryCoordinationIntent,
+  type SecretaryPersonalObjectIntent,
 } from "../src/views/HomeView";
 import type {
   SecretaryHomeAttentionItem,
@@ -84,6 +85,59 @@ function home(overrides: Partial<SecretaryHomeReadModel> = {}): SecretaryHomeRea
         source_authority: "M4_COORDINATION",
       },
     ],
+    local_objects: {
+      personal_actions: [{
+        personal_action_id: "personal-action:fixture-only",
+        explicit_user_command_ref: "user-command:fixture-only",
+        title: "准备季度复盘",
+        status: "OPEN",
+        due_at_utc: "2026-08-11T09:00:00Z",
+        revision: "4",
+      }],
+      notifications: [{
+        notification_id: "notification:fixture-only",
+        source_ref: {
+          link_kind: "INTERNAL_ROUTE",
+          source_owner_ref: "owner:workflow",
+          object_type: "workflow_attention",
+          canonical_source_object_id: "workflow-object:fixture",
+          expected_source_revision: "7",
+          opaque_route_ref: `route:sha256:${hash("r")}`,
+        },
+        subject_ref: `source-event:sha256:${hash("e")}`,
+        notification_purpose_code: "SOURCE_ATTENTION_PUBLISHED",
+        delivery_channel: "IN_APP",
+        status: "DELIVERED",
+        created_at_utc: "2026-08-10T09:00:00Z",
+        delivered_at_utc: "2026-08-10T09:00:00Z",
+        read_at_utc: null,
+        dismissed_at_utc: null,
+        revision: "2",
+      }],
+      reminders: [{
+        reminder_id: "reminder:fixture-only",
+        owner_ref: "personal-action:fixture-only",
+        explicit_schedule_command_id: `schedule-command:sha256:${hash("c")}`,
+        scheduled_for_utc: "2026-08-11T10:00:00Z",
+        iana_timezone: "Asia/Shanghai",
+        status: "SCHEDULED",
+        last_fired_at_utc: null,
+        snoozed_until_utc: null,
+        revision: "3",
+      }],
+      decisions: [{
+        decision_projection_id: "decision-projection:fixture-only",
+        source_identity_key: `source-identity:sha256:${hash("i")}`,
+        source_event_key: `source-event:sha256:${hash("j")}`,
+        source_ref: "proposal:fixture-only",
+        owner_status: "EXPIRED",
+        local_visibility_status: "UNREAD",
+        decision_by_utc: null,
+        source_revision: "8",
+        revision: "1",
+      }],
+      reminder_owner_refs: ["personal-action:fixture-only", `source-identity:sha256:${hash("i")}`],
+    },
     module_entries: [
       {
         entry_ref: "secretary-owner-route:fixture",
@@ -136,6 +190,7 @@ function home(overrides: Partial<SecretaryHomeReadModel> = {}): SecretaryHomeRea
   }
   const personalMarkup = markup.slice(personalAt, markup.indexOf("secretary-availability", personalAt));
   assert(personalMarkup.includes("personal-action:fixture-only"), "PersonalAction is independently rendered");
+  assert(personalMarkup.includes("准备季度复盘"), "PersonalAction title is rendered from the local-only DTO");
   assert(!personalMarkup.includes("open-loop:fixture-loop"), "OpenLoop is not cloned into PersonalAction");
   assert(!markup.includes("完成业务") && !markup.includes("创建 Todo"), "home exposes no owner completion or Todo creation affordance");
 }
@@ -255,6 +310,39 @@ function home(overrides: Partial<SecretaryHomeReadModel> = {}): SecretaryHomeRea
   const markup = renderToStaticMarkup(<HomeView secretaryHome={home()} onOperateCoordination={() => undefined} />);
   assert(markup.includes("secretary-home-action") && markup.includes("data-secretary-action"), "native action buttons retain keyboard/focus style hooks");
   assert(markup.includes("secretary-attention-spine") && markup.includes("secretary-home-layout"), "source spine retains the narrow-screen layout hooks");
+}
+
+// 6) Local object controls expose only ordinary local transitions. The typed
+// Decision keeps owner expiry and local visibility separate, and the Reminder
+// surface never exposes the server-owned fire transition.
+{
+  const model = home();
+  let personalIntent: SecretaryPersonalObjectIntent | null = null;
+  const tree = <HomeView secretaryHome={model} onOperatePersonalObject={(intent) => { personalIntent = intent; }} />;
+  const complete = findButtonByText(tree, "完成");
+  (complete?.props?.onClick as (() => void) | undefined)?.();
+  const dispatched = personalIntent as SecretaryPersonalObjectIntent | null;
+  assert(
+    dispatched?.action === "PERSONAL_ACTION_COMPLETE"
+      && "item_ref" in dispatched
+      && dispatched.item_ref === "personal-action:fixture-only",
+    "PersonalAction button emits only item/revision intent",
+  );
+  const markup = renderToStaticMarkup(tree);
+  for (const expected of [
+    "准备季度复盘",
+    "SOURCE_ATTENTION_PUBLISHED",
+    "server clock reminder",
+    "来源状态",
+    "EXPIRED",
+    "本地显示",
+    "UNREAD",
+    "data-secretary-personal-action=\"REMINDER_SNOOZE\"",
+    "data-secretary-personal-action=\"DECISION_DISMISS\"",
+  ]) {
+    assert(markup.includes(expected), `local object UI retains ${expected}`);
+  }
+  assert(!markup.includes("REMINDER_FIRE"), "Reminder fire remains server-owned and absent from the renderer");
 }
 
 console.log("m4c06-secretary-home-ui: hierarchy, source continuity, action matrix, recovery, focus and narrow-screen assertions passed");

@@ -50,6 +50,7 @@ const testEntries = [
   "tests/m4c07-secretary-daily-read-model.test.ts",
   "tests/m4c08-legacy-read-compatibility-migration.test.tsx",
   "tests/m4c09-isolated-product-app-acceptance.test.ts",
+  "tests/m4r02-ordinary-composition-driver.test.ts",
 ];
 
 try {

@@ -5,12 +5,16 @@ use crate::workbench_sqlite_repository::{
     CONFIRMED_DB_DENIED_PATH_MARKERS,
 };
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 #[path = "workbench_sqlite_storage_mode_m5c.rs"]
 mod m5c;
@@ -63,7 +67,8 @@ impl DbPrimaryJsonProjectionConfig {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 struct StorageModeFileV1 {
     schema_version: String,
     mode: String,
@@ -95,6 +100,47 @@ fn health_cache() -> &'static Mutex<BTreeMap<PathBuf, DbPrimaryHealth>> {
     CACHE.get_or_init(|| Mutex::new(BTreeMap::new()))
 }
 
+thread_local! {
+    /// Startup recovery must sometimes rebuild the JSON projection before the
+    /// path can be marked Ready. Keep that narrow authority thread-local so a
+    /// concurrent command in the same process cannot borrow it by path alone.
+    static STARTUP_JSON_PROJECTION_AUTHORITY: std::cell::RefCell<BTreeSet<PathBuf>> =
+        std::cell::RefCell::new(BTreeSet::new());
+}
+
+struct StartupJsonProjectionAuthorityGuard {
+    workflow_state_path: PathBuf,
+}
+
+impl Drop for StartupJsonProjectionAuthorityGuard {
+    fn drop(&mut self) {
+        STARTUP_JSON_PROJECTION_AUTHORITY.with(|authority| {
+            authority.borrow_mut().remove(&self.workflow_state_path);
+        });
+    }
+}
+
+fn with_startup_json_projection_authority<T>(
+    workflow_state_path: &Path,
+    operation: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    STARTUP_JSON_PROJECTION_AUTHORITY.with(|authority| {
+        authority
+            .borrow_mut()
+            .insert(workflow_state_path.to_path_buf());
+    });
+    let _guard = StartupJsonProjectionAuthorityGuard {
+        workflow_state_path: workflow_state_path.to_path_buf(),
+    };
+    operation()
+}
+
+fn has_startup_json_projection_authority(workflow_state_path: &Path) -> bool {
+    STARTUP_JSON_PROJECTION_AUTHORITY.with(|authority| {
+        authority.borrow().contains(workflow_state_path)
+    })
+}
+
 // A blocked DB primary writer falls back to the established JSON path. Record that transition
 // once for the process so repeated product writes do not flood the workflow audit or stderr.
 fn degradation_audit_recorded() -> &'static Mutex<bool> {
@@ -120,6 +166,148 @@ pub(crate) fn storage_mode_path(workflow_state_path: &Path) -> Result<PathBuf, S
         .join(STORAGE_MODE_FILE_NAME))
 }
 
+/// Publish an already-imported and reconciled DB-primary declaration without
+/// ever exposing a partial config file. The caller owns DB preparation and
+/// must invoke this only as its final durable step.
+pub(crate) fn install_db_primary_config_create_new(
+    config: &DbPrimaryJsonProjectionConfig,
+) -> Result<PathBuf, String> {
+    static TEMP_SEQUENCE: std::sync::atomic::AtomicU64 =
+        std::sync::atomic::AtomicU64::new(0);
+    validate_db_primary_config(&config.workflow_state_path, config)?;
+    let config_path = storage_mode_path(&config.workflow_state_path)?;
+    let parent = config_path.parent().ok_or_else(|| {
+        format!(
+            "storage_mode_config_parent_required:{}",
+            config_path.display()
+        )
+    })?;
+    let canonical_parent = fs::canonicalize(parent).map_err(|error| {
+        format!(
+            "storage_mode_config_parent_canonicalize_failed:{}:{error}",
+            parent.display()
+        )
+    })?;
+    if canonical_parent != parent {
+        return Err(format!(
+            "storage_mode_config_parent_must_be_canonical:expected={}:actual={}",
+            canonical_parent.display(),
+            parent.display()
+        ));
+    }
+
+    let file = StorageModeFileV1 {
+        schema_version: STORAGE_MODE_SCHEMA_VERSION.to_string(),
+        mode: DB_PRIMARY_JSON_PROJECTION.to_string(),
+        workflow_state_path: Some(config.workflow_state_path.clone()),
+        confirmed_workflow_state_path: Some(config.confirmed_workflow_state_path.clone()),
+        db_path: Some(config.db_path.clone()),
+        confirmed_db_path: Some(config.confirmed_db_path.clone()),
+        denied_path_markers: config.denied_path_markers.clone(),
+    };
+    let bytes = serde_json::to_vec_pretty(&file)
+        .map_err(|error| format!("storage_mode_config_serialize_failed:{error}"))?;
+    let temporary = parent.join(format!(
+        ".storage-mode.v1.{}.{}.{}.tmp",
+        std::process::id(),
+        crate::unix_timestamp_nanos(),
+        TEMP_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    ));
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut output = options.open(&temporary).map_err(|error| {
+        format!(
+            "storage_mode_config_temporary_create_failed:{}:{error}",
+            temporary.display()
+        )
+    })?;
+    if let Err(error) = output.write_all(&bytes).and_then(|()| output.sync_all()) {
+        let _ = fs::remove_file(&temporary);
+        return Err(format!(
+            "storage_mode_config_temporary_sync_failed:{}:{error}",
+            temporary.display()
+        ));
+    }
+    drop(output);
+
+    // hard_link supplies create-new publication semantics on the same
+    // filesystem. Unlike rename, it cannot replace an operator-owned config;
+    // unlike writing the final path directly, a crash cannot truncate it.
+    match fs::hard_link(&temporary, &config_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            let _ = fs::remove_file(&temporary);
+            verify_existing_storage_mode_config(&config_path, &file)?;
+            sync_storage_mode_config_parent(parent)?;
+            return Ok(config_path);
+        }
+        Err(error) => {
+            let _ = fs::remove_file(&temporary);
+            return Err(format!(
+                "storage_mode_config_publish_create_new_failed:{}:{error}",
+                config_path.display()
+            ));
+        }
+    }
+    fs::remove_file(&temporary).map_err(|error| {
+        format!(
+            "storage_mode_config_temporary_unlink_failed:{}:{error}",
+            temporary.display()
+        )
+    })?;
+    sync_storage_mode_config_parent(parent)?;
+    Ok(config_path)
+}
+
+fn verify_existing_storage_mode_config(
+    config_path: &Path,
+    expected: &StorageModeFileV1,
+) -> Result<(), String> {
+    let metadata = fs::symlink_metadata(config_path).map_err(|error| {
+        format!(
+            "storage_mode_config_existing_inspect_failed:{}:{error}",
+            config_path.display()
+        )
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("storage_mode_config_existing_conflict".to_string());
+    }
+    let canonical = fs::canonicalize(config_path).map_err(|error| {
+        format!(
+            "storage_mode_config_existing_canonicalize_failed:{}:{error}",
+            config_path.display()
+        )
+    })?;
+    if canonical != config_path {
+        return Err("storage_mode_config_existing_conflict".to_string());
+    }
+    let bytes = fs::read(config_path).map_err(|error| {
+        format!(
+            "storage_mode_config_existing_read_failed:{}:{error}",
+            config_path.display()
+        )
+    })?;
+    let existing: StorageModeFileV1 = serde_json::from_slice(&bytes)
+        .map_err(|_| "storage_mode_config_existing_conflict".to_string())?;
+    if &existing != expected {
+        return Err("storage_mode_config_existing_conflict".to_string());
+    }
+    Ok(())
+}
+
+fn sync_storage_mode_config_parent(parent: &Path) -> Result<(), String> {
+    fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| {
+            format!(
+                "storage_mode_config_parent_sync_failed:{}:{error}",
+                parent.display()
+            )
+        })
+}
+
 // Mode is intentionally cached by workflow-state path. A config change takes effect only after
 // process restart, so a running app cannot hot-switch its primary writer mid-operation.
 pub(crate) fn storage_mode_for(workflow_state_path: &Path) -> StorageMode {
@@ -131,6 +319,53 @@ pub(crate) fn storage_mode_for(workflow_state_path: &Path) -> StorageMode {
     let mode = resolve_storage_mode(workflow_state_path);
     cache.insert(key, mode.clone());
     mode
+}
+
+/// Called by the JSON writer while it holds `.workflow-state.v0.lock`.
+/// An ordinary process which cached JsonOnly may not continue writing after a
+/// different process publishes the DB-primary declaration. Legitimate JSON
+/// projection is limited to startup recovery on this thread or a process whose
+/// DB-primary startup health is already Ready.
+pub(crate) fn require_ordinary_json_projection_write_authority(
+    workflow_state_path: &Path,
+) -> Result<(), String> {
+    if !crate::ordinary_product_storage_bootstrap::has_ordinary_product_workflow_state_path_identity(
+        workflow_state_path,
+    ) {
+        return Ok(());
+    }
+    let config_path = storage_mode_path(workflow_state_path)?;
+    match fs::symlink_metadata(&config_path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "ordinary_product_storage_config_inspect_failed:{}:{error}",
+                config_path.display()
+            ))
+        }
+        Ok(_) => {}
+    }
+    if has_startup_json_projection_authority(workflow_state_path) {
+        return Ok(());
+    }
+    let db_primary_cached = mode_cache()
+        .lock()
+        .expect("storage mode cache lock")
+        .get(workflow_state_path)
+        .is_some_and(|mode| matches!(mode, StorageMode::DbPrimaryJsonProjection(_)));
+    let startup_ready = health_cache()
+        .lock()
+        .expect("storage mode health lock")
+        .get(workflow_state_path)
+        .is_some_and(|health| matches!(health, DbPrimaryHealth::Ready));
+    if db_primary_cached && startup_ready {
+        Ok(())
+    } else {
+        Err(
+            crate::ordinary_product_storage_bootstrap::ORDINARY_PRODUCT_STORAGE_RESTART_REQUIRED_MARKER
+                .to_string(),
+        )
+    }
 }
 
 // Once a DB commit has succeeded, a failed JSON projection must stop this process from
@@ -178,7 +413,7 @@ pub(crate) fn initialize_for_startup(workflow_state_path: &Path) -> Result<(), S
                 "storage mode=db_primary_json_projection db_path_hash={}",
                 config.db_path_hash()
             );
-            let startup = (|| {
+            let startup = with_startup_json_projection_authority(workflow_state_path, || {
                 quarantine_m2_workflow_state_sidecar_if_needed(&config)?;
                 require_no_unresolved_m2_workflow_state_sidecar_quarantine(&config)?;
                 let report = reconcile_db_vs_json(&config)?;
@@ -205,7 +440,7 @@ pub(crate) fn initialize_for_startup(workflow_state_path: &Path) -> Result<(), S
                 }
                 repair_m2_workflow_state_sidecar_checkpoint_after_startup(&config)?;
                 Ok(())
-            })();
+            });
             let mut health = health_cache().lock().expect("storage mode health lock");
             match startup {
                 Ok(()) => {
@@ -551,6 +786,7 @@ struct DbAuditRecord {
 #[derive(Clone, Debug, Default)]
 struct DbProjectionData {
     proposals: Vec<DbRecord>,
+    proposal_decisions: Vec<DbRecord>,
     proposal_audits: Vec<DbRecord>,
     authorizations: Vec<DbRecord>,
     authorization_audits: Vec<DbRecord>,
@@ -605,6 +841,14 @@ pub(crate) fn reconcile_db_vs_json(
             .map(|value| serde_json::to_value(value).map_err(|error| error.to_string()))
             .collect::<Result<Vec<_>, _>>()?,
         "proposal_id",
+    )?;
+    let proposal_decision_records = values_to_records(
+        proposal_store
+            .decisions
+            .into_iter()
+            .map(|value| serde_json::to_value(value).map_err(|error| error.to_string()))
+            .collect::<Result<Vec<_>, _>>()?,
+        "decision_id",
     )?;
     let authorization_records = values_to_records(
         authorization_store
@@ -693,6 +937,11 @@ pub(crate) fn reconcile_db_vs_json(
 
     let mut tables = vec![
         reconcile_table("project_proposals", database.proposals, proposal_records),
+        reconcile_table(
+            "project_proposal_decisions",
+            database.proposal_decisions,
+            proposal_decision_records,
+        ),
         reconcile_table(
             "plan_authorizations",
             normalize_authorizations(database.authorizations)?,
@@ -811,6 +1060,11 @@ fn replay_db_primary_projection(config: &DbPrimaryJsonProjectionConfig) -> Resul
         &config.workflow_state_path,
         &database
             .proposals
+            .iter()
+            .map(|record| record.value.clone())
+            .collect::<Vec<_>>(),
+        &database
+            .proposal_decisions
             .iter()
             .map(|record| record.value.clone())
             .collect::<Vec<_>>(),
@@ -1147,6 +1401,10 @@ fn load_db_projection_data(
         proposals: query_records(
             &connection,
             "SELECT proposal_id, record_hash, record_json FROM project_proposals",
+        )?,
+        proposal_decisions: query_records(
+            &connection,
+            "SELECT decision_id, record_hash, record_json FROM project_proposal_decisions",
         )?,
         proposal_audits: query_records(
             &connection,
@@ -1887,17 +2145,42 @@ fn validate_active_r4_root_binding(
     let Some(paths) = active_profile else {
         return Ok(());
     };
-    if actual_workflow_state_path != paths.workflow_state_path {
+    let ordinary_product_root = paths.app_data_root.join("CodexGovernanceWorkbench");
+    let ordinary_workflow_state_path = ordinary_product_root
+        .join("workflow-state")
+        .join("workflow-state.v0.json");
+    let (expected_workflow_state_path, expected_mode_path, expected_db_path) =
+        if actual_workflow_state_path == paths.workflow_state_path {
+            (
+                paths.workflow_state_path.clone(),
+                paths.root.join("runtime-artifacts").join(STORAGE_MODE_FILE_NAME),
+                paths.root.join("runtime-artifacts").join("workbench.sqlite"),
+            )
+        } else if actual_workflow_state_path == ordinary_workflow_state_path {
+            (
+                ordinary_workflow_state_path,
+                ordinary_product_root
+                    .join("runtime-artifacts")
+                    .join(STORAGE_MODE_FILE_NAME),
+                ordinary_product_root
+                    .join("runtime-artifacts")
+                    .join("workbench.sqlite"),
+            )
+        } else {
+            return Err(format!(
+                "storage_mode_r4_workflow_state_path_mismatch:legacy_expected={}:ordinary_expected={}:actual={}",
+                paths.workflow_state_path.display(),
+                ordinary_workflow_state_path.display(),
+                actual_workflow_state_path.display()
+            ));
+        };
+    if actual_workflow_state_path != expected_workflow_state_path {
         return Err(format!(
             "storage_mode_r4_workflow_state_path_mismatch:expected={}:actual={}",
-            paths.workflow_state_path.display(),
+            expected_workflow_state_path.display(),
             actual_workflow_state_path.display()
         ));
     }
-    let expected_mode_path = paths
-        .root
-        .join("runtime-artifacts")
-        .join(STORAGE_MODE_FILE_NAME);
     if storage_mode_path(actual_workflow_state_path)? != expected_mode_path {
         return Err(format!(
             "storage_mode_r4_config_path_mismatch:expected={}:actual={}",
@@ -1905,10 +2188,6 @@ fn validate_active_r4_root_binding(
             storage_mode_path(actual_workflow_state_path)?.display()
         ));
     }
-    let expected_db_path = paths
-        .root
-        .join("runtime-artifacts")
-        .join("workbench.sqlite");
     if config.db_path != expected_db_path || config.confirmed_db_path != expected_db_path {
         return Err(format!(
             "storage_mode_r4_db_path_mismatch:expected={}:configured={}:confirmed={}",
@@ -2124,6 +2403,39 @@ mod tests {
     }
 
     #[test]
+    fn m4r02_ordinary_isolated_db_primary_accepts_exact_product_data_binding() {
+        let paths = r4_runtime_paths(PathBuf::from("/tmp/syn-r4-acceptance-bound-root"));
+        let product_root = paths.app_data_root.join("CodexGovernanceWorkbench");
+        let workflow_state_path = product_root
+            .join("workflow-state")
+            .join("workflow-state.v0.json");
+        let db_path = product_root
+            .join("runtime-artifacts")
+            .join("workbench.sqlite");
+        let config = DbPrimaryJsonProjectionConfig {
+            workflow_state_path: workflow_state_path.clone(),
+            confirmed_workflow_state_path: workflow_state_path.clone(),
+            db_path: db_path.clone(),
+            confirmed_db_path: db_path,
+            denied_path_markers: vec![],
+        };
+
+        validate_active_r4_root_binding(&workflow_state_path, &config, Some(&paths))
+            .expect("ordinary isolated product paths remain exactly bound to active R4 app-data");
+
+        let mut legacy_db = config.clone();
+        legacy_db.db_path = paths.root.join("runtime-artifacts/workbench.sqlite");
+        legacy_db.confirmed_db_path = legacy_db.db_path.clone();
+        assert!(validate_active_r4_root_binding(
+            &workflow_state_path,
+            &legacy_db,
+            Some(&paths),
+        )
+        .expect_err("ordinary product workflow must not bind the legacy acceptance DB")
+        .starts_with("storage_mode_r4_db_path_mismatch"));
+    }
+
+    #[test]
     fn m2_t2_r4_db_primary_rejects_foreign_or_wrong_in_root_paths() {
         let paths = r4_runtime_paths(PathBuf::from("/tmp/syn-r4-acceptance-bound-root"));
         let mut foreign = r4_db_primary_config(&paths);
@@ -2216,6 +2528,7 @@ mod tests {
                 project_root: project_root.to_string(),
                 work_item_id: work_item_id.clone(),
                 next_state: "ready_to_dispatch".to_string(),
+                client_request_ref: None,
                 command_id: None,
                 idempotency_key: None,
                 expected_revision: None,
@@ -2503,9 +2816,606 @@ mod tests {
             created_by_role: crate::ProjectConsultationProposalCreatorRole::ProjectConsultant,
             suggest_workflow: false,
             tasks: vec![],
+            expires_at_ms: None,
             actor_id: "m5a-test".to_string(),
             expected_store_revision: None,
         }
+    }
+
+    #[test]
+    fn m4_new_proposal_identity_and_owner_outbox_are_opaque_for_long_sensitive_input() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m4-proposal-opaque-owner-id");
+        let mut input = proposal_input(&fixture);
+        let title_marker = format!("TITLE_PASSWORD_SECRET_MARKER_{}", "x".repeat(4096));
+        let goal_marker = format!("GOAL_ACCESS_TOKEN_MARKER_{}", "y".repeat(4096));
+        input.title = title_marker.clone();
+        input.user_goal = goal_marker.clone();
+        input.user_requirement_snapshot = goal_marker.clone();
+        input.goal_summary = goal_marker.clone();
+        let created = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &input,
+            1_786_100_000_000,
+            "m4-proposal-privacy",
+        )
+        .expect("long sensitive proposal still uses ordinary owner UoW");
+        assert!(created.proposal.proposal_id.starts_with("proposal:sha256:"));
+        assert_eq!(created.proposal.proposal_id.len(), "proposal:sha256:".len() + 64);
+
+        let connection = Connection::open_with_flags(
+            &fixture.config.db_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("open owner DB read only");
+        let outbox: [String; 13] = connection
+            .query_row(
+                "SELECT publication_id, owner_native_event_id, owner_native_watermark,
+                        source_event_id, source_owner_watermark, native_scope_seal,
+                        source_owner_ref, object_type, canonical_object_id,
+                        owner_status_code, opaque_route_ref, scrubbed_summary_ref,
+                        payload_hash
+                 FROM m4_source_owner_publications",
+                [],
+                |row| Ok([
+                    row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?,
+                    row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?,
+                    row.get(10)?, row.get(11)?, row.get(12)?,
+                ]),
+            )
+            .expect("read scrubbed owner outbox");
+        assert_eq!(outbox[8], created.proposal.proposal_id);
+        let outbox_debug = format!("{outbox:?}").to_ascii_lowercase();
+        for forbidden in [
+            fixture.project_root.to_ascii_lowercase(),
+            title_marker.to_ascii_lowercase(),
+            goal_marker.to_ascii_lowercase(),
+            "password".to_string(),
+            "secret".to_string(),
+            "access_token".to_string(),
+        ] {
+            assert!(
+                !outbox_debug.contains(&forbidden),
+                "owner outbox leaked forbidden marker: {forbidden}"
+            );
+        }
+    }
+
+    #[test]
+    fn m4_proposal_expiry_uses_explicit_deadline_server_clock_and_durable_owner_uow() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m4-proposal-expiry-owner-uow");
+        let server_now = crate::unix_timestamp_ms();
+        let mut expiring = proposal_input(&fixture);
+        expiring.title = "explicitly expiring proposal".to_string();
+        expiring.expires_at_ms = Some(server_now - 10_000);
+        let created = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &expiring,
+            server_now - 20_000,
+            "m4-expiry-create",
+        )
+        .expect("create proposal with explicit future-at-creation deadline");
+        assert_eq!(
+            created.proposal.status,
+            crate::ProjectConsultationProposalStatus::PendingUserConfirmation
+        );
+
+        let expired = crate::project_consultation_proposal_store::
+            expire_due_proposals_at_server_clock(&fixture.state_path)
+            .expect("server clock expiry sweep");
+        assert_eq!(
+            expired.expired_proposal_id.as_deref(),
+            Some(created.proposal.proposal_id.as_str())
+        );
+        assert_eq!(expired.store_revision, Some(2));
+        assert!(expired.drained);
+        let store = crate::project_consultation_proposal_store::load_store(
+            &fixture.state_path,
+            crate::unix_timestamp_ms(),
+        )
+        .expect("read expiry projection");
+        assert_eq!(store.proposals[0].status, crate::ProjectConsultationProposalStatus::Expired);
+        assert_eq!(store.revision, 2);
+
+        let connection = Connection::open_with_flags(
+            &fixture.config.db_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("read expiry owner DB");
+        let publications: Vec<(String, i64, Option<String>)> = {
+            let mut statement = connection
+                .prepare(
+                    "SELECT owner_status_code, source_revision, due_at_utc
+                     FROM m4_source_owner_publications ORDER BY publication_sequence",
+                )
+                .expect("prepare expiry publications");
+            statement
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .expect("query expiry publications")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("collect expiry publications")
+        };
+        assert_eq!(publications.len(), 2);
+        assert_eq!(publications[0].0, "pending_user_confirmation");
+        assert_eq!(publications[0].1, 1);
+        assert_eq!(publications[1].0, "expired");
+        assert_eq!(publications[1].1, 2);
+        let expected_due = crate::m2_clock::utc_rfc3339_at_epoch_ms(server_now - 10_000);
+        assert_eq!(publications[1].2.as_deref(), Some(expected_due.as_str()));
+        drop(connection);
+
+        let no_default_ttl = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &proposal_input(&fixture),
+            server_now + 1,
+            "m4-no-default-ttl",
+        )
+        .expect("create proposal without deadline");
+        assert_eq!(no_default_ttl.proposal.expires_at_ms, None);
+        let idle = crate::project_consultation_proposal_store::
+            expire_due_proposals_at_server_clock(&fixture.state_path)
+            .expect("no-default-TTL sweep");
+        assert_eq!(idle.expired_proposal_id, None);
+        assert!(idle.drained);
+    }
+
+    #[test]
+    fn m4r02_real_proposal_owner_dispatches_open_answered_expired_and_withdrawn_without_local_writeback(
+    ) {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m4r02-real-proposal-owner-four-states");
+        let m4_requested = std::env::temp_dir().join(format!(
+            "syn-m4c03-m4r02-proposal-owner-four-states-{}-{}",
+            std::process::id(),
+            crate::unix_timestamp_nanos()
+        ));
+        fs::create_dir_all(&m4_requested).expect("create isolated M4 repository root");
+        let m4_root = fs::canonicalize(&m4_requested).expect("canonical M4 repository root");
+        let m4_repository =
+            crate::m4_secretary_repository::M4SecretarySqliteRepository::open_isolated_fixture(
+                &m4_root,
+            )
+            .expect("open isolated production M4 repository");
+        let owner_repository = primary_repository_for_m2_t2_fail_closed_write(
+            &fixture.state_path,
+            "m4r02_proposal_owner_test_readback",
+        )
+        .expect("resolve ordinary proposal owner repository")
+        .expect("ordinary proposal owner is DB primary");
+        let dispatch = |expected_delivered: usize| {
+            let outcome = crate::m4_source_dispatcher::dispatch_pending_m4_source_owner_outbox(
+                &owner_repository,
+                &m4_repository,
+                "m4r02-proposal-owner-test-dispatcher",
+                64,
+            )
+            .expect("run production owner-to-M4 dispatcher");
+            assert_eq!(outcome.delivered_count, expected_delivered);
+            assert_eq!(outcome.quarantined_count, 0);
+            assert_eq!(outcome.retry_scheduled_count, 0);
+            assert!(outcome.drained);
+        };
+        let decision_id_for = |proposal_id: &str| {
+            let source_identity = crate::m4_secretary_domain::m4_source_identity_key(
+                crate::m4_source_owner_schema::M4_PROPOSAL_SOURCE_OWNER_REF,
+                crate::m4_secretary_domain::m4_primary_scope_ref(),
+                crate::m4_secretary_domain::M4_WORKFLOW_ATTENTION_SOURCE_TYPE,
+                proposal_id,
+            )
+            .expect("derive registered proposal source identity");
+            crate::m4_secretary_domain::m4_decision_projection_id(&source_identity)
+                .expect("derive typed Decision id")
+        };
+        let assert_owner_status = |proposal_id: &str, expected_status: &str| {
+            let decision_id = decision_id_for(proposal_id);
+            let snapshot = m4_repository
+                .read_coordination_snapshot(crate::m4_secretary_domain::m4_primary_scope_ref())
+                .expect("read M4 typed Decision snapshot");
+            let decision = snapshot
+                .decisions
+                .iter()
+                .find(|decision| decision.decision_projection_id == decision_id)
+                .expect("typed Decision for owner proposal");
+            assert_eq!(decision.owner_status, expected_status);
+        };
+
+        let server_now = crate::unix_timestamp_ms();
+        let mut answered_input = proposal_input(&fixture);
+        answered_input.title = "M4R02 answered owner proposal".to_string();
+        answered_input.expected_store_revision = Some(0);
+        let answered = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &answered_input,
+            server_now - 60_000,
+            "m4r02-owner-answered-create",
+        )
+        .expect("ordinary owner creates first proposal");
+        assert_eq!(answered.store_revision, 1);
+        dispatch(1);
+        assert_owner_status(&answered.proposal.proposal_id, "OPEN");
+
+        let answered_terminal = crate::project_consultation_proposal_store::record_decision(
+            &fixture.state_path,
+            &crate::RecordProjectConsultationProposalDecisionInput {
+                project_root: fixture.project_root.clone(),
+                proposal_id: answered.proposal.proposal_id.clone(),
+                actor_id: "user:m4r02-proposal-owner".to_string(),
+                decision: crate::ProjectConsultationProposalDecisionKind::Reject,
+                summary: "M4R02 ordinary reject without authorization side effects".to_string(),
+                expected_proposal_store_revision: Some(1),
+                expected_plan_authorization_store_revision: None,
+            },
+            server_now - 59_000,
+            "m4r02-owner-answered-decision",
+            "m4r02-owner-unused-authorization",
+            "m4r02-owner-unused-confirmation",
+        )
+        .expect("ordinary owner records terminal proposal decision");
+        assert_eq!(answered_terminal.store_revision, 2);
+        dispatch(1);
+        assert_owner_status(&answered.proposal.proposal_id, "ANSWERED");
+
+        let mut expired_input = proposal_input(&fixture);
+        expired_input.title = "M4R02 explicitly expiring owner proposal".to_string();
+        expired_input.expires_at_ms = Some(server_now - 10_000);
+        expired_input.expected_store_revision = Some(2);
+        let expired = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &expired_input,
+            server_now - 20_000,
+            "m4r02-owner-expired-create",
+        )
+        .expect("ordinary owner creates explicitly deadlined proposal");
+        assert_eq!(expired.store_revision, 3);
+        dispatch(1);
+        assert_owner_status(&expired.proposal.proposal_id, "OPEN");
+        let expiry =
+            crate::project_consultation_proposal_store::expire_due_proposals_at_server_clock(
+                &fixture.state_path,
+            )
+            .expect("ordinary server-clock expiry sweep");
+        assert_eq!(expiry.store_revision, Some(4));
+        assert_eq!(
+            expiry.expired_proposal_id.as_deref(),
+            Some(expired.proposal.proposal_id.as_str())
+        );
+        dispatch(1);
+        assert_owner_status(&expired.proposal.proposal_id, "EXPIRED");
+
+        let other_project_root = fresh_root("m4r02-other-project-scope");
+        let other_project_root_text = other_project_root.display().to_string();
+        crate::bootstrap_project_workflow_at(
+            &fixture.state_path,
+            &project_record(&other_project_root_text),
+        )
+        .expect("ordinary product adds a second exact project/workflow scope");
+        let other_project_id = crate::project_id(&other_project_root_text);
+        let other_workflow_id = crate::default_workflow_id(&other_project_root_text);
+        let mut other_scope_input = proposal_input(&fixture);
+        other_scope_input.project_root = other_project_root_text.clone();
+        other_scope_input.project_id = Some(other_project_id);
+        other_scope_input.workflow_id = Some(other_workflow_id);
+        other_scope_input.title = "M4R02 other-scope open proposal".to_string();
+        other_scope_input.scope_draft.allowed_read_roots = vec![other_project_root_text.clone()];
+        other_scope_input.scope_draft.allowed_write_roots = vec![other_project_root_text];
+        other_scope_input.expected_store_revision = Some(4);
+        let other_scope = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &other_scope_input,
+            server_now - 9_000,
+            "m4r02-owner-other-scope-create",
+        )
+        .expect("ordinary owner creates different-scope proposal");
+        assert_eq!(other_scope.store_revision, 5);
+        dispatch(1);
+        assert_owner_status(&other_scope.proposal.proposal_id, "OPEN");
+
+        let mut withdrawn_input = proposal_input(&fixture);
+        withdrawn_input.title = "M4R02 owner proposal to be withdrawn".to_string();
+        withdrawn_input.expected_store_revision = Some(5);
+        let withdrawn = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &withdrawn_input,
+            server_now - 8_000,
+            "m4r02-owner-withdrawn-create",
+        )
+        .expect("ordinary owner creates proposal that remains open");
+        assert_eq!(withdrawn.store_revision, 6);
+        dispatch(1);
+        assert_owner_status(&withdrawn.proposal.proposal_id, "OPEN");
+        let pre_replacement_projection = fs::read(
+            crate::project_consultation_proposal_store::sidecar_path(&fixture.state_path)
+                .expect("proposal sidecar path"),
+        )
+        .expect("capture pre-replacement JSON projection");
+
+        let resident_idempotency_key = "d".repeat(64);
+        let mut replacement_input = proposal_input(&fixture);
+        replacement_input.title = "M4R02 opaque replacement proposal".to_string();
+        replacement_input.actor_id = format!("supervisor-resident:{resident_idempotency_key}");
+        replacement_input.expected_store_revision = Some(6);
+        let replacement =
+            crate::project_consultation_proposal_store::create_resident_proposal_once(
+                &fixture.state_path,
+                &replacement_input,
+                server_now - 7_000,
+                "m4r02-owner-replacement-create",
+                &resident_idempotency_key,
+            )
+            .expect("resident owner creates same-scope replacement atomically");
+        assert_eq!(
+            replacement.store_revision, 8,
+            "E + one supersede + one create"
+        );
+        dispatch(2);
+        assert_owner_status(&withdrawn.proposal.proposal_id, "WITHDRAWN");
+        assert_owner_status(&replacement.proposal.proposal_id, "OPEN");
+
+        let store =
+            crate::project_consultation_proposal_store::load_store(&fixture.state_path, server_now)
+                .expect("read complete owner proposal store");
+        let status_for = |proposal_id: &str| {
+            store
+                .proposals
+                .iter()
+                .find(|proposal| proposal.proposal_id == proposal_id)
+                .expect("proposal in owner store")
+                .status
+        };
+        assert_eq!(
+            status_for(&answered.proposal.proposal_id),
+            crate::ProjectConsultationProposalStatus::Rejected,
+            "terminal proposal is never superseded"
+        );
+        assert_eq!(
+            status_for(&expired.proposal.proposal_id),
+            crate::ProjectConsultationProposalStatus::Expired,
+            "expired proposal is never superseded"
+        );
+        assert_eq!(
+            status_for(&other_scope.proposal.proposal_id),
+            crate::ProjectConsultationProposalStatus::PendingUserConfirmation,
+            "different exact scope remains open"
+        );
+        assert_eq!(
+            status_for(&withdrawn.proposal.proposal_id),
+            crate::ProjectConsultationProposalStatus::Superseded
+        );
+        assert_eq!(
+            status_for(&replacement.proposal.proposal_id),
+            crate::ProjectConsultationProposalStatus::PendingUserConfirmation
+        );
+
+        let owner_connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open owner DB for exact revision evidence");
+        let publications = {
+            let mut statement = owner_connection
+                .prepare(
+                    "SELECT canonical_object_id, owner_status_code, source_revision,
+                            owner_native_watermark, owner_native_event_id
+                     FROM m4_source_owner_publications
+                     WHERE adapter_id = ?1 ORDER BY publication_sequence",
+                )
+                .expect("prepare proposal publication evidence query");
+            statement
+                .query_map(
+                    [crate::m4_source_owner_schema::M4_PROPOSAL_DECISION_SOURCE_ADAPTER_ID],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, i64>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(4)?,
+                        ))
+                    },
+                )
+                .expect("query proposal publication evidence")
+                .collect::<Result<Vec<_>, _>>()
+                .expect("collect proposal publication evidence")
+        };
+        assert_eq!(publications.len(), 8);
+        for (index, publication) in publications.iter().enumerate() {
+            let revision = i64::try_from(index + 1).expect("bounded test revision");
+            assert_eq!(publication.2, revision);
+            assert_eq!(publication.3, revision.to_string());
+        }
+        assert_eq!(
+            (&publications[6].0, publications[6].1.as_str()),
+            (&withdrawn.proposal.proposal_id, "superseded")
+        );
+        assert_eq!(
+            (&publications[7].0, publications[7].1.as_str()),
+            (
+                &replacement.proposal.proposal_id,
+                "pending_user_confirmation"
+            )
+        );
+        let superseded_audit: Value = owner_connection
+            .query_row(
+                "SELECT record_json FROM workflow_audit_events WHERE event_id = ?1",
+                [&publications[6].4],
+                |row| row.get::<_, String>(0),
+            )
+            .map(|json| serde_json::from_str(&json).expect("parse superseded owner audit"))
+            .expect("read superseded owner audit");
+        assert_eq!(
+            superseded_audit["event_type"],
+            "project_consultation_proposal_superseded"
+        );
+        assert!(superseded_audit["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.ends_with(&format!(
+                "replacement_proposal_id={}",
+                replacement.proposal.proposal_id
+            ))));
+        let before_replay_counts: (i64, i64, i64) = (
+            owner_connection
+                .query_row("SELECT COUNT(*) FROM project_proposals", [], |row| row.get(0))
+                .expect("count proposals before replay"),
+            owner_connection
+                .query_row(
+                    "SELECT COUNT(*) FROM workflow_audit_events WHERE target_kind = 'project_consultation_proposal'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("count proposal audits before replay"),
+            i64::try_from(publications.len()).expect("publication count fits i64"),
+        );
+        let owner_hash_before_local: String = owner_connection
+            .query_row(
+                "SELECT record_hash FROM project_proposals WHERE proposal_id = ?1",
+                [&withdrawn.proposal.proposal_id],
+                |row| row.get(0),
+            )
+            .expect("read withdrawn owner hash before local action");
+        drop(owner_connection);
+
+        let replay = crate::project_consultation_proposal_store::create_resident_proposal_once(
+            &fixture.state_path,
+            &replacement_input,
+            server_now - 6_000,
+            "m4r02-owner-replacement-replay",
+            &resident_idempotency_key,
+        )
+        .expect("resident exact replay returns original replacement");
+        assert_eq!(
+            replay.proposal.proposal_id,
+            replacement.proposal.proposal_id
+        );
+        assert_eq!(replay.audit_event, replacement.audit_event);
+        assert_eq!(replay.store_revision, 8);
+        dispatch(0);
+        let replay_connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open owner DB after exact replay");
+        let after_replay_counts: (i64, i64, i64) = (
+            replay_connection
+                .query_row("SELECT COUNT(*) FROM project_proposals", [], |row| row.get(0))
+                .expect("count proposals after replay"),
+            replay_connection
+                .query_row(
+                    "SELECT COUNT(*) FROM workflow_audit_events WHERE target_kind = 'project_consultation_proposal'",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("count proposal audits after replay"),
+            replay_connection
+                .query_row(
+                    "SELECT COUNT(*) FROM m4_source_owner_publications WHERE adapter_id = ?1",
+                    [crate::m4_source_owner_schema::M4_PROPOSAL_DECISION_SOURCE_ADAPTER_ID],
+                    |row| row.get(0),
+                )
+                .expect("count proposal publications after replay"),
+        );
+        assert_eq!(after_replay_counts, before_replay_counts);
+        drop(replay_connection);
+
+        let withdrawn_decision_id = decision_id_for(&withdrawn.proposal.proposal_id);
+        let withdrawn_snapshot = m4_repository
+            .read_coordination_snapshot(crate::m4_secretary_domain::m4_primary_scope_ref())
+            .expect("read withdrawn Decision before local actions");
+        let withdrawn_revision = withdrawn_snapshot
+            .decisions
+            .iter()
+            .find(|decision| decision.decision_projection_id == withdrawn_decision_id)
+            .expect("withdrawn Decision before local actions")
+            .revision
+            .parse::<u64>()
+            .expect("parse withdrawn local revision");
+        let read_key = crate::m4_secretary_domain::m4_internal_id(
+            "command:sha256:",
+            "syn.m4r02.proposal-owner-local-read/v1",
+            &[&withdrawn_decision_id],
+        )
+        .expect("derive local read idempotency key");
+        m4_repository
+            .mark_decision_read(&withdrawn_decision_id, withdrawn_revision, &read_key)
+            .expect("ordinary local Decision read");
+        let dismiss_key = crate::m4_secretary_domain::m4_internal_id(
+            "command:sha256:",
+            "syn.m4r02.proposal-owner-local-dismiss/v1",
+            &[&withdrawn_decision_id],
+        )
+        .expect("derive local dismiss idempotency key");
+        m4_repository
+            .dismiss_decision(&withdrawn_decision_id, withdrawn_revision + 1, &dismiss_key)
+            .expect("ordinary local Decision dismiss");
+        let after_local_snapshot = m4_repository
+            .read_coordination_snapshot(crate::m4_secretary_domain::m4_primary_scope_ref())
+            .expect("read withdrawn Decision after local actions");
+        let after_local = after_local_snapshot
+            .decisions
+            .iter()
+            .find(|decision| decision.decision_projection_id == withdrawn_decision_id)
+            .expect("withdrawn Decision after local actions");
+        assert_eq!(after_local.owner_status, "WITHDRAWN");
+        assert_eq!(after_local.local_visibility_status, "DISMISSED");
+        let owner_after_local =
+            crate::project_consultation_proposal_store::load_store(&fixture.state_path, server_now)
+                .expect("read owner after local M4 actions");
+        assert_eq!(owner_after_local.revision, 8);
+        let owner_connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open owner after local M4 actions");
+        let owner_hash_after_local: String = owner_connection
+            .query_row(
+                "SELECT record_hash FROM project_proposals WHERE proposal_id = ?1",
+                [&withdrawn.proposal.proposal_id],
+                |row| row.get(0),
+            )
+            .expect("read withdrawn owner hash after local action");
+        assert_eq!(owner_hash_after_local, owner_hash_before_local);
+        let publication_count_after_local: i64 = owner_connection
+            .query_row(
+                "SELECT COUNT(*) FROM m4_source_owner_publications WHERE adapter_id = ?1",
+                [crate::m4_source_owner_schema::M4_PROPOSAL_DECISION_SOURCE_ADAPTER_ID],
+                |row| row.get(0),
+            )
+            .expect("count owner publications after local actions");
+        assert_eq!(publication_count_after_local, 8);
+        drop(owner_connection);
+
+        let proposal_sidecar =
+            crate::project_consultation_proposal_store::sidecar_path(&fixture.state_path)
+                .expect("proposal sidecar path for crash recovery");
+        fs::write(&proposal_sidecar, pre_replacement_projection)
+            .expect("simulate DB-committed/JSON-not-projected replacement crash");
+        clear_storage_mode_cache_for_path_for_tests(&fixture.state_path);
+        initialize_for_startup(&fixture.state_path)
+            .expect("restart recovers both supersede and replacement projections");
+        let recovered =
+            crate::project_consultation_proposal_store::load_store(&fixture.state_path, server_now)
+                .expect("read recovered proposal owner projection");
+        assert_eq!(
+            recovered.revision, 8,
+            "recovery must not drift owner revision"
+        );
+        assert_eq!(
+            recovered
+                .proposals
+                .iter()
+                .find(|proposal| proposal.proposal_id == withdrawn.proposal.proposal_id)
+                .expect("recovered withdrawn proposal")
+                .status,
+            crate::ProjectConsultationProposalStatus::Superseded
+        );
+        assert_eq!(
+            recovered
+                .proposals
+                .iter()
+                .find(|proposal| proposal.proposal_id == replacement.proposal.proposal_id)
+                .expect("recovered replacement proposal")
+                .status,
+            crate::ProjectConsultationProposalStatus::PendingUserConfirmation
+        );
+        assert!(reconcile_db_vs_json(&fixture.config)
+            .expect("post-recovery proposal reconciliation")
+            .is_green());
+        let _ = fs::remove_dir_all(m4_root);
+        let _ = fs::remove_dir_all(other_project_root);
     }
 
     fn authorization_input(
@@ -2680,6 +3590,7 @@ mod tests {
                 .expect("open fixture DB read only");
         [
             "project_proposals",
+            "project_proposal_decisions",
             "project_proposal_audit_events",
             "plan_authorizations",
             "plan_authorization_audit_events",
@@ -2849,6 +3760,7 @@ mod tests {
             created_by_role: crate::ProjectConsultationProposalCreatorRole::ProjectConsultant,
             suggest_workflow: false,
             tasks: vec![],
+            expires_at_ms: None,
             actor_id: "m5a-byte-test".to_string(),
             expected_store_revision: None,
         };
@@ -2950,6 +3862,7 @@ mod tests {
             table_names,
             vec![
                 "project_proposals",
+                "project_proposal_decisions",
                 "plan_authorizations",
                 "projects",
                 "agent_adapters",
@@ -3295,6 +4208,7 @@ mod tests {
                 project_root: fixture.project_root.clone(),
                 work_item_id: fixture.work_item_id.clone(),
                 next_state: "ready_for_review".to_string(),
+                client_request_ref: None,
                 command_id: None,
                 idempotency_key: None,
                 expected_revision: None,
@@ -3382,6 +4296,7 @@ mod tests {
             project_root: fixture.project_root.clone(),
             work_item_id: fixture.work_item_id.clone(),
             next_state: "running".to_string(),
+            client_request_ref: None,
             command_id: Some("m2-reference-slice-replay-command".to_string()),
             idempotency_key: Some("m2-reference-slice-replay-key".to_string()),
             expected_revision: Some(expected_revision),
@@ -3417,6 +4332,19 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("load the reference-slice domain event");
+        let source_publication: (i64, String, String, String) = connection
+            .query_row(
+                "SELECT publication_sequence, owner_native_event_id,
+                        owner_status_code, dispatch_status
+                 FROM m4_source_owner_publications",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("load WorkItem owner publication from the same UoW");
+        assert_eq!(source_publication.0, 1);
+        assert_eq!(source_publication.1, event_id);
+        assert_eq!(source_publication.2, "running");
+        assert_eq!(source_publication.3, "PENDING");
         let (checkpoint_version, checkpoint_last_event, checkpoint_watermark, checkpoint_status, checkpoint_error):
             (String, Option<String>, String, String, Option<String>) = connection
             .query_row(
@@ -3487,6 +4415,18 @@ mod tests {
             [1, 1, 1, 0, 1],
             "completed replay must not grow the M2 ledger"
         );
+        let publication_count: i64 = Connection::open_with_flags(
+            &fixture.config.db_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("reopen owner DB")
+        .query_row(
+            "SELECT COUNT(*) FROM m4_source_owner_publications",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count replayed owner publications");
+        assert_eq!(publication_count, 1, "receipt replay may not duplicate publication");
     }
 
     #[test]
@@ -3502,6 +4442,7 @@ mod tests {
             project_root: fixture.project_root.clone(),
             work_item_id: fixture.work_item_id.clone(),
             next_state: "running".to_string(),
+            client_request_ref: None,
             command_id: Some("m2-reference-slice-external-pending-command".to_string()),
             idempotency_key: Some("m2-reference-slice-external-pending-key".to_string()),
             expected_revision: Some(expected_revision),
@@ -3640,6 +4581,7 @@ mod tests {
             project_root: fixture.project_root.clone(),
             work_item_id: fixture.work_item_id.clone(),
             next_state: "running".to_string(),
+            client_request_ref: None,
             command_id: Some("m2-reference-slice-full-aggregate-command".to_string()),
             idempotency_key: Some("m2-reference-slice-full-aggregate-key".to_string()),
             expected_revision: Some(expected_revision),
@@ -3810,6 +4752,7 @@ mod tests {
             project_root: fixture.project_root.clone(),
             work_item_id: fixture.work_item_id.clone(),
             next_state: "running".to_string(),
+            client_request_ref: None,
             command_id: Some("m2-reference-slice-persisted-projection-tamper-command".to_string()),
             idempotency_key: Some("m2-reference-slice-persisted-projection-tamper-key".to_string()),
             expected_revision: Some(expected_revision),
@@ -5031,6 +5974,7 @@ mod tests {
             project_root: fixture.project_root.clone(),
             work_item_id: fixture.work_item_id.clone(),
             next_state: "failed".to_string(),
+            client_request_ref: None,
             command_id: Some("m2-reference-slice-denied-command".to_string()),
             idempotency_key: Some("m2-reference-slice-denied-key".to_string()),
             expected_revision: Some(expected_revision),
@@ -5115,6 +6059,7 @@ mod tests {
                 project_root: fixture.project_root.clone(),
                 work_item_id: fixture.work_item_id.clone(),
                 next_state: next_state.to_string(),
+                client_request_ref: None,
                 command_id: Some(command_id.to_string()),
                 idempotency_key: Some(idempotency_key.to_string()),
                 expected_revision: Some(expected_revision),
@@ -5245,6 +6190,110 @@ mod tests {
     }
 
     #[test]
+    fn m4_proposal_decision_db_ahead_restart_recovers_decision_and_owner_revision() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        let fixture = db_primary_fixture("m4-proposal-decision-restart-recovery");
+        let created = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &proposal_input(&fixture),
+            1_786_200_000_000,
+            "m4-decision-recovery-create",
+        )
+        .expect("create base proposal");
+        let mut rejected_proposal =
+            serde_json::to_value(&created.proposal).expect("proposal JSON");
+        rejected_proposal["status"] = Value::String("rejected".to_string());
+        rejected_proposal["updated_at_ms"] = Value::from(1_786_200_000_001_i64);
+        let decision = json!({
+            "decision_id": "decision:proposal:m4-restart-rejected",
+            "proposal_id": created.proposal.proposal_id,
+            "decided_by": "user",
+            "decision": "reject",
+            "summary": "reject during crash window",
+            "created_at_ms": 1_786_200_000_001_i64
+        });
+        let audit_payload = json!({
+            "audit_event_id": "audit:proposal:m4-restart-rejected",
+            "event_type": "project_consultation_proposal_rejected",
+            "actor_id": "user:m4-restart",
+            "actor_role": "user",
+            "project_id": fixture.project_id,
+            "workflow_id": fixture.workflow_id,
+            "proposal_id": created.proposal.proposal_id,
+            "plan_authorization_id": null,
+            "before_status": "pending_user_confirmation",
+            "after_status": "rejected",
+            "reason": "reject during crash window",
+            "created_at_ms": 1_786_200_000_001_i64
+        });
+        let repository = primary_repository_for_write(&fixture.state_path)
+            .expect("DB-primary gate")
+            .expect("DB-primary repository");
+        repository
+            .record_proposal_decision_with_audit_and_m4_publication(
+                &rejected_proposal,
+                &decision,
+                &RepositoryAuditEntry {
+                    event_id: "audit:proposal:m4-restart-rejected".to_string(),
+                    target_kind: "project_consultation_proposal".to_string(),
+                    target_id: created.proposal.proposal_id.clone(),
+                    payload: audit_payload,
+                },
+                2,
+                None,
+            )
+            .expect("commit DB-only decision crash window");
+
+        let before_restart = reconcile_db_vs_json(&fixture.config)
+            .expect("inspect DB-leading decision before restart");
+        let decision_table = before_restart
+            .tables
+            .iter()
+            .find(|table| table.table_name == "project_proposal_decisions")
+            .expect("decision reconciliation table");
+        assert_eq!(
+            decision_table.db_leading,
+            vec!["decision:proposal:m4-restart-rejected".to_string()]
+        );
+
+        clear_storage_mode_cache_for_tests();
+        initialize_for_startup(&fixture.state_path)
+            .expect("restart replays proposal decision and audit");
+        let recovered = crate::project_consultation_proposal_store::load_store(
+            &fixture.state_path,
+            crate::unix_timestamp_ms(),
+        )
+        .expect("read recovered proposal store");
+        assert_eq!(recovered.revision, 2);
+        assert_eq!(recovered.decisions.len(), 1);
+        assert_eq!(
+            recovered.decisions[0].decision_id,
+            "decision:proposal:m4-restart-rejected"
+        );
+        assert_eq!(
+            recovered.proposals[0].status,
+            crate::ProjectConsultationProposalStatus::Rejected
+        );
+        assert!(
+            reconcile_db_vs_json(&fixture.config)
+                .expect("post-recovery reconciliation")
+                .is_green()
+        );
+        let publication_count: i64 = Connection::open_with_flags(
+            &fixture.config.db_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .expect("open recovered owner DB")
+        .query_row(
+            "SELECT COUNT(*) FROM m4_source_owner_publications",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count owner publications after recovery");
+        assert_eq!(publication_count, 2, "restart must not duplicate owner events");
+    }
+
+    #[test]
     fn m5a_db_ahead_replays_on_restart_and_json_ahead_degrades_to_json() {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("replay-and-block");
@@ -5324,13 +6373,38 @@ mod tests {
         assert!(primary_repository_for_write(&fixture.state_path)
             .expect("blocked primary mode must degrade to JSON")
             .is_none());
-        crate::project_consultation_proposal_store::create_proposal(
+        let proposal_sidecar_before_freeze =
+            crate::project_consultation_proposal_store::load_store(
+                &fixture.state_path,
+                crate::unix_timestamp_ms(),
+            )
+            .expect("proposal sidecar before registered-owner freeze");
+        let frozen_error = crate::project_consultation_proposal_store::create_proposal(
             &fixture.state_path,
             &proposal_input(&fixture),
             1_700_000_000_203,
-            "m5a-json-ahead-json-fallback",
+            "m5a-json-ahead-registered-owner-freeze",
         )
-        .expect("blocked product write must succeed through JSON fallback");
+        .expect_err("registered proposal owner must freeze rather than fall back to JSON");
+        assert!(
+            frozen_error.contains("db_primary_m2_t2_write_frozen"),
+            "{frozen_error}"
+        );
+        assert_eq!(
+            crate::project_consultation_proposal_store::load_store(
+                &fixture.state_path,
+                crate::unix_timestamp_ms(),
+            )
+            .expect("proposal sidecar after registered-owner freeze"),
+            proposal_sidecar_before_freeze
+        );
+        crate::plan_authorization_store::create_authorization(
+            &fixture.state_path,
+            &authorization_input(&fixture, &created.proposal.proposal_id),
+            1_700_000_000_204,
+            "m5a-json-ahead-legacy-authorization-fallback",
+        )
+        .expect("remaining legacy product write must succeed through JSON fallback");
         let audits = degradation_audits(&fixture.state_path);
         assert_eq!(audits.len(), 1);
         assert!(
@@ -5348,6 +6422,13 @@ mod tests {
     fn m5a_projection_failure_blocks_db_writes_and_degrades_to_json() {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("projection-failure-block");
+        let base_proposal = crate::project_consultation_proposal_store::create_proposal(
+            &fixture.state_path,
+            &proposal_input(&fixture),
+            1_700_000_000_300,
+            "m5a-projection-failure-base-proposal",
+        )
+        .expect("create proposal before injected projection failure");
         let error = complete_db_primary_json_projection(
             &fixture.state_path,
             "injected_projection_failure",
@@ -5362,13 +6443,38 @@ mod tests {
         assert!(primary_repository_for_write(&fixture.state_path)
             .expect("subsequent DB-primary writes must degrade to JSON")
             .is_none());
-        crate::project_consultation_proposal_store::create_proposal(
+        let proposal_sidecar_before_freeze =
+            crate::project_consultation_proposal_store::load_store(
+                &fixture.state_path,
+                crate::unix_timestamp_ms(),
+            )
+            .expect("proposal sidecar before registered-owner freeze");
+        let frozen_error = crate::project_consultation_proposal_store::create_proposal(
             &fixture.state_path,
             &proposal_input(&fixture),
             1_700_000_000_301,
-            "m5a-projection-failure-json-fallback",
+            "m5a-projection-failure-registered-owner-freeze",
         )
-        .expect("blocked product write must succeed through JSON fallback");
+        .expect_err("registered proposal owner must freeze rather than fall back to JSON");
+        assert!(
+            frozen_error.contains("db_primary_m2_t2_write_frozen"),
+            "{frozen_error}"
+        );
+        assert_eq!(
+            crate::project_consultation_proposal_store::load_store(
+                &fixture.state_path,
+                crate::unix_timestamp_ms(),
+            )
+            .expect("proposal sidecar after registered-owner freeze"),
+            proposal_sidecar_before_freeze
+        );
+        crate::plan_authorization_store::create_authorization(
+            &fixture.state_path,
+            &authorization_input(&fixture, &base_proposal.proposal.proposal_id),
+            1_700_000_000_302,
+            "m5a-projection-failure-legacy-authorization-fallback",
+        )
+        .expect("remaining legacy product write must succeed through JSON fallback");
         let audits = degradation_audits(&fixture.state_path);
         assert_eq!(audits.len(), 1);
         assert!(
@@ -5430,6 +6536,18 @@ mod tests {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("blocked-six-flow-json-fallback");
         let supervisor_runtime = prepare_active_supervisor_run(&fixture);
+        let proposal_sidecar_before_freeze =
+            crate::project_consultation_proposal_store::load_store(
+                &fixture.state_path,
+                crate::unix_timestamp_ms(),
+            )
+            .expect("proposal sidecar before registered-owner freeze");
+        let source_proposal_id = proposal_sidecar_before_freeze
+            .proposals
+            .last()
+            .expect("supervisor setup proposal")
+            .proposal_id
+            .clone();
         let db_before_fallback = db_primary_row_counts(&fixture.config);
         block_db_primary_writes(
             &fixture.state_path,
@@ -5437,16 +6555,28 @@ mod tests {
             "injected blocked fixture reason",
         );
 
-        let proposal = crate::project_consultation_proposal_store::create_proposal(
+        let frozen_error = crate::project_consultation_proposal_store::create_proposal(
             &fixture.state_path,
             &proposal_input(&fixture),
             1_700_000_000_500,
-            "m5a-blocked-six-flow-proposal",
+            "m5a-blocked-six-flow-registered-owner-freeze",
         )
-        .expect("proposal flow must fall back to JSON");
+        .expect_err("registered proposal owner must freeze rather than fall back to JSON");
+        assert!(
+            frozen_error.contains("db_primary_m2_t2_write_frozen"),
+            "{frozen_error}"
+        );
+        assert_eq!(
+            crate::project_consultation_proposal_store::load_store(
+                &fixture.state_path,
+                crate::unix_timestamp_ms(),
+            )
+            .expect("proposal sidecar after registered-owner freeze"),
+            proposal_sidecar_before_freeze
+        );
         let _authorization = crate::plan_authorization_store::create_authorization(
             &fixture.state_path,
-            &authorization_input(&fixture, &proposal.proposal.proposal_id),
+            &authorization_input(&fixture, &source_proposal_id),
             1_700_000_000_501,
             "m5a-blocked-six-flow-authorization",
         )
@@ -5557,5 +6687,53 @@ mod tests {
         assert!(!proposal_sidecar.exists());
         assert!(!authorization_sidecar.exists());
         assert!(!supervisor_sidecar.exists());
+    }
+
+    #[test]
+    fn m4r02_config_create_new_is_concurrently_idempotent_and_conflict_closed() {
+        let _serial = test_lock().lock().expect("storage mode test lock");
+        clear_storage_mode_cache_for_tests();
+        let root = fresh_root("m4r02-config-create-new");
+        let project_root = root.join("fixture-project").display().to_string();
+        let (state_path, _, _, _) = bootstrap_json_state(&root, &project_root);
+        let config = Arc::new(db_primary_config(&state_path));
+        let barrier = Arc::new(Barrier::new(2));
+        let mut joins = Vec::new();
+        for _ in 0..2 {
+            let config = config.clone();
+            let barrier = barrier.clone();
+            joins.push(std::thread::spawn(move || {
+                barrier.wait();
+                install_db_primary_config_create_new(&config)
+            }));
+        }
+        let published = joins
+            .into_iter()
+            .map(|join| join.join().expect("config publisher thread"))
+            .collect::<Result<Vec<_>, _>>()
+            .expect("matching concurrent publishers are idempotent");
+        assert_eq!(published[0], published[1]);
+        let config_path = published[0].clone();
+        let bytes = fs::read(&config_path).expect("published config bytes");
+        assert_eq!(
+            install_db_primary_config_create_new(&config).expect("exact replay"),
+            config_path
+        );
+        assert_eq!(
+            fs::read(&config_path).expect("config bytes after replay"),
+            bytes
+        );
+
+        let mut conflicting = (*config).clone();
+        conflicting.denied_path_markers = vec!["different-policy-marker".to_string()];
+        let error = install_db_primary_config_create_new(&conflicting)
+            .expect_err("different existing config must fail closed");
+        assert_eq!(error, "storage_mode_config_existing_conflict");
+        assert_eq!(
+            fs::read(&config_path).expect("config bytes after conflict"),
+            bytes
+        );
+        fs::remove_dir_all(&root).expect("remove config fixture root");
+        clear_storage_mode_cache_for_tests();
     }
 }

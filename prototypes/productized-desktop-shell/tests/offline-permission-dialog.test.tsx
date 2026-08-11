@@ -3123,9 +3123,15 @@ function runShellScenario() {
   const advance = advanceButton.props?.onClick;
   assert(typeof advance === "function", "推进状态按钮没有 onClick");
   advance({ preventDefault() {}, stopPropagation() {} });
+  const capturedAdvanceAction = capturedAction as PendingAction | null;
+  const clientRequestRef = capturedAdvanceAction?.workItemStateUpdate?.client_request_ref;
+  assert(
+    typeof clientRequestRef === "string" && /^[a-f0-9]{32}$/.test(clientRequestRef),
+    "推进工作项状态必须只生成一次 32 位小写 hex client_request_ref",
+  );
   assertDeepEqual(
     capturedAction,
-    buildAdvanceWorkItemStateAction(project.project_root),
+    buildAdvanceWorkItemStateAction(project.project_root, clientRequestRef),
     "推进工作项状态待确认动作不匹配",
   );
   const advanceDialogText = visibleText(

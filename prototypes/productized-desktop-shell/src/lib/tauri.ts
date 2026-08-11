@@ -30,6 +30,7 @@ import {
 } from "./roleSessionReadModel";
 import {
   createSecretaryCoordinationActionRequest,
+  createSecretaryPersonalObjectRequest,
   parseSecretaryLegacyReadCompatibilityReportEnvelope,
   parseSecretaryCoordinationActionReceipt,
   parseSecretaryDailyReportEnvelope,
@@ -42,6 +43,7 @@ import type {
   M4SecretaryCoordinationActionReceiptDto,
   M4SecretaryCoordinationActionRequestDto,
   M4SecretaryHomeContextEnvelopeDto,
+  M4SecretaryPersonalObjectRequestDto,
 } from "./types/m4Secretary";
 import type {
   AdoptMemoryCandidateInput,
@@ -1833,6 +1835,16 @@ export async function operateSecretaryCoordination(
   ensureTauriRuntime();
   return parseSecretaryCoordinationActionReceipt(
     await invoke<unknown>("operate_secretary_coordination", { request: safeRequest }),
+  );
+}
+
+export async function operateSecretaryPersonalObject(
+  request: M4SecretaryPersonalObjectRequestDto,
+): Promise<M4SecretaryCoordinationActionReceiptDto> {
+  const safeRequest = createSecretaryPersonalObjectRequest(request);
+  ensureTauriRuntime();
+  return parseSecretaryCoordinationActionReceipt(
+    await invoke<unknown>("operate_secretary_personal_object", { request: safeRequest }),
   );
 }
 

@@ -1085,6 +1085,7 @@ fn map_consultation_to_c1_input_with_user_requirement_snapshot(
                 report_format: t.report_format.clone(),
             })
             .collect(),
+        expires_at_ms: None,
         actor_id: actor_id.to_string(),
         expected_store_revision: None,
     })

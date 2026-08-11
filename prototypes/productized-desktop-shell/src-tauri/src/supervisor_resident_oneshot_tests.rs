@@ -1451,9 +1451,24 @@ fn s1b_h2_same_resident_message_replays_reuse_one_card_but_a_new_message_can_cre
     )
     .expect("proposal store after technical replay");
     assert_eq!(store.proposals.len(), 2);
-    assert!(store.proposals.iter().all(|proposal| {
-        proposal.status == crate::ProjectConsultationProposalStatus::PendingUserConfirmation
-    }));
+    let replaced = store
+        .proposals
+        .iter()
+        .find(|proposal| proposal.proposal_id == receipt_ids[0])
+        .expect("the first proposal remains as owner history");
+    assert_eq!(
+        replaced.status,
+        crate::ProjectConsultationProposalStatus::Superseded
+    );
+    let current = store
+        .proposals
+        .iter()
+        .find(|proposal| proposal.proposal_id == receipt_ids[4])
+        .expect("the later explicit proposal is current");
+    assert_eq!(
+        current.status,
+        crate::ProjectConsultationProposalStatus::PendingUserConfirmation
+    );
     assert_eq!(
         store
             .audit_events
@@ -1462,6 +1477,21 @@ fn s1b_h2_same_resident_message_replays_reuse_one_card_but_a_new_message_can_cre
             .count(),
         2,
         "technical replays do not append a second proposal audit or DB/JSON projection"
+    );
+    let superseded_audits = store
+        .audit_events
+        .iter()
+        .filter(|event| event.event_type == "project_consultation_proposal_superseded")
+        .collect::<Vec<_>>();
+    assert_eq!(superseded_audits.len(), 1);
+    assert_eq!(
+        superseded_audits[0].proposal_id.as_deref(),
+        Some(receipt_ids[0].as_str())
+    );
+    assert!(
+        superseded_audits[0]
+            .reason
+            .contains(&format!("replacement_proposal_id={}", receipt_ids[4]))
     );
     let workflow_after: Value =
         serde_json::from_slice(&fs::read(&state_path).expect("workflow state after replay"))

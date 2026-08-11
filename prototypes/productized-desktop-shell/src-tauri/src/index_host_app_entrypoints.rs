@@ -603,16 +603,6 @@ pub fn run() {
         eprintln!("验收 runtime profile 初始化失败：{error}");
         return;
     }
-    let acceptance_state = if acceptance_profile_requested {
-        Some(match AppState::try_new() {
-            Ok(state) => state,
-            Err(_) => {
-                exit_acceptance_startup_failure(ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE);
-            }
-        })
-    } else {
-        None
-    };
     let m2_r4_reference_slice_requested = match crate::m2_r4_reference_slice_driver::requested() {
         Ok(requested) => requested,
         Err(error) => {
@@ -623,18 +613,51 @@ pub fn run() {
             return;
         }
     };
+    let m4r02_ordinary_composition_requested =
+        match crate::m4r02_ordinary_composition_driver::requested() {
+            Ok(requested) => requested,
+            Err(error) => {
+                eprintln!("M4R02 ordinary-composition runner 请求无效：{error}");
+                if acceptance_profile_requested {
+                    exit_acceptance_startup_failure(
+                        ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE,
+                    );
+                }
+                return;
+            }
+        };
+    if m4r02_ordinary_composition_requested {
+        if let Err(error) = crate::m4r02_ordinary_composition_driver::start_early_process_watchdog()
+        {
+            crate::m4r02_ordinary_composition_driver::reject_early_setup(&error);
+        }
+    }
+    // Historical M2/M3/C09 drivers retain their archived, explicit runtime.
+    // A plain isolated profile is stage-07 ordinary-product composition and
+    // must not install an acceptance wrapper or a second AppState.
+    let legacy_acceptance_runtime_requested = m2_r4_reference_slice_requested
+        || crate::m3_acceptance::explicit_mode_enabled()
+        || crate::m4_acceptance::explicit_mode_enabled();
+    let acceptance_state = if acceptance_profile_requested && legacy_acceptance_runtime_requested {
+        Some(match AppState::try_new() {
+            Ok(state) => state,
+            Err(_) => {
+                exit_acceptance_startup_failure(ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE);
+            }
+        })
+    } else {
+        None
+    };
     if let Some(state) = acceptance_state.as_ref() {
         if m2_r4_reference_slice_requested {
             if let Err(error) = crate::m2_r4_reference_slice_driver::prepare_before_startup(state) {
                 eprintln!("M2 R4 reference-slice runner 预置失败：{error}");
-                exit_acceptance_startup_failure(
-                    ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE,
-                );
+                exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
             }
         }
-        if let Err(error) = crate::migrate_legacy_workflow_node_session_binding_ids_at(
-            &state.workflow_state_path,
-        ) {
+        if let Err(error) =
+            crate::migrate_legacy_workflow_node_session_binding_ids_at(&state.workflow_state_path)
+        {
             eprintln!("工作流 binding_id 迁移未完成：{error}");
         }
         if let Err(error) =
@@ -649,125 +672,192 @@ pub fn run() {
         {
             eprintln!("主管一次一发会话陈账对账未完成：{error}");
         }
-        if let Err(error) = crate::workbench_sqlite_storage_mode::initialize_for_startup(
-            &state.workflow_state_path,
-        ) {
+        if let Err(error) =
+            crate::workbench_sqlite_storage_mode::initialize_for_startup(&state.workflow_state_path)
+        {
             if m2_r4_reference_slice_requested {
                 eprintln!("M2 R4 reference-slice DB-primary startup failure:{error}");
             }
-            exit_acceptance_startup_failure(
-                ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE,
-            );
+            exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
         }
         if let Err(error) = crate::acceptance_runtime_profile::finalize_first_r4_initialization() {
             eprintln!("验收 runtime profile 首次初始化标记失败：{error}");
             exit_acceptance_startup_failure(ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE);
         }
     }
-    let app = tauri::Builder::default()
+    let app_result = tauri::Builder::default()
         .manage(mcp::orchestrator::OrchestratorState::new())
         .manage(crate::knowledge_open_relay::KnowledgeOpenRelayState::new())
         .invoke_handler(workbench_command_handler!())
         .setup(move |app| {
-            let isolated_profile_active = crate::acceptance_runtime_profile::active_paths()
-                .map_err(std::io::Error::other)?
-                .is_some();
-            let state = if isolated_profile_active {
-                acceptance_state.ok_or_else(|| {
-                    "acceptance_runtime_profile_state_missing_after_initialization".to_string()
-                })
-            } else {
-                app.path()
-                    .app_data_dir()
-                    .map_err(|_| "m4_secretary_tauri_app_data_root_unavailable".to_string())
-                    .and_then(|app_data_root| {
-                        AppState::try_new_with_tauri_app_data_root(&app_data_root)
+            let ordinary_setup = || -> Result<(), Box<dyn std::error::Error>> {
+                let isolated_profile = crate::acceptance_runtime_profile::active_paths()
+                    .map_err(std::io::Error::other)?;
+                let isolated_profile_active = isolated_profile.is_some();
+                let state = if legacy_acceptance_runtime_requested {
+                    acceptance_state.ok_or_else(|| {
+                        "acceptance_runtime_profile_state_missing_after_initialization".to_string()
                     })
-            };
-            let state = match state {
-                Ok(state) => state,
-                Err(error) => {
-                    if acceptance_profile_requested {
-                        exit_acceptance_startup_failure(
-                            ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE,
-                        );
+                } else {
+                    match isolated_profile.as_ref() {
+                        Some(paths) => AppState::try_new_with_isolated_product_profile(paths),
+                        None => app
+                            .path()
+                            .app_data_dir()
+                            .map_err(|_| "m4_secretary_tauri_app_data_root_unavailable".to_string())
+                            .and_then(|app_data_root| {
+                                AppState::try_new_with_tauri_app_data_root(&app_data_root)
+                            }),
                     }
-                    return Err(std::io::Error::other(format!(
-                        "AppState 启动装配失败：{error}"
-                    ))
-                    .into());
-                }
-            };
-            if !isolated_profile_active {
-                if m2_r4_reference_slice_requested {
-                    if let Err(error) =
-                        crate::m2_r4_reference_slice_driver::prepare_before_startup(&state)
-                    {
+                };
+                let state = match state {
+                    Ok(state) => state,
+                    Err(error) => {
+                        if acceptance_profile_requested && !m4r02_ordinary_composition_requested {
+                            exit_acceptance_startup_failure(
+                                ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE,
+                            );
+                        }
                         return Err(std::io::Error::other(format!(
-                            "M2 R4 reference-slice runner 预置失败：{error}"
+                            "AppState 启动装配失败：{error}"
                         ))
                         .into());
                     }
+                };
+                if m4r02_ordinary_composition_requested {
+                    crate::m4r02_ordinary_composition_driver::mark_ordinary_constructor_ready();
                 }
-                if let Err(error) = crate::migrate_legacy_workflow_node_session_binding_ids_at(
-                    &state.workflow_state_path,
-                ) {
-                    eprintln!("工作流 binding_id 迁移未完成：{error}");
-                }
-                if let Err(error) = crate::exec_process_registry::reap_registered_orphans(
-                    &state.workflow_state_path,
-                ) {
-                    eprintln!("执行进程遗留回收未完成：{error}");
-                }
-                if let Err(error) =
-                    crate::supervisor_session_launcher::reap_supervisor_resident_stale_sessions_at(
+                if !legacy_acceptance_runtime_requested {
+                    crate::ordinary_product_storage_bootstrap::cold_bootstrap_before_startup(
                         &state.workflow_state_path,
                     )
-                {
-                    eprintln!("主管一次一发会话陈账对账未完成：{error}");
-                }
-                if let Err(error) = crate::workbench_sqlite_storage_mode::initialize_for_startup(
-                    &state.workflow_state_path,
-                ) {
-                    eprintln!("DB 主写模式启动对账未通过：{error}");
-                }
-            }
-            if !app.manage(state) {
-                return Err(std::io::Error::other("AppState 重复注册").into());
-            }
-            if !isolated_profile_active {
-                app.state::<crate::knowledge_open_relay::KnowledgeOpenRelayState>()
-                    .start(app.handle().clone())
-                    .map_err(std::io::Error::other)?;
-            }
-            if cfg!(debug_assertions) {
-                let log_plugin = match crate::acceptance_runtime_profile::isolated_log_dir()
-                    .map_err(std::io::Error::other)?
-                {
-                    Some(path) => tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .clear_targets()
-                        .target(tauri_plugin_log::Target::new(
-                            tauri_plugin_log::TargetKind::Folder {
-                                path,
-                                file_name: Some("syn-r4-isolated".into()),
-                            },
+                    .map_err(|error| {
+                        std::io::Error::other(format!(
+                            "普通产品 DB 主写冷迁移失败，已在任何 workflow writer 前停止：{error}"
                         ))
-                        .build(),
-                    None => tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                };
-                app.handle().plugin(log_plugin)?;
+                    })?;
+                    crate::ordinary_product_storage_bootstrap::initialize_for_ordinary_startup(
+                        &state.workflow_state_path,
+                    )
+                    .map_err(|error| {
+                        std::io::Error::other(format!(
+                            "普通产品 DB 主写启动对账失败，已拒绝 JSON 双写者降级：{error}"
+                        ))
+                    })?;
+                    #[cfg(not(test))]
+                    if let Some(owner_repository) =
+                        crate::workbench_sqlite_storage_mode::primary_repository_for_m2_t2_fail_closed_write(
+                            &state.workflow_state_path,
+                            "m4_source_owner_dispatcher_startup",
+                        )
+                        .map_err(|error| {
+                            std::io::Error::other(format!(
+                                "普通产品 M4 source dispatcher owner repository 不可用：{error}"
+                            ))
+                        })?
+                    {
+                        let m4_repository = state
+                            .m4_secretary_repository
+                            .clone()
+                            .ok_or_else(|| {
+                                std::io::Error::other(
+                                    "普通产品 M4 source dispatcher 缺少 M4 repository",
+                                )
+                            })?;
+                        crate::start_m4_source_owner_dispatcher(
+                            state.workflow_state_path.clone(),
+                            owner_repository,
+                            m4_repository,
+                        )
+                        .map_err(|error| {
+                            std::io::Error::other(format!(
+                                "普通产品 M4 source dispatcher 启动恢复失败：{error}"
+                            ))
+                        })?;
+                    }
+                    if let Err(error) = crate::migrate_legacy_workflow_node_session_binding_ids_at(
+                        &state.workflow_state_path,
+                    ) {
+                        eprintln!("工作流 binding_id 迁移未完成：{error}");
+                    }
+                    if let Err(error) = crate::exec_process_registry::reap_registered_orphans(
+                        &state.workflow_state_path,
+                    ) {
+                        eprintln!("执行进程遗留回收未完成：{error}");
+                    }
+                    if let Err(error) =
+                        crate::supervisor_session_launcher::reap_supervisor_resident_stale_sessions_at(
+                            &state.workflow_state_path,
+                        )
+                    {
+                        eprintln!("主管一次一发会话陈账对账未完成：{error}");
+                    }
+                    if acceptance_profile_requested {
+                        crate::acceptance_runtime_profile::finalize_first_r4_initialization()
+                            .map_err(std::io::Error::other)?;
+                    }
+                }
+                if !app.manage(state) {
+                    return Err(std::io::Error::other("AppState 重复注册").into());
+                }
+                if !isolated_profile_active {
+                    app.state::<crate::knowledge_open_relay::KnowledgeOpenRelayState>()
+                        .start(app.handle().clone())
+                        .map_err(std::io::Error::other)?;
+                }
+                if cfg!(debug_assertions) {
+                    let log_plugin = match crate::acceptance_runtime_profile::isolated_log_dir()
+                        .map_err(std::io::Error::other)?
+                    {
+                        Some(path) => tauri_plugin_log::Builder::default()
+                            .level(log::LevelFilter::Info)
+                            .clear_targets()
+                            .target(tauri_plugin_log::Target::new(
+                                tauri_plugin_log::TargetKind::Folder {
+                                    path,
+                                    file_name: Some("syn-r4-isolated".into()),
+                                },
+                            ))
+                            .build(),
+                        None => tauri_plugin_log::Builder::default()
+                            .level(log::LevelFilter::Info)
+                            .build(),
+                    };
+                    app.handle().plugin(log_plugin)?;
+                }
+                if m2_r4_reference_slice_requested {
+                    crate::m2_r4_reference_slice_driver::install_after_runtime_ready(app)
+                        .map_err(std::io::Error::other)?;
+                }
+                if m4r02_ordinary_composition_requested {
+                    crate::m4r02_ordinary_composition_driver::install_after_runtime_ready(app)
+                        .map_err(std::io::Error::other)?;
+                }
+                Ok(())
+            };
+            let setup_result = ordinary_setup();
+            match setup_result {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    if m4r02_ordinary_composition_requested {
+                        crate::m4r02_ordinary_composition_driver::reject_early_setup(
+                            &error.to_string(),
+                        );
+                    }
+                    Err(error)
+                }
             }
-            if m2_r4_reference_slice_requested {
-                crate::m2_r4_reference_slice_driver::install_after_runtime_ready(app)
-                    .map_err(std::io::Error::other)?;
-            }
-            Ok(())
         })
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .build(tauri::generate_context!());
+    let app = match app_result {
+        Ok(app) => app,
+        Err(error) => {
+            if m4r02_ordinary_composition_requested {
+                crate::m4r02_ordinary_composition_driver::reject_early_setup(&error.to_string());
+            }
+            panic!("error while building tauri application: {error}");
+        }
+    };
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             app_handle

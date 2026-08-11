@@ -49,7 +49,7 @@ pub(crate) fn apply_fixture_dir_to_temp_db(
             db_path.display()
         ));
     }
-    apply_source_root_to_db(fixture_root, db_path, failure_point, |path| {
+    apply_source_root_to_db(fixture_root, db_path, failure_point, false, |path| {
         initialize_temp_workbench_sqlite_db(path)
     })
 }
@@ -81,7 +81,7 @@ pub(crate) fn apply_confirmed_workbench_state_root_to_confirmed_db(
             db_path.display()
         ));
     }
-    apply_source_root_to_db(source_root, db_path, failure_point, |path| {
+    apply_source_root_to_db(source_root, db_path, failure_point, true, |path| {
         initialize_confirmed_workbench_sqlite_db(path, confirmed_db_path)
     })
 }
@@ -90,6 +90,7 @@ fn apply_source_root_to_db(
     source_root: &Path,
     db_path: &Path,
     failure_point: Option<SqliteApplyFailurePoint>,
+    use_canonical_workflow_owner_source: bool,
     initialize_db: impl Fn(&Path) -> Result<(), String>,
 ) -> Result<SqliteApplyImportReport, String> {
     if failure_point == Some(SqliteApplyFailurePoint::BeforeDbBegin) {
@@ -158,10 +159,22 @@ fn apply_source_root_to_db(
         .iter()
         .filter(|source| source.classification == "accepted")
     {
-        let source_id = format!(
-            "source:{}:{}:{}",
-            source.source_kind, dry_run.source_root_hash, source.source_path_hash
-        );
+        // A confirmed DB is the ordinary workflow owner's long-lived primary
+        // repository. Its workflow rows and workflow_state_meta must share the
+        // exact source id used by later DB-primary upserts; otherwise a
+        // WorkItem created after import cannot join its revision meta. Temp
+        // imports retain root-scoped identities so fixtures never alias.
+        let source_id = if use_canonical_workflow_owner_source
+            && source.source_kind == "workflow_state"
+        {
+            crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_REPOSITORY_SOURCE_ID
+                .to_string()
+        } else {
+            format!(
+                "source:{}:{}:{}",
+                source.source_kind, dry_run.source_root_hash, source.source_path_hash
+            )
+        };
         let warnings_json = serde_json::to_string(&source.warnings)
             .map_err(|error| format!("serialize source warnings failed: {error}"))?;
         let inserted = transaction

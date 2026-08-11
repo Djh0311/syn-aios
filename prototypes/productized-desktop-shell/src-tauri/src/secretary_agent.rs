@@ -30,9 +30,13 @@ const M4C05_HANDOFF_UNAVAILABLE: &str = "M6_RECIPIENT_UNAVAILABLE";
 const M4C05_MODEL_LEDGER_UNAVAILABLE: &str = "M4C05_MODEL_LEDGER_UNAVAILABLE";
 const M4C05_MODEL_UNAVAILABLE: &str = "M4C05_MODEL_ADAPTER_UNAVAILABLE";
 const M4C05_CONTEXT_UNAVAILABLE_REASON: &str = "秘书上下文暂不可用，请稍后重试。";
+const M4C05_HOME_CONTEXT_UNAVAILABLE_CODE: &str = "M4C05_CONTEXT_UNAVAILABLE";
 const M4C06_COORDINATION_REQUEST_INVALID: &str = "M4C06_COORDINATION_REQUEST_INVALID";
 const M4C06_COORDINATION_UNAVAILABLE: &str = "M4C06_COORDINATION_UNAVAILABLE";
 const M4C06_COORDINATION_OPERATION_FAILED: &str = "M4C06_COORDINATION_OPERATION_FAILED";
+const M4R02_PERSONAL_OBJECT_REQUEST_INVALID: &str = "M4R02_PERSONAL_OBJECT_REQUEST_INVALID";
+const M4R02_PERSONAL_OBJECT_UNAVAILABLE: &str = "M4R02_PERSONAL_OBJECT_UNAVAILABLE";
+const M4R02_PERSONAL_OBJECT_OPERATION_FAILED: &str = "M4R02_PERSONAL_OBJECT_OPERATION_FAILED";
 
 /// Existing command fields remain stable. The optional metadata only exposes
 /// server-minted context/brief refs and mechanical counts.
@@ -108,7 +112,7 @@ impl SecretaryHomeContextEnvelope {
         Self {
             status: "unavailable".to_string(),
             application_outcome: None,
-            reason: Some(M4C05_CONTEXT_UNAVAILABLE_REASON.to_string()),
+            reason: Some(M4C05_HOME_CONTEXT_UNAVAILABLE_CODE.to_string()),
         }
     }
 }
@@ -135,6 +139,49 @@ struct OrdinaryProductRoleSessionReadPort<'a> {
     runtime: &'a crate::m3_role_session_read_model::M3RoleSessionReadRuntimeSlot,
 }
 
+fn ordinary_product_role_session_state(
+    status: crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto,
+) -> Result<M4SecretaryRoleSessionState, M4SecretaryServiceError> {
+    let invalid = || M4SecretaryServiceError::new(M4C05_RUNTIME_UNAVAILABLE);
+    let identity = crate::mcp::identity_kernel::resolve_m4_primary_secretary_identity()
+        .map_err(|_| invalid())?;
+    let binding = identity
+        .m3_server_resolved_binding()
+        .map_err(|_| invalid())?;
+    if status.actor_id != binding.actor_id.as_str()
+        || status.role_ref != binding.role_ref.as_str()
+        || status.scope_ref != binding.scope_ref.as_str()
+        || status.current_object_ref != binding.current_object_ref.as_str()
+        || status.execution_channel != binding.execution_channel.as_str()
+        || status.permission_snapshot_ref != binding.permission_snapshot_ref.as_str()
+        || status.owner_fingerprint != binding.owner_fingerprint.as_str()
+    {
+        return Err(invalid());
+    }
+
+    Ok(M4SecretaryRoleSessionState {
+        role_session_ref: M4SecretaryOpaqueRef::new(status.role_session_id)
+            .map_err(|_| invalid())?,
+        role_ref: M4SecretaryTypedRef::new(
+            crate::mcp::identity_kernel::M4_PRIMARY_SECRETARY_ROLE_ID,
+        )
+        .map_err(|_| invalid())?,
+        scope_ref: M4SecretaryTypedRef::new(
+            crate::mcp::identity_kernel::M4_PRIMARY_SECRETARY_SCOPE_ID,
+        )
+        .map_err(|_| invalid())?,
+        current_object_ref: M4SecretaryTypedRef::new(
+            crate::mcp::identity_kernel::M4_PRIMARY_SECRETARY_CURRENT_OBJECT_ID,
+        )
+        .map_err(|_| invalid())?,
+        execution_channel_code: "DAILY".to_string(),
+        session_state_code: status.session_state,
+        permission_snapshot_ref: M4SecretaryOpaqueRef::new(status.permission_snapshot_ref)
+            .map_err(|_| invalid())?,
+        owner_fingerprint: M4SecretaryHash::new(status.owner_fingerprint).map_err(|_| invalid())?,
+    })
+}
+
 impl M4SecretaryRoleSessionReadPort for OrdinaryProductRoleSessionReadPort<'_> {
     fn read_personal_secretary_role_session(
         &self,
@@ -143,22 +190,7 @@ impl M4SecretaryRoleSessionReadPort for OrdinaryProductRoleSessionReadPort<'_> {
             .runtime
             .secretary_status()
             .map_err(|_| M4SecretaryServiceError::new(M4C05_RUNTIME_UNAVAILABLE))?;
-        let invalid = || M4SecretaryServiceError::new(M4C05_RUNTIME_UNAVAILABLE);
-
-        Ok(M4SecretaryRoleSessionState {
-            role_session_ref: M4SecretaryOpaqueRef::new(status.role_session_id)
-                .map_err(|_| invalid())?,
-            role_ref: M4SecretaryTypedRef::new(status.role_ref).map_err(|_| invalid())?,
-            scope_ref: M4SecretaryTypedRef::new(status.scope_ref).map_err(|_| invalid())?,
-            current_object_ref: M4SecretaryTypedRef::new(status.current_object_ref)
-                .map_err(|_| invalid())?,
-            execution_channel_code: status.execution_channel,
-            session_state_code: status.session_state,
-            permission_snapshot_ref: M4SecretaryOpaqueRef::new(status.permission_snapshot_ref)
-                .map_err(|_| invalid())?,
-            owner_fingerprint: M4SecretaryHash::new(status.owner_fingerprint)
-                .map_err(|_| invalid())?,
-        })
+        ordinary_product_role_session_state(status)
     }
 }
 
@@ -819,6 +851,387 @@ pub(crate) async fn operate_secretary_coordination(
     }
 }
 
+/// Ordinary user operations for M4-owned local objects.  The tagged sum is
+/// intentionally closed: there is no Reminder fire, Notification create or
+/// deliver, Decision owner transition, identity, scope, source payload, path,
+/// provider or connector field.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "action",
+    rename_all = "SCREAMING_SNAKE_CASE",
+    deny_unknown_fields
+)]
+pub(crate) enum SecretaryPersonalObjectRequest {
+    PersonalActionCreate {
+        title: String,
+        #[serde(default)]
+        due_at_utc: Option<String>,
+        idempotency_key: String,
+    },
+    PersonalActionComplete {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+    PersonalActionCancel {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+    PersonalActionReopen {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+    ReminderCreate {
+        owner_ref: String,
+        scheduled_for_utc: String,
+        iana_timezone: String,
+        idempotency_key: String,
+    },
+    ReminderSnooze {
+        item_ref: String,
+        expected_revision: String,
+        snoozed_until_utc: String,
+        idempotency_key: String,
+    },
+    ReminderDismiss {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+    ReminderCancel {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+    NotificationRead {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+    NotificationDismiss {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+    DecisionRead {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+    DecisionDismiss {
+        item_ref: String,
+        expected_revision: String,
+        idempotency_key: String,
+    },
+}
+
+fn validate_secretary_personal_object_request(
+    request: &SecretaryPersonalObjectRequest,
+) -> Result<(), String> {
+    let invalid = || M4R02_PERSONAL_OBJECT_REQUEST_INVALID.to_string();
+    let validate_idempotency = |value: &str| {
+        M4SecretaryOpaqueRef::new(value.to_string())
+            .map(|_| ())
+            .map_err(|_| invalid())
+    };
+    let validate_ref_revision = |item_ref: &str, prefix: &str, revision: &str| {
+        let item_ref = M4SecretaryTypedRef::new(item_ref.to_string()).map_err(|_| invalid())?;
+        if !item_ref.as_str().starts_with(prefix) {
+            return Err(invalid());
+        }
+        parse_canonical_coordination_revision(revision).map(|_| ())
+    };
+    match request {
+        SecretaryPersonalObjectRequest::PersonalActionCreate {
+            title,
+            due_at_utc,
+            idempotency_key,
+        } => {
+            if title.is_empty()
+                || title.trim() != title
+                || title.chars().count() > 160
+                || title.chars().any(char::is_control)
+                || due_at_utc
+                    .as_deref()
+                    .is_some_and(|value| {
+                        crate::m4_secretary_domain::m4_parse_rfc3339_utc_key(value).is_none()
+                    })
+            {
+                return Err(invalid());
+            }
+            validate_idempotency(idempotency_key)
+        }
+        SecretaryPersonalObjectRequest::PersonalActionComplete {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        }
+        | SecretaryPersonalObjectRequest::PersonalActionCancel {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        }
+        | SecretaryPersonalObjectRequest::PersonalActionReopen {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => {
+            validate_ref_revision(item_ref, "personal-action:", expected_revision)?;
+            validate_idempotency(idempotency_key)
+        }
+        SecretaryPersonalObjectRequest::ReminderCreate {
+            owner_ref,
+            scheduled_for_utc,
+            iana_timezone,
+            idempotency_key,
+        } => {
+            M4SecretaryTypedRef::new(owner_ref.to_string()).map_err(|_| invalid())?;
+            if crate::m4_secretary_domain::m4_parse_rfc3339_utc_key(scheduled_for_utc).is_none()
+                || iana_timezone.is_empty()
+                || iana_timezone.len() > 128
+            {
+                return Err(invalid());
+            }
+            validate_idempotency(idempotency_key)
+        }
+        SecretaryPersonalObjectRequest::ReminderSnooze {
+            item_ref,
+            expected_revision,
+            snoozed_until_utc,
+            idempotency_key,
+        } => {
+            validate_ref_revision(item_ref, "reminder:", expected_revision)?;
+            if crate::m4_secretary_domain::m4_parse_rfc3339_utc_key(snoozed_until_utc).is_none() {
+                return Err(invalid());
+            }
+            validate_idempotency(idempotency_key)
+        }
+        SecretaryPersonalObjectRequest::ReminderDismiss {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        }
+        | SecretaryPersonalObjectRequest::ReminderCancel {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => {
+            validate_ref_revision(item_ref, "reminder:", expected_revision)?;
+            validate_idempotency(idempotency_key)
+        }
+        SecretaryPersonalObjectRequest::NotificationRead {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        }
+        | SecretaryPersonalObjectRequest::NotificationDismiss {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => {
+            validate_ref_revision(item_ref, "notification:", expected_revision)?;
+            validate_idempotency(idempotency_key)
+        }
+        SecretaryPersonalObjectRequest::DecisionRead {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        }
+        | SecretaryPersonalObjectRequest::DecisionDismiss {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => {
+            validate_ref_revision(item_ref, "decision-projection:", expected_revision)?;
+            validate_idempotency(idempotency_key)
+        }
+    }
+}
+
+#[cfg(not(test))]
+fn operate_secretary_personal_object_from_server_state(
+    runtime: crate::m3_role_session_read_model::M3RoleSessionReadRuntimeSlot,
+    repository: M4SecretarySqliteRepository,
+    request: SecretaryPersonalObjectRequest,
+) -> Result<SecretaryCoordinationReceipt, String> {
+    validate_secretary_personal_object_request(&request)?;
+    let role_session_port = OrdinaryProductRoleSessionReadPort { runtime: &runtime };
+    let coordination_port = OrdinaryProductCoordinationSnapshotReadPort {
+        repository: &repository,
+    };
+    let handoff_port = OrdinaryProductUnavailableHandoffPort;
+    let invocation_ledger_port = OrdinaryProductUnavailableInvocationLedgerPort;
+    let model_port = OrdinaryProductUnavailableModelPort;
+    let authorized = read_secretary_application_outcome_with_ports(
+        &role_session_port,
+        &coordination_port,
+        &handoff_port,
+        &invocation_ledger_port,
+        &model_port,
+    )
+    .map_err(|_| M4R02_PERSONAL_OBJECT_UNAVAILABLE.to_string())?;
+
+    let parse_revision = |value: &str| {
+        parse_canonical_coordination_revision(value)
+            .map_err(|_| M4R02_PERSONAL_OBJECT_REQUEST_INVALID.to_string())
+    };
+    let operation = match request {
+        SecretaryPersonalObjectRequest::PersonalActionCreate {
+            title,
+            due_at_utc,
+            idempotency_key,
+        } => repository.create_personal_action(&title, due_at_utc.as_deref(), &idempotency_key),
+        SecretaryPersonalObjectRequest::PersonalActionComplete {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.complete_personal_action(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::PersonalActionCancel {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.cancel_personal_action(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::PersonalActionReopen {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.reopen_personal_action(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::ReminderCreate {
+            owner_ref,
+            scheduled_for_utc,
+            iana_timezone,
+            idempotency_key,
+        } => {
+            let owner_is_authorized = authorized
+                .local_objects
+                .personal_actions
+                .iter()
+                .any(|item| item.personal_action_id == owner_ref)
+                || authorized
+                    .local_objects
+                    .reminder_owner_refs
+                    .iter()
+                    .any(|candidate| candidate == &owner_ref);
+            if !owner_is_authorized {
+                return Err(M4R02_PERSONAL_OBJECT_REQUEST_INVALID.to_string());
+            }
+            repository.create_reminder(
+                &owner_ref,
+                &scheduled_for_utc,
+                &iana_timezone,
+                &idempotency_key,
+            )
+        }
+        SecretaryPersonalObjectRequest::ReminderSnooze {
+            item_ref,
+            expected_revision,
+            snoozed_until_utc,
+            idempotency_key,
+        } => repository.snooze_reminder(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &snoozed_until_utc,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::ReminderDismiss {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.dismiss_reminder(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::ReminderCancel {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.cancel_reminder(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::NotificationRead {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.mark_notification_read(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::NotificationDismiss {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.dismiss_notification(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::DecisionRead {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.mark_decision_read(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+        SecretaryPersonalObjectRequest::DecisionDismiss {
+            item_ref,
+            expected_revision,
+            idempotency_key,
+        } => repository.dismiss_decision(
+            &item_ref,
+            parse_revision(&expected_revision)?,
+            &idempotency_key,
+        ),
+    }
+    .map_err(|_| M4R02_PERSONAL_OBJECT_OPERATION_FAILED.to_string())?;
+    SecretaryCoordinationReceipt::from_repository_outcome(operation)
+        .map_err(|_| M4R02_PERSONAL_OBJECT_OPERATION_FAILED.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn operate_secretary_personal_object(
+    state: tauri::State<'_, crate::AppState>,
+    request: SecretaryPersonalObjectRequest,
+) -> Result<SecretaryCoordinationReceipt, String> {
+    #[cfg(not(test))]
+    {
+        let runtime = state.m3_role_session_read_runtime.clone();
+        let repository = state
+            .m4_secretary_repository
+            .clone()
+            .ok_or_else(|| M4R02_PERSONAL_OBJECT_UNAVAILABLE.to_string())?;
+        return tauri::async_runtime::spawn_blocking(move || {
+            operate_secretary_personal_object_from_server_state(runtime, repository, request)
+        })
+        .await
+        .map_err(|_| M4R02_PERSONAL_OBJECT_UNAVAILABLE.to_string())?;
+    }
+    #[cfg(test)]
+    {
+        let _ = (state, request);
+        Err(M4R02_PERSONAL_OBJECT_UNAVAILABLE.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -850,6 +1263,28 @@ mod tests {
         }
     }
 
+    fn exact_ordinary_role_session_status(
+    ) -> crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto {
+        let identity = crate::mcp::identity_kernel::resolve_m4_primary_secretary_identity()
+            .expect("fixed Secretary identity");
+        let binding = identity
+            .m3_server_resolved_binding()
+            .expect("fixed M3 binding");
+        crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto {
+            host: "SECRETARY".to_string(),
+            role_session_id: fixture_opaque_ref("session", '9').as_str().to_string(),
+            session_revision: 1,
+            session_state: "ACTIVE".to_string(),
+            actor_id: binding.actor_id.as_str().to_string(),
+            role_ref: binding.role_ref.as_str().to_string(),
+            scope_ref: binding.scope_ref.as_str().to_string(),
+            current_object_ref: binding.current_object_ref.as_str().to_string(),
+            execution_channel: binding.execution_channel.as_str().to_string(),
+            permission_snapshot_ref: binding.permission_snapshot_ref.as_str().to_string(),
+            owner_fingerprint: binding.owner_fingerprint.as_str().to_string(),
+        }
+    }
+
     fn fixture_snapshot() -> M4CoordinationSnapshot {
         M4CoordinationSnapshot {
             scope_ref: "scope:personal:primary".to_string(),
@@ -866,6 +1301,7 @@ mod tests {
             }],
             notifications: Vec::new(),
             reminders: Vec::new(),
+            decisions: Vec::new(),
             owner_writeback_receipts: Vec::new(),
         }
     }
@@ -1015,6 +1451,47 @@ mod tests {
     }
 
     #[test]
+    fn m4r02_ordinary_adapter_validates_sealed_m3_binding_before_typed_projection() {
+        let projected = ordinary_product_role_session_state(exact_ordinary_role_session_status())
+            .expect("exact ordinary M3 binding projects to the fixed M4 identity");
+        assert_eq!(
+            projected.role_ref.as_str(),
+            crate::mcp::identity_kernel::M4_PRIMARY_SECRETARY_ROLE_ID
+        );
+        assert_eq!(
+            projected.scope_ref.as_str(),
+            crate::mcp::identity_kernel::M4_PRIMARY_SECRETARY_SCOPE_ID
+        );
+        assert_eq!(
+            projected.current_object_ref.as_str(),
+            crate::mcp::identity_kernel::M4_PRIMARY_SECRETARY_CURRENT_OBJECT_ID
+        );
+        assert_eq!(projected.execution_channel_code, "DAILY");
+        assert_eq!(projected.session_state_code, "ACTIVE");
+
+        let mut mismatched = exact_ordinary_role_session_status();
+        mismatched.scope_ref = fixture_opaque_ref("scope", '8').as_str().to_string();
+        assert_eq!(
+            ordinary_product_role_session_state(mismatched)
+                .expect_err("a different sealed M3 scope must fail closed")
+                .code,
+            M4C05_RUNTIME_UNAVAILABLE
+        );
+    }
+
+    #[test]
+    fn m4r02_home_unavailable_envelope_serializes_stable_machine_code() {
+        assert_eq!(
+            serde_json::to_value(SecretaryHomeContextEnvelope::unavailable())
+                .expect("serialize unavailable Home envelope"),
+            json!({
+                "status": "unavailable",
+                "reason": M4C05_HOME_CONTEXT_UNAVAILABLE_CODE,
+            })
+        );
+    }
+
+    #[test]
     fn m4c05_secretary_adapter_missing_runtime_is_stable_soft_failure() {
         let (outcome, handoff, ledger, model) = run_fixture(
             Err(M4SecretaryServiceError::new(M4C05_RUNTIME_UNAVAILABLE)),
@@ -1072,7 +1549,19 @@ mod tests {
             &model_port,
         );
         assert_eq!(envelope.status, "ready");
-        assert!(envelope.application_outcome.is_some());
+        let application_outcome = envelope
+            .application_outcome
+            .expect("ready envelope carries application outcome");
+        assert_eq!(
+            application_outcome.local_objects.personal_actions[0].title,
+            "private user text must not appear"
+        );
+        assert!(
+            !serde_json::to_string(&application_outcome.deterministic_brief)
+                .expect("serialize deterministic brief")
+                .contains("private user text"),
+            "PersonalAction title is renderer-local and absent from the model-facing brief"
+        );
         assert_eq!(handoff_port.calls.get(), 0);
         assert_eq!(invocation_ledger_port.calls.get(), 0);
         assert_eq!(model_port.calls.get(), 0);
@@ -1134,6 +1623,57 @@ mod tests {
                 .expect_err("snooze must require timestamp"),
             M4C06_COORDINATION_REQUEST_INVALID
         );
+    }
+
+    #[test]
+    fn m4r02_personal_object_request_is_closed_and_carries_no_renderer_authority() {
+        let decision: SecretaryPersonalObjectRequest = serde_json::from_value(json!({
+            "action": "DECISION_DISMISS",
+            "item_ref": format!("decision-projection:{}", fixture_hash('b')),
+            "expected_revision": u64::MAX.to_string(),
+            "idempotency_key": fixture_opaque_ref("idempotency", 'c').as_str()
+        }))
+        .expect("deserialize exact Decision local command");
+        validate_secretary_personal_object_request(&decision)
+            .expect("full u64 Decision revision is accepted as canonical text");
+
+        let personal_create: SecretaryPersonalObjectRequest = serde_json::from_value(json!({
+            "action": "PERSONAL_ACTION_CREATE",
+            "title": "准备季度复盘",
+            "due_at_utc": "2026-08-11T09:00:00Z",
+            "idempotency_key": fixture_opaque_ref("idempotency", 'd').as_str()
+        }))
+        .expect("deserialize exact PersonalAction create");
+        validate_secretary_personal_object_request(&personal_create)
+            .expect("ordinary PersonalAction create validates");
+
+        for invalid in [
+            json!({
+                "action": "REMINDER_FIRE",
+                "item_ref": format!("reminder:{}", fixture_hash('e')),
+                "expected_revision": "1",
+                "idempotency_key": fixture_opaque_ref("idempotency", 'f').as_str()
+            }),
+            json!({
+                "action": "DECISION_READ",
+                "item_ref": format!("decision-projection:{}", fixture_hash('g')),
+                "expected_revision": "1",
+                "idempotency_key": fixture_opaque_ref("idempotency", 'h').as_str(),
+                "owner_status": "ANSWERED"
+            }),
+            json!({
+                "action": "NOTIFICATION_READ",
+                "item_ref": format!("notification:{}", fixture_hash('i')),
+                "expected_revision": "1",
+                "idempotency_key": fixture_opaque_ref("idempotency", 'j').as_str(),
+                "scope_ref": "scope:personal:other"
+            }),
+        ] {
+            assert!(
+                serde_json::from_value::<SecretaryPersonalObjectRequest>(invalid).is_err(),
+                "Reminder fire, owner mutation and renderer authority all fail at DTO decode"
+            );
+        }
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]

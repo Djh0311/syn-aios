@@ -2159,6 +2159,7 @@ enum ProjectConsultationProposalStatus {
     ChangesRequested,
     Rejected,
     Superseded,
+    Expired,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -2244,6 +2245,10 @@ struct ProjectConsultationProposal {
     // P2-A 方案自带任务图。serde 双件(M5 前科):default 保老数据反序列化;skip 空数组保 record_hash 零漂移。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     tasks: Vec<ProjectConsultationProposalTask>,
+    /// Optional owner-declared deadline.  Absence means no expiry; the server
+    /// never invents a default TTL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expires_at_ms: Option<i64>,
     created_at_ms: i64,
     updated_at_ms: i64,
 }
@@ -2330,6 +2335,9 @@ struct CreateProjectConsultationProposalInput {
     // P2-A：方案自带任务图透传（缺省空数组·老调用方/样本不受影响；仅 Deserialize，不落盘不需 skip_serializing_if）。
     #[serde(default)]
     tasks: Vec<ProjectConsultationProposalTask>,
+    /// Explicit owner deadline only.  `None` deliberately has no implicit TTL.
+    #[serde(default)]
+    expires_at_ms: Option<i64>,
     actor_id: String,
     expected_store_revision: Option<i64>,
 }
@@ -5129,6 +5137,11 @@ struct WorkItemStateUpdateRequest {
     project_root: String,
     work_item_id: String,
     next_state: String,
+    /// Opaque identity for one ordinary product request/retry.  The server
+    /// seals this reference together with the admitted owner fields; callers
+    /// never provide the resulting command id, idempotency key, or revision.
+    #[serde(default)]
+    client_request_ref: Option<String>,
     /// Stable caller-provided identity for one logical command.  Omitting it
     /// remains compatible with old callers, but the DB-primary M2 route will
     /// mint a fresh UUIDv7 and therefore cannot mistake a later state cycle
