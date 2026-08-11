@@ -36,7 +36,7 @@ pub(crate) struct M3ConversationTransportError {
 }
 
 impl M3ConversationTransportError {
-    fn new(code: impl Into<String>) -> Self {
+    pub(crate) fn new(code: impl Into<String>) -> Self {
         Self { code: code.into() }
     }
 }
@@ -393,6 +393,10 @@ impl M3FreshEffectDispatchGrant {
         &self.effect.effect_attempt_id
     }
 
+    pub(crate) fn effect_created_at(&self) -> &str {
+        &self.effect.created_at
+    }
+
     pub(crate) fn effect_kind(&self) -> M3ProviderEffectKind {
         self.effect.effect_kind
     }
@@ -406,6 +410,17 @@ impl M3FreshEffectDispatchGrant {
 
     pub(crate) fn binding(&self) -> &ServerResolvedBinding {
         self.authority.binding()
+    }
+
+    pub(crate) fn role_session_id(&self) -> &RoleSessionId {
+        match &self.authority {
+            M3FrozenTransportAuthority::SessionStart {
+                role_session_id, ..
+            }
+            | M3FrozenTransportAuthority::Turn {
+                role_session_id, ..
+            } => role_session_id,
+        }
     }
 
     pub(crate) fn frozen_context(&self) -> Option<&M3ConversationContextReadDto> {
@@ -565,6 +580,18 @@ impl M3ConversationTransportReadbackGrant {
         self.effect
             .as_ref()
             .and_then(|effect| effect.provider_handle_ref.as_ref())
+    }
+
+    pub(crate) fn turn_id(&self) -> Option<&TurnId> {
+        self.effect
+            .as_ref()
+            .and_then(|effect| effect.turn_id.as_ref())
+    }
+
+    pub(crate) fn effect_created_at(&self) -> Option<&str> {
+        self.effect
+            .as_ref()
+            .map(|effect| effect.created_at.as_str())
     }
 
     pub(crate) fn binding(&self) -> &ServerResolvedBinding {

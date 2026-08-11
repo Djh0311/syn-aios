@@ -77,6 +77,7 @@ mod m3_role_session_read_model;
 mod m3_role_session_repository;
 mod m3_role_session_schema;
 mod m4_acceptance;
+mod m4_secretary_conversation;
 mod m4_secretary_domain;
 mod m4_secretary_read_model;
 mod m4_secretary_repository;
@@ -89,6 +90,7 @@ mod m4_source_route_resolver;
 mod m4r02_ordinary_composition_driver;
 mod m4r03_ordinary_clock_driver;
 mod m4r04_ordinary_route_driver;
+mod m4r05_ordinary_conversation_driver;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;
@@ -118,6 +120,9 @@ struct AppState {
     // ordinary Tauri constructor installs it.
     #[cfg(not(test))]
     m4_secretary_repository: Option<m4_secretary_repository::M4SecretarySqliteRepository>,
+    #[cfg(not(test))]
+    m4_secretary_conversation_runtime:
+        m4_secretary_conversation::M4SecretaryConversationRuntimeSlot,
     // Read capability is independent from the owner writeback port.  Only the
     // ordinary constructor installs this closed two-owner registry.
     #[cfg(not(test))]
@@ -155,6 +160,8 @@ impl AppState {
                     #[cfg(not(test))]
                     m4_secretary_repository: Some(installed.repository),
                     #[cfg(not(test))]
+                    m4_secretary_conversation_runtime: Default::default(),
+                    #[cfg(not(test))]
                     m4_source_route_registry: None,
                 });
             }
@@ -167,6 +174,8 @@ impl AppState {
                 m3_role_session_read_runtime,
                 #[cfg(not(test))]
                 m4_secretary_repository: None,
+                #[cfg(not(test))]
+                m4_secretary_conversation_runtime: Default::default(),
                 #[cfg(not(test))]
                 m4_source_route_registry: None,
             });
@@ -184,6 +193,8 @@ impl AppState {
             #[cfg(not(test))]
             m4_secretary_repository: None,
             #[cfg(not(test))]
+            m4_secretary_conversation_runtime: Default::default(),
+            #[cfg(not(test))]
             m4_source_route_registry: None,
         })
     }
@@ -197,6 +208,7 @@ impl AppState {
             app_data_root,
             &manifest_dir.join("../../index-kernel/codex-index.json"),
             &manifest_dir.join("../../tasks/README.md"),
+            m4_secretary_conversation::M4SecretaryConversationProviderConfig::Unavailable,
         )
     }
 
@@ -219,10 +231,20 @@ impl AppState {
         {
             return Err("m4r02_isolated_app_data_root_identity_mismatch".to_string());
         }
+        let provider_config = if m4r05_ordinary_conversation_driver::requested()? {
+            m4_secretary_conversation::M4SecretaryConversationProviderConfig::PersistentFake {
+                ledger_path: canonical_app_data_root
+                    .join(m4_secretary_conversation::M4_SECRETARY_PROVIDER_RELATIVE_PATH),
+                failure_turn_ordinal: Some(4),
+            }
+        } else {
+            m4_secretary_conversation::M4SecretaryConversationProviderConfig::Unavailable
+        };
         Self::try_new_with_ordinary_product_ports(
             &canonical_app_data_root,
             &paths.index_path,
             &paths.tasks_path,
+            provider_config,
         )
     }
 
@@ -230,9 +252,11 @@ impl AppState {
         app_data_root: &Path,
         product_index_seed: &Path,
         product_tasks_seed: &Path,
+        provider_config: m4_secretary_conversation::M4SecretaryConversationProviderConfig,
     ) -> Result<Self, String> {
-        let m3_role_session_read_runtime =
-            m4_secretary_domain::install_ordinary_product_secretary_runtime(app_data_root)?;
+        let m4_secretary_installation =
+            m4_secretary_domain::install_ordinary_product_secretary_composition(app_data_root)?;
+        let m3_role_session_read_runtime = m4_secretary_installation.read_runtime.clone();
         let product_data_paths =
             ordinary_product_storage_bootstrap::ProductDataPaths::resolve_and_materialize(
                 app_data_root,
@@ -250,6 +274,13 @@ impl AppState {
             )
             .map_err(|error| error.code)?;
         #[cfg(not(test))]
+        let m4_secretary_conversation_runtime =
+            m4_secretary_conversation::M4SecretaryConversationRuntimeSlot::install(
+                m4_secretary_installation,
+                m4_secretary_repository.clone(),
+                provider_config,
+            )?;
+        #[cfg(not(test))]
         start_m4_secretary_scheduler(m4_secretary_repository.clone())?;
         #[cfg(not(test))]
         let m4_source_route_registry =
@@ -264,6 +295,8 @@ impl AppState {
             m3_role_session_read_runtime,
             #[cfg(not(test))]
             m4_secretary_repository: Some(m4_secretary_repository),
+            #[cfg(not(test))]
+            m4_secretary_conversation_runtime,
             #[cfg(not(test))]
             m4_source_route_registry: Some(m4_source_route_registry),
         })

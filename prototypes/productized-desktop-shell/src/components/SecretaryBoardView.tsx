@@ -10,6 +10,10 @@ import type {
   SecretarySourceRouteViewState,
   SecretaryTypedDeepLinkDescriptor,
 } from "../lib/types/m4Secretary";
+import type {
+  M4SecretaryConversation,
+  M4SecretaryConversationMessage,
+} from "../lib/types/m4SecretaryConversation";
 import type { ViewKey } from "../lib/workbenchNavigation";
 
 // Secondary full-page surface for the same M4 context shown on Home.  It does
@@ -18,17 +22,25 @@ import type { ViewKey } from "../lib/workbenchNavigation";
 export function SecretaryBoardView({
   home,
   context,
+  conversation = null,
+  conversationErrorCode = null,
+  conversationState = "loading",
   presentationState = null,
   sourceRouteState,
   onOpenDeepLink,
   onReloadSecretaryHome,
+  onReloadSecretaryConversation,
 }: {
   home?: SecretaryHomeReadModel;
   context?: SecretaryContext;
+  conversation?: M4SecretaryConversation | null;
+  conversationErrorCode?: string | null;
+  conversationState?: "loading" | "ready" | "error";
   presentationState?: "loading" | "error" | null;
   sourceRouteState?: SecretarySourceRouteViewState;
   onOpenDeepLink?: (descriptor: SecretaryTypedDeepLinkDescriptor) => void;
   onReloadSecretaryHome?: () => void;
+  onReloadSecretaryConversation?: () => void;
   onNavigate?: (view: ViewKey) => void;
 }) {
   if (!home && context) return <LegacySecretaryBoardView context={context} />;
@@ -66,6 +78,13 @@ export function SecretaryBoardView({
                 : `来源回跳失败：${sourceRouteState.error_code ?? "M4_SOURCE_ROUTE_RESOLUTION_FAILED"}`}
         </p>
       ) : null}
+
+      <SecretaryConversationHistory
+        conversation={conversation}
+        errorCode={conversationErrorCode}
+        state={conversationState}
+        onReload={onReloadSecretaryConversation}
+      />
 
       <div className="secretary-board-layout">
         <section className="secretary-board-attention" aria-labelledby="secretary-board-attention-title">
@@ -154,6 +173,98 @@ export function SecretaryBoardView({
         </aside>
       </div>
     </section>
+  );
+}
+
+export function SecretaryConversationHistory({
+  conversation,
+  errorCode,
+  state,
+  onReload,
+}: {
+  conversation: M4SecretaryConversation | null;
+  errorCode: string | null;
+  state: "loading" | "ready" | "error";
+  onReload?: () => void;
+}) {
+  const displayState = state.toUpperCase();
+  return (
+    <section
+      className="secretary-conversation"
+      aria-labelledby="secretary-conversation-title"
+      data-secretary-conversation-state={displayState}
+      data-secretary-conversation-role-session-ref={conversation?.role_session_ref ?? undefined}
+      data-secretary-conversation-history-ref={conversation?.history_ref ?? undefined}
+      data-secretary-conversation-error-code={errorCode ?? undefined}
+    >
+      <div className="secretary-section-head secretary-conversation-head">
+        <div>
+          <p className="eyebrow">persistent conversation</p>
+          <h3 id="secretary-conversation-title">持续对话</h3>
+        </div>
+        {conversation ? <span className="secretary-conversation-count">{conversation.turns.length} 轮</span> : null}
+      </div>
+
+      {state === "loading" ? (
+        <p className="muted small-note" role="status">正在恢复同一 Secretary 会话历史。</p>
+      ) : null}
+      {state === "error" ? (
+        <div className="secretary-conversation-load-error" role="alert">
+          <span>对话读取或发送未完成：<code>{errorCode ?? "M4_SECRETARY_CONVERSATION_FAILED"}</code></span>
+          {onReload ? <button className="secondary-button" type="button" onClick={onReload}>重新读取</button> : null}
+        </div>
+      ) : null}
+
+      {conversation?.turns.length ? (
+        <ol className="secretary-conversation-turns" aria-label="Secretary 对话历史">
+          {conversation.turns.map((turn) => (
+            <li
+              className={`secretary-conversation-turn ${turn.state === "FAILED" ? "failed" : ""}`}
+              key={turn.turn_ref}
+              data-secretary-turn-ref={turn.turn_ref}
+              data-secretary-turn-state={turn.state}
+              data-secretary-client-message-ref={turn.client_message_ref}
+            >
+              <SecretaryConversationMessage message={turn.user_message} role="user" />
+              {turn.assistant_message ? (
+                <SecretaryConversationMessage message={turn.assistant_message} role="assistant" />
+              ) : null}
+              {turn.state === "FAILED" ? (
+                <p
+                  className="secretary-conversation-turn-error"
+                  data-secretary-conversation-error-code={turn.error_code ?? "M4_SECRETARY_TURN_FAILED"}
+                  role="alert"
+                >
+                  本轮失败：<code>{turn.error_code ?? "M4_SECRETARY_TURN_FAILED"}</code>
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      ) : state === "ready" ? (
+        <p className="secretary-inline-empty">还没有消息。发送第一句后，后端历史会显示在这里。</p>
+      ) : null}
+    </section>
+  );
+}
+
+function SecretaryConversationMessage({
+  message,
+  role,
+}: {
+  message: M4SecretaryConversationMessage;
+  role: "user" | "assistant";
+}) {
+  return (
+    <article
+      className={`secretary-conversation-message ${role}`}
+      data-secretary-message-role={role}
+      data-secretary-message-ref={message.message_ref}
+    >
+      <span>{role === "user" ? "你" : "Secretary"}</span>
+      <p>{message.text}</p>
+      <time dateTime={message.created_at_utc}>{displayUtc(message.created_at_utc)}</time>
+    </article>
   );
 }
 

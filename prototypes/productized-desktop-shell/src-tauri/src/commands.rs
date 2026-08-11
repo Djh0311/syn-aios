@@ -16,6 +16,47 @@ fn load_m4c09_acceptance_status(
     m4_acceptance::load_acceptance_status()
 }
 
+/// No request body: identity, PersonalScope, RoleSession and provider
+/// transcript selection all remain fixed in the ordinary AppState.
+#[tauri::command]
+async fn load_secretary_conversation(
+    state: tauri::State<'_, AppState>,
+) -> Result<m4_secretary_conversation::M4SecretaryConversationDto, String> {
+    #[cfg(not(test))]
+    {
+        let runtime = state.m4_secretary_conversation_runtime.clone();
+        return tauri::async_runtime::spawn_blocking(move || runtime.load())
+            .await
+            .map_err(|_| "M4_SECRETARY_CONVERSATION_LOAD_FAILED".to_string())?;
+    }
+    #[cfg(test)]
+    {
+        let _ = state;
+        Err("M4_SECRETARY_CONVERSATION_UNAVAILABLE".to_string())
+    }
+}
+
+/// The renderer contributes only exact message text and one bounded replay
+/// reference. All authority, context and provider ports are server composed.
+#[tauri::command]
+async fn send_secretary_message(
+    request: m4_secretary_conversation::M4SecretaryMessageSendRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<m4_secretary_conversation::M4SecretaryConversationSendOutcome, String> {
+    #[cfg(not(test))]
+    {
+        let runtime = state.m4_secretary_conversation_runtime.clone();
+        return tauri::async_runtime::spawn_blocking(move || runtime.send(&request))
+            .await
+            .map_err(|_| "M4_SECRETARY_CONVERSATION_SEND_FAILED".to_string())?;
+    }
+    #[cfg(test)]
+    {
+        let _ = (request, state);
+        Err("M4_SECRETARY_CONVERSATION_UNAVAILABLE".to_string())
+    }
+}
+
 /// Resolve a server-minted source route through the AppState-installed closed
 /// owner registry.  The renderer contributes no owner/type/id/revision tuple.
 #[tauri::command]

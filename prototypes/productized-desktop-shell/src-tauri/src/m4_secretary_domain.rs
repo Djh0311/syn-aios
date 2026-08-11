@@ -15,9 +15,9 @@ use crate::m3_role_session_read_model::{
 };
 use crate::m3_role_session_repository::{
     CreateRoleSessionCommand, M3CommandMetadata, M3OrdinaryRoleSessionRepositoryConfig,
-    M3ReadPermissionDisposition, M3RoleSessionDirectoryQuery, M3RoleSessionSnapshotQuery,
-    M3RoleSessionSqliteRepository, M3SessionBindingReadState, QuarantineRoleSessionCommand,
-    ResumeRoleSessionCommand, M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH,
+    M3ReadPermissionDisposition, M3RepositoryCommandOutcome, M3RoleSessionDirectoryQuery,
+    M3RoleSessionSnapshotQuery, M3RoleSessionSqliteRepository, M3SessionBindingReadState,
+    QuarantineRoleSessionCommand, ResumeRoleSessionCommand, M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH,
 };
 use crate::mcp::identity_kernel::{
     resolve_m4_primary_secretary_identity, M4PrimarySecretaryIdentity,
@@ -33,9 +33,31 @@ const M4_SECRETARY_ROLE_SESSION_ID_MATERIAL: &str =
 const M4_SECRETARY_CREATE_MATERIAL: &str =
     "syn.m4.secretary-role-session-create/personal-primary/v1";
 
+#[derive(Clone)]
+pub(crate) struct M4OrdinarySecretaryRuntimeInstallation {
+    pub(crate) read_runtime: M3RoleSessionReadRuntimeSlot,
+    pub(crate) repository: M3RoleSessionSqliteRepository,
+    pub(crate) binding: ServerResolvedBinding,
+    pub(crate) role_session_id: RoleSessionId,
+    pub(crate) permission: PermissionSnapshotDescriptor,
+    /// Present only in the process that committed CREATE_ROLE_SESSION.  The
+    /// M3 repository clone shares the process-local fresh-dispatch permit, so
+    /// the first explicit Secretary message may lazily bind the provider.  A
+    /// reopened process deliberately receives None and must not bypass M3's
+    /// restart/orphan rule.
+    pub(crate) fresh_session_start: Option<M3RepositoryCommandOutcome>,
+}
+
 pub(crate) fn install_ordinary_product_secretary_runtime(
     app_data_root: &Path,
 ) -> Result<M3RoleSessionReadRuntimeSlot, String> {
+    install_ordinary_product_secretary_composition(app_data_root)
+        .map(|installation| installation.read_runtime)
+}
+
+pub(crate) fn install_ordinary_product_secretary_composition(
+    app_data_root: &Path,
+) -> Result<M4OrdinarySecretaryRuntimeInstallation, String> {
     let canonical_app_data_root = admit_server_app_data_root(app_data_root)?;
     let repository = M3RoleSessionSqliteRepository::open_ordinary_product(
         &M3OrdinaryRoleSessionRepositoryConfig {
@@ -49,14 +71,25 @@ pub(crate) fn install_ordinary_product_secretary_runtime(
     let binding = identity
         .m3_server_resolved_binding()
         .map_err(|error| error.code().to_string())?;
-    let role_session_id =
-        bootstrap_or_restore_secretary_role_session(&repository, &identity, &binding)?;
+    let bootstrap =
+        bootstrap_or_restore_secretary_role_session_installation(&repository, &identity, &binding)?;
+    let permission = permission_descriptor(&identity, &binding)?;
 
-    M3RoleSessionReadRuntimeSlot::from_ordinary_product_secretary(M3OrdinarySecretaryReadBinding {
-        host: M3SecretaryReadHost::server_fixed(),
+    let read_runtime = M3RoleSessionReadRuntimeSlot::from_ordinary_product_secretary(
+        M3OrdinarySecretaryReadBinding {
+            host: M3SecretaryReadHost::server_fixed(),
+            repository: repository.clone(),
+            binding: binding.clone(),
+            role_session_id: bootstrap.role_session_id.clone(),
+        },
+    )?;
+    Ok(M4OrdinarySecretaryRuntimeInstallation {
+        read_runtime,
         repository,
         binding,
-        role_session_id,
+        role_session_id: bootstrap.role_session_id,
+        permission,
+        fresh_session_start: bootstrap.fresh_session_start,
     })
 }
 
@@ -86,6 +119,20 @@ fn bootstrap_or_restore_secretary_role_session(
     identity: &M4PrimarySecretaryIdentity,
     binding: &ServerResolvedBinding,
 ) -> Result<RoleSessionId, String> {
+    bootstrap_or_restore_secretary_role_session_installation(repository, identity, binding)
+        .map(|installation| installation.role_session_id)
+}
+
+struct SecretaryBootstrapInstallation {
+    role_session_id: RoleSessionId,
+    fresh_session_start: Option<M3RepositoryCommandOutcome>,
+}
+
+fn bootstrap_or_restore_secretary_role_session_installation(
+    repository: &M3RoleSessionSqliteRepository,
+    identity: &M4PrimarySecretaryIdentity,
+    binding: &ServerResolvedBinding,
+) -> Result<SecretaryBootstrapInstallation, String> {
     // Directory order is only pagination mechanics. Resolve the complete
     // server-authorized set before choosing anything, so startup cannot turn
     // recency into identity authority.
@@ -137,15 +184,22 @@ fn bootstrap_or_restore_secretary_role_session(
         {
             return Err("m4_secretary_role_session_closed".to_string());
         }
-        return create_secretary_role_session(repository, binding)
-            .map(|outcome| outcome.role_session_id);
+        return create_secretary_role_session(repository, binding).map(|outcome| {
+            SecretaryBootstrapInstallation {
+                role_session_id: outcome.role_session_id,
+                fresh_session_start: (!outcome.replayed).then_some(outcome.repository_outcome),
+            }
+        });
     };
     match entry.session.status {
         RoleSessionState::Active => {
             if !matches!(&entry.permission, M3ReadPermissionDisposition::Current) {
                 return Err("m4_secretary_permission_revalidation_required".to_string());
             }
-            Ok(entry.session.role_session_id.clone())
+            Ok(SecretaryBootstrapInstallation {
+                role_session_id: entry.session.role_session_id.clone(),
+                fresh_session_start: None,
+            })
         }
         RoleSessionState::Suspended => {
             if !matches!(&entry.permission, M3ReadPermissionDisposition::Current) {
@@ -185,7 +239,10 @@ fn bootstrap_or_restore_secretary_role_session(
             if session.status != RoleSessionState::Active {
                 return Err("m4_secretary_resume_not_active".to_string());
             }
-            Ok(session.role_session_id)
+            Ok(SecretaryBootstrapInstallation {
+                role_session_id: session.role_session_id,
+                fresh_session_start: None,
+            })
         }
         RoleSessionState::Quarantined => Err("m4_secretary_role_session_quarantined".to_string()),
         RoleSessionState::Closed => Err("m4_secretary_role_session_closed".to_string()),
@@ -246,6 +303,7 @@ fn quarantine_secretary_role_session_candidate(
 struct SecretaryCreateOutcome {
     role_session_id: RoleSessionId,
     replayed: bool,
+    repository_outcome: M3RepositoryCommandOutcome,
 }
 
 fn create_secretary_role_session(
@@ -262,6 +320,7 @@ fn create_secretary_role_session(
         .map_err(|error| error.code)?;
     let session = outcome
         .role_session
+        .as_ref()
         .ok_or_else(|| "m4_secretary_create_session_missing".to_string())?;
     if session.role_session_id != role_session_id || session.status != RoleSessionState::Active {
         return Err("m4_secretary_create_session_invalid".to_string());
@@ -269,6 +328,7 @@ fn create_secretary_role_session(
     Ok(SecretaryCreateOutcome {
         role_session_id,
         replayed: outcome.replayed,
+        repository_outcome: outcome,
     })
 }
 
@@ -1454,7 +1514,10 @@ pub(crate) fn m4_validate_registered_source_publication(
         ("adapter_id", publication.adapter_id.as_str()),
         ("native_scope_seal", publication.native_scope_seal.as_str()),
         ("source_owner_ref", publication.source_owner_ref.as_str()),
-        ("source_object_type", publication.source_object_type.as_str()),
+        (
+            "source_object_type",
+            publication.source_object_type.as_str(),
+        ),
         (
             "canonical_source_object_id",
             publication.canonical_source_object_id.as_str(),
@@ -1476,7 +1539,10 @@ pub(crate) fn m4_validate_registered_source_publication(
     for (field, value) in [
         ("adapter_id", publication.adapter_id.as_str()),
         ("source_owner_ref", publication.source_owner_ref.as_str()),
-        ("source_object_type", publication.source_object_type.as_str()),
+        (
+            "source_object_type",
+            publication.source_object_type.as_str(),
+        ),
         (
             "canonical_source_object_id",
             publication.canonical_source_object_id.as_str(),
@@ -1499,7 +1565,9 @@ pub(crate) fn m4_validate_registered_source_publication(
         ),
     ] {
         if !m4_is_opaque_reference(value) {
-            return Err(format!("m4_registered_publication_opaque_ref_invalid:{field}"));
+            return Err(format!(
+                "m4_registered_publication_opaque_ref_invalid:{field}"
+            ));
         }
     }
     if m4_parse_rfc3339_utc_key(&publication.occurred_at_utc).is_none()
@@ -1527,7 +1595,10 @@ pub(crate) fn m4_validate_registered_source_publication(
 pub(crate) fn m4_validate_decision_projection(
     decision: &M4DecisionProjection,
 ) -> Result<(), String> {
-    m4_validate_typed_reference("decision_source_identity_key", &decision.source_identity_key)?;
+    m4_validate_typed_reference(
+        "decision_source_identity_key",
+        &decision.source_identity_key,
+    )?;
     m4_validate_typed_reference("decision_source_event_key", &decision.source_event_key)?;
     m4_validate_typed_reference("decision_source_ref", &decision.source_ref)?;
     if decision.source_ref != decision.source_identity_key

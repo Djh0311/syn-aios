@@ -7,16 +7,23 @@ import {
   createProjectConsultationProposal,
   createTaskDraft,
   initializeWorkflowState,
+  loadSecretaryConversation,
   loadSecretaryHomeContext,
   loadWorkflowStateSnapshot,
   operateSecretaryCoordination,
   operateSecretaryPersonalObject,
   resolveSecretarySourceRoute,
+  sendSecretaryMessage,
   updateWorkItemState,
 } from "./lib/tauri";
 import { mintSecretaryCoordinationIdempotencyKey } from "./lib/secretaryReadModel";
 import { setTauriWindowTitle } from "./lib/tauriWindow";
 import type { WorkItemStateUpdateRequest } from "./lib/types/workflow";
+import type {
+  M4SecretaryConversation,
+  M4SecretaryConversationTurn,
+  M4SecretaryMessageSendOutcome,
+} from "./lib/types/m4SecretaryConversation";
 import "./styles.css";
 import "./manualRelay.css";
 import "./components/sourceStylePlaceholder.css";
@@ -1723,6 +1730,439 @@ async function installM4R04OrdinaryRouteTauriIpcBridge() {
   }
 }
 
+// M4R05 actual-App proof. Product sends still originate from the visible
+// composer. The single duplicate request deliberately reuses the second DOM
+// turn's client_message_ref through the ordinary typed wrapper; it does not
+// expose a test retry control or manufacture renderer state.
+const M4R05_IPC_READY_EVENT = "syn-m4r05-ordinary-conversation-ui-ready";
+const M4R05_IPC_INVOKE_EVENT = "syn-m4r05-ordinary-conversation-invoke";
+const M4R05_IPC_RESULT_EVENT = "syn-m4r05-ordinary-conversation-result";
+const M4R05_IPC_SCHEMA_VERSION = "syn_m4r05_ordinary_conversation_ipc.v1";
+const M4R05_COMMAND_SURFACE = "ordinary_secretary_conversation_command_and_dom_submit";
+const M4R05_CONVERSATION_SCHEMA = "syn.m4.secretary.conversation.v1";
+const M4R05_SEND_SCHEMA = "syn.m4.secretary.conversation-send.v1";
+const M4R05_DOM_WAIT_MS = 25_000;
+const M4R05_MESSAGES = {
+  round_one: "SYN M4R05 ordinary conversation round 1",
+  round_two: "SYN M4R05 ordinary conversation round 2",
+  round_three: "SYN M4R05 ordinary conversation round 3",
+  round_four: "SYN M4R05 ordinary conversation round 4",
+} as const;
+
+type M4R05Phase = "two_rounds_arm" | "restart_continue_failure";
+
+type M4R05Invocation = {
+  schema_version: typeof M4R05_IPC_SCHEMA_VERSION;
+  phase: M4R05Phase;
+  operation: "run_phase";
+  nonce: string;
+};
+
+type M4R05DomTurn = {
+  turn_ref: string;
+  client_message_ref: string;
+  state: string;
+  user_text: string;
+  assistant_text: string | null;
+  error_code: string | null;
+};
+
+type M4R05DomObservation = {
+  role_session_ref: string;
+  turn_count: number;
+  succeeded_turn_count: number;
+  failed_turn_count: number;
+  user_message_node_count: number;
+  assistant_message_node_count: number;
+  pending: boolean;
+  turns: M4R05DomTurn[];
+};
+
+function m4r05IsInvocation(value: unknown): value is M4R05Invocation {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<M4R05Invocation>;
+  return candidate.schema_version === M4R05_IPC_SCHEMA_VERSION
+    && (candidate.phase === "two_rounds_arm"
+      || candidate.phase === "restart_continue_failure")
+    && candidate.operation === "run_phase"
+    && typeof candidate.nonce === "string"
+    && /^[a-f0-9]{32}$/.test(candidate.nonce);
+}
+
+function m4r05BoundedDomText(value: string | undefined, field: string): string {
+  if (!value || value.length > 512 || /[\r\n]/.test(value)) {
+    throw new Error(`m4r05_${field}_invalid`);
+  }
+  return value;
+}
+
+function m4r05ReadDomConversation(): M4R05DomObservation | null {
+  const roots = Array.from(document.querySelectorAll<HTMLElement>(
+    '[data-secretary-conversation-state="READY"]',
+  ));
+  if (roots.length === 0) return null;
+  if (roots.length !== 1) throw new Error("m4r05_conversation_root_cardinality");
+  const root = roots[0];
+  const roleSessionRef = m4r05BoundedDomText(
+    root.dataset.secretaryConversationRoleSessionRef,
+    "role_session_ref",
+  );
+  const turnElements = Array.from(root.querySelectorAll<HTMLElement>(
+    "[data-secretary-turn-ref]",
+  ));
+  const turns = turnElements.map((turn): M4R05DomTurn => {
+    const userNodes = turn.querySelectorAll<HTMLElement>(
+      '[data-secretary-message-role="user"]',
+    );
+    const assistantNodes = turn.querySelectorAll<HTMLElement>(
+      '[data-secretary-message-role="assistant"]',
+    );
+    if (userNodes.length !== 1 || assistantNodes.length > 1) {
+      throw new Error("m4r05_message_node_cardinality");
+    }
+    const userParagraphs = userNodes[0].querySelectorAll(":scope > p");
+    const assistantParagraphs = assistantNodes.length === 1
+      ? assistantNodes[0].querySelectorAll(":scope > p")
+      : [];
+    if (userParagraphs.length !== 1
+      || (assistantNodes.length === 1 && assistantParagraphs.length !== 1)) {
+      throw new Error("m4r05_message_text_cardinality");
+    }
+    const errorNode = turn.matches("[data-secretary-conversation-error-code]")
+      ? turn
+      : turn.querySelector<HTMLElement>("[data-secretary-conversation-error-code]");
+    return {
+      turn_ref: m4r05BoundedDomText(turn.dataset.secretaryTurnRef, "turn_ref"),
+      client_message_ref: m4r05BoundedDomText(
+        turn.dataset.secretaryClientMessageRef,
+        "client_message_ref",
+      ),
+      state: m4r05BoundedDomText(turn.dataset.secretaryTurnState, "turn_state"),
+      user_text: userParagraphs[0].textContent?.trim() ?? "",
+      assistant_text: assistantNodes.length === 1
+        ? assistantParagraphs[0].textContent?.trim() ?? ""
+        : null,
+      error_code: errorNode?.dataset.secretaryConversationErrorCode ?? null,
+    };
+  });
+  const pendingNodes = Array.from(document.querySelectorAll<HTMLElement>(
+    "[data-secretary-send-pending]",
+  ));
+  if (pendingNodes.length !== 1) throw new Error("m4r05_pending_state_cardinality");
+  const pendingValue = pendingNodes[0].dataset.secretarySendPending;
+  if (pendingValue !== "true" && pendingValue !== "false") {
+    throw new Error("m4r05_pending_state_invalid");
+  }
+  return {
+    role_session_ref: roleSessionRef,
+    turn_count: turns.length,
+    succeeded_turn_count: turns.filter((turn) => turn.state === "SUCCEEDED").length,
+    failed_turn_count: turns.filter((turn) => turn.state === "FAILED").length,
+    user_message_node_count: turns.length,
+    assistant_message_node_count: turns.filter((turn) => turn.assistant_text !== null).length,
+    pending: pendingValue === "true",
+    turns,
+  };
+}
+
+function m4r05ConversationMatchesDom(
+  conversation: M4SecretaryConversation,
+  observation: M4R05DomObservation,
+): boolean {
+  return conversation.schema_version === M4R05_CONVERSATION_SCHEMA
+    && conversation.role_session_ref === observation.role_session_ref
+    && conversation.turns.length === observation.turn_count
+    && conversation.turns.every((turn, index) => {
+      const dom = observation.turns[index];
+      return Boolean(dom)
+        && turn.turn_ref === dom.turn_ref
+        && turn.client_message_ref === dom.client_message_ref
+        && turn.state === dom.state
+        && turn.user_message.text === dom.user_text
+        && (turn.assistant_message?.text ?? null) === dom.assistant_text
+        && turn.error_code === dom.error_code;
+    });
+}
+
+function m4r05ExpectedTurnContract(
+  turn: M4SecretaryConversationTurn,
+  message: string,
+  state: "SUCCEEDED" | "FAILED",
+): boolean {
+  return turn.user_message.text === message
+    && turn.state === state
+    && (state === "SUCCEEDED"
+      ? turn.assistant_message !== null && turn.error_code === null
+      : turn.assistant_message === null
+        && turn.error_code === "M4_SECRETARY_PROVIDER_FAILURE");
+}
+
+async function m4r05WaitForDom(
+  predicate: (observation: M4R05DomObservation) => boolean,
+  family: string,
+): Promise<M4R05DomObservation> {
+  return m4r05WaitForDomUntil(predicate, family, Date.now() + M4R05_DOM_WAIT_MS);
+}
+
+async function m4r05WaitForDomUntil(
+  predicate: (observation: M4R05DomObservation) => boolean,
+  family: string,
+  deadline: number,
+): Promise<M4R05DomObservation> {
+  while (Date.now() < deadline) {
+    const observation = m4r05ReadDomConversation();
+    if (observation && predicate(observation)) return observation;
+    await delayM4R02(100);
+  }
+  throw new Error(`m4r05_${family}_timeout`);
+}
+
+function m4r05SetNativeInputValue(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+) {
+  const prototype = input instanceof HTMLTextAreaElement
+    ? HTMLTextAreaElement.prototype
+    : HTMLInputElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  if (!setter) throw new Error("m4r05_composer_value_setter_missing");
+  setter.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+async function m4r05DomSend(
+  message: string,
+  expectedTurnCount: number,
+  expectedState: "SUCCEEDED" | "FAILED",
+): Promise<M4R05DomObservation> {
+  // Submit enablement and the terminal DOM observation share one deadline;
+  // they are not two sequential 25-second budgets.
+  const sendDeadline = Date.now() + M4R05_DOM_WAIT_MS;
+  const inputs = Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+    '[data-secretary-composer="true"]',
+  ));
+  const submits = Array.from(document.querySelectorAll<HTMLButtonElement>(
+    '[data-secretary-send="true"]',
+  ));
+  if (inputs.length !== 1 || submits.length !== 1) {
+    throw new Error("m4r05_composer_cardinality");
+  }
+  m4r05SetNativeInputValue(inputs[0], message);
+  while (submits[0].disabled && Date.now() < sendDeadline) {
+    await delayM4R02(50);
+  }
+  if (submits[0].disabled) throw new Error("m4r05_submit_disabled_timeout");
+  submits[0].click();
+  return m4r05WaitForDomUntil(
+    (observation) => {
+      const turn = observation.turns.at(-1);
+      return !observation.pending
+        && observation.turn_count === expectedTurnCount
+        && Boolean(turn)
+        && turn?.user_text === message
+        && turn?.state === expectedState;
+    },
+    `round_${expectedTurnCount}_${expectedState.toLowerCase()}`,
+    sendDeadline,
+  );
+}
+
+function m4r05RequireConversationContract(
+  conversation: M4SecretaryConversation,
+  observation: M4R05DomObservation,
+  expectedMessages: readonly string[],
+  expectedStates: readonly ("SUCCEEDED" | "FAILED")[],
+) {
+  if (!m4r05ConversationMatchesDom(conversation, observation)
+    || conversation.turns.length !== expectedMessages.length
+    || observation.pending
+    || !conversation.turns.every((turn, index) => m4r05ExpectedTurnContract(
+      turn,
+      expectedMessages[index],
+      expectedStates[index],
+    ))) {
+    throw new Error("m4r05_conversation_dom_contract_invalid");
+  }
+}
+
+async function m4r05RunPhase(invocation: M4R05Invocation) {
+  const controlsDeadline = Date.now() + M4R05_DOM_WAIT_MS;
+  let homeControls: {
+    input: HTMLInputElement | HTMLTextAreaElement;
+    submit: HTMLButtonElement;
+    open: HTMLButtonElement;
+  } | null = null;
+  while (Date.now() < controlsDeadline) {
+    const inputs = Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      '[data-secretary-composer="true"]',
+    ));
+    const submits = Array.from(document.querySelectorAll<HTMLButtonElement>(
+      '[data-secretary-send="true"]',
+    ));
+    const opens = Array.from(document.querySelectorAll<HTMLButtonElement>(
+      '[data-secretary-open-conversation="true"]',
+    ));
+    if (inputs.length === 1 && submits.length === 1 && opens.length === 1) {
+      homeControls = { input: inputs[0], submit: submits[0], open: opens[0] };
+      break;
+    }
+    if (inputs.length > 1 || submits.length > 1 || opens.length > 1) {
+      throw new Error("m4r05_home_conversation_controls_cardinality");
+    }
+    await delayM4R02(100);
+  }
+  if (!homeControls) throw new Error("m4r05_home_conversation_controls_timeout");
+  const blankSubmitDisabled = homeControls.input.value === ""
+    && homeControls.submit.disabled;
+  if (!blankSubmitDisabled) throw new Error("m4r05_blank_submit_not_disabled");
+  homeControls.open.click();
+  const expectedInitialCount = invocation.phase === "two_rounds_arm" ? 0 : 2;
+  const initialDom = await m4r05WaitForDom(
+    (observation) => !observation.pending && observation.turn_count === expectedInitialCount,
+    "initial_dom",
+  );
+  const initialConversation = await loadSecretaryConversation();
+  const initialMessages = invocation.phase === "two_rounds_arm"
+    ? []
+    : [M4R05_MESSAGES.round_one, M4R05_MESSAGES.round_two];
+  m4r05RequireConversationContract(
+    initialConversation,
+    initialDom,
+    initialMessages,
+    initialMessages.map(() => "SUCCEEDED" as const),
+  );
+
+  if (invocation.phase === "two_rounds_arm") {
+    await m4r05DomSend(M4R05_MESSAGES.round_one, 1, "SUCCEEDED");
+    const secondDom = await m4r05DomSend(M4R05_MESSAGES.round_two, 2, "SUCCEEDED");
+    const beforeReplay = await loadSecretaryConversation();
+    m4r05RequireConversationContract(
+      beforeReplay,
+      secondDom,
+      [M4R05_MESSAGES.round_one, M4R05_MESSAGES.round_two],
+      ["SUCCEEDED", "SUCCEEDED"],
+    );
+    const secondTurn = beforeReplay.turns[1];
+    const replay = await sendSecretaryMessage({
+      message: secondTurn.user_message.text,
+      client_message_ref: secondTurn.client_message_ref,
+    });
+    if (replay.schema_version !== M4R05_SEND_SCHEMA
+      || !replay.replayed
+      || replay.turn_ref !== secondTurn.turn_ref
+      || replay.conversation.turns.length !== 2) {
+      throw new Error("m4r05_exact_replay_contract_invalid");
+    }
+    const finalDom = await m4r05WaitForDom(
+      (observation) => !observation.pending && observation.turn_count === 2,
+      "replay_zero_delta",
+    );
+    const finalConversation = await loadSecretaryConversation();
+    m4r05RequireConversationContract(
+      finalConversation,
+      finalDom,
+      [M4R05_MESSAGES.round_one, M4R05_MESSAGES.round_two],
+      ["SUCCEEDED", "SUCCEEDED"],
+    );
+    if (JSON.stringify(replay.conversation) !== JSON.stringify(finalConversation)) {
+      throw new Error("m4r05_exact_replay_readback_mismatch");
+    }
+    return {
+      initial_conversation: initialConversation,
+      initial_dom: initialDom,
+      final_conversation: finalConversation,
+      final_dom: finalDom,
+      replay,
+      dom_submit_clicks: 2,
+      bridge_load_calls: 3,
+      bridge_exact_replay_send_calls: 1,
+      open_conversation_clicks: 1,
+      blank_submit_disabled: blankSubmitDisabled,
+    };
+  }
+
+  await m4r05DomSend(M4R05_MESSAGES.round_three, 3, "SUCCEEDED");
+  const fourthDom = await m4r05DomSend(M4R05_MESSAGES.round_four, 4, "FAILED");
+  const finalConversation = await loadSecretaryConversation();
+  m4r05RequireConversationContract(
+    finalConversation,
+    fourthDom,
+    [
+      M4R05_MESSAGES.round_one,
+      M4R05_MESSAGES.round_two,
+      M4R05_MESSAGES.round_three,
+      M4R05_MESSAGES.round_four,
+    ],
+    ["SUCCEEDED", "SUCCEEDED", "SUCCEEDED", "FAILED"],
+  );
+  return {
+    initial_conversation: initialConversation,
+    initial_dom: initialDom,
+    final_conversation: finalConversation,
+    final_dom: fourthDom,
+    replay: null,
+    dom_submit_clicks: 2,
+    bridge_load_calls: 2,
+    bridge_exact_replay_send_calls: 0,
+    open_conversation_clicks: 1,
+    blank_submit_disabled: blankSubmitDisabled,
+  };
+}
+
+function m4r05ErrorFamily(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/m4r05_([a-z0-9_]{1,80})/);
+  return match?.[1] ?? "renderer_rejected";
+}
+
+async function installM4R05OrdinaryConversationTauriIpcBridge() {
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  try {
+    await listen<M4R05Invocation>(M4R05_IPC_INVOKE_EVENT, async ({ payload }) => {
+      if (!m4r05IsInvocation(payload)) return;
+      try {
+        const evidence = await m4r05RunPhase(payload);
+        await emit(M4R05_IPC_RESULT_EVENT, {
+          schema_version: M4R05_IPC_SCHEMA_VERSION,
+          phase: payload.phase,
+          operation: payload.operation,
+          nonce: payload.nonce,
+          outcome: "PASS",
+          ...evidence,
+          error_family: null,
+        });
+      } catch (error) {
+        await emit(M4R05_IPC_RESULT_EVENT, {
+          schema_version: M4R05_IPC_SCHEMA_VERSION,
+          phase: payload.phase,
+          operation: payload.operation,
+          nonce: payload.nonce,
+          outcome: "REJECTED",
+          initial_conversation: null,
+          initial_dom: null,
+          final_conversation: null,
+          final_dom: null,
+          replay: null,
+          dom_submit_clicks: null,
+          bridge_load_calls: null,
+          bridge_exact_replay_send_calls: null,
+          open_conversation_clicks: null,
+          blank_submit_disabled: null,
+          error_family: m4r05ErrorFamily(error),
+        });
+      }
+    });
+    await emit(M4R05_IPC_READY_EVENT, {
+      schema_version: M4R05_IPC_SCHEMA_VERSION,
+      surface: M4R05_COMMAND_SURFACE,
+      phases: ["two_rounds_arm", "restart_continue_failure"],
+    });
+  } catch {
+    // Rust owns the bounded readiness timeout and terminal receipt.
+  }
+}
+
 class BootErrorBoundary extends React.Component<BootErrorBoundaryProps, BootErrorBoundaryState> {
   state: BootErrorBoundaryState = { error: null };
 
@@ -1786,6 +2226,7 @@ void installM2R4TauriIpcBridge();
 void installM4R02OrdinaryCompositionTauriIpcBridge();
 void installM4R03OrdinaryClockTauriIpcBridge();
 void installM4R04OrdinaryRouteTauriIpcBridge();
+void installM4R05OrdinaryConversationTauriIpcBridge();
 
 window.addEventListener("error", (event) => {
   const root = document.getElementById("root");

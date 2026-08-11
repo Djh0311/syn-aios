@@ -53,7 +53,10 @@ const testEntries = [
   "tests/m4r02-ordinary-composition-driver.test.ts",
   "tests/m4r03-server-due-clock-composition.test.ts",
   "tests/m4r04-secretary-source-route-ui.test.tsx",
+  "tests/m4r05-secretary-conversation-ui.test.tsx",
   "tests/m4r04-isolated-app-preflight-runner.test.mjs",
+  "tests/m4r05-ordinary-conversation-driver.test.ts",
+  "tests/m4r05-isolated-app-preflight-runner.test.mjs",
 ];
 
 try {

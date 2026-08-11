@@ -32,6 +32,7 @@ import {
   loadPlanAuthorizationStore,
   loadSecretaryLegacyReadCompatibilityReport,
   loadSecretaryHomeContext,
+  loadSecretaryConversation,
   loadProjectConsultationProposalStore,
   loadSystemStatusReadModel,
   loadWorkflowStateSnapshot,
@@ -58,6 +59,7 @@ import {
   recordProjectConsultationProposalDecision,
   recordUserResultDecision,
   resolveSecretarySourceRoute,
+  sendSecretaryMessage,
   queryWorkbenchPageReadModel,
   operateSecretaryCoordination,
   operateSecretaryPersonalObject,
@@ -115,6 +117,12 @@ import type {
   SecretaryHomeReadModel,
   SecretaryTypedDeepLinkDescriptor,
 } from "./lib/types/m4Secretary";
+import {
+  isCurrentSecretaryConversationEpoch,
+  mintSecretaryClientMessageRef,
+  shouldStartSecretaryConversationReload,
+  type M4SecretaryConversation,
+} from "./lib/types/m4SecretaryConversation";
 import type { BlackboardCandidateStoreV1, FormalMemoryStoreV1, GlobalSupervisorReviewStoreV1, MemoryCaptureStoreV1, MemoryCandidateStoreV1, MemoryEntityRelationStoreV1, MemoryLintStoreV1, MemoryPatternStoreV1, ObservationStoreV1, PendingAction, PlanAuthorizationStoreV1, ProjectConsultationProposalStoreV1, WorkbenchSnapshot, WorkflowStateSnapshot } from "./lib/types";
 import { devNavItems, homeNavItem, primaryNavItems, settingsNavItem, workspaceRailItems } from "./lib/workbenchNavigation";
 import type { NavigateHandler, NavigationFocus, RightPanelKey, ViewKey } from "./lib/workbenchNavigation";
@@ -133,6 +141,7 @@ const browserPreviewEnabled = viteEnv.DEV === true && !("__TAURI_INTERNALS__" in
 export const SECRETARY_SOURCE_ROUTE_RESOLUTION_FAILED = "SECRETARY_SOURCE_ROUTE_RESOLUTION_FAILED";
 
 type SecretaryHomeTransportState = "loading" | "loaded" | "error";
+type SecretaryConversationTransportState = "loading" | "ready" | "error";
 
 const stageKInitialViewKeys = new Set<ViewKey>([
   homeNavItem.key,
@@ -222,6 +231,13 @@ export function App() {
   const [secretaryHomeEnvelope, setSecretaryHomeEnvelope] = useState<M4SecretaryHomeContextEnvelopeDto | null>(null);
   const [secretaryHomeTransport, setSecretaryHomeTransport] = useState<SecretaryHomeTransportState>("loading");
   const [secretaryHomeErrorCode, setSecretaryHomeErrorCode] = useState<string | null>(null);
+  const [secretaryConversation, setSecretaryConversation] = useState<M4SecretaryConversation | null>(null);
+  const [secretaryConversationTransport, setSecretaryConversationTransport] =
+    useState<SecretaryConversationTransportState>("loading");
+  const [secretaryConversationErrorCode, setSecretaryConversationErrorCode] = useState<string | null>(null);
+  const [secretarySendPending, setSecretarySendPending] = useState(false);
+  const secretarySendPendingRef = useRef(false);
+  const secretaryConversationEpoch = useRef(0);
   const [secretaryLegacyReadCompatibilityEnvelope, setSecretaryLegacyReadCompatibilityEnvelope] =
     useState<M4LegacyReadCompatibilityReportEnvelopeDto | null>(null);
   const [secretaryCoordinationStates, setSecretaryCoordinationStates] = useState<
@@ -326,6 +342,7 @@ export function App() {
     // action cannot turn an in-flight read into a false "target missing".
     setWorkflowStateLoading(true);
     void reloadSecretaryHome();
+    void reloadSecretaryConversation();
     if (browserPreviewEnabled) {
       setSnapshot(browserPreviewSnapshot);
       setWorkflowState(browserPreviewWorkflowState);
@@ -392,6 +409,29 @@ export function App() {
     } catch (loadError) {
       setSecretaryHomeTransport("error");
       setSecretaryHomeErrorCode(secretaryHomeSafeErrorCode(loadError));
+    }
+  }
+
+  async function reloadSecretaryConversation() {
+    if (!shouldStartSecretaryConversationReload(secretarySendPendingRef.current)) return;
+    const epoch = ++secretaryConversationEpoch.current;
+    setSecretaryConversationTransport("loading");
+    setSecretaryConversationErrorCode(null);
+    if (browserPreviewEnabled) {
+      setSecretaryConversation(null);
+      setSecretaryConversationTransport("error");
+      setSecretaryConversationErrorCode("M4_SECRETARY_CONVERSATION_REQUIRES_TAURI");
+      return;
+    }
+    try {
+      const conversation = await loadSecretaryConversation();
+      if (!isCurrentSecretaryConversationEpoch(secretaryConversationEpoch.current, epoch)) return;
+      setSecretaryConversation(conversation);
+      setSecretaryConversationTransport("ready");
+    } catch (loadError) {
+      if (!isCurrentSecretaryConversationEpoch(secretaryConversationEpoch.current, epoch)) return;
+      setSecretaryConversationTransport("error");
+      setSecretaryConversationErrorCode(secretaryConversationSafeErrorCode(loadError));
     }
   }
 
@@ -1154,6 +1194,46 @@ export function App() {
       }));
     }
   }, [secretaryHome]);
+  const sendSecretaryConversationMessage = useCallback(async (message: string): Promise<boolean> => {
+    const normalizedMessage = message.trim();
+    if (normalizedMessage.length === 0 || secretarySendPendingRef.current || browserPreviewEnabled) return false;
+    const clientMessageRef = mintSecretaryClientMessageRef();
+    const epoch = ++secretaryConversationEpoch.current;
+    secretarySendPendingRef.current = true;
+    setSecretarySendPending(true);
+    setSecretaryConversationErrorCode(null);
+    try {
+      const outcome = await sendSecretaryMessage({
+        message: normalizedMessage,
+        client_message_ref: clientMessageRef,
+      });
+      if (!isCurrentSecretaryConversationEpoch(secretaryConversationEpoch.current, epoch)) return false;
+      setSecretaryConversation(outcome.conversation);
+      setSecretaryConversationTransport("ready");
+      return true;
+    } catch (sendError) {
+      if (!isCurrentSecretaryConversationEpoch(secretaryConversationEpoch.current, epoch)) return false;
+      // An ambiguous bridge failure may happen after the server commits.  A
+      // read-only recovery determines whether this exact client ref exists;
+      // the renderer never appends the draft to transcript state itself.
+      try {
+        const recovered = await loadSecretaryConversation();
+        if (!isCurrentSecretaryConversationEpoch(secretaryConversationEpoch.current, epoch)) return false;
+        setSecretaryConversation(recovered);
+        setSecretaryConversationTransport("ready");
+        if (recovered.turns.some((turn) => turn.client_message_ref === clientMessageRef)) return true;
+      } catch {
+        // Keep the original send failure as the visible transport outcome.
+      }
+      if (!isCurrentSecretaryConversationEpoch(secretaryConversationEpoch.current, epoch)) return false;
+      setSecretaryConversationTransport("error");
+      setSecretaryConversationErrorCode(secretaryConversationSafeErrorCode(sendError));
+      return false;
+    } finally {
+      secretarySendPendingRef.current = false;
+      setSecretarySendPending(false);
+    }
+  }, []);
   const pendingReviewCount =
     workflowState?.project_workflows.reduce(
       (count, workflow) => count + workflow.task_drafts.filter((task) => task.state === "ready_for_review").length,
@@ -1184,6 +1264,7 @@ export function App() {
       secretaryHome={secretaryHome}
       secretaryHomePresentationState={secretaryHomePresentationState}
       secretarySourceRouteState={secretarySourceRouteState}
+      secretarySendPending={secretarySendPending}
       systemStatus={systemStatus}
       topbarReviewCount={topbarReviewCount}
       workflowState={workflowState}
@@ -1196,6 +1277,7 @@ export function App() {
       onQueryChange={setQuery}
       onReload={reloadFromUser}
       onReloadSecretaryHome={reloadSecretaryHome}
+      onSendSecretaryMessage={sendSecretaryConversationMessage}
       onReloadWorkflowState={reloadWorkflowState}
       onOpenSecretaryDeepLink={openSecretaryDeepLink}
     >
@@ -1212,12 +1294,16 @@ export function App() {
           />
         ) : activeView === "secretary_board" ? (
           <SecretaryBoardView
+            conversation={secretaryConversation}
+            conversationErrorCode={secretaryConversationErrorCode}
+            conversationState={secretaryConversationTransport}
             home={secretaryHome}
             context={secretaryContext}
             presentationState={secretaryHomePresentationState}
             sourceRouteState={secretarySourceRouteState}
             onOpenDeepLink={openSecretaryDeepLink}
             onReloadSecretaryHome={() => void reloadSecretaryHome()}
+            onReloadSecretaryConversation={() => void reloadSecretaryConversation()}
           />
         ) : renderActiveWorkbenchView({
           view: activeView,
@@ -1299,6 +1385,13 @@ function legacyProductCommandBlockedNotice(commandName: string) {
 function secretaryHomeSafeErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return /^[A-Za-z0-9_:-]{1,128}$/.test(message) ? message : "M4_SECRETARY_HOME_READ_FAILED";
+}
+
+function secretaryConversationSafeErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return /^[A-Za-z0-9_:-]{1,256}$/.test(message)
+    ? message
+    : "M4_SECRETARY_CONVERSATION_FAILED";
 }
 
 const SECRETARY_SOURCE_ROUTE_FIXED_FAILURE_CODES = [

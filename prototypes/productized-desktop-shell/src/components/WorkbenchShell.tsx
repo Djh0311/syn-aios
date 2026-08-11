@@ -1,8 +1,9 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { useState, type Dispatch, type FormEvent, type ReactNode, type SetStateAction } from "react";
 import { PermissionDialog } from "./PermissionDialog";
 import { RightDetailPanel, deriveRightPanelFeedCounts } from "./RightDetailPanel";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
 import type { SecretaryHomeReadModel, SecretarySourceRouteViewState, SecretaryTypedDeepLinkDescriptor } from "../lib/types/m4Secretary";
+import { secretaryMessageUtf8ByteLength } from "../lib/types/m4SecretaryConversation";
 import type {
   MemoryCandidateStoreV1,
   MemoryCaptureStoreV1,
@@ -43,6 +44,7 @@ export function WorkbenchShell({
   secretaryContext,
   secretaryHome,
   secretaryHomePresentationState,
+  secretarySendPending,
   secretarySourceRouteState,
   systemStatus,
   topbarReviewCount,
@@ -56,6 +58,7 @@ export function WorkbenchShell({
   onQueryChange,
   onReload,
   onReloadSecretaryHome,
+  onSendSecretaryMessage,
   onReloadWorkflowState,
   onOpenSecretaryDeepLink,
 }: {
@@ -75,6 +78,7 @@ export function WorkbenchShell({
   secretaryContext: SecretaryContext;
   secretaryHome: SecretaryHomeReadModel;
   secretaryHomePresentationState: "loading" | "error" | null;
+  secretarySendPending: boolean;
   secretarySourceRouteState?: SecretarySourceRouteViewState;
   systemStatus: SystemStatusReadModel | null;
   topbarReviewCount: number;
@@ -88,6 +92,7 @@ export function WorkbenchShell({
   onQueryChange: (value: string) => void;
   onReload: () => void | Promise<void>;
   onReloadSecretaryHome: () => void | Promise<void>;
+  onSendSecretaryMessage: (message: string) => Promise<boolean>;
   onReloadWorkflowState: () => void;
   onOpenSecretaryDeepLink: (descriptor: SecretaryTypedDeepLinkDescriptor) => void;
 }) {
@@ -160,7 +165,12 @@ export function WorkbenchShell({
         onReloadWorkflowState={onReloadWorkflowState}
       />
 
-      <WorkbenchDock onActiveRightPanelChange={onActiveRightPanelChange} onActiveViewChange={onActiveViewChange} />
+      <WorkbenchDock
+        sendPending={secretarySendPending}
+        onActiveRightPanelChange={onActiveRightPanelChange}
+        onActiveViewChange={onActiveViewChange}
+        onSendSecretaryMessage={onSendSecretaryMessage}
+      />
 
       <PermissionDialog
         action={pendingAction}
@@ -423,13 +433,29 @@ function railBadgeCount(
   return 0;
 }
 
-function WorkbenchDock({
+export function canSendSecretaryDraft(draft: string, sendPending: boolean): boolean {
+  const byteLength = secretaryMessageUtf8ByteLength(draft);
+  return !sendPending && byteLength > 0 && byteLength <= 16_000;
+}
+
+export function WorkbenchDock({
+  sendPending,
   onActiveRightPanelChange,
   onActiveViewChange,
+  onSendSecretaryMessage,
 }: {
+  sendPending: boolean;
   onActiveRightPanelChange: Dispatch<SetStateAction<RightPanelKey | null>>;
   onActiveViewChange: NavigateHandler;
+  onSendSecretaryMessage: (message: string) => Promise<boolean>;
 }) {
+  const [draft, setDraft] = useState("");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSendSecretaryDraft(draft, sendPending)) return;
+    if (await onSendSecretaryMessage(draft)) setDraft("");
+  }
+
   return (
     <footer className="dock ink-shell" aria-label="秘书对话框">
       <button
@@ -441,20 +467,45 @@ function WorkbenchDock({
         <span className="secretary-orb" aria-hidden="true" />
         <span>秘 书 · 辅 助</span>
       </button>
-      <div className="dock-input-wrap">
+      <form className="dock-input-wrap" onSubmit={(event) => void submit(event)}>
         <span className="prompt" aria-hidden="true">›</span>
         <input
           className="dock-input"
-          disabled
-          placeholder="持续消息发送尚未接入"
-          aria-label="持续 Secretary 消息发送尚未接入"
-          aria-describedby="secretary-composer-unavailable"
+          data-secretary-composer="true"
+          value={draft}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          disabled={sendPending}
+          placeholder="给 Secretary 发消息"
+          aria-label="给持续 Secretary 发消息"
+          aria-describedby="secretary-composer-status"
         />
         <div className="dock-chips" aria-label="秘书快捷入口">
-          <span id="secretary-composer-unavailable" className="dock-unavailable">消息发送未接入</span>
-          <button className="chip send" type="button" onClick={() => onActiveViewChange("secretary_board")}>查看情境</button>
+          <span
+            id="secretary-composer-status"
+            className="dock-send-status"
+            data-secretary-send-pending={sendPending ? "true" : "false"}
+            role="status"
+          >
+            {sendPending ? "发送中…" : ""}
+          </span>
+          <button
+            className="chip"
+            data-secretary-open-conversation="true"
+            type="button"
+            onClick={() => onActiveViewChange("secretary_board")}
+          >
+            查看对话
+          </button>
+          <button
+            className="chip send"
+            data-secretary-send="true"
+            type="submit"
+            disabled={!canSendSecretaryDraft(draft, sendPending)}
+          >
+            {sendPending ? "发送中" : "发送"}
+          </button>
         </div>
-      </div>
+      </form>
     </footer>
   );
 }

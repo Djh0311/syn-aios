@@ -14,13 +14,18 @@
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_role_session_read_model.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m3_conversation_transport.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_domain.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_conversation.rs [新增]
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_service.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_read_model.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m4r05_ordinary_conversation_driver.rs [新增]
 - prototypes/productized-desktop-shell/src/App.tsx
+- prototypes/productized-desktop-shell/src/main.tsx
 - prototypes/productized-desktop-shell/src/components/WorkbenchShell.tsx
 - prototypes/productized-desktop-shell/src/components/SecretaryBoardView.tsx
 - prototypes/productized-desktop-shell/src/lib/tauri.ts
 - prototypes/productized-desktop-shell/src/lib/types/
+- prototypes/productized-desktop-shell/src/styles.css
 - prototypes/productized-desktop-shell/tests/
 - prototypes/productized-desktop-shell/scripts/
 - docs/harness/

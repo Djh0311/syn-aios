@@ -646,6 +646,19 @@ pub fn run() {
             return;
         }
     };
+    let m4r05_ordinary_conversation_requested =
+        match crate::m4r05_ordinary_conversation_driver::requested() {
+            Ok(requested) => requested,
+            Err(error) => {
+                eprintln!("M4R05 ordinary-conversation runner 请求无效：{error}");
+                if acceptance_profile_requested {
+                    exit_acceptance_startup_failure(
+                        ACCEPTANCE_RUNTIME_PROFILE_FINALIZATION_EXIT_CODE,
+                    );
+                }
+                return;
+            }
+        };
     if m4r02_ordinary_composition_requested {
         if let Err(error) = crate::m4r02_ordinary_composition_driver::start_early_process_watchdog()
         {
@@ -660,6 +673,13 @@ pub fn run() {
     if m4r04_ordinary_route_requested {
         if let Err(error) = crate::m4r04_ordinary_route_driver::start_early_process_watchdog() {
             crate::m4r04_ordinary_route_driver::reject_early_setup(&error);
+        }
+    }
+    if m4r05_ordinary_conversation_requested {
+        if let Err(error) =
+            crate::m4r05_ordinary_conversation_driver::start_early_process_watchdog()
+        {
+            crate::m4r05_ordinary_conversation_driver::reject_early_setup(&error);
         }
     }
     // Historical M2/M3/C09 drivers retain their archived, explicit runtime.
@@ -747,6 +767,7 @@ pub fn run() {
                             && !m4r02_ordinary_composition_requested
                             && !m4r03_ordinary_clock_requested
                             && !m4r04_ordinary_route_requested
+                            && !m4r05_ordinary_conversation_requested
                         {
                             exit_acceptance_startup_failure(
                                 ACCEPTANCE_APP_STATE_INITIALIZATION_EXIT_CODE,
@@ -766,6 +787,9 @@ pub fn run() {
                 }
                 if m4r04_ordinary_route_requested {
                     crate::m4r04_ordinary_route_driver::mark_ordinary_constructor_ready();
+                }
+                if m4r05_ordinary_conversation_requested {
+                    crate::m4r05_ordinary_conversation_driver::mark_ordinary_constructor_ready();
                 }
                 if !legacy_acceptance_runtime_requested {
                     crate::ordinary_product_storage_bootstrap::cold_bootstrap_before_startup(
@@ -881,6 +905,10 @@ pub fn run() {
                     crate::m4r04_ordinary_route_driver::install_after_runtime_ready(app)
                         .map_err(std::io::Error::other)?;
                 }
+                if m4r05_ordinary_conversation_requested {
+                    crate::m4r05_ordinary_conversation_driver::install_after_runtime_ready(app)
+                        .map_err(std::io::Error::other)?;
+                }
                 Ok(())
             };
             let setup_result = ordinary_setup();
@@ -902,6 +930,11 @@ pub fn run() {
                             &error.to_string(),
                         );
                     }
+                    if m4r05_ordinary_conversation_requested {
+                        crate::m4r05_ordinary_conversation_driver::reject_early_setup(
+                            &error.to_string(),
+                        );
+                    }
                     Err(error)
                 }
             }
@@ -918,6 +951,11 @@ pub fn run() {
             }
             if m4r04_ordinary_route_requested {
                 crate::m4r04_ordinary_route_driver::reject_early_setup(&error.to_string());
+            }
+            if m4r05_ordinary_conversation_requested {
+                crate::m4r05_ordinary_conversation_driver::reject_early_setup(
+                    &error.to_string(),
+                );
             }
             panic!("error while building tauri application: {error}");
         }

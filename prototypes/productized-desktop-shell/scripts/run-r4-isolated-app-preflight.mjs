@@ -401,6 +401,163 @@ const M4R04_WORK_ITEM_SOURCE_OWNER_REF =
   "owner:m2-workflow-state-work-item:v1";
 const M4R04_PROPOSAL_SOURCE_OWNER_REF =
   "owner:project-consultation-proposal:v1";
+const M4R05_ORDINARY_CONVERSATION_MODE_ARG = "--m4r05-ordinary-conversation";
+const M4R05_ORDINARY_CONVERSATION_DRIVER_ENV =
+  "SYN_M4R05_ORDINARY_CONVERSATION_DRIVER";
+const M4R05_ORDINARY_CONVERSATION_PHASE_ENV =
+  "SYN_M4R05_ORDINARY_CONVERSATION_PHASE";
+const M4R05_ORDINARY_CONVERSATION_NONCE_ENV =
+  "SYN_M4R05_ORDINARY_CONVERSATION_NONCE";
+const M4R05_ORDINARY_CONVERSATION_DRIVER_VALUE =
+  "ordinary-persistent-secretary-conversation-v1";
+const M4R05_ORDINARY_CONVERSATION_MARKER_ENV_NAMES = [
+  M4R05_ORDINARY_CONVERSATION_DRIVER_ENV,
+  M4R05_ORDINARY_CONVERSATION_PHASE_ENV,
+  M4R05_ORDINARY_CONVERSATION_NONCE_ENV,
+];
+const M4R05_ORDINARY_CONVERSATION_PHASES = [
+  "two_rounds_arm",
+  "restart_continue_failure",
+];
+const M4R05_ORDINARY_CONVERSATION_RECEIPT_PREFIX =
+  "m4r05-ordinary-conversation-";
+const M4R05_ORDINARY_CONVERSATION_RECEIPT_SCHEMA =
+  "syn_m4r05_ordinary_conversation_driver_receipt.v1";
+const M4R05_ORDINARY_CONVERSATION_COMPOSITE_SCHEMA =
+  "syn.m4.remediation.behavior-receipt.v1";
+const M4R05_ORDINARY_CONVERSATION_COMPOSITE_FILE =
+  "m4r05-secretary-conversation-composite-receipt.json";
+const M4R05_ORDINARY_CONVERSATION_PORTABLE_REPORT_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../docs/harness/reports/M4R05-persistent-secretary-conversation-behavior-receipt.json",
+);
+const M4R05_ORDINARY_CONVERSATION_MODE_CONFLICT =
+  "m4r05_ordinary_conversation_mode_conflict";
+const M4R05_ORDINARY_CONVERSATION_OUTPUT_MAX_BYTES = 16 * 1024;
+const M4R05_ORDINARY_CONVERSATION_RECEIPT_MAX_BYTES = 64 * 1024;
+// 210s launcher > 190s Rust watchdog > READY20 + IPC140 + post10 = 170s.
+const M4R05_ORDINARY_CONVERSATION_PHASE_TIMEOUT_MS = 210 * 1000;
+const M4R05_ORDINARY_CONVERSATION_CHILD_CLOSE_GRACE_MS = 2 * 1000;
+const M4R05_ORDINARY_CONVERSATION_PASS_RECEIPT_FIELDS = [
+  "schema_version",
+  "phase",
+  "launch_ordinal",
+  "process_id_sha256",
+  "outcome",
+  "profile_fingerprint",
+  "nonce_sha256",
+  "previous_phase_receipt_sha256",
+  "ordinary_constructor",
+  "ordinary_composition",
+  "command_registry_surface",
+  "acceptance_wrapper_calls",
+  "direct_repository_seed_calls",
+  "external_capability_attempts",
+  "open_conversation_clicks",
+  "dom_submit_clicks",
+  "bridge_load_calls",
+  "bridge_exact_replay_send_calls",
+  "blank_submit_disabled",
+  "initial_turn_count",
+  "final_turn_count",
+  "succeeded_turn_count",
+  "failed_turn_count",
+  "user_message_node_count",
+  "assistant_message_node_count",
+  "role_session_ref_sha256",
+  "history_ref_sha256",
+  "final_conversation_sha256",
+  "turn_refs_sha256",
+  "client_message_refs_sha256",
+  "user_messages_sha256",
+  "assistant_messages_sha256",
+  "exact_replay_observed",
+  "exact_replay_turn_ref_sha256",
+  "exact_replay_command_receipt_ref_sha256",
+  "restart_continuity",
+  "failure_turn_ordinal",
+  "failure_error_code",
+  "stays_alive_for_sigkill",
+  "raw_text_fields_present",
+  "database_evidence",
+  "error_family",
+];
+const M4R05_ORDINARY_CONVERSATION_DATABASE_FIELDS = [
+  "baseline",
+  "final_state",
+  "read_only_query_only_connection_count",
+  "formal_objects_unchanged",
+  "previous_final_match",
+  "exact_replay_zero_dispatch",
+  "restart_load_zero_dispatch",
+];
+const M4R05_ORDINARY_CONVERSATION_DATABASE_SNAPSHOT_FIELDS = [
+  "m3",
+  "provider",
+  "m4",
+  "workbench",
+];
+const M4R05_ORDINARY_CONVERSATION_SQLITE_HEALTH_FIELDS = [
+  "integrity_check",
+  "foreign_key_violations",
+];
+const M4R05_ORDINARY_CONVERSATION_FORMAL_FINGERPRINT_FIELDS = [
+  "table_count",
+  "record_count",
+  "canonical_record_hashes_sha256",
+];
+const M4R05_ORDINARY_CONVERSATION_M3_DATABASE_FIELDS = [
+  "sqlite_health",
+  "active_role_session_rows",
+  "role_session_ref_sha256",
+  "ordered_turn_refs_sha256",
+  "verified_provider_handle_rows",
+  "current_binding_rows",
+  "conversation_context_rows",
+  "turn_rows",
+  "succeeded_turn_rows",
+  "failed_turn_rows",
+  "create_role_session_effect_rows",
+  "create_role_session_readback_recorded_rows",
+  "start_turn_effect_rows",
+  "start_turn_readback_recorded_rows",
+  "start_turn_receipt_rows",
+  "record_turn_readback_receipt_rows",
+  "handoff_write_rows",
+];
+const M4R05_ORDINARY_CONVERSATION_PROVIDER_DATABASE_FIELDS = [
+  "sqlite_health",
+  "session_rows",
+  "role_session_ref_sha256",
+  "ordered_turn_refs_sha256",
+  "ordered_client_message_refs_sha256",
+  "ordered_turn_bindings_sha256",
+  "transcript_rows",
+  "prepared_transcript_rows",
+  "succeeded_transcript_rows",
+  "failed_transcript_rows",
+  "start_session_calls",
+  "continue_turn_calls",
+  "poll_calls",
+  "read_transcript_calls",
+  "resume_readback_calls",
+  "stop_calls",
+];
+const M4R05_ORDINARY_CONVERSATION_M4_DATABASE_FIELDS = [
+  "sqlite_health",
+  "model_invocation_rows",
+  "source_owner_writeback_request_rows",
+  "source_owner_writeback_receipt_rows",
+  "coordination_rows",
+  "formal_objects",
+];
+const M4R05_ORDINARY_CONVERSATION_WORKBENCH_DATABASE_FIELDS = [
+  "workbench_db_absent",
+  "workflow_state_absent",
+  "storage_mode_absent",
+  "catalog_file_count",
+  "catalog_labels_and_bytes_sha256",
+];
 const M2_REFERENCE_SLICE_DRIVER_ENV = "SYN_M2_R4_REFERENCE_SLICE_DRIVER";
 const M2_REFERENCE_SLICE_ATTEMPT_ENV = "SYN_M2_R4_REFERENCE_SLICE_ATTEMPT";
 const M2_REFERENCE_SLICE_PHASE_ENV = "SYN_M2_R4_REFERENCE_SLICE_PHASE";
@@ -877,6 +1034,41 @@ async function writeM4R04PortableReport(value) {
       || (metadata.mode & 0o777) !== MODE_0600
     ) {
       throw new Error("m4r04 portable report metadata invalid");
+    }
+  } catch (error) {
+    try {
+      await unlink(temporaryPath);
+    } catch {
+      // rename success or absent temp requires no cleanup.
+    }
+    throw error;
+  }
+}
+
+async function writeM4R05PortableReport(value) {
+  const reportDirectory = dirname(
+    M4R05_ORDINARY_CONVERSATION_PORTABLE_REPORT_PATH,
+  );
+  await mkdir(reportDirectory, { recursive: true });
+  const temporaryPath = join(
+    reportDirectory,
+    `.M4R05-persistent-secretary-conversation-${randomBytes(12).toString("hex")}.tmp`,
+  );
+  try {
+    await writeJson(temporaryPath, value);
+    await rename(
+      temporaryPath,
+      M4R05_ORDINARY_CONVERSATION_PORTABLE_REPORT_PATH,
+    );
+    const metadata = await lstat(
+      M4R05_ORDINARY_CONVERSATION_PORTABLE_REPORT_PATH,
+    );
+    if (
+      !metadata.isFile()
+      || metadata.isSymbolicLink()
+      || (metadata.mode & 0o777) !== MODE_0600
+    ) {
+      throw new Error("m4r05 portable report metadata invalid");
     }
   } catch (error) {
     try {
@@ -5796,6 +5988,1094 @@ async function runM4R04OrdinaryRouteSuite({
   };
 }
 
+function m4r05OrdinaryConversationReceiptPath(root, phase) {
+  return join(
+    root,
+    "runtime-artifacts",
+    `${M4R05_ORDINARY_CONVERSATION_RECEIPT_PREFIX}${phase}.json`,
+  );
+}
+
+function m4r05RawEvidenceLeak(value) {
+  const forbiddenKeys = new Set([
+    "message",
+    "text",
+    "message_ref",
+    "client_message_ref",
+    "turn_ref",
+    "role_session_ref",
+    "history_ref",
+    "command_receipt_ref",
+    "assistant_message",
+    "user_message",
+    "provider_handle",
+    "session_handle",
+  ]);
+  const fixedRawMessages = [1, 2, 3, 4].map(
+    (ordinal) => `SYN M4R05 ordinary conversation round ${ordinal}`,
+  );
+  const publicProductCodes = new Set([
+    "M4_SECRETARY_PROVIDER_FAILURE",
+    "M4_SECRETARY_PROVIDER_UNAVAILABLE",
+    "M4_SECRETARY_CONVERSATION_UNAVAILABLE",
+  ]);
+  const visit = (current, path = "$") => {
+    if (Array.isArray(current)) {
+      for (let index = 0; index < current.length; index += 1) {
+        const leak = visit(current[index], `${path}[${index}]`);
+        if (leak) return leak;
+      }
+      return null;
+    }
+    if (current && typeof current === "object") {
+      for (const [key, nested] of Object.entries(current)) {
+        if (forbiddenKeys.has(key)) return `${path}.${key}`;
+        const leak = visit(nested, `${path}.${key}`);
+        if (leak) return leak;
+      }
+      return null;
+    }
+    if (typeof current !== "string") return null;
+    if (
+      fixedRawMessages.includes(current)
+      || current.startsWith("secretary-client-message:")
+      || current.startsWith("role-session:")
+      || current.startsWith("conversation-history:")
+      || /^provider-(?:handle|session):/i.test(current)
+      || /^session-handle:/i.test(current)
+      || current.toLowerCase().includes("m4_secretary_fake_")
+      || (current.startsWith("M4_SECRETARY_")
+        && !publicProductCodes.has(current))
+    ) {
+      return path;
+    }
+    return null;
+  };
+  return visit(value);
+}
+
+function m4r05CanonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(m4r05CanonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => (
+      `${JSON.stringify(key)}:${m4r05CanonicalJson(value[key])}`
+    )).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function m4r05SnapshotWithoutReadTranscript(value) {
+  return {
+    ...value,
+    provider: {
+      ...value.provider,
+      read_transcript_calls: 0,
+    },
+  };
+}
+
+function m4r05NonnegativeIntegerFields(value, fields) {
+  return fields.find(
+    (field) => !Number.isSafeInteger(value[field]) || value[field] < 0,
+  ) ?? null;
+}
+
+function m4r05SqliteHealthFailure(value) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R05_ORDINARY_CONVERSATION_SQLITE_HEALTH_FIELDS,
+  )) return "health_fields";
+  return m4r02FirstInvalidField([
+    ["integrity_check", value.integrity_check === "ok"],
+    ["foreign_key_violations", value.foreign_key_violations === 0],
+  ]);
+}
+
+function m4r05FormalFingerprintFailure(value, expectedTableCount) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R05_ORDINARY_CONVERSATION_FORMAL_FINGERPRINT_FIELDS,
+  )) return "formal_fields";
+  return m4r02FirstInvalidField([
+    ["formal_table_count", value.table_count === expectedTableCount],
+    [
+      "formal_record_count",
+      Number.isSafeInteger(value.record_count) && value.record_count >= 0,
+    ],
+    [
+      "formal_hash",
+      m4r02IsLowerHexSha256(value.canonical_record_hashes_sha256),
+    ],
+  ]);
+}
+
+function m4r05DatabaseSnapshotFailure(value) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R05_ORDINARY_CONVERSATION_DATABASE_SNAPSHOT_FIELDS,
+  )) return "snapshot_fields";
+  if (!m4r02HasExactObjectFields(
+    value.m3,
+    M4R05_ORDINARY_CONVERSATION_M3_DATABASE_FIELDS,
+  )) return "m3_fields";
+  if (!m4r02HasExactObjectFields(
+    value.provider,
+    M4R05_ORDINARY_CONVERSATION_PROVIDER_DATABASE_FIELDS,
+  )) return "provider_fields";
+  if (!m4r02HasExactObjectFields(
+    value.m4,
+    M4R05_ORDINARY_CONVERSATION_M4_DATABASE_FIELDS,
+  )) return "m4_fields";
+  if (!m4r02HasExactObjectFields(
+    value.workbench,
+    M4R05_ORDINARY_CONVERSATION_WORKBENCH_DATABASE_FIELDS,
+  )) return "workbench_fields";
+  for (const [label, health] of [
+    ["m3", value.m3.sqlite_health],
+    ["provider", value.provider.sqlite_health],
+    ["m4", value.m4.sqlite_health],
+  ]) {
+    const failure = m4r05SqliteHealthFailure(health);
+    if (failure) return `${label}_${failure}`;
+  }
+  const m3NumberFailure = m4r05NonnegativeIntegerFields(
+    value.m3,
+    M4R05_ORDINARY_CONVERSATION_M3_DATABASE_FIELDS.filter(
+      (field) => ![
+        "sqlite_health",
+        "role_session_ref_sha256",
+        "ordered_turn_refs_sha256",
+      ].includes(field),
+    ),
+  );
+  if (m3NumberFailure) return `m3_${m3NumberFailure}`;
+  if (!m4r02IsLowerHexSha256(value.m3.role_session_ref_sha256)) {
+    return "m3_role_session_ref_sha256";
+  }
+  if (!m4r02IsLowerHexSha256(value.m3.ordered_turn_refs_sha256)) {
+    return "m3_ordered_turn_refs_sha256";
+  }
+  const providerNumberFailure = m4r05NonnegativeIntegerFields(
+    value.provider,
+    M4R05_ORDINARY_CONVERSATION_PROVIDER_DATABASE_FIELDS.filter(
+      (field) => ![
+        "sqlite_health",
+        "role_session_ref_sha256",
+        "ordered_turn_refs_sha256",
+        "ordered_client_message_refs_sha256",
+        "ordered_turn_bindings_sha256",
+      ].includes(field),
+    ),
+  );
+  if (providerNumberFailure) return `provider_${providerNumberFailure}`;
+  if (
+    value.provider.role_session_ref_sha256 !== null
+    && !m4r02IsLowerHexSha256(value.provider.role_session_ref_sha256)
+  ) return "provider_role_session_ref_sha256";
+  for (const field of [
+    "ordered_turn_refs_sha256",
+    "ordered_client_message_refs_sha256",
+    "ordered_turn_bindings_sha256",
+  ]) {
+    if (!m4r02IsLowerHexSha256(value.provider[field])) {
+      return `provider_${field}`;
+    }
+  }
+  const m4NumberFailure = m4r05NonnegativeIntegerFields(
+    value.m4,
+    [
+      "model_invocation_rows",
+      "source_owner_writeback_request_rows",
+      "source_owner_writeback_receipt_rows",
+      "coordination_rows",
+    ],
+  );
+  if (m4NumberFailure) return `m4_${m4NumberFailure}`;
+  const m4FormalFailure = m4r05FormalFingerprintFailure(
+    value.m4.formal_objects,
+    17,
+  );
+  if (m4FormalFailure) return `m4_${m4FormalFailure}`;
+  return m4r02FirstInvalidField([
+    ["m3_handoff_zero", value.m3.handoff_write_rows === 0],
+    ["m4_model_zero", value.m4.model_invocation_rows === 0],
+    [
+      "m4_writeback_request_zero",
+      value.m4.source_owner_writeback_request_rows === 0,
+    ],
+    [
+      "m4_writeback_receipt_zero",
+      value.m4.source_owner_writeback_receipt_rows === 0,
+    ],
+    ["workbench_db_absent", value.workbench.workbench_db_absent === true],
+    ["workflow_state_absent", value.workbench.workflow_state_absent === true],
+    ["storage_mode_absent", value.workbench.storage_mode_absent === true],
+    ["catalog_file_count", value.workbench.catalog_file_count === 2],
+    [
+      "catalog_labels_and_bytes_sha256",
+      m4r02IsLowerHexSha256(
+        value.workbench.catalog_labels_and_bytes_sha256,
+      ),
+    ],
+  ]);
+}
+
+function m4r05M3CountsMatch(value, expected) {
+  return m4r02FirstInvalidField(Object.entries(expected).map(
+    ([field, count]) => [field, value[field] === count],
+  ));
+}
+
+function m4r05ProviderCountsMatch(value, expected) {
+  return m4r02FirstInvalidField(Object.entries(expected).map(
+    ([field, count]) => [field, value[field] === count],
+  ));
+}
+
+function m4r05DatabaseContractFailure({
+  phase,
+  value,
+  expectedRoleSessionRefSha256,
+  expectedTurnRefsSha256,
+  expectedClientMessageRefsSha256,
+}) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R05_ORDINARY_CONVERSATION_DATABASE_FIELDS,
+  )) return "database_fields";
+  const baselineFailure = m4r05DatabaseSnapshotFailure(value.baseline);
+  if (baselineFailure) return `baseline_${baselineFailure}`;
+  const finalFailure = m4r05DatabaseSnapshotFailure(value.final_state);
+  if (finalFailure) return `final_${finalFailure}`;
+  const commonFailure = m4r02FirstInvalidField([
+    [
+      "connection_count",
+      value.read_only_query_only_connection_count === 6,
+    ],
+    ["formal_objects_unchanged", value.formal_objects_unchanged === true],
+    [
+      "m4_formal_exact",
+      m4r05CanonicalJson(value.baseline.m4.formal_objects)
+        === m4r05CanonicalJson(value.final_state.m4.formal_objects),
+    ],
+    [
+      "workbench_absence_and_catalog_exact",
+      m4r05CanonicalJson(value.baseline.workbench)
+        === m4r05CanonicalJson(value.final_state.workbench),
+    ],
+    [
+      "m4_coordination_exact",
+      value.baseline.m4.coordination_rows
+        === value.final_state.m4.coordination_rows,
+    ],
+    [
+      "read_transcript_monotonic",
+      value.final_state.provider.read_transcript_calls
+        >= value.baseline.provider.read_transcript_calls,
+    ],
+    [
+      "final_m3_role_binding",
+      value.final_state.m3.role_session_ref_sha256
+        === expectedRoleSessionRefSha256,
+    ],
+    [
+      "final_provider_role_binding",
+      value.final_state.provider.role_session_ref_sha256
+        === expectedRoleSessionRefSha256,
+    ],
+    [
+      "final_m3_turn_binding",
+      value.final_state.m3.ordered_turn_refs_sha256
+        === expectedTurnRefsSha256,
+    ],
+    [
+      "final_provider_turn_binding",
+      value.final_state.provider.ordered_turn_refs_sha256
+        === expectedTurnRefsSha256,
+    ],
+    [
+      "final_provider_client_binding",
+      value.final_state.provider.ordered_client_message_refs_sha256
+        === expectedClientMessageRefsSha256,
+    ],
+  ]);
+  if (commonFailure) return commonFailure;
+  if (phase === "two_rounds_arm") {
+    const baselineM3Failure = m4r05M3CountsMatch(value.baseline.m3, {
+      active_role_session_rows: 1,
+      verified_provider_handle_rows: 0,
+      current_binding_rows: 0,
+      conversation_context_rows: 0,
+      turn_rows: 0,
+      succeeded_turn_rows: 0,
+      failed_turn_rows: 0,
+      create_role_session_effect_rows: 1,
+      create_role_session_readback_recorded_rows: 0,
+      start_turn_effect_rows: 0,
+      start_turn_readback_recorded_rows: 0,
+      start_turn_receipt_rows: 0,
+      record_turn_readback_receipt_rows: 0,
+      handoff_write_rows: 0,
+    });
+    if (baselineM3Failure) return `phase1_baseline_m3_${baselineM3Failure}`;
+    const baselineProviderFailure = m4r05ProviderCountsMatch(
+      value.baseline.provider,
+      {
+        session_rows: 0,
+        transcript_rows: 0,
+        prepared_transcript_rows: 0,
+        succeeded_transcript_rows: 0,
+        failed_transcript_rows: 0,
+        start_session_calls: 0,
+        continue_turn_calls: 0,
+        poll_calls: 0,
+        read_transcript_calls: 0,
+        resume_readback_calls: 0,
+        stop_calls: 0,
+      },
+    );
+    if (baselineProviderFailure) {
+      return `phase1_baseline_provider_${baselineProviderFailure}`;
+    }
+    const finalM3Failure = m4r05M3CountsMatch(value.final_state.m3, {
+      active_role_session_rows: 1,
+      verified_provider_handle_rows: 1,
+      current_binding_rows: 1,
+      conversation_context_rows: 1,
+      turn_rows: 2,
+      succeeded_turn_rows: 2,
+      failed_turn_rows: 0,
+      create_role_session_effect_rows: 1,
+      create_role_session_readback_recorded_rows: 1,
+      start_turn_effect_rows: 2,
+      start_turn_readback_recorded_rows: 2,
+      start_turn_receipt_rows: 2,
+      record_turn_readback_receipt_rows: 2,
+      handoff_write_rows: 0,
+    });
+    if (finalM3Failure) return `phase1_final_m3_${finalM3Failure}`;
+    const finalProviderFailure = m4r05ProviderCountsMatch(
+      value.final_state.provider,
+      {
+        session_rows: 1,
+        transcript_rows: 2,
+        prepared_transcript_rows: 0,
+        succeeded_transcript_rows: 2,
+        failed_transcript_rows: 0,
+        start_session_calls: 1,
+        continue_turn_calls: 2,
+        poll_calls: 3,
+        resume_readback_calls: 0,
+        stop_calls: 0,
+      },
+    );
+    if (finalProviderFailure) {
+      return `phase1_final_provider_${finalProviderFailure}`;
+    }
+    return m4r02FirstInvalidField([
+      [
+        "phase1_provider_role_baseline",
+        value.baseline.provider.role_session_ref_sha256 === null,
+      ],
+      ["previous_final_match", value.previous_final_match === null],
+      ["exact_replay_zero_dispatch", value.exact_replay_zero_dispatch === true],
+      ["restart_load_zero_dispatch", value.restart_load_zero_dispatch === null],
+    ]);
+  }
+  if (phase === "restart_continue_failure") {
+    const baselineM3Failure = m4r05M3CountsMatch(value.baseline.m3, {
+      active_role_session_rows: 1,
+      verified_provider_handle_rows: 1,
+      current_binding_rows: 1,
+      conversation_context_rows: 1,
+      turn_rows: 2,
+      succeeded_turn_rows: 2,
+      failed_turn_rows: 0,
+      create_role_session_effect_rows: 1,
+      create_role_session_readback_recorded_rows: 1,
+      start_turn_effect_rows: 2,
+      start_turn_readback_recorded_rows: 2,
+      start_turn_receipt_rows: 2,
+      record_turn_readback_receipt_rows: 2,
+      handoff_write_rows: 0,
+    });
+    if (baselineM3Failure) return `phase2_baseline_m3_${baselineM3Failure}`;
+    const baselineProviderFailure = m4r05ProviderCountsMatch(
+      value.baseline.provider,
+      {
+        session_rows: 1,
+        transcript_rows: 2,
+        prepared_transcript_rows: 0,
+        succeeded_transcript_rows: 2,
+        failed_transcript_rows: 0,
+        start_session_calls: 1,
+        continue_turn_calls: 2,
+        poll_calls: 3,
+        resume_readback_calls: 0,
+        stop_calls: 0,
+      },
+    );
+    if (baselineProviderFailure) {
+      return `phase2_baseline_provider_${baselineProviderFailure}`;
+    }
+    const finalM3Failure = m4r05M3CountsMatch(value.final_state.m3, {
+      active_role_session_rows: 1,
+      verified_provider_handle_rows: 1,
+      current_binding_rows: 1,
+      conversation_context_rows: 1,
+      turn_rows: 4,
+      succeeded_turn_rows: 3,
+      failed_turn_rows: 1,
+      create_role_session_effect_rows: 1,
+      create_role_session_readback_recorded_rows: 1,
+      start_turn_effect_rows: 4,
+      start_turn_readback_recorded_rows: 4,
+      start_turn_receipt_rows: 4,
+      record_turn_readback_receipt_rows: 4,
+      handoff_write_rows: 0,
+    });
+    if (finalM3Failure) return `phase2_final_m3_${finalM3Failure}`;
+    const finalProviderFailure = m4r05ProviderCountsMatch(
+      value.final_state.provider,
+      {
+        session_rows: 1,
+        transcript_rows: 4,
+        prepared_transcript_rows: 0,
+        succeeded_transcript_rows: 3,
+        failed_transcript_rows: 1,
+        start_session_calls: 1,
+        continue_turn_calls: 4,
+        poll_calls: 5,
+        resume_readback_calls: 0,
+        stop_calls: 0,
+      },
+    );
+    if (finalProviderFailure) {
+      return `phase2_final_provider_${finalProviderFailure}`;
+    }
+    return m4r02FirstInvalidField([
+      ["restart_read_transcript_positive", value.final_state.provider.read_transcript_calls > 0],
+      ["previous_final_match", value.previous_final_match === true],
+      ["exact_replay_zero_dispatch", value.exact_replay_zero_dispatch === null],
+      ["restart_load_zero_dispatch", value.restart_load_zero_dispatch === true],
+    ]);
+  }
+  return "database_phase";
+}
+
+function m4r05PassReceiptContractFailure({ phase, value }) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R05_ORDINARY_CONVERSATION_PASS_RECEIPT_FIELDS,
+  )) {
+    return "top_level_fields";
+  }
+  const hashFields = [
+    "process_id_sha256",
+    "profile_fingerprint",
+    "nonce_sha256",
+    "role_session_ref_sha256",
+    "history_ref_sha256",
+    "final_conversation_sha256",
+    "turn_refs_sha256",
+    "client_message_refs_sha256",
+    "user_messages_sha256",
+    "assistant_messages_sha256",
+  ];
+  const invalidHash = hashFields.find(
+    (field) => !m4r02IsLowerHexSha256(value[field]),
+  );
+  if (invalidHash) return invalidHash;
+  const commonFailure = m4r02FirstInvalidField([
+    ["outcome", value.outcome === "PASS"],
+    ["ordinary_constructor", value.ordinary_constructor === true],
+    ["ordinary_composition", value.ordinary_composition === true],
+    [
+      "command_registry_surface",
+      value.command_registry_surface
+        === "ordinary_secretary_conversation_command_and_dom_submit",
+    ],
+    ["acceptance_wrapper_calls", value.acceptance_wrapper_calls === 0],
+    ["direct_repository_seed_calls", value.direct_repository_seed_calls === 0],
+    ["external_capability_attempts", value.external_capability_attempts === 0],
+    ["open_conversation_clicks", value.open_conversation_clicks === 1],
+    ["dom_submit_clicks", value.dom_submit_clicks === 2],
+    ["blank_submit_disabled", value.blank_submit_disabled === true],
+    ["raw_text_fields_present", value.raw_text_fields_present === false],
+    ["error_family", value.error_family === null],
+  ]);
+  if (commonFailure) return commonFailure;
+  const rawLeak = m4r05RawEvidenceLeak(value);
+  if (rawLeak) return `raw_evidence_${rawLeak}`;
+  const databaseFailure = m4r05DatabaseContractFailure({
+    phase,
+    value: value.database_evidence,
+    expectedRoleSessionRefSha256: value.role_session_ref_sha256,
+    expectedTurnRefsSha256: value.turn_refs_sha256,
+    expectedClientMessageRefsSha256: value.client_message_refs_sha256,
+  });
+  if (databaseFailure) return databaseFailure;
+  if (phase === "two_rounds_arm") {
+    const replayHashes = [
+      "exact_replay_turn_ref_sha256",
+      "exact_replay_command_receipt_ref_sha256",
+    ];
+    const invalidReplayHash = replayHashes.find(
+      (field) => !m4r02IsLowerHexSha256(value[field]),
+    );
+    return invalidReplayHash ?? m4r02FirstInvalidField([
+      ["previous_receipt", value.previous_phase_receipt_sha256 === null],
+      ["bridge_load_calls", value.bridge_load_calls === 3],
+      [
+        "bridge_exact_replay_send_calls",
+        value.bridge_exact_replay_send_calls === 1,
+      ],
+      ["initial_turn_count", value.initial_turn_count === 0],
+      ["final_turn_count", value.final_turn_count === 2],
+      ["succeeded_turn_count", value.succeeded_turn_count === 2],
+      ["failed_turn_count", value.failed_turn_count === 0],
+      ["user_message_node_count", value.user_message_node_count === 2],
+      ["assistant_message_node_count", value.assistant_message_node_count === 2],
+      ["exact_replay_observed", value.exact_replay_observed === true],
+      ["restart_continuity", value.restart_continuity === false],
+      ["failure_turn_ordinal", value.failure_turn_ordinal === null],
+      ["failure_error_code", value.failure_error_code === null],
+      ["stays_alive_for_sigkill", value.stays_alive_for_sigkill === true],
+    ]);
+  }
+  if (phase === "restart_continue_failure") {
+    return m4r02FirstInvalidField([
+      [
+        "previous_receipt",
+        m4r02IsLowerHexSha256(value.previous_phase_receipt_sha256),
+      ],
+      ["bridge_load_calls", value.bridge_load_calls === 2],
+      [
+        "bridge_exact_replay_send_calls",
+        value.bridge_exact_replay_send_calls === 0,
+      ],
+      ["initial_turn_count", value.initial_turn_count === 2],
+      ["final_turn_count", value.final_turn_count === 4],
+      ["succeeded_turn_count", value.succeeded_turn_count === 3],
+      ["failed_turn_count", value.failed_turn_count === 1],
+      ["user_message_node_count", value.user_message_node_count === 4],
+      ["assistant_message_node_count", value.assistant_message_node_count === 3],
+      ["exact_replay_observed", value.exact_replay_observed === false],
+      ["exact_replay_turn_ref", value.exact_replay_turn_ref_sha256 === null],
+      [
+        "exact_replay_command_receipt",
+        value.exact_replay_command_receipt_ref_sha256 === null,
+      ],
+      ["restart_continuity", value.restart_continuity === true],
+      ["failure_turn_ordinal", value.failure_turn_ordinal === 4],
+      [
+        "failure_error_code",
+        value.failure_error_code === "M4_SECRETARY_PROVIDER_FAILURE",
+      ],
+      ["stays_alive_for_sigkill", value.stays_alive_for_sigkill === false],
+    ]);
+  }
+  return "phase";
+}
+
+async function readM4R05OrdinaryConversationReceipt({
+  root,
+  phase,
+  expectedNonceSha256,
+  expectedProfileFingerprint,
+  expectedPreviousReceiptSha256,
+  expectedProcessIdSha256,
+  visibilityDeadline,
+  abortWhen,
+}) {
+  const path = m4r05OrdinaryConversationReceiptPath(root, phase);
+  while (true) {
+    try {
+      const metadata = await lstat(path);
+      if (
+        !metadata.isFile()
+        || metadata.isSymbolicLink()
+        || (metadata.mode & 0o777) !== MODE_0600
+        || metadata.size > M4R05_ORDINARY_CONVERSATION_RECEIPT_MAX_BYTES
+      ) {
+        const error = new Error(
+          "m4r05_ordinary_conversation_receipt_metadata_invalid",
+        );
+        error.failureFamily = "receipt_invalid_metadata";
+        throw error;
+      }
+      const bytes = await readFile(path);
+      const value = JSON.parse(bytes.toString("utf8"));
+      if (!m4r02HasExactObjectFields(
+        value,
+        M4R05_ORDINARY_CONVERSATION_PASS_RECEIPT_FIELDS,
+      )) {
+        const error = new Error(
+          "m4r05_ordinary_conversation_receipt_binding_invalid:top_level_fields",
+        );
+        error.failureFamily = "receipt_binding_top_level_fields";
+        throw error;
+      }
+      const expectedLaunchOrdinal =
+        M4R05_ORDINARY_CONVERSATION_PHASES.indexOf(phase) + 1;
+      const invalidBinding = m4r02FirstInvalidField([
+        [
+          "schema",
+          value.schema_version === M4R05_ORDINARY_CONVERSATION_RECEIPT_SCHEMA,
+        ],
+        ["phase", value.phase === phase],
+        ["launch_ordinal", value.launch_ordinal === expectedLaunchOrdinal],
+        ["nonce", value.nonce_sha256 === expectedNonceSha256],
+        ["profile", value.profile_fingerprint === expectedProfileFingerprint],
+        ["process_id", value.process_id_sha256 === expectedProcessIdSha256],
+        [
+          "previous_receipt",
+          value.previous_phase_receipt_sha256
+            === expectedPreviousReceiptSha256,
+        ],
+      ]);
+      if (invalidBinding) {
+        const error = new Error(
+          `m4r05_ordinary_conversation_receipt_binding_invalid:${invalidBinding}`,
+        );
+        error.failureFamily = `receipt_binding_${invalidBinding}`;
+        throw error;
+      }
+      if (
+        value.outcome === "REJECTED"
+        && /^[a-z0-9_:-]{1,160}$/.test(value.error_family ?? "")
+      ) {
+        const error = new Error(
+          `m4r05_ordinary_conversation_driver_${value.error_family}`,
+        );
+        error.failureFamily = `driver_${value.error_family}`;
+        throw error;
+      }
+      const invalidPassField = m4r05PassReceiptContractFailure({ phase, value });
+      if (invalidPassField) {
+        const error = new Error(
+          `m4r05_ordinary_conversation_pass_contract_invalid:${phase}:${invalidPassField}`,
+        );
+        error.failureFamily = `receipt_contract_${phase}_${invalidPassField}`;
+        throw error;
+      }
+      return { path, sha256: sha256(bytes), value };
+    } catch (error) {
+      if (error?.code === "ENOENT" && Date.now() < visibilityDeadline) {
+        if (abortWhen()) {
+          const closedError = new Error(
+            "m4r05_ordinary_conversation_child_closed_before_receipt",
+          );
+          closedError.failureFamily = "child_closed_before_receipt";
+          throw closedError;
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+        continue;
+      }
+      if (typeof error?.failureFamily === "string") throw error;
+      const receiptError = new Error(
+        "m4r05_ordinary_conversation_receipt_invalid",
+      );
+      receiptError.failureFamily = error instanceof SyntaxError
+        ? "receipt_invalid_json"
+        : "receipt_invalid_io";
+      throw receiptError;
+    }
+  }
+}
+
+function spawnM4R05OrdinaryConversationApp({
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  phase,
+  nonce,
+}) {
+  const environment = {
+    ...normalBuildEnvironment,
+    [PROFILE_ENV]: profilePath,
+    [REENTRY_CAPABILITY_ENV]: reentryCapability,
+    [M4R05_ORDINARY_CONVERSATION_DRIVER_ENV]:
+      M4R05_ORDINARY_CONVERSATION_DRIVER_VALUE,
+    [M4R05_ORDINARY_CONVERSATION_PHASE_ENV]: phase,
+    [M4R05_ORDINARY_CONVERSATION_NONCE_ENV]: nonce,
+  };
+  const child = spawn(debugAppExecutablePath, [], {
+    cwd: desktopRoot,
+    env: environment,
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let boundedOutput = "";
+  let closed = false;
+  child.stdout?.on("data", (chunk) => {
+    boundedOutput = `${boundedOutput}${chunk.toString("utf8")}`
+      .slice(-M4R05_ORDINARY_CONVERSATION_OUTPUT_MAX_BYTES);
+  });
+  child.stderr?.on("data", (chunk) => {
+    boundedOutput = `${boundedOutput}${chunk.toString("utf8")}`
+      .slice(-M4R05_ORDINARY_CONVERSATION_OUTPUT_MAX_BYTES);
+  });
+  const closePromise = new Promise((resolveClose) => {
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      closed = true;
+      resolveClose(result);
+    };
+    child.once("error", () => settle({
+      exit_code: null,
+      launched: false,
+      signal: null,
+    }));
+    child.once("close", (code, signal) => settle({
+      exit_code: code,
+      launched: true,
+      signal: signal ?? null,
+    }));
+  });
+  return {
+    child,
+    closePromise,
+    output: () => boundedOutput,
+    isClosed: () => closed,
+  };
+}
+
+async function closeM4R05AppAtDeadline(process, timeoutMs) {
+  let timer;
+  const timeout = new Promise((resolveTimeout) => {
+    timer = setTimeout(() => resolveTimeout({ timed_out: true }), timeoutMs);
+  });
+  const result = await Promise.race([process.closePromise, timeout]);
+  clearTimeout(timer);
+  if (!result.timed_out) return { ...result, timed_out: false };
+  if (typeof process.child.pid === "number") {
+    try {
+      process.child.kill("SIGKILL");
+    } catch {
+      // The exact child close event may win after the deadline fires.
+    }
+  }
+  let closeGraceTimer;
+  const killed = await Promise.race([
+    process.closePromise,
+    new Promise((resolveGrace) => {
+      closeGraceTimer = setTimeout(
+        () => resolveGrace({ close_unconfirmed: true }),
+        M4R05_ORDINARY_CONVERSATION_CHILD_CLOSE_GRACE_MS,
+      );
+    }),
+  ]);
+  clearTimeout(closeGraceTimer);
+  if (killed.close_unconfirmed) {
+    return {
+      exit_code: null,
+      launched: true,
+      signal: "SIGKILL_UNCONFIRMED",
+      timed_out: true,
+    };
+  }
+  return { ...killed, timed_out: true };
+}
+
+async function killM4R05ArmProcess(process) {
+  if (process.isClosed() || !process.child.kill("SIGKILL")) {
+    return {
+      exit_code: null,
+      launched: true,
+      signal: "SIGKILL_NOT_SENT",
+      timed_out: false,
+    };
+  }
+  let graceTimer;
+  const result = await Promise.race([
+    process.closePromise,
+    new Promise((resolveGrace) => {
+      graceTimer = setTimeout(
+        () => resolveGrace({ close_unconfirmed: true }),
+        M4R05_ORDINARY_CONVERSATION_CHILD_CLOSE_GRACE_MS,
+      );
+    }),
+  ]);
+  clearTimeout(graceTimer);
+  if (result.close_unconfirmed) {
+    return {
+      exit_code: null,
+      launched: true,
+      signal: "SIGKILL_UNCONFIRMED",
+      timed_out: false,
+    };
+  }
+  return { ...result, timed_out: false };
+}
+
+function m4r05DriverFailureFamily(output, launch) {
+  const driverFailure = output.match(
+    /M4R05 ordinary conversation (?:driver|early setup) failed:([a-z0-9_:-]{1,160})/,
+  );
+  if (driverFailure) return `driver_${driverFailure[1]}`;
+  if (launch.timed_out) return "phase_timeout";
+  if (!launch.launched) return "child_spawn";
+  if (launch.signal !== null) return `child_signal_${launch.signal.toLowerCase()}`;
+  return `child_exit_${launch.exit_code ?? "unknown"}`;
+}
+
+async function runM4R05OrdinaryConversationPhase({
+  root,
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  phase,
+  nonce,
+  expectedProfileFingerprint,
+  expectedPreviousReceiptSha256,
+}) {
+  const process = spawnM4R05OrdinaryConversationApp({
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    phase,
+    nonce,
+  });
+  const pid = process.child.pid;
+  if (!Number.isSafeInteger(pid)) {
+    const error = new Error("m4r05_ordinary_conversation_child_spawn");
+    error.failureFamily = "child_spawn";
+    error.phase = phase;
+    throw error;
+  }
+  const deadline = Date.now() + M4R05_ORDINARY_CONVERSATION_PHASE_TIMEOUT_MS;
+  try {
+    const receipt = await readM4R05OrdinaryConversationReceipt({
+      root,
+      phase,
+      expectedNonceSha256: sha256(nonce),
+      expectedProfileFingerprint,
+      expectedPreviousReceiptSha256,
+      expectedProcessIdSha256: sha256(String(pid)),
+      visibilityDeadline: deadline,
+      abortWhen: process.isClosed,
+    });
+    let launch;
+    if (phase === "two_rounds_arm") {
+      if (process.isClosed()) {
+        const error = new Error(
+          "m4r05_ordinary_conversation_arm_closed_after_receipt",
+        );
+        error.failureFamily = "arm_not_alive_after_receipt";
+        throw error;
+      }
+      launch = await killM4R05ArmProcess(process);
+      if (
+        !launch.launched
+        || launch.exit_code !== null
+        || launch.signal !== "SIGKILL"
+        || launch.timed_out
+      ) {
+        const error = new Error(
+          "m4r05_ordinary_conversation_arm_sigkill_unconfirmed",
+        );
+        error.failureFamily = "arm_sigkill_unconfirmed";
+        error.launch = launch;
+        throw error;
+      }
+    } else {
+      launch = await closeM4R05AppAtDeadline(
+        process,
+        Math.max(1, deadline - Date.now()),
+      );
+      if (
+        launch.timed_out
+        || !launch.launched
+        || launch.exit_code !== 0
+        || launch.signal !== null
+      ) {
+        const failureFamily = m4r05DriverFailureFamily(process.output(), launch);
+        const error = new Error(`m4r05_ordinary_conversation_${failureFamily}`);
+        error.failureFamily = failureFamily;
+        error.launch = launch;
+        throw error;
+      }
+    }
+    return {
+      phase,
+      launch,
+      app_pid_sha256: sha256(String(pid)),
+      receipt_sha256: receipt.sha256,
+      receipt: receipt.value,
+    };
+  } catch (error) {
+    if (!process.isClosed()) {
+      const launch = await closeM4R05AppAtDeadline(process, 1);
+      error.launch ??= launch;
+    }
+    error.phase = phase;
+    throw error;
+  }
+}
+
+async function runM4R05OrdinaryConversationSuite({
+  root,
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  buildResult,
+}) {
+  const profileFingerprint = sha256(await readFile(profilePath));
+  const phaseNonces = Object.fromEntries(
+    M4R05_ORDINARY_CONVERSATION_PHASES.map((phase) => [
+      phase,
+      randomBytes(16).toString("hex"),
+    ]),
+  );
+  if (new Set(Object.values(phaseNonces)).size !== 2) {
+    const error = new Error("m4r05_ordinary_conversation_nonce_collision");
+    error.failureFamily = "nonce_collision";
+    throw error;
+  }
+  const arm = await runM4R05OrdinaryConversationPhase({
+    root,
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    phase: "two_rounds_arm",
+    nonce: phaseNonces.two_rounds_arm,
+    expectedProfileFingerprint: profileFingerprint,
+    expectedPreviousReceiptSha256: null,
+  });
+  const restart = await runM4R05OrdinaryConversationPhase({
+    root,
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    phase: "restart_continue_failure",
+    nonce: phaseNonces.restart_continue_failure,
+    expectedProfileFingerprint: profileFingerprint,
+    expectedPreviousReceiptSha256: arm.receipt_sha256,
+  });
+  const crossLaunchFailure = m4r02FirstInvalidField([
+    ["distinct_processes", arm.app_pid_sha256 !== restart.app_pid_sha256],
+    [
+      "same_role_session",
+      arm.receipt.role_session_ref_sha256
+        === restart.receipt.role_session_ref_sha256,
+    ],
+    [
+      "history_advanced",
+      arm.receipt.history_ref_sha256 !== restart.receipt.history_ref_sha256,
+    ],
+    [
+      "restart_recovered_two",
+      restart.receipt.initial_turn_count === arm.receipt.final_turn_count,
+    ],
+    ["arm_sigkill", arm.launch.signal === "SIGKILL"],
+    ["restart_exit_zero", restart.launch.exit_code === 0],
+    [
+      "database_previous_final_exact",
+      m4r05CanonicalJson(m4r05SnapshotWithoutReadTranscript(
+        arm.receipt.database_evidence.final_state,
+      )) === m4r05CanonicalJson(m4r05SnapshotWithoutReadTranscript(
+        restart.receipt.database_evidence.baseline,
+      )),
+    ],
+    [
+      "database_read_transcript_monotonic",
+      restart.receipt.database_evidence.baseline.provider.read_transcript_calls
+        >= arm.receipt.database_evidence.final_state.provider.read_transcript_calls,
+    ],
+  ]);
+  if (crossLaunchFailure) {
+    const error = new Error(
+      `m4r05_ordinary_conversation_cross_launch_invalid:${crossLaunchFailure}`,
+    );
+    error.failureFamily = `cross_launch_${crossLaunchFailure}`;
+    error.launch = restart.launch;
+    error.phase = restart.phase;
+    throw error;
+  }
+  for (const phase of [arm, restart]) {
+    const rawLeak = m4r05RawEvidenceLeak(phase.receipt);
+    if (rawLeak) {
+      const error = new Error(
+        `m4r05_ordinary_conversation_raw_phase_receipt:${rawLeak}`,
+      );
+      error.failureFamily = "raw_phase_receipt";
+      error.phase = phase.phase;
+      throw error;
+    }
+  }
+  const composite = {
+    schema_version: M4R05_ORDINARY_CONVERSATION_COMPOSITE_SCHEMA,
+    task_package: "M4R05",
+    outcome: "PASS",
+    evidence_family: "persistent_secretary_conversation",
+    evidence_level: "ISOLATED_PRODUCT_APP",
+    synthetic_fixture_only: true,
+    ordinary_composition: true,
+    acceptance_wrapper_calls: 0,
+    direct_repository_seed_calls: 0,
+    external_capability_attempts: 0,
+    actual_app: {
+      two_rounds: {
+        initial_turn_count: arm.receipt.initial_turn_count,
+        final_turn_count: arm.receipt.final_turn_count,
+        succeeded_turn_count: arm.receipt.succeeded_turn_count,
+        dom_submit_clicks: arm.receipt.dom_submit_clicks,
+        exact_replay_observed: arm.receipt.exact_replay_observed,
+        exact_replay_turn_ref_sha256:
+          arm.receipt.exact_replay_turn_ref_sha256,
+      },
+      restart_continue_failure: {
+        recovered_turn_count: restart.receipt.initial_turn_count,
+        final_turn_count: restart.receipt.final_turn_count,
+        succeeded_turn_count: restart.receipt.succeeded_turn_count,
+        failed_turn_count: restart.receipt.failed_turn_count,
+        failure_turn_ordinal: restart.receipt.failure_turn_ordinal,
+        failure_error_code: restart.receipt.failure_error_code,
+      },
+      role_session_ref_sha256: restart.receipt.role_session_ref_sha256,
+      history_ref_sha256: restart.receipt.history_ref_sha256,
+      final_conversation_sha256:
+        restart.receipt.final_conversation_sha256,
+      same_profile: true,
+      distinct_app_processes: true,
+      phase_one_sigkill_confirmed: true,
+      phase_two_exit_zero: true,
+    },
+    database_evidence: {
+      two_rounds_arm: arm.receipt.database_evidence,
+      restart_continue_failure: restart.receipt.database_evidence,
+    },
+    phase_receipt_sha256: {
+      two_rounds_arm: arm.receipt_sha256,
+      restart_continue_failure: restart.receipt_sha256,
+    },
+    launches: [arm, restart],
+    isolation_boundary: {
+      real_model_attempts: 0,
+      real_provider_attempts: 0,
+      external_connector_attempts: 0,
+      external_network_writes: 0,
+      real_codex_message_attempts: 0,
+    },
+    raw_text_fields_present: false,
+    build: buildResult,
+  };
+  const rawLeak = m4r05RawEvidenceLeak(composite);
+  if (rawLeak) {
+    const error = new Error(
+      `m4r05_ordinary_conversation_raw_composite:${rawLeak}`,
+    );
+    error.failureFamily = "raw_composite";
+    throw error;
+  }
+  return composite;
+}
+
 // This policy is intentionally pure: it runs before the launcher creates a
 // root, scrubs inherited environment, builds, or spawns a child.  Values are
 // never returned or logged; marker names are normalized only as a fixed
@@ -5813,12 +7093,14 @@ function resolveLauncherModeConflict({
   m4r02OrdinaryCompositionMode = false,
   m4r03ServerClockMode = false,
   m4r04OrdinaryRouteMode = false,
+  m4r05OrdinaryConversationMode = false,
   inheritedM2ReferenceSliceMarkers,
   inheritedM3C07ModeMarker,
   inheritedM4C09ModeMarker = false,
   inheritedM4R02OrdinaryCompositionMarkers = [],
   inheritedM4R03OrdinaryClockMarkers = [],
   inheritedM4R04OrdinaryRouteMarkers = [],
+  inheritedM4R05OrdinaryConversationMarkers = [],
 }) {
   if (
     [
@@ -5828,10 +7110,23 @@ function resolveLauncherModeConflict({
       m4r02OrdinaryCompositionMode,
       m4r03ServerClockMode,
       m4r04OrdinaryRouteMode,
+      m4r05OrdinaryConversationMode,
     ].filter(Boolean)
       .length > 1
   ) {
     return "mode_argument";
+  }
+  if (
+    inheritedM4R05OrdinaryConversationMarkers.length > 0
+    || (m4r05OrdinaryConversationMode
+      && (inheritedM2ReferenceSliceMarkers.length > 0
+        || inheritedM3C07ModeMarker
+        || inheritedM4C09ModeMarker
+        || inheritedM4R02OrdinaryCompositionMarkers.length > 0
+        || inheritedM4R03OrdinaryClockMarkers.length > 0
+        || inheritedM4R04OrdinaryRouteMarkers.length > 0))
+  ) {
+    return M4R05_ORDINARY_CONVERSATION_MODE_CONFLICT;
   }
   if (
     inheritedM4R04OrdinaryRouteMarkers.length > 0
@@ -5896,6 +7191,9 @@ const m4r03ServerClockMode = launcherArguments.includes(
 const m4r04OrdinaryRouteMode = launcherArguments.includes(
   M4R04_ORDINARY_ROUTE_MODE_ARG,
 );
+const m4r05OrdinaryConversationMode = launcherArguments.includes(
+  M4R05_ORDINARY_CONVERSATION_MODE_ARG,
+);
 const inheritedM2ReferenceSliceMarkers = normalizeInheritedMarkerNames(
   process.env,
   M2_REFERENCE_SLICE_MARKER_ENV_NAMES,
@@ -5914,6 +7212,10 @@ const inheritedM4R04OrdinaryRouteMarkers = normalizeInheritedMarkerNames(
   process.env,
   M4R04_ORDINARY_ROUTE_MARKER_ENV_NAMES,
 );
+const inheritedM4R05OrdinaryConversationMarkers = normalizeInheritedMarkerNames(
+  process.env,
+  M4R05_ORDINARY_CONVERSATION_MARKER_ENV_NAMES,
+);
 const launcherModeConflict = resolveLauncherModeConflict({
   m2ReferenceSliceMode,
   m3c07IsolatedMode,
@@ -5921,12 +7223,14 @@ const launcherModeConflict = resolveLauncherModeConflict({
   m4r02OrdinaryCompositionMode,
   m4r03ServerClockMode,
   m4r04OrdinaryRouteMode,
+  m4r05OrdinaryConversationMode,
   inheritedM2ReferenceSliceMarkers,
   inheritedM3C07ModeMarker,
   inheritedM4C09ModeMarker,
   inheritedM4R02OrdinaryCompositionMarkers,
   inheritedM4R03OrdinaryClockMarkers,
   inheritedM4R04OrdinaryRouteMarkers,
+  inheritedM4R05OrdinaryConversationMarkers,
 });
 const m2M3ReceiptModesMutuallyExclusive =
   !(m2ReferenceSliceMode && m3c07IsolatedMode);
@@ -5939,6 +7243,7 @@ const launcherModeArgumentsValid =
     m4r02OrdinaryCompositionMode,
     m4r03ServerClockMode,
     m4r04OrdinaryRouteMode,
+    m4r05OrdinaryConversationMode,
   ].filter(Boolean).length <= 1;
 const homeInitialViewConfigPinned =
   !Object.hasOwn(process.env, "VITE_STAGE_K_INITIAL_VIEW") ||
@@ -5971,6 +7276,10 @@ let m4r04OrdinaryRouteErrorFamily = null;
 let m4r04OrdinaryRouteFailedLaunch = null;
 let m4r04OrdinaryRouteFailedPhase = null;
 let m4r04RepositoryIntegrationEvidence = null;
+let m4r05OrdinaryConversationSuite = null;
+let m4r05OrdinaryConversationErrorFamily = null;
+let m4r05OrdinaryConversationFailedLaunch = null;
+let m4r05OrdinaryConversationFailedPhase = null;
 
 try {
   if (!launcherModeArgumentsValid) {
@@ -6013,6 +7322,9 @@ try {
     delete normalBuildEnvironment[M4R04_ORDINARY_ROUTE_DRIVER_ENV];
     delete normalBuildEnvironment[M4R04_ORDINARY_ROUTE_PHASE_ENV];
     delete normalBuildEnvironment[M4R04_ORDINARY_ROUTE_NONCE_ENV];
+    delete normalBuildEnvironment[M4R05_ORDINARY_CONVERSATION_DRIVER_ENV];
+    delete normalBuildEnvironment[M4R05_ORDINARY_CONVERSATION_PHASE_ENV];
+    delete normalBuildEnvironment[M4R05_ORDINARY_CONVERSATION_NONCE_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_DRIVER_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_ATTEMPT_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_PHASE_ENV];
@@ -6182,6 +7494,36 @@ try {
                 ? error.repositoryIntegrationEvidence
                 : null;
             failureStage = "m4r04_ordinary_route";
+            process.exitCode = 1;
+          }
+        } else if (m4r05OrdinaryConversationMode) {
+          try {
+            m4r05OrdinaryConversationSuite =
+              await runM4R05OrdinaryConversationSuite({
+                root,
+                normalBuildEnvironment,
+                profilePath: join(root, PROFILE_FILE_NAME),
+                reentryCapability,
+                buildResult,
+              });
+            launchResult = m4r05OrdinaryConversationSuite.launches.at(-1)?.launch
+              ?? launchResult;
+          } catch (error) {
+            m4r05OrdinaryConversationErrorFamily =
+              typeof error?.failureFamily === "string"
+              && /^[a-z0-9_:-]{1,160}$/.test(error.failureFamily)
+                ? error.failureFamily
+                : "unclassified";
+            m4r05OrdinaryConversationFailedLaunch =
+              error?.launch && typeof error.launch === "object"
+                ? error.launch
+                : null;
+            m4r05OrdinaryConversationFailedPhase =
+              typeof error?.phase === "string"
+              && M4R05_ORDINARY_CONVERSATION_PHASES.includes(error.phase)
+                ? error.phase
+                : null;
+            failureStage = "m4r05_ordinary_conversation";
             process.exitCode = 1;
           }
         } else if (m3c07IsolatedMode) {
@@ -6411,6 +7753,28 @@ try {
               && process.env.CODEX_HOME === initialCodexHome,
             home_initial_view_config_pinned: homeInitialViewConfigPinned,
           }
+      : m4r05OrdinaryConversationMode
+        ? {
+            ...(m4r05OrdinaryConversationSuite ?? {
+              schema_version: M4R05_ORDINARY_CONVERSATION_COMPOSITE_SCHEMA,
+              task_package: "M4R05",
+              outcome: "REJECTED",
+              evidence_family: "persistent_secretary_conversation",
+              evidence_level: "ISOLATED_PRODUCT_APP",
+              ordinary_composition: false,
+              error_family:
+                m4r05OrdinaryConversationErrorFamily ?? "unclassified",
+              failed_phase: m4r05OrdinaryConversationFailedPhase,
+              failed_launch: m4r05OrdinaryConversationFailedLaunch,
+              launches: [],
+              build: buildResult,
+            }),
+            ...(failureStage ? { failure_stage: failureStage } : {}),
+            environment_unchanged:
+              process.env.HOME === initialHome
+              && process.env.CODEX_HOME === initialCodexHome,
+            home_initial_view_config_pinned: homeInitialViewConfigPinned,
+          }
       : m3c07IsolatedMode
         ? {
             ...m3c07ReadinessReceipt(
@@ -6468,6 +7832,8 @@ try {
             ? M4R03_SERVER_CLOCK_COMPOSITE_FILE
           : m4r04OrdinaryRouteMode
             ? M4R04_ORDINARY_ROUTE_COMPOSITE_FILE
+          : m4r05OrdinaryConversationMode
+            ? M4R05_ORDINARY_CONVERSATION_COMPOSITE_FILE
           : m3c07IsolatedMode
             ? M3C07_READINESS_RECEIPT_FILE_NAME
             : m4c09IsolatedMode
@@ -6498,6 +7864,19 @@ try {
       && receipt.repository_integration_error_matrix?.exit_code === 0
     ) {
       await writeM4R04PortableReport(receipt);
+    }
+    if (
+      m4r05OrdinaryConversationMode
+      && m4r05OrdinaryConversationSuite?.outcome === "PASS"
+      && !failureStage
+      && receipt.ordinary_composition === true
+      && receipt.acceptance_wrapper_calls === 0
+      && receipt.direct_repository_seed_calls === 0
+      && receipt.external_capability_attempts === 0
+      && receipt.raw_text_fields_present === false
+      && m4r05RawEvidenceLeak(receipt) === null
+    ) {
+      await writeM4R05PortableReport(receipt);
     }
     process.stdout.write(`${JSON.stringify(receipt)}\n`);
     if (parentSignalToReraise) {

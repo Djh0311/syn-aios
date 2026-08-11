@@ -49,6 +49,14 @@ import type {
   M4SecretarySourceRouteRequestDto,
   M4SecretarySourceRouteResolutionDto,
 } from "./types/m4Secretary";
+import {
+  createSecretaryMessageSendRequest,
+  parseSecretaryConversation,
+  parseSecretaryMessageSendOutcome,
+  type M4SecretaryConversation,
+  type M4SecretaryMessageSendOutcome,
+  type M4SecretaryMessageSendRequest,
+} from "./types/m4SecretaryConversation";
 import type {
   AdoptMemoryCandidateInput,
   AdoptMemoryCandidateOutput,
@@ -1809,6 +1817,31 @@ export async function loadSecretaryLegacyReadCompatibilityReport(): Promise<M4Le
 export async function loadSecretaryHomeContext(): Promise<M4SecretaryHomeContextEnvelopeDto> {
   ensureTauriRuntime();
   return parseSecretaryHomeContextEnvelope(await invoke<unknown>("load_secretary_home_context"));
+}
+
+// M4R05 persistent Secretary conversation ----------------------------------
+//
+// Load sends no renderer identity or selector. Send carries exactly the user
+// message plus an idempotency reference; role, scope, channel, binding,
+// authority and provider selection remain fixed by AppState.
+export async function loadSecretaryConversation(): Promise<M4SecretaryConversation> {
+  ensureTauriRuntime();
+  return parseSecretaryConversation(await invoke<unknown>("load_secretary_conversation"));
+}
+
+export async function sendSecretaryMessage(
+  request: M4SecretaryMessageSendRequest,
+): Promise<M4SecretaryMessageSendOutcome> {
+  const safeRequest = createSecretaryMessageSendRequest(request);
+  ensureTauriRuntime();
+  const outcome = parseSecretaryMessageSendOutcome(
+    await invoke<unknown>("send_secretary_message", { request: safeRequest }),
+  );
+  const turn = outcome.conversation.turns.find((candidate) => candidate.turn_ref === outcome.turn_ref);
+  if (turn?.client_message_ref !== safeRequest.client_message_ref || turn.user_message.text !== safeRequest.message) {
+    throw new Error("m4_secretary_conversation_send_response_request_mismatch");
+  }
+  return outcome;
 }
 
 export async function resolveSecretarySourceRoute(

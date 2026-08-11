@@ -52,6 +52,7 @@ pub(crate) const M3_ROLE_SESSION_REPOSITORY_PORT_VERSION: &str = "m3.role-sessio
 pub(crate) const M3_ROLE_SESSION_REPOSITORY_SOURCE_ID: &str = "m3_role_session_repository_scratch";
 pub(crate) const M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH: &str =
     "conversation/m3-role-session-v1.sqlite3";
+pub(crate) const M3_MAX_AUTHORIZED_ROLE_SESSION_TURNS: usize = 2_048;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct M3OrdinaryRoleSessionRepositoryConfig {
@@ -162,6 +163,10 @@ pub(crate) trait M3RoleSessionRepositoryPort {
         &self,
         query: &M3RoleSessionSnapshotQuery,
     ) -> Result<Option<M3RoleSessionReadSnapshot>, M3RoleSessionRepositoryError>;
+    fn list_authorized_role_session_turns(
+        &self,
+        query: &M3RoleSessionSnapshotQuery,
+    ) -> Result<Vec<Turn>, M3RoleSessionRepositoryError>;
     fn list_authorized_role_session_directory(
         &self,
         query: &M3RoleSessionDirectoryQuery,
@@ -250,6 +255,13 @@ impl M3RoleSessionRepositoryPort for M3RoleSessionSqliteRepository {
         query: &M3RoleSessionSnapshotQuery,
     ) -> Result<Option<M3RoleSessionReadSnapshot>, M3RoleSessionRepositoryError> {
         M3RoleSessionSqliteRepository::load_authorized_role_session_snapshot(self, query)
+    }
+
+    fn list_authorized_role_session_turns(
+        &self,
+        query: &M3RoleSessionSnapshotQuery,
+    ) -> Result<Vec<Turn>, M3RoleSessionRepositoryError> {
+        M3RoleSessionSqliteRepository::list_authorized_role_session_turns(self, query)
     }
 
     fn list_authorized_role_session_directory(
@@ -1867,6 +1879,83 @@ impl M3RoleSessionSqliteRepository {
             current_context,
             latest_started_turn,
         }))
+    }
+
+    /// Complete, binding-authorized lifecycle history for the ordinary
+    /// conversation join.  Raw message bodies remain outside M3; this method
+    /// returns only the frozen Turn metadata already owned by the M3 ledger.
+    pub(crate) fn list_authorized_role_session_turns(
+        &self,
+        query: &M3RoleSessionSnapshotQuery,
+    ) -> Result<Vec<Turn>, M3RoleSessionRepositoryError> {
+        validate_reference_fields(&[("role_session_id", query.role_session_id.as_str())])?;
+        validate_server_binding_metadata_only(&query.binding)?;
+        query
+            .binding
+            .verify_owner_fingerprint()
+            .map_err(domain_error)?;
+        let mut connection = self.read_connection()?;
+        let transaction = connection.transaction().map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_turn_history_begin", error)
+        })?;
+        let session = load_role_session_from_connection(&transaction, &query.role_session_id)?
+            .ok_or_else(|| M3RoleSessionRepositoryError::new("m3_role_session_not_found"))?;
+        authorize_session_read(&session, &query.binding)?;
+        validate_role_session_read_metadata(&session)?;
+
+        let mut statement = transaction
+            .prepare(
+                "SELECT turn_id FROM m3_role_turns
+                 WHERE role_session_id = ?1
+                 ORDER BY started_at ASC, rowid ASC
+                 LIMIT ?2",
+            )
+            .map_err(|error| {
+                M3RoleSessionRepositoryError::sqlite("m3_turn_history_prepare", error)
+            })?;
+        let rows = statement
+            .query_map(
+                params![
+                    query.role_session_id.as_str(),
+                    i64::try_from(M3_MAX_AUTHORIZED_ROLE_SESSION_TURNS + 1).map_err(|_| {
+                        M3RoleSessionRepositoryError::new("m3_turn_history_limit_invalid")
+                    })?
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|error| {
+                M3RoleSessionRepositoryError::sqlite("m3_turn_history_query", error)
+            })?;
+        let mut turn_ids = Vec::new();
+        for row in rows {
+            turn_ids.push(row.map_err(|error| {
+                M3RoleSessionRepositoryError::sqlite("m3_turn_history_row", error)
+            })?);
+        }
+        drop(statement);
+        if turn_ids.len() > M3_MAX_AUTHORIZED_ROLE_SESSION_TURNS {
+            return Err(M3RoleSessionRepositoryError::new(
+                "m3_turn_history_limit_exceeded",
+            ));
+        }
+
+        let mut turns = Vec::with_capacity(turn_ids.len());
+        for turn_id in turn_ids {
+            let turn_id = TurnId::try_from_canonical(turn_id).map_err(domain_error)?;
+            let stored = load_turn_from_connection(&transaction, &turn_id)?.ok_or_else(|| {
+                M3RoleSessionRepositoryError::new("m3_turn_history_row_disappeared")
+            })?;
+            if stored.turn.role_session_id != query.role_session_id {
+                return Err(M3RoleSessionRepositoryError::new(
+                    "m3_turn_history_session_mismatch",
+                ));
+            }
+            turns.push(stored.turn);
+        }
+        transaction.commit().map_err(|error| {
+            M3RoleSessionRepositoryError::sqlite("m3_turn_history_commit", error)
+        })?;
+        Ok(turns)
     }
 
     pub(crate) fn list_authorized_role_session_directory(
