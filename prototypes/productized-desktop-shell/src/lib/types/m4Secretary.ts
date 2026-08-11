@@ -290,6 +290,77 @@ export type SecretaryHomeSourceOwner = Readonly<{
   source_owner_ref: M4SecretaryTypedRef | null;
 }>;
 
+// M4R04 source-return contract. The renderer submits only the server-minted
+// route capability. Owner/type/id/revision and the finite target all come back
+// from the ordinary server resolver; none is selected or reconstructed here.
+export const M4_SECRETARY_SOURCE_ROUTE_RESOLUTION_SCHEMA =
+  "syn.m4.secretary.source-route-resolution.v1" as const;
+
+export const M4_WORK_ITEM_SOURCE_OWNER_REF =
+  "owner:m2-workflow-state-work-item:v1" as const;
+export const M4_PROPOSAL_SOURCE_OWNER_REF =
+  "owner:project-consultation-proposal:v1" as const;
+
+export type M4SecretarySourceRouteRequestDto = Readonly<{
+  source_route_ref: M4SecretaryOpaqueRef;
+}>;
+
+export type M4SecretarySourceNavigationTarget =
+  | Readonly<{
+      kind: "WORK_ITEM";
+      project_id: M4SecretaryTypedRef;
+      workflow_id: M4SecretaryTypedRef;
+      work_item_id: M4SecretaryTypedRef;
+      source_revision: M4SecretaryCanonicalRevision;
+    }>
+  | Readonly<{
+      kind: "CONSULTATION_PROPOSAL";
+      project_id: M4SecretaryTypedRef;
+      workflow_id: M4SecretaryTypedRef;
+      proposal_id: M4SecretaryTypedRef;
+      source_revision: M4SecretaryCanonicalRevision;
+    }>;
+
+export type M4SecretarySourceRouteResolutionDto = Readonly<{
+  schema_version: typeof M4_SECRETARY_SOURCE_ROUTE_RESOLUTION_SCHEMA;
+  source_owner_ref: M4SecretaryTypedRef;
+  source_object_type: "workflow_attention" | "proposal_decision";
+  canonical_source_object_id: M4SecretaryTypedRef;
+  source_revision: M4SecretaryCanonicalRevision;
+  source_route_ref: M4SecretaryOpaqueRef;
+  target: M4SecretarySourceNavigationTarget;
+}>;
+
+// This is deliberately separate from Workbench NavigationFocus's open-ended
+// `{ kind: string, id: string }`. Only a parsed server resolution may create it.
+export type SecretarySourceFocus = Readonly<{
+  attempt_id: number;
+  source_owner_ref: M4SecretarySourceRouteResolutionDto["source_owner_ref"];
+  source_object_type: M4SecretarySourceRouteResolutionDto["source_object_type"];
+  canonical_source_object_id: M4SecretarySourceRouteResolutionDto["canonical_source_object_id"];
+  source_revision: M4SecretarySourceRouteResolutionDto["source_revision"];
+  source_route_ref: M4SecretarySourceRouteResolutionDto["source_route_ref"];
+  target: M4SecretarySourceNavigationTarget;
+}>;
+
+export type SecretarySourceFocusOutcome = Readonly<{
+  attempt_id: number;
+  source_route_ref: M4SecretaryOpaqueRef;
+  target_kind: M4SecretarySourceNavigationTarget["kind"];
+  status: "CONSUMED" | "FAILED";
+  error_code:
+    | null
+    | "SECRETARY_SOURCE_TARGET_PROJECT_MISSING"
+    | "SECRETARY_SOURCE_TARGET_AMBIGUOUS"
+    | "SECRETARY_SOURCE_TARGET_RECORD_MISSING";
+}>;
+
+export type SecretarySourceRouteViewState = Readonly<{
+  source_route_ref: M4SecretaryOpaqueRef | null;
+  phase: "IDLE" | "RESOLVING" | "CONSUMING" | "CONSUMED" | "FAILED";
+  error_code: string | null;
+}>;
+
 export type SecretaryTypedDeepLinkDescriptor =
   | Readonly<{
       kind: "M4_SOURCE_ROUTE";

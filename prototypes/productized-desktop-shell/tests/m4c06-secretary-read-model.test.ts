@@ -126,8 +126,8 @@ function readyEnvelope(input: {
         }],
         decisions: [{
           decision_projection_id: "decision-projection:fixture-a",
-          source_identity_key: `source-identity:sha256:${hash("d")}`,
-          source_event_key: `source-event:sha256:${hash("e")}`,
+          source_identity_key: `source:${hash("d")}`,
+          source_event_key: `source-event:${hash("e")}`,
           source_ref: "proposal:fixture-a",
           owner_status: "OPEN",
           local_visibility_status: "UNREAD",
@@ -135,7 +135,7 @@ function readyEnvelope(input: {
           source_revision: "18446744073709551615",
           revision: "1",
         }],
-        reminder_owner_refs: ["personal-action:fixture-a", `source-identity:sha256:${hash("d")}`],
+        reminder_owner_refs: ["personal-action:fixture-a", `source:${hash("d")}`],
       },
       model_enhancement: input.model_enhancement ?? null,
     },
@@ -189,8 +189,10 @@ function readyEnvelope(input: {
   );
   assert(
     model.local_objects.notifications[0]?.source_ref.expected_source_revision === "18446744073709551615"
-      && model.local_objects.decisions[0]?.source_revision === "18446744073709551615",
-    "local source and Decision revisions preserve full u64 decimal text",
+      && model.local_objects.decisions[0]?.source_revision === "18446744073709551615"
+      && model.local_objects.decisions[0]?.source_identity_key === `source:${hash("d")}`
+      && model.local_objects.decisions[0]?.source_event_key === `source-event:${hash("e")}`,
+    "local source and Decision identities preserve the production internal-reference and u64 formats",
   );
 }
 

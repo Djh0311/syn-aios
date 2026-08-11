@@ -107,6 +107,11 @@ import type {
   SupervisorPilotReadModel,
   WorkflowStateSnapshot,
 } from "../../lib/types";
+import {
+  M4_PROPOSAL_SOURCE_OWNER_REF,
+  type SecretarySourceFocus,
+  type SecretarySourceFocusOutcome,
+} from "../../lib/types/m4Secretary";
 
 // 固定测试项目（自动干只在这真跑；非它则老实标注·跳智能体直连）。与 WorkflowCommandConsoleView 同一常量。
 const TEST_PROJECT_ROOT = "/Users/yoyi/codex-workflow-mario-test";
@@ -148,6 +153,8 @@ export type ProjectJiaobanPanelProps = {
   workflowState: WorkflowStateSnapshot | null;
   projectConsultationProposalStore: ProjectConsultationProposalStoreV1 | null;
   planAuthorizationStore: PlanAuthorizationStoreV1 | null;
+  secretarySourceFocus?: SecretarySourceFocus | null;
+  onSecretarySourceFocusOutcome?: (outcome: SecretarySourceFocusOutcome) => void;
   onRequestAction: (action: PendingAction) => void;
   onOpenAgentSession: (threadId: string) => void;
   // fix8：出方案成功后刷新方案店（App 的 reloadCandidateStores 穿下来）→ latestProposal 更新 → 自动进批脸。
@@ -205,6 +212,84 @@ export function JiaobanNonTestProjectFallback({
         </div>
         {!latestSession ? <p className="muted small-note">这个项目还没有可打开的对话。</p> : null}
       </div>
+    </section>
+  );
+}
+
+/**
+ * A registered Proposal route is a read capability, not permission to unlock
+ * the legacy Jiaoban workflow for an arbitrary project.  Render the exact
+ * owner record without exposing composer, approval, or execution actions.
+ */
+export function JiaobanRegisteredProposalSourceFocus({
+  proposal,
+  focus,
+  onOutcome,
+}: {
+  proposal: ProjectConsultationProposal;
+  focus: SecretarySourceFocus;
+  onOutcome?: (outcome: SecretarySourceFocusOutcome) => void;
+}) {
+  const reportedAttempt = useRef<number | null>(null);
+  const matches =
+    focus.target.kind === "CONSULTATION_PROPOSAL" &&
+    focus.source_owner_ref === M4_PROPOSAL_SOURCE_OWNER_REF &&
+    focus.source_object_type === "proposal_decision" &&
+    focus.canonical_source_object_id === focus.target.proposal_id &&
+    focus.source_revision === focus.target.source_revision &&
+    proposal.proposal_id === focus.target.proposal_id &&
+    proposal.project_id === focus.target.project_id &&
+    proposal.workflow_id === focus.target.workflow_id;
+
+  useEffect(() => {
+    if (!onOutcome || reportedAttempt.current === focus.attempt_id) return;
+    reportedAttempt.current = focus.attempt_id;
+    onOutcome({
+      attempt_id: focus.attempt_id,
+      source_route_ref: focus.source_route_ref,
+      target_kind: focus.target.kind,
+      status: matches ? "CONSUMED" : "FAILED",
+      error_code: matches ? null : "SECRETARY_SOURCE_TARGET_RECORD_MISSING",
+    });
+  }, [focus, matches, onOutcome]);
+
+  if (!matches) {
+    return (
+      <section
+        className="project-jiaoban"
+        aria-label="交办 · 来源方案未找到"
+        data-secretary-source-focus-status="FAILED"
+      >
+        <p className="muted small-note">这份来源方案已不在当前项目工作流中。</p>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="project-jiaoban"
+      aria-label="交办 · 来源方案"
+      {...secretaryProposalFocusDataAttributes(focus)}
+    >
+      <JiaobanAuthorizeState
+        proposal={proposal}
+        proposalIsStale={proposalAgeDays(proposal.created_at_ms) >= 1}
+        amendment=""
+        onAmend={() => undefined}
+        onAuthorizeAndStart={() => undefined}
+        onRePlan={() => undefined}
+        onDecline={() => undefined}
+        starting={false}
+        consultLoading={false}
+        consultError={null}
+        howRunSummary=""
+        onShowGovernance={() => undefined}
+        onShowHowRun={() => undefined}
+        boundaryLoading={false}
+        boundaryOutcome={null}
+        onBoundaryRetry={() => undefined}
+        readOnly
+      />
     </section>
   );
 }
@@ -379,6 +464,16 @@ export type ProjectJiaobanPanelLayout = {
 // 离线/SSR：本组件含 hooks + 真命令，findButtonByText 会当普通函数平铺调用触发 "Invalid hook call"，
 // 故 typeof window 守卫放最前，无 window 直接渲染静态占位（同 DirectorChainRunButton 套路）。
 export function ProjectJiaobanPanel(props: ProjectJiaobanPanelProps) {
+  const registeredProposal = registeredProposalSourceFocusForNonRolloutProject(props);
+  if (registeredProposal && props.secretarySourceFocus) {
+    return (
+      <JiaobanRegisteredProposalSourceFocus
+        proposal={registeredProposal}
+        focus={props.secretarySourceFocus}
+        onOutcome={props.onSecretarySourceFocusOutcome}
+      />
+    );
+  }
   if (typeof window === "undefined") {
     return (
       <section className="project-jiaoban" aria-label="交办">
@@ -387,6 +482,34 @@ export function ProjectJiaobanPanel(props: ProjectJiaobanPanelProps) {
     );
   }
   return <ProjectJiaobanPanelBrowser {...props} />;
+}
+
+function registeredProposalSourceFocusForNonRolloutProject(
+  props: ProjectJiaobanPanelProps,
+): ProjectConsultationProposal | null {
+  if (
+    props.project.project_root === TEST_PROJECT_ROOT ||
+    props.project.project_root === STATION_3B_READONLY_PROJECT_ROOT ||
+    props.secretarySourceFocus?.target.kind !== "CONSULTATION_PROPOSAL"
+  ) {
+    return null;
+  }
+  const target = props.secretarySourceFocus.target;
+  const exactWorkflow = props.workflowState?.project_workflows.find(
+    (workflow) =>
+      workflow.project_root === props.project.project_root &&
+      workflow.project_id === target.project_id &&
+      workflow.workflow_id === target.workflow_id,
+  );
+  if (!exactWorkflow) return null;
+  return (
+    props.projectConsultationProposalStore?.proposals.find(
+      (proposal) =>
+        proposal.proposal_id === target.proposal_id &&
+        proposal.project_id === target.project_id &&
+        proposal.workflow_id === target.workflow_id,
+    ) ?? null
+  );
 }
 
 // 交办进度（人话化用）。stage 与后端 outcome/链状态解耦——这里只管「说给用户听」。
@@ -498,6 +621,8 @@ function ProjectJiaobanPanelBrowser({
   workflowState,
   projectConsultationProposalStore,
   planAuthorizationStore,
+  secretarySourceFocus = null,
+  onSecretarySourceFocusOutcome,
   onRequestAction,
   onOpenAgentSession,
   onProposalStoreRefresh,
@@ -505,8 +630,14 @@ function ProjectJiaobanPanelBrowser({
   onOpenWorkflow,
   renderLayout,
 }: ProjectJiaobanPanelProps) {
-  const projectWorkflow =
-    workflowState?.project_workflows.find((workflow) => workflow.project_root === project.project_root) ?? null;
+  const focusedProposalTarget = secretarySourceFocus?.target.kind === "CONSULTATION_PROPOSAL"
+    ? secretarySourceFocus.target
+    : null;
+  const projectWorkflow = workflowState?.project_workflows.find((workflow) =>
+    workflow.project_root === project.project_root
+      && (!focusedProposalTarget
+        || (workflow.project_id === focusedProposalTarget.project_id
+          && workflow.workflow_id === focusedProposalTarget.workflow_id))) ?? null;
 
   // 本项目最新一份方案（授权卡的数据源）。主管私有 submit_proposal 落卡后，刷新读模型即切到「批」。
   const proposalSummary = useMemo(
@@ -655,6 +786,7 @@ function ProjectJiaobanPanelBrowser({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const reportedSecretaryFocusAttempt = useRef<number | null>(null);
   const historyLoadingRef = useRef(false);
   // 这一轮真按下[允许并开始]批的方案 id（从缓存恢复）。用来判「有没有来一份新方案」。
   const ranProposalIdRef = useRef<string | null>(cached?.ranProposalId ?? null);
@@ -673,6 +805,14 @@ function ProjectJiaobanPanelBrowser({
     if (cached?.manualPhase && cached.manualPhase !== "say") return "graph";
     return latestProposal && cached?.manualPhase !== "say" ? "proposal" : "graph";
   });
+
+  useEffect(() => {
+    if (secretarySourceFocus?.target.kind !== "CONSULTATION_PROPOSAL") return;
+    const focusedProposalId = secretarySourceFocus.target.proposal_id;
+    if (!workflowProposals.some((proposal) => proposal.proposal_id === focusedProposalId)) return;
+    setSelectedHistoryId(focusedProposalId === latestProposal?.proposal_id ? null : focusedProposalId);
+    setCanvasViewKey("proposal");
+  }, [latestProposal?.proposal_id, secretarySourceFocus, workflowProposals]);
   const [focusedRuntimeNodeId, setFocusedRuntimeNodeId] = useState<string | null>(null);
   const [previewTasks, setPreviewTasks] = useState<ProjectDirectorPlannedTask[] | null>(null);
   const [previewWarnings, setPreviewWarnings] = useState<string[]>([]);
@@ -1547,6 +1687,26 @@ function ProjectJiaobanPanelBrowser({
     ? workflowProposals.find((proposal) => proposal.proposal_id === focusedProposalId) ?? null
     : latestProposal;
   const focusedProposalIsLatest = focusedProposal?.proposal_id === latestProposal?.proposal_id;
+  const secretaryProposalFocusConsumed = secretarySourceFocus?.target.kind === "CONSULTATION_PROPOSAL"
+    && focusedProposal?.proposal_id === secretarySourceFocus.target.proposal_id
+    && focusedProposal.project_id === secretarySourceFocus.target.project_id
+    && focusedProposal.workflow_id === secretarySourceFocus.target.workflow_id
+    && canvasViewKey === "proposal";
+  useEffect(() => {
+    if (
+      !secretaryProposalFocusConsumed
+      || !secretarySourceFocus
+      || reportedSecretaryFocusAttempt.current === secretarySourceFocus.attempt_id
+    ) return;
+    reportedSecretaryFocusAttempt.current = secretarySourceFocus.attempt_id;
+    onSecretarySourceFocusOutcome?.({
+      attempt_id: secretarySourceFocus.attempt_id,
+      source_route_ref: secretarySourceFocus.source_route_ref,
+      target_kind: secretarySourceFocus.target.kind,
+      status: "CONSUMED",
+      error_code: null,
+    });
+  }, [onSecretarySourceFocusOutcome, secretaryProposalFocusConsumed, secretarySourceFocus]);
   const proposalInteractive =
     focusedProposalIsLatest &&
     selectedHistoryId == null &&
@@ -1804,7 +1964,13 @@ function ProjectJiaobanPanelBrowser({
   });
 
   return (
-    <section className="project-jiaoban project-jiaoban--split" aria-label="交办">
+    <section
+      className="project-jiaoban project-jiaoban--split"
+      aria-label="交办"
+      {...(secretaryProposalFocusConsumed && secretarySourceFocus
+        ? secretaryProposalFocusDataAttributes(secretarySourceFocus)
+        : {})}
+    >
       {renderLayout ? (
         renderLayout({
           phase,
@@ -1823,6 +1989,17 @@ function ProjectJiaobanPanelBrowser({
       )}
     </section>
   );
+}
+
+function secretaryProposalFocusDataAttributes(focus: SecretarySourceFocus) {
+  return {
+    "data-secretary-source-focus-status": "CONSUMED",
+    "data-secretary-source-owner": focus.source_owner_ref,
+    "data-secretary-source-object-type": focus.source_object_type,
+    "data-secretary-source-object-id": focus.canonical_source_object_id,
+    "data-secretary-source-revision": focus.source_revision,
+    "data-secretary-source-route-ref": focus.source_route_ref,
+  } as const;
 }
 
 // ============================================================

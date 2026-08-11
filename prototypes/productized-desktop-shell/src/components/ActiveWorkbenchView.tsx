@@ -32,6 +32,7 @@ import type {
 } from "../lib/types";
 import { devNavItems, type NavigateHandler, type NavigationFocus, type ViewKey } from "../lib/workbenchNavigation";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
+import type { SecretarySourceFocus, SecretarySourceFocusOutcome } from "../lib/types/m4Secretary";
 import type { KnowledgeOpenRelayIntent, KnowledgeOpenRelayOutcome } from "../lib/knowledgeOpenRelay";
 import { AgentView } from "../views/AgentView";
 import { AuditLedgerView } from "../views/AuditLedgerView";
@@ -82,6 +83,8 @@ export type ActiveWorkbenchViewProps = {
   // ④「点击带上下文直达」：导航第二参带来的焦点（跳哪一页 + 落在哪一条）。
   // 可选=只切页不选行，既有调用点零破坏。
   navigationFocus?: NavigationFocus | null;
+  secretarySourceFocus?: SecretarySourceFocus | null;
+  onSecretarySourceFocusOutcome?: (outcome: SecretarySourceFocusOutcome) => void;
   // App 一定传（secretaryContext 派生·672 穿参）；设可选让现有离线测试的其它 view 调用不必补它。
   secretaryContext?: SecretaryContext;
   onReloadWorkflowState: () => void;
@@ -106,6 +109,8 @@ export function renderActiveWorkbenchView({
   knowledgeOpenIntent,
   onKnowledgeOpenIntentOutcome,
   navigationFocus,
+  secretarySourceFocus,
+  onSecretarySourceFocusOutcome,
   secretaryContext,
   workflowState,
   workflowStateLoading,
@@ -182,6 +187,9 @@ export function renderActiveWorkbenchView({
         projects={snapshot.projects}
         sessions={snapshot.sessions}
         workflowState={workflowState}
+        hasRealSnapshot={hasRealSnapshot}
+        secretarySourceFocus={secretarySourceFocus}
+        onSecretarySourceFocusOutcome={onSecretarySourceFocusOutcome}
         blackboardCandidateStore={blackboardCandidateStore}
         planAuthorizationStore={planAuthorizationStore}
         projectConsultationProposalStore={projectConsultationProposalStore}

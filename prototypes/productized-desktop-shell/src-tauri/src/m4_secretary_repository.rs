@@ -10,32 +10,29 @@ use crate::m4_secretary_domain::{
     classify_workflow_attention_source, m4_acknowledge_open_loop, m4_automatic_open_loop,
     m4_close_open_loop, m4_coordination_command_fingerprint,
     m4_coordination_command_fingerprint_with_fields, m4_create_notification,
-    m4_create_personal_action, m4_create_reminder, m4_dismiss_inbox_item, m4_dismiss_open_loop,
-    m4_decision_projection_id, m4_inbox_item_id, m4_internal_id, m4_is_lower_hex_digest,
-    m4_is_opaque_reference,
-    m4_mark_inbox_item_read, m4_open_loop_id, m4_parse_rfc3339_utc_key, m4_personal_action_id,
-    m4_prepare_source_owner_writeback, m4_primary_actor_ref, m4_primary_scope_ref,
-    m4_priority_reason, m4_reminder_id, m4_reopen_open_loop, m4_reopen_snoozed_open_loop_on_clock,
-    m4_scope_source_watermark, m4_select_open_loop_for_carry_over, m4_snooze_open_loop,
-    m4_source_owner_writeback_fingerprint, m4_source_owner_writeback_idempotency_key,
-    m4_transition_decision_local_visibility, m4_transition_notification,
-    m4_transition_personal_action, m4_transition_reminder,
-    m4_validate_inbox_item, m4_validate_notification, m4_validate_open_loop,
-    m4_validate_decision_projection, m4_validate_personal_action,
-    m4_validate_registered_source_publication, m4_validate_reminder,
-    m4_validate_source_owner_writeback_intent,
+    m4_create_personal_action, m4_create_reminder, m4_decision_projection_id,
+    m4_dismiss_inbox_item, m4_dismiss_open_loop, m4_inbox_item_id, m4_internal_id,
+    m4_is_lower_hex_digest, m4_is_opaque_reference, m4_mark_inbox_item_read, m4_open_loop_id,
+    m4_parse_rfc3339_utc_key, m4_personal_action_id, m4_prepare_source_owner_writeback,
+    m4_primary_actor_ref, m4_primary_scope_ref, m4_priority_reason, m4_reminder_id,
+    m4_reopen_open_loop, m4_reopen_snoozed_open_loop_on_clock, m4_scope_source_watermark,
+    m4_select_open_loop_for_carry_over, m4_snooze_open_loop, m4_source_owner_writeback_fingerprint,
+    m4_source_owner_writeback_idempotency_key, m4_transition_decision_local_visibility,
+    m4_transition_notification, m4_transition_personal_action, m4_transition_reminder,
+    m4_validate_decision_projection, m4_validate_inbox_item, m4_validate_notification,
+    m4_validate_open_loop, m4_validate_personal_action, m4_validate_registered_source_publication,
+    m4_validate_reminder, m4_validate_source_owner_writeback_intent,
     m4_validate_source_owner_writeback_result, M4AcknowledgeOpenLoopCommand,
     M4AdmittedWorkflowAttentionSource, M4AttentionSignals, M4CarryOverOpenLoopCommand,
     M4CoordinationCommandMetadata, M4CreateNotificationCommand, M4CreatePersonalActionCommand,
     M4CreateReminderCommand, M4DecisionLocalTransition, M4DecisionLocalTransitionCommand,
     M4DecisionLocalVisibilityStatus, M4DecisionOwnerStatus, M4DecisionProjection,
-    M4InboxDismissCommand, M4InboxItem, M4InboxItemStatus,
-    M4InboxReadCommand, M4Notification, M4NotificationStatus, M4NotificationTransition,
-    M4NotificationTransitionCommand, M4OpenLoop, M4OpenLoopClockCommand, M4OpenLoopStatus,
-    M4PersonalAction, M4PersonalActionCreationRequest, M4PersonalActionStatus,
-    M4PersonalActionTransition, M4PersonalActionTransitionCommand,
-    M4PrepareSourceOwnerWritebackCommand, M4QuarantineCandidate, M4Reminder, M4ReminderStatus,
-    M4RegisteredPublicationKind, M4RegisteredSourcePublication, M4ReminderTransition,
+    M4InboxDismissCommand, M4InboxItem, M4InboxItemStatus, M4InboxReadCommand, M4Notification,
+    M4NotificationStatus, M4NotificationTransition, M4NotificationTransitionCommand, M4OpenLoop,
+    M4OpenLoopClockCommand, M4OpenLoopStatus, M4PersonalAction, M4PersonalActionCreationRequest,
+    M4PersonalActionStatus, M4PersonalActionTransition, M4PersonalActionTransitionCommand,
+    M4PrepareSourceOwnerWritebackCommand, M4QuarantineCandidate, M4RegisteredPublicationKind,
+    M4RegisteredSourcePublication, M4Reminder, M4ReminderStatus, M4ReminderTransition,
     M4ReminderTransitionCommand, M4ScopeWatermarkEntry, M4SourceLinkInput,
     M4SourceOwnerCommandIntent, M4SourceOwnerWritebackIntent, M4SourceOwnerWritebackOutcome,
     M4SourceOwnerWritebackResult, M4SourceRecordRef, M4SourceStatus, M4StateTransitionResult,
@@ -47,13 +44,12 @@ use crate::m4_secretary_domain::{
 use crate::m4_secretary_read_model::{
     build_m4_legacy_shadow_parity_report, m4_priority_reason_text, sort_m4_inbox_items,
     sort_m4_open_loops, sort_m4c04_coordination_snapshot, validate_m4c07_daily_report_envelope,
-    M4AttentionSnapshot, M4CoordinationSnapshot, M4InboxItemRead, M4LegacyCanonicalReadSnapshot,
-    M4LegacyCanonicalSourceRead, M4LegacyReadCandidate, M4LegacyReadCompatibilityReport,
-    M4DecisionRead, M4NotificationRead, M4OpenLoopRead, M4OwnerWritebackReceiptRead,
-    M4PersonalActionRead,
-    M4ReminderRead, M4SecretaryDailyBriefRead, M4SecretaryDailyReportEnvelope,
-    M4SecretaryDailyReportRead, M4SecretaryDailySchedulerRead, M4SecretarySchedulerRunRead,
-    M4SourceLinkRead,
+    M4AttentionSnapshot, M4CoordinationSnapshot, M4DecisionRead, M4InboxItemRead,
+    M4LegacyCanonicalReadSnapshot, M4LegacyCanonicalSourceRead, M4LegacyReadCandidate,
+    M4LegacyReadCompatibilityReport, M4NotificationRead, M4OpenLoopRead,
+    M4OwnerWritebackReceiptRead, M4PersonalActionRead, M4ReminderRead, M4SecretaryDailyBriefRead,
+    M4SecretaryDailyReportEnvelope, M4SecretaryDailyReportRead, M4SecretaryDailySchedulerRead,
+    M4SecretarySchedulerRunRead, M4SourceLinkRead,
 };
 use crate::m4_secretary_scheduler::{
     m4_daily_window_at_utc, m4_format_utc_seconds, m4_parse_utc_seconds,
@@ -263,6 +259,31 @@ pub(crate) struct M4RegisteredSourcePublicationOutcome {
     pub(crate) decision_projection_id: Option<String>,
 }
 
+/// Immutable M4 half of a source-route resolution.  The owner registry must
+/// still prove the corresponding publication terminal receipt and rebuild the
+/// native owner target before any navigation target can be returned.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M4CurrentSourceRouteCandidate {
+    pub(crate) source_event_key: String,
+    pub(crate) source_identity_key: String,
+    pub(crate) source_owner_ref: String,
+    pub(crate) scope_ref: String,
+    pub(crate) source_type: String,
+    pub(crate) canonical_source_object_id: String,
+    pub(crate) source_revision: u64,
+    pub(crate) source_event_id: String,
+    pub(crate) source_owner_watermark: String,
+    pub(crate) source_route_ref: String,
+    pub(crate) payload_hash: String,
+    pub(crate) publication_sequence: u64,
+    pub(crate) publication_id: String,
+    pub(crate) adapter_id: String,
+    pub(crate) publication_kind: String,
+    pub(crate) native_scope_seal: String,
+    pub(crate) source_object_type: String,
+    pub(crate) m4_ingestion_receipt_id: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct M4ProjectionRebuildOutcome {
     pub(crate) inbox_count: usize,
@@ -436,6 +457,199 @@ impl M4SecretarySqliteRepository {
             .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))
     }
 
+    /// Resolve only the current M4 admission named by a sealed source route.
+    /// Historical rows remain addressable solely long enough to classify an
+    /// old ref as stale; provenance and the admitted ingestion receipt must be
+    /// exact before the candidate leaves this repository.
+    pub(crate) fn read_current_source_route_candidate(
+        &self,
+        source_route_ref: &str,
+    ) -> Result<M4CurrentSourceRouteCandidate, M4SecretaryRepositoryError> {
+        const PREFIX: &str = "source-route:sha256:";
+        if source_route_ref.len() != PREFIX.len() + 64
+            || !source_route_ref.starts_with(PREFIX)
+            || !m4_is_lower_hex_digest(&source_route_ref[PREFIX.len()..])
+        {
+            return Err(M4SecretaryRepositoryError::new("m4_source_route_invalid"));
+        }
+        let mut connection = self.open_read_connection()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Deferred)
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_source_route_read_begin", error)
+            })?;
+        let event_keys = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT source_event_key
+                     FROM m4_admitted_source_events
+                     WHERE source_link_ref = ?1
+                     ORDER BY source_event_key
+                     LIMIT 3",
+                )
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_source_route_event_prepare", error)
+                })?;
+            let rows = statement
+                .query_map([source_route_ref], |row| row.get::<_, String>(0))
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_source_route_event_query", error)
+                })?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_source_route_event_collect", error)
+                })?;
+            rows
+        };
+        if event_keys.is_empty() {
+            return Err(M4SecretaryRepositoryError::new("m4_source_route_not_found"));
+        }
+        if event_keys.len() != 1 {
+            return Err(M4SecretaryRepositoryError::new("m4_source_route_ambiguous"));
+        }
+
+        let candidates = {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT source.source_event_key, source.source_identity_key,
+                            source.source_owner_ref, source.scope_ref, source.source_type,
+                            source.canonical_source_object_id, source.source_revision,
+                            source.source_event_id, source.source_owner_watermark,
+                            source.source_link_ref, source.payload_hash,
+                            provenance.publication_sequence, provenance.publication_id,
+                            provenance.adapter_id, provenance.publication_kind,
+                            provenance.native_scope_seal, provenance.source_object_type,
+                            receipt.ingestion_receipt_id
+                     FROM m4_admitted_source_events AS source
+                     JOIN m4_source_provenance_index AS provenance
+                       ON provenance.source_event_key = source.source_event_key
+                      AND provenance.source_identity_key = source.source_identity_key
+                      AND provenance.source_revision = source.source_revision
+                      AND provenance.payload_hash = source.payload_hash
+                     JOIN m4_ingestion_receipts AS receipt
+                       ON receipt.admitted_source_event_key = source.source_event_key
+                      AND receipt.source_identity_key = source.source_identity_key
+                      AND receipt.scope_ref = source.scope_ref
+                      AND receipt.source_event_key = source.source_event_key
+                      AND receipt.source_event_id = source.source_event_id
+                      AND receipt.source_revision = source.source_revision
+                      AND receipt.payload_hash = source.payload_hash
+                      AND receipt.disposition = 'ADMITTED'
+                      AND receipt.outcome_code = 'SOURCE_ADMITTED'
+                     WHERE source.source_event_key = ?1 AND source.source_link_ref = ?2
+                     ORDER BY receipt.ingestion_receipt_id
+                     LIMIT 2",
+                )
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_source_route_provenance_prepare", error)
+                })?;
+            let rows = statement
+                .query_map(params![event_keys[0], source_route_ref], |row| {
+                    Ok(M4CurrentSourceRouteCandidate {
+                        source_event_key: row.get(0)?,
+                        source_identity_key: row.get(1)?,
+                        source_owner_ref: row.get(2)?,
+                        scope_ref: row.get(3)?,
+                        source_type: row.get(4)?,
+                        canonical_source_object_id: row.get(5)?,
+                        source_revision: row_source_revision(row, 6)?,
+                        source_event_id: row.get(7)?,
+                        source_owner_watermark: row.get(8)?,
+                        source_route_ref: row.get(9)?,
+                        payload_hash: row.get(10)?,
+                        publication_sequence: row_source_revision(row, 11)?,
+                        publication_id: row.get(12)?,
+                        adapter_id: row.get(13)?,
+                        publication_kind: row.get(14)?,
+                        native_scope_seal: row.get(15)?,
+                        source_object_type: row.get(16)?,
+                        m4_ingestion_receipt_id: row.get(17)?,
+                    })
+                })
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_source_route_provenance_query", error)
+                })?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| {
+                    M4SecretaryRepositoryError::sqlite("m4_source_route_provenance_collect", error)
+                })?;
+            rows
+        };
+        if candidates.len() != 1 {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_source_route_provenance_invalid",
+            ));
+        }
+        let candidate = candidates.into_iter().next().expect("one candidate");
+        let current: Option<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            u64,
+            String,
+            String,
+            String,
+            String,
+        )> = transaction
+            .query_row(
+                "SELECT source_event_key, source_identity_key, source_owner_ref,
+                        scope_ref, source_type, canonical_source_object_id,
+                        source_revision, source_event_id, source_owner_watermark,
+                        source_link_ref, payload_hash
+                 FROM m4_admitted_source_current
+                 WHERE source_identity_key = ?1",
+                [candidate.source_identity_key.as_str()],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row_source_revision(row, 6)?,
+                        row.get(7)?,
+                        row.get(8)?,
+                        row.get(9)?,
+                        row.get(10)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|error| {
+                M4SecretaryRepositoryError::sqlite("m4_source_route_current_read", error)
+            })?;
+        let Some(current) = current else {
+            return Err(M4SecretaryRepositoryError::new("m4_source_route_stale"));
+        };
+        if current.0 != candidate.source_event_key
+            || current.6 != candidate.source_revision
+            || current.9 != candidate.source_route_ref
+        {
+            return Err(M4SecretaryRepositoryError::new("m4_source_route_stale"));
+        }
+        if current.1 != candidate.source_identity_key
+            || current.2 != candidate.source_owner_ref
+            || current.3 != candidate.scope_ref
+            || current.4 != candidate.source_type
+            || current.5 != candidate.canonical_source_object_id
+            || current.7 != candidate.source_event_id
+            || current.8 != candidate.source_owner_watermark
+            || current.10 != candidate.payload_hash
+        {
+            return Err(M4SecretaryRepositoryError::new(
+                "m4_source_route_provenance_invalid",
+            ));
+        }
+        transaction.commit().map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_source_route_read_commit", error)
+        })?;
+        Ok(candidate)
+    }
+
     pub(crate) fn capture_server_utc_now(&self) -> Result<String, M4SecretaryRepositoryError> {
         self.clock.capture_now()
     }
@@ -587,19 +801,18 @@ impl M4SecretarySqliteRepository {
                         source,
                         &recorded_at,
                     )?;
-                    let decision_projection_id =
-                        if publication.publication_kind
-                            == M4RegisteredPublicationKind::ProposalDecision
-                        {
-                            Some(upsert_decision_projection(
-                                transaction,
-                                publication,
-                                source,
-                                &recorded_at,
-                            )?)
-                        } else {
-                            None
-                        };
+                    let decision_projection_id = if publication.publication_kind
+                        == M4RegisteredPublicationKind::ProposalDecision
+                    {
+                        Some(upsert_decision_projection(
+                            transaction,
+                            publication,
+                            source,
+                            &recorded_at,
+                        )?)
+                    } else {
+                        None
+                    };
                     Ok(M4RegisteredSourcePublicationOutcome {
                         ingestion,
                         notification_id: Some(notification_id),
@@ -982,8 +1195,7 @@ impl M4SecretarySqliteRepository {
                     let current = load_open_loop(transaction, &open_loop_id)?;
                     if current.revision != expected_revision
                         || current.status != M4OpenLoopStatus::Snoozed
-                        || current.snoozed_until_utc.as_deref()
-                            != Some(due_marker_utc.as_str())
+                        || current.snoozed_until_utc.as_deref() != Some(due_marker_utc.as_str())
                     {
                         return Err(M4SecretaryRepositoryError::new(
                             "m4_due_open_loop_candidate_conflict",
@@ -3139,9 +3351,8 @@ impl M4SecretarySqliteRepository {
         )
         .map_err(M4SecretaryRepositoryError::new)?;
         let request_hash = coordination_request_hash(&request_fingerprint)?;
-        let (mut outcome, busy_retries) = self.with_immediate_transaction(
-            "m4_decision_local_transition",
-            |transaction| {
+        let (mut outcome, busy_retries) =
+            self.with_immediate_transaction("m4_decision_local_transition", |transaction| {
                 if let Some(replay) =
                     find_decision_local_replay(transaction, idempotency_key, &request_hash)?
                 {
@@ -3200,8 +3411,7 @@ impl M4SecretarySqliteRepository {
                     replayed: false,
                     busy_retries: 0,
                 })
-            },
-        )?;
+            })?;
         outcome.busy_retries = busy_retries;
         Ok(outcome)
     }
@@ -6129,7 +6339,9 @@ fn upsert_registered_source_provenance(
                 recorded_at_utc,
             ],
         )
-        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_insert_source_provenance", error))?;
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_insert_source_provenance", error)
+        })?;
     let stored: (String, u64, u64, String, String, String, String, String) = transaction
         .query_row(
             "SELECT source_identity_key, source_revision, publication_sequence,
@@ -6200,7 +6412,11 @@ fn upsert_delivered_publication_notification(
         &notification_id,
         0,
         &idempotency_key,
-        &[&publication.publication_id, &source.source_event_key, purpose_code],
+        &[
+            &publication.publication_id,
+            &source.source_event_key,
+            purpose_code,
+        ],
     )
     .map_err(M4SecretaryRepositoryError::new)?;
     let request_hash = coordination_request_hash(&request_fingerprint)?;
@@ -6236,9 +6452,7 @@ fn upsert_delivered_publication_notification(
             &request_hash,
         )?
         .ok_or_else(|| {
-            M4SecretaryRepositoryError::new(
-                "m4_publication_notification_evidence_missing",
-            )
+            M4SecretaryRepositoryError::new("m4_publication_notification_evidence_missing")
         })?;
         if replay.aggregate_kind != "NOTIFICATION"
             || replay.aggregate_id != notification_id
@@ -6335,8 +6549,14 @@ fn upsert_decision_projection(
         .map_err(|error| {
             M4SecretaryRepositoryError::sqlite("m4_lookup_decision_projection", error)
         })?;
-    if let Some((event_key, stored_owner, stored_due, stored_source_revision, local_status, revision_sql)) =
-        existing
+    if let Some((
+        event_key,
+        stored_owner,
+        stored_due,
+        stored_source_revision,
+        local_status,
+        revision_sql,
+    )) = existing
     {
         let revision = local_revision_from_sql(revision_sql)?;
         if event_key == source.source_event_key {
@@ -6409,9 +6629,7 @@ fn upsert_decision_projection(
             owner_status,
             local_visibility_status: M4DecisionLocalVisibilityStatus::parse(&local_status)
                 .ok_or_else(|| {
-                    M4SecretaryRepositoryError::new(
-                        "m4_decision_local_visibility_status_invalid",
-                    )
+                    M4SecretaryRepositoryError::new("m4_decision_local_visibility_status_invalid")
                 })?,
             decision_by_utc: publication.due_at_utc.clone(),
             source_revision: source.source_revision,
@@ -8221,9 +8439,7 @@ fn load_due_transition_candidates(
             "SELECT open_loop_id FROM m4_open_loops
              WHERE status = 'SNOOZED' ORDER BY open_loop_id ASC",
         )
-        .map_err(|error| {
-            M4SecretaryRepositoryError::sqlite("m4_due_open_loop_prepare", error)
-        })?
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_due_open_loop_prepare", error))?
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_due_open_loop_query", error))?
         .collect::<Result<Vec<_>, _>>()
@@ -8233,9 +8449,7 @@ fn load_due_transition_candidates(
             "SELECT reminder_id FROM m4_reminders
              WHERE status IN ('SCHEDULED','SNOOZED') ORDER BY reminder_id ASC",
         )
-        .map_err(|error| {
-            M4SecretaryRepositoryError::sqlite("m4_due_reminder_prepare", error)
-        })?
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_due_reminder_prepare", error))?
         .query_map([], |row| row.get::<_, String>(0))
         .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_due_reminder_query", error))?
         .collect::<Result<Vec<_>, _>>()
@@ -10369,9 +10583,7 @@ fn read_coordination_snapshot_from_transaction(
                     source_revision, revision
              FROM m4_decision_request_projections",
         )
-        .map_err(|error| {
-            M4SecretaryRepositoryError::sqlite("m4_read_decisions_prepare", error)
-        })?
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_read_decisions_prepare", error))?
         .query_map([], |row| {
             Ok(M4DecisionRead {
                 decision_projection_id: row.get(0)?,
@@ -11293,29 +11505,17 @@ mod tests {
             due_marker,
         )
         .expect("derive exact future open-loop due key");
-        let reminder_due_key = due_transition_idempotency_key(
-            "REMINDER",
-            &reminder_id,
-            reminder_revision,
-            due_marker,
-        )
-        .expect("derive exact future reminder due key");
+        let reminder_due_key =
+            due_transition_idempotency_key("REMINDER", &reminder_id, reminder_revision, due_marker)
+                .expect("derive exact future reminder due key");
 
         fixture
             .repository
-            .create_personal_action(
-                "M4R03 user-scope preoccupation A",
-                None,
-                &open_loop_due_key,
-            )
+            .create_personal_action("M4R03 user-scope preoccupation A", None, &open_loop_due_key)
             .expect("ordinary user command may reuse the opaque text in its own scope");
         fixture
             .repository
-            .create_personal_action(
-                "M4R03 user-scope preoccupation B",
-                None,
-                &reminder_due_key,
-            )
+            .create_personal_action("M4R03 user-scope preoccupation B", None, &reminder_due_key)
             .expect("second ordinary command occupies the other future due key");
 
         fixture
@@ -11357,11 +11557,7 @@ mod tests {
                 "SELECT COUNT(*) FROM m4_coordination_command_receipts
                  WHERE idempotency_scope_ref = ?1
                    AND idempotency_key IN (?2, ?3)",
-                params![
-                    m4_primary_scope_ref(),
-                    open_loop_due_key,
-                    reminder_due_key
-                ],
+                params![m4_primary_scope_ref(), open_loop_due_key, reminder_due_key],
                 |row| row.get(0),
             )
             .expect("count user-scope preoccupation receipts");
@@ -11585,8 +11781,14 @@ mod tests {
             fixture.count("m4_coordination_command_receipts"),
             receipts_after_scheduler
         );
-        assert_eq!(fixture.count("m4_coordination_events"), events_after_scheduler);
-        assert_eq!(fixture.count("m4_coordination_audit_records"), audits_after_scheduler);
+        assert_eq!(
+            fixture.count("m4_coordination_events"),
+            events_after_scheduler
+        );
+        assert_eq!(
+            fixture.count("m4_coordination_audit_records"),
+            audits_after_scheduler
+        );
         assert_eq!(server_clock_audit_count(&fixture), 1);
     }
 
@@ -11621,7 +11823,10 @@ mod tests {
             receipts_before
         );
         assert_eq!(fixture.count("m4_coordination_events"), events_before);
-        assert_eq!(fixture.count("m4_coordination_audit_records"), audits_before);
+        assert_eq!(
+            fixture.count("m4_coordination_audit_records"),
+            audits_before
+        );
         assert_eq!(current_daily_brief_state(&fixture), brief_before);
 
         let restarted = fixture.reopen();
@@ -13211,7 +13416,11 @@ mod tests {
         assert!(carry_replay.replayed);
         assert_eq!(carry_replay.command_receipt_id, carry.command_receipt_id);
         for (table, before) in carry_counts {
-            assert_eq!(fixture.count(table), before, "carry-over replay wrote {table}");
+            assert_eq!(
+                fixture.count(table),
+                before,
+                "carry-over replay wrote {table}"
+            );
         }
         let carry_conflict = fixture
             .repository
@@ -13450,12 +13659,8 @@ mod tests {
     #[test]
     fn m4r02_registered_proposal_is_atomic_and_decision_local_replay_preserves_owner_axis() {
         let fixture = RepositoryFixture::new("m4r02-registered-proposal");
-        let publication = registered_proposal_publication(
-            "proposal-r02",
-            1,
-            7,
-            M4DecisionOwnerStatus::Open,
-        );
+        let publication =
+            registered_proposal_publication("proposal-r02", 1, 7, M4DecisionOwnerStatus::Open);
         let admitted = fixture
             .repository
             .ingest_registered_source_publication(&publication)
@@ -13498,18 +13703,27 @@ mod tests {
             "m4_decision_projection_events",
             "m4_decision_projection_audit_records",
         ];
-        let before_publication_replay = replay_tables
-            .map(|table| (table, fixture.count(table)));
+        let before_publication_replay = replay_tables.map(|table| (table, fixture.count(table)));
         let publication_replay = fixture
             .repository
             .ingest_registered_source_publication(&publication)
             .expect("exact registered-source replay");
         assert_eq!(publication_replay.ingestion.disposition, "ADMITTED");
         assert!(publication_replay.ingestion.replayed);
-        assert_eq!(publication_replay.notification_id.as_deref(), Some(notification_id.as_str()));
-        assert_eq!(publication_replay.decision_projection_id.as_deref(), Some(decision_id.as_str()));
+        assert_eq!(
+            publication_replay.notification_id.as_deref(),
+            Some(notification_id.as_str())
+        );
+        assert_eq!(
+            publication_replay.decision_projection_id.as_deref(),
+            Some(decision_id.as_str())
+        );
         for (table, before) in before_publication_replay {
-            assert_eq!(fixture.count(table), before, "publication replay wrote {table}");
+            assert_eq!(
+                fixture.count(table),
+                before,
+                "publication replay wrote {table}"
+            );
         }
 
         let read_key = opaque("command", "decision-read-r02");
@@ -13531,7 +13745,11 @@ mod tests {
         assert!(read_replay.replayed);
         assert_eq!(read_replay.command_receipt_id, read.command_receipt_id);
         for (table, before) in decision_counts_after_read {
-            assert_eq!(fixture.count(table), before, "Decision read replay wrote {table}");
+            assert_eq!(
+                fixture.count(table),
+                before,
+                "Decision read replay wrote {table}"
+            );
         }
         let read_conflict = fixture
             .repository
@@ -13555,17 +13773,20 @@ mod tests {
             .dismiss_decision(&decision_id, 2, &dismiss_key)
             .expect("exact Decision dismiss replay");
         assert!(dismiss_replay.replayed);
-        assert_eq!(dismiss_replay.command_receipt_id, dismissed.command_receipt_id);
+        assert_eq!(
+            dismiss_replay.command_receipt_id,
+            dismissed.command_receipt_id
+        );
         for (table, before) in dismiss_counts {
-            assert_eq!(fixture.count(table), before, "Decision dismiss replay wrote {table}");
+            assert_eq!(
+                fixture.count(table),
+                before,
+                "Decision dismiss replay wrote {table}"
+            );
         }
 
-        let answered = registered_proposal_publication(
-            "proposal-r02",
-            2,
-            8,
-            M4DecisionOwnerStatus::Answered,
-        );
+        let answered =
+            registered_proposal_publication("proposal-r02", 2, 8, M4DecisionOwnerStatus::Answered);
         fixture
             .repository
             .ingest_registered_source_publication(&answered)
@@ -13576,8 +13797,7 @@ mod tests {
             .expect("read dual-axis Decision after owner update");
         assert_eq!(final_snapshot.decisions[0].owner_status, "ANSWERED");
         assert_eq!(
-            final_snapshot.decisions[0].local_visibility_status,
-            "DISMISSED",
+            final_snapshot.decisions[0].local_visibility_status, "DISMISSED",
             "owner updates never reset local visibility"
         );
         let connection = fixture

@@ -893,6 +893,9 @@ export function buildProjectConsultationProposalCreationAction(
     selectedTaskPackage?.target_session_id ?? null,
     ...projectWorkflow.node_session_bindings.map((binding) => binding.native_thread_id),
   ]);
+  const workerAcceptanceCriteria = selectedTaskPackage?.acceptance_criteria.length
+    ? selectedTaskPackage.acceptance_criteria
+    : ["工作者按方案范围交付可复核结果，并逐项报告验收标准。"];
 
   return {
     kind: "create-project-consultation-proposal",
@@ -934,9 +937,10 @@ export function buildProjectConsultationProposalCreationAction(
           mitigation: "用户确认后不自动派发，等待 C3 全局边界复核。",
         },
       ],
-      acceptance_criteria: selectedTaskPackage?.acceptance_criteria.length
-        ? selectedTaskPackage.acceptance_criteria
-        : ["用户能看懂方案范围，并确认或要求修改；确认后授权仍停在待全局复核。"],
+      worker_acceptance_criteria: workerAcceptanceCriteria,
+      control_core_acceptance_criteria: ["控制核保持读写范围、工具、检查与停止条件的精确约束。"],
+      supervisor_acceptance_criteria: ["主管复核方案事实与证据后再决定是否进入后续授权。"],
+      acceptance_criteria: ["用户能看懂方案范围，并确认或要求修改；确认后授权仍停在待全局复核。"],
       created_by_role: "project_consultant",
       actor_id: "desktop_project_consultation_template",
       expected_store_revision: proposalStoreRevision,

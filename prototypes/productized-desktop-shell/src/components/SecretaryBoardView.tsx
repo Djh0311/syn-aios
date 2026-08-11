@@ -7,6 +7,7 @@ import {
 import type { SecretaryContext, SecretaryPendingBoardEntry } from "../lib/secretaryReadModel";
 import type {
   SecretaryHomeReadModel,
+  SecretarySourceRouteViewState,
   SecretaryTypedDeepLinkDescriptor,
 } from "../lib/types/m4Secretary";
 import type { ViewKey } from "../lib/workbenchNavigation";
@@ -18,12 +19,14 @@ export function SecretaryBoardView({
   home,
   context,
   presentationState = null,
+  sourceRouteState,
   onOpenDeepLink,
   onReloadSecretaryHome,
 }: {
   home?: SecretaryHomeReadModel;
   context?: SecretaryContext;
   presentationState?: "loading" | "error" | null;
+  sourceRouteState?: SecretarySourceRouteViewState;
   onOpenDeepLink?: (descriptor: SecretaryTypedDeepLinkDescriptor) => void;
   onReloadSecretaryHome?: () => void;
   onNavigate?: (view: ViewKey) => void;
@@ -48,6 +51,22 @@ export function SecretaryBoardView({
         </div>
       </header>
 
+      {sourceRouteState && sourceRouteState.phase !== "IDLE" ? (
+        <p
+          className={sourceRouteState.phase === "FAILED" ? "state-warning" : "muted small-note"}
+          data-secretary-source-route-state={sourceRouteState.phase}
+          role={sourceRouteState.phase === "FAILED" ? "alert" : "status"}
+        >
+          {sourceRouteState.phase === "RESOLVING"
+            ? "正在由服务端核验来源路由。"
+            : sourceRouteState.phase === "CONSUMING"
+              ? "路由已核验，正在来源页面定位精确记录。"
+              : sourceRouteState.phase === "CONSUMED"
+                ? "来源页面已选中精确记录。"
+                : `来源回跳失败：${sourceRouteState.error_code ?? "M4_SOURCE_ROUTE_RESOLUTION_FAILED"}`}
+        </p>
+      ) : null}
+
       <div className="secretary-board-layout">
         <section className="secretary-board-attention" aria-labelledby="secretary-board-attention-title">
           <div className="secretary-section-head">
@@ -61,6 +80,7 @@ export function SecretaryBoardView({
             <div className="secretary-board-attention-list">
               {home.attention_items.map((item) => {
                 const ownerResolved = isSecretarySourceOwnerResolved(item);
+                const routePending = isPendingSourceRoute(sourceRouteState, item.deep_link);
                 return (
                   <article className="secretary-board-attention-row" key={item.item_ref}>
                     <div>
@@ -74,9 +94,11 @@ export function SecretaryBoardView({
                         className="secondary-button secretary-board-go"
                         type="button"
                         onClick={() => openDeepLink(item.deep_link)}
+                        disabled={routePending}
                         aria-label="在来源模块中查看此关注项"
+                        {...secretarySourceActionDataAttributes(item.deep_link)}
                       >
-                        回到来源
+                        {routePending ? "核验中…" : "回到来源"}
                       </button>
                     ) : (
                       <span className="muted small-note">来源 owner 未确认，已隔离</span>
@@ -104,12 +126,19 @@ export function SecretaryBoardView({
               <ul>
                 {home.module_entries.map((entry) => {
                   const ownerResolved = isSecretaryModuleEntryOwnerResolved(entry);
+                  const routePending = isPendingSourceRoute(sourceRouteState, entry.deep_link);
                   return (
                     <li key={entry.entry_ref}>
                       <code>{entry.source_owner.source_owner_ref ?? "UNAVAILABLE"}</code>
                       {ownerResolved ? (
-                        <button className="secondary-button" type="button" onClick={() => openDeepLink(entry.deep_link)}>
-                          打开模块
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          onClick={() => openDeepLink(entry.deep_link)}
+                          disabled={routePending}
+                          {...secretarySourceActionDataAttributes(entry.deep_link)}
+                        >
+                          {routePending ? "核验中…" : "打开模块"}
                         </button>
                       ) : (
                         <span className="muted small-note">owner 未确认，已隔离</span>
@@ -126,6 +155,26 @@ export function SecretaryBoardView({
       </div>
     </section>
   );
+}
+
+function isPendingSourceRoute(
+  state: SecretarySourceRouteViewState | undefined,
+  descriptor: SecretaryTypedDeepLinkDescriptor,
+): boolean {
+  return descriptor.kind === "M4_SOURCE_ROUTE"
+    && state?.source_route_ref === descriptor.source_route_ref
+    && (state.phase === "RESOLVING" || state.phase === "CONSUMING");
+}
+
+function secretarySourceActionDataAttributes(descriptor: SecretaryTypedDeepLinkDescriptor) {
+  if (descriptor.kind !== "M4_SOURCE_ROUTE") return {};
+  return {
+    "data-secretary-source-route-action": "OPEN",
+    "data-secretary-source-route-ref": descriptor.source_route_ref,
+    "data-secretary-source-owner": descriptor.source_owner_ref,
+    "data-secretary-source-object-type": descriptor.source_object_type,
+    "data-secretary-source-object-id": descriptor.source_object_ref,
+  } as const;
 }
 
 // Compatibility-only pre-M4 board for old static callers. The active App

@@ -49,6 +49,9 @@ import type {
   M4SecretaryNotificationLocalDto,
   M4SecretaryReminderLocalDto,
   M4SecretaryDecisionLocalDto,
+  M4SecretarySourceNavigationTarget,
+  M4SecretarySourceRouteRequestDto,
+  M4SecretarySourceRouteResolutionDto,
   M4SecretarySourceLinkDto,
   M4SecretarySourceBackedBriefItemDto,
   SecretaryHomeAttentionItem,
@@ -57,6 +60,11 @@ import type {
   SecretaryHomeReadModel,
   SecretaryProfessionalModuleEntry,
   SecretaryTypedDeepLinkDescriptor,
+} from "./types/m4Secretary";
+import {
+  M4_PROPOSAL_SOURCE_OWNER_REF,
+  M4_SECRETARY_SOURCE_ROUTE_RESOLUTION_SCHEMA,
+  M4_WORK_ITEM_SOURCE_OWNER_REF,
 } from "./types/m4Secretary";
 
 export type SecretarySourceRef = {
@@ -1953,6 +1961,182 @@ export function parseSecretaryHomeContextEnvelope(value: unknown): M4SecretaryHo
   });
 }
 
+export function createSecretarySourceRouteRequest(
+  input: M4SecretarySourceRouteRequestDto,
+): M4SecretarySourceRouteRequestDto {
+  const raw = m4HomeExactObject(input, ["source_route_ref"], "source_route_request");
+  const source_route_ref = m4HomeOpaqueReference(
+    raw.source_route_ref,
+    "source_route_request.source_route_ref",
+  );
+  if (!source_route_ref.startsWith("source-route:sha256:")) {
+    throw new Error("m4_secretary_source_route_request_ref_invalid");
+  }
+  return Object.freeze({ source_route_ref });
+}
+
+export function parseSecretarySourceRouteResolution(
+  value: unknown,
+): M4SecretarySourceRouteResolutionDto {
+  const raw = m4HomeExactObject(
+    value,
+    [
+      "schema_version",
+      "source_owner_ref",
+      "source_object_type",
+      "canonical_source_object_id",
+      "source_revision",
+      "source_route_ref",
+      "target",
+    ],
+    "source_route_resolution",
+  );
+  if (raw.schema_version !== M4_SECRETARY_SOURCE_ROUTE_RESOLUTION_SCHEMA) {
+    throw new Error("m4_secretary_source_route_resolution_schema_invalid");
+  }
+  const source_owner_ref = m4HomeReference(
+    raw.source_owner_ref,
+    "source_route_resolution.source_owner_ref",
+  );
+  const source_object_type = m4HomeString(
+    raw.source_object_type,
+    "source_route_resolution.source_object_type",
+  );
+  const canonical_source_object_id = m4HomeReference(
+    raw.canonical_source_object_id,
+    "source_route_resolution.canonical_source_object_id",
+  );
+  const source_revision = m4HomeCanonicalRevision(
+    raw.source_revision,
+    "source_route_resolution.source_revision",
+  );
+  const source_route_ref = m4HomeOpaqueReference(
+    raw.source_route_ref,
+    "source_route_resolution.source_route_ref",
+  );
+  if (!source_route_ref.startsWith("source-route:sha256:")) {
+    throw new Error("m4_secretary_source_route_resolution_ref_invalid");
+  }
+
+  const targetRaw = m4HomeAllowedObject(
+    raw.target,
+    ["kind", "project_id", "workflow_id", "work_item_id", "proposal_id", "source_revision"],
+    "source_route_resolution.target",
+  );
+  const kind = m4HomeFiniteCode(
+    targetRaw.kind,
+    "source_route_resolution.target.kind",
+    ["WORK_ITEM", "CONSULTATION_PROPOSAL"] as const,
+  );
+  const expectedKeys = kind === "WORK_ITEM"
+    ? ["kind", "project_id", "workflow_id", "work_item_id", "source_revision"] as const
+    : ["kind", "project_id", "workflow_id", "proposal_id", "source_revision"] as const;
+  m4HomeExactObject(raw.target, expectedKeys, "source_route_resolution.target");
+  const project_id = m4HomeReference(
+    targetRaw.project_id,
+    "source_route_resolution.target.project_id",
+  );
+  const workflow_id = m4HomeReference(
+    targetRaw.workflow_id,
+    "source_route_resolution.target.workflow_id",
+  );
+  const targetSourceRevision = m4HomeCanonicalRevision(
+    targetRaw.source_revision,
+    "source_route_resolution.target.source_revision",
+  );
+  if (targetSourceRevision !== source_revision) {
+    throw new Error("m4_secretary_source_route_resolution_revision_mismatch");
+  }
+
+  let target: M4SecretarySourceNavigationTarget;
+  if (kind === "WORK_ITEM") {
+    const work_item_id = m4HomeReference(
+      targetRaw.work_item_id,
+      "source_route_resolution.target.work_item_id",
+    );
+    if (
+      source_owner_ref !== M4_WORK_ITEM_SOURCE_OWNER_REF
+      || source_object_type !== "workflow_attention"
+      || canonical_source_object_id !== work_item_id
+    ) {
+      throw new Error("m4_secretary_source_route_resolution_work_item_binding_invalid");
+    }
+    target = Object.freeze({
+      kind,
+      project_id,
+      workflow_id,
+      work_item_id,
+      source_revision: targetSourceRevision,
+    });
+  } else {
+    const proposal_id = m4HomeReference(
+      targetRaw.proposal_id,
+      "source_route_resolution.target.proposal_id",
+    );
+    if (
+      source_owner_ref !== M4_PROPOSAL_SOURCE_OWNER_REF
+      || source_object_type !== "proposal_decision"
+      || canonical_source_object_id !== proposal_id
+    ) {
+      throw new Error("m4_secretary_source_route_resolution_proposal_binding_invalid");
+    }
+    target = Object.freeze({
+      kind,
+      project_id,
+      workflow_id,
+      proposal_id,
+      source_revision: targetSourceRevision,
+    });
+  }
+
+  return Object.freeze({
+    schema_version: M4_SECRETARY_SOURCE_ROUTE_RESOLUTION_SCHEMA,
+    source_owner_ref,
+    source_object_type,
+    canonical_source_object_id,
+    source_revision,
+    source_route_ref,
+    target,
+  });
+}
+
+export function sameSecretarySourceRouteResolution(
+  left: M4SecretarySourceRouteResolutionDto,
+  right: M4SecretarySourceRouteResolutionDto,
+): boolean {
+  if (
+    left.schema_version !== right.schema_version
+    || left.source_owner_ref !== right.source_owner_ref
+    || left.source_object_type !== right.source_object_type
+    || left.canonical_source_object_id !== right.canonical_source_object_id
+    || left.source_revision !== right.source_revision
+    || left.source_route_ref !== right.source_route_ref
+    || left.target.kind !== right.target.kind
+    || left.target.project_id !== right.target.project_id
+    || left.target.workflow_id !== right.target.workflow_id
+    || left.target.source_revision !== right.target.source_revision
+  ) return false;
+  return left.target.kind === "WORK_ITEM" && right.target.kind === "WORK_ITEM"
+    ? left.target.work_item_id === right.target.work_item_id
+    : left.target.kind === "CONSULTATION_PROPOSAL" && right.target.kind === "CONSULTATION_PROPOSAL"
+      ? left.target.proposal_id === right.target.proposal_id
+      : false;
+}
+
+export function shouldReleaseConsumedSecretarySourceReadCut(input: {
+  phase: "IDLE" | "RESOLVING" | "CONSUMING" | "CONSUMED" | "FAILED";
+  route_state_ref: string | null;
+  focus_attempt_id: number | null;
+  focus_route_ref: string | null;
+  read_cut_attempt_id: number | null;
+}): boolean {
+  return input.phase === "CONSUMED"
+    && input.route_state_ref !== null
+    && input.focus_route_ref === input.route_state_ref
+    && input.focus_attempt_id !== null
+    && input.read_cut_attempt_id === input.focus_attempt_id;
+}
+
 const M4_HOME_COORDINATION_ACTIONS = new Set<M4SecretaryCoordinationActionCode>([
   "INBOX_MARK_READ",
   "INBOX_DISMISS",
@@ -2705,8 +2889,8 @@ function m4HomeParseLocalDecision(value: unknown, index: number): M4SecretaryDec
   const local_visibility_status = m4HomeFiniteCode(raw.local_visibility_status, `${field}.local_visibility_status`, ["UNREAD", "READ", "DISMISSED"] as const);
   return Object.freeze({
     decision_projection_id: m4HomePrefixedReference(raw.decision_projection_id, `${field}.decision_projection_id`, "decision-projection:"),
-    source_identity_key: m4HomeOpaqueReference(raw.source_identity_key, `${field}.source_identity_key`),
-    source_event_key: m4HomeOpaqueReference(raw.source_event_key, `${field}.source_event_key`),
+    source_identity_key: m4HomeInternalReference(raw.source_identity_key, `${field}.source_identity_key`, "source:"),
+    source_event_key: m4HomeInternalReference(raw.source_event_key, `${field}.source_event_key`, "source-event:"),
     source_ref: m4HomeReference(raw.source_ref, `${field}.source_ref`),
     owner_status,
     local_visibility_status,
@@ -2885,6 +3069,15 @@ function m4HomePrefixedReference(value: unknown, field: string, prefix: string):
 function m4HomeOpaqueReference(value: unknown, field: string): string {
   const reference = m4HomeReference(value, field);
   if (!/^[a-z][a-z0-9._-]{0,63}:sha256:[a-f0-9]{64}$/.test(reference)) {
+    throw new Error(`m4_secretary_home_invalid_${field}`);
+  }
+  return reference;
+}
+
+function m4HomeInternalReference(value: unknown, field: string, prefix: string): string {
+  const reference = m4HomeReference(value, field);
+  const digest = reference.startsWith(prefix) ? reference.slice(prefix.length) : "";
+  if (!/^[a-f0-9]{64}$/.test(digest)) {
     throw new Error(`m4_secretary_home_invalid_${field}`);
   }
   return reference;

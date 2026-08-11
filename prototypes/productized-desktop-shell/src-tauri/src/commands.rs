@@ -16,6 +16,31 @@ fn load_m4c09_acceptance_status(
     m4_acceptance::load_acceptance_status()
 }
 
+/// Resolve a server-minted source route through the AppState-installed closed
+/// owner registry.  The renderer contributes no owner/type/id/revision tuple.
+#[tauri::command]
+async fn resolve_secretary_source_route(
+    request: m4_source_route_resolver::ResolveSecretarySourceRouteRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<m4_source_route_resolver::M4SourceRouteResolution, String> {
+    #[cfg(not(test))]
+    {
+        let registry = state.m4_source_route_registry.clone().ok_or_else(|| {
+            m4_source_route_resolver::M4_SOURCE_ROUTE_REGISTRY_UNAVAILABLE.to_string()
+        })?;
+        return tauri::async_runtime::spawn_blocking(move || registry.resolve(&request))
+            .await
+            .map_err(|_| {
+                m4_source_route_resolver::M4_SOURCE_ROUTE_RESOLUTION_UNAVAILABLE.to_string()
+            })?;
+    }
+    #[cfg(test)]
+    {
+        let _ = (request, state);
+        Err(m4_source_route_resolver::M4_SOURCE_ROUTE_REGISTRY_UNAVAILABLE.to_string())
+    }
+}
+
 fn m4_unavailable_daily_report(
     reason: &str,
 ) -> m4_secretary_read_model::M4SecretaryDailyReportEnvelope {

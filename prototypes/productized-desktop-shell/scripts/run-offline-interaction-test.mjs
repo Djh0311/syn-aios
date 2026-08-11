@@ -52,6 +52,8 @@ const testEntries = [
   "tests/m4c09-isolated-product-app-acceptance.test.ts",
   "tests/m4r02-ordinary-composition-driver.test.ts",
   "tests/m4r03-server-due-clock-composition.test.ts",
+  "tests/m4r04-secretary-source-route-ui.test.tsx",
+  "tests/m4r04-isolated-app-preflight-runner.test.mjs",
 ];
 
 try {

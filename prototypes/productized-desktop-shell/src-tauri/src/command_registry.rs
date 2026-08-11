@@ -59,6 +59,7 @@ macro_rules! workbench_command_handler {
         let workbench_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = tauri::generate_handler![
             load_workbench_snapshot,
             load_m4c09_acceptance_status,
+            resolve_secretary_source_route,
             query_workbench_page_read_model,
             record_operation_control_decision,
             preview_manual_codex_relay,

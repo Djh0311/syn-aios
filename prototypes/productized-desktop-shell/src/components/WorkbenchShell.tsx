@@ -2,7 +2,7 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import { PermissionDialog } from "./PermissionDialog";
 import { RightDetailPanel, deriveRightPanelFeedCounts } from "./RightDetailPanel";
 import type { SecretaryContext } from "../lib/secretaryReadModel";
-import type { SecretaryHomeReadModel, SecretaryTypedDeepLinkDescriptor } from "../lib/types/m4Secretary";
+import type { SecretaryHomeReadModel, SecretarySourceRouteViewState, SecretaryTypedDeepLinkDescriptor } from "../lib/types/m4Secretary";
 import type {
   MemoryCandidateStoreV1,
   MemoryCaptureStoreV1,
@@ -43,6 +43,7 @@ export function WorkbenchShell({
   secretaryContext,
   secretaryHome,
   secretaryHomePresentationState,
+  secretarySourceRouteState,
   systemStatus,
   topbarReviewCount,
   workflowState,
@@ -74,6 +75,7 @@ export function WorkbenchShell({
   secretaryContext: SecretaryContext;
   secretaryHome: SecretaryHomeReadModel;
   secretaryHomePresentationState: "loading" | "error" | null;
+  secretarySourceRouteState?: SecretarySourceRouteViewState;
   systemStatus: SystemStatusReadModel | null;
   topbarReviewCount: number;
   workflowState: WorkflowStateSnapshot | null;
@@ -91,7 +93,13 @@ export function WorkbenchShell({
 }) {
   return (
     // 07-08 用户二调：秘书摘要归队右侧栏——与通知/待办同一套面板开法，不再单独浮层。
-    <div className={`app-shell ${activeRightPanel ? "right-pane-open" : ""}`}>
+    <div
+      className={`app-shell ${activeRightPanel ? "right-pane-open" : ""}`}
+      data-active-view={activeView}
+      data-secretary-source-route-phase={secretarySourceRouteState?.phase ?? "IDLE"}
+      data-secretary-source-route-ref={secretarySourceRouteState?.source_route_ref ?? undefined}
+      data-secretary-source-route-error-code={secretarySourceRouteState?.error_code ?? undefined}
+    >
       <WorkbenchTopbar
         displaySnapshot={displaySnapshot}
         error={error}
@@ -116,7 +124,13 @@ export function WorkbenchShell({
         }`}
       >
         {notice || error ? (
-          <section className={`notice-panel ${error ? "error" : ""}`} aria-live="polite">
+          <section
+            className={`notice-panel ${error ? "error" : ""}`}
+            aria-live="polite"
+            data-secretary-source-route-notice={secretarySourceRouteState?.phase ?? undefined}
+            data-secretary-source-route-notice-ref={secretarySourceRouteState?.source_route_ref ?? undefined}
+            data-secretary-source-route-notice-error-code={secretarySourceRouteState?.error_code ?? undefined}
+          >
             <strong>{error ? "需要处理" : "状态"}</strong>
             <span>{notice}</span>
           </section>
@@ -214,7 +228,13 @@ function WorkbenchTopbar({
           </button>
         ) : null}
         <span className="meta-text">{displaySnapshot.summary.project_count} 项目</span>
-        <button className="secondary-button icon-button" type="button" onClick={() => void onReload()} aria-label="重新读取">
+        <button
+          className="secondary-button icon-button"
+          type="button"
+          data-workbench-refresh="true"
+          onClick={() => void onReload()}
+          aria-label="重新读取"
+        >
           ↺
         </button>
         <span

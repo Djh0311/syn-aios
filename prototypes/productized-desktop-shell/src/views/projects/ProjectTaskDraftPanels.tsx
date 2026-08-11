@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Pill } from "../../components/SpecPrimitives";
 import { summarizeTaskPackageMemoryInjection } from "../../lib/candidateGovernance";
 import type {
@@ -10,24 +10,40 @@ import type {
   TaskPackagePreview,
   WorkflowStateSnapshot,
 } from "../../lib/types";
+import type { SecretarySourceFocus, SecretarySourceFocusOutcome } from "../../lib/types/m4Secretary";
 import { DetailLine } from "./ProjectOverviewPanels";
 
 export function ProjectWorkflowDraftPanel({
   project,
   workflowState,
+  secretarySourceFocus,
+  onSecretarySourceFocusOutcome,
   onRequestAction,
   onRenderTaskPreview,
   onInspectDispatchReadiness,
 }: {
   project: ProjectRecord;
   workflowState: WorkflowStateSnapshot | null;
+  secretarySourceFocus?: SecretarySourceFocus | null;
+  onSecretarySourceFocusOutcome?: (outcome: SecretarySourceFocusOutcome) => void;
   onRequestAction: (action: PendingAction) => void;
   onRenderTaskPreview?: (projectRoot: string, workItemId: string) => Promise<TaskPackagePreview>;
   onInspectDispatchReadiness?: (projectRoot: string, workItemId: string) => Promise<TaskPackageDispatchReadiness>;
 }) {
-  const projectWorkflow = workflowState?.project_workflows.find((workflow) => workflow.project_root === project.project_root) ?? null;
+  const focusedWorkItemTarget = secretarySourceFocus?.target.kind === "WORK_ITEM"
+    ? secretarySourceFocus.target
+    : null;
+  const projectWorkflow = workflowState?.project_workflows.find((workflow) =>
+    workflow.project_root === project.project_root
+      && (!focusedWorkItemTarget
+        || (workflow.project_id === focusedWorkItemTarget.project_id
+          && workflow.workflow_id === focusedWorkItemTarget.workflow_id))) ?? null;
   const assignedRole = "codex-dev";
-  const fallbackSelectedTaskDraft = selectedTaskDraftFor(projectWorkflow?.task_drafts ?? [], null);
+  const focusedWorkItemId = focusedWorkItemTarget?.work_item_id ?? null;
+  const fallbackSelectedTaskDraft = selectedTaskDraftFor(
+    projectWorkflow?.task_drafts ?? [],
+    focusedWorkItemId,
+  );
 
   return (
     <section className="workflow-draft-panel">
@@ -116,7 +132,10 @@ export function ProjectWorkflowDraftPanel({
           <div className="task-draft-list" aria-label="任务包草稿列表">
             {projectWorkflow.task_drafts.length ? (
               projectWorkflow.task_drafts.map((taskDraft) => (
-                <div className={`task-draft-item ${taskDraft.work_item_id === fallbackSelectedTaskDraft?.work_item_id ? "selected" : ""}`} key={taskDraft.work_item_id}>
+                <div
+                  className={`task-draft-item ${taskDraft.work_item_id === fallbackSelectedTaskDraft?.work_item_id ? "selected" : ""}`}
+                  key={taskDraft.work_item_id}
+                >
                   <strong>{taskDraft.title}</strong>
                   <span>{taskDraft.state}</span>
                   <em>{taskDraft.artifact_type || "artifact 类型缺失"}</em>
@@ -147,6 +166,8 @@ export function ProjectWorkflowDraftPanel({
               projectRoot={project.project_root}
               taskDrafts={projectWorkflow.task_drafts}
               fallbackSelectedTaskDraft={fallbackSelectedTaskDraft}
+              secretarySourceFocus={secretarySourceFocus}
+              onSecretarySourceFocusOutcome={onSecretarySourceFocusOutcome}
               onRequestAction={onRequestAction}
               onRenderTaskPreview={onRenderTaskPreview}
               onInspectDispatchReadiness={onInspectDispatchReadiness}
@@ -165,6 +186,8 @@ const TaskDraftSelectionController = memo(function TaskDraftSelectionController(
   projectRoot,
   taskDrafts,
   fallbackSelectedTaskDraft,
+  secretarySourceFocus,
+  onSecretarySourceFocusOutcome,
   onRequestAction,
   onRenderTaskPreview,
   onInspectDispatchReadiness,
@@ -172,16 +195,46 @@ const TaskDraftSelectionController = memo(function TaskDraftSelectionController(
   projectRoot: string;
   taskDrafts: TaskDraftSummary[];
   fallbackSelectedTaskDraft: TaskDraftSummary | null;
+  secretarySourceFocus?: SecretarySourceFocus | null;
+  onSecretarySourceFocusOutcome?: (outcome: SecretarySourceFocusOutcome) => void;
   onRequestAction: (action: PendingAction) => void;
   onRenderTaskPreview?: (projectRoot: string, workItemId: string) => Promise<TaskPackagePreview>;
   onInspectDispatchReadiness?: (projectRoot: string, workItemId: string) => Promise<TaskPackageDispatchReadiness>;
 }) {
   const [selectedWorkItemId, setSelectedWorkItemId] = useState<string | null>(fallbackSelectedTaskDraft?.work_item_id ?? null);
   const selectedTaskDraft = selectedTaskDraftFor(taskDrafts, selectedWorkItemId);
+  const reportedSecretaryFocusAttempt = useRef<number | null>(null);
+  const secretaryWorkItemFocusConsumed = secretarySourceFocus?.target.kind === "WORK_ITEM"
+    && selectedTaskDraft?.work_item_id === secretarySourceFocus.target.work_item_id
+    && selectedTaskDraft.workflow_id === secretarySourceFocus.target.workflow_id;
 
   useEffect(() => {
-    setSelectedWorkItemId((current) => nextSelectedWorkItemId(taskDrafts, current));
-  }, [taskDrafts]);
+    setSelectedWorkItemId((current) => {
+      if (secretarySourceFocus?.target.kind === "WORK_ITEM") {
+        const focusedId = secretarySourceFocus.target.work_item_id;
+        if (taskDrafts.some((task) =>
+          task.work_item_id === focusedId
+            && task.workflow_id === secretarySourceFocus.target.workflow_id)) return focusedId;
+      }
+      return nextSelectedWorkItemId(taskDrafts, current);
+    });
+  }, [secretarySourceFocus, taskDrafts]);
+
+  useEffect(() => {
+    if (
+      !secretaryWorkItemFocusConsumed
+      || !secretarySourceFocus
+      || reportedSecretaryFocusAttempt.current === secretarySourceFocus.attempt_id
+    ) return;
+    reportedSecretaryFocusAttempt.current = secretarySourceFocus.attempt_id;
+    onSecretarySourceFocusOutcome?.({
+      attempt_id: secretarySourceFocus.attempt_id,
+      source_route_ref: secretarySourceFocus.source_route_ref,
+      target_kind: secretarySourceFocus.target.kind,
+      status: "CONSUMED",
+      error_code: null,
+    });
+  }, [onSecretarySourceFocusOutcome, secretarySourceFocus, secretaryWorkItemFocusConsumed]);
 
   if (!taskDrafts.length) {
     return <p className="muted small-note">当前工作流下还没有任务包草稿；无法预览或保存字段。</p>;
@@ -192,7 +245,11 @@ const TaskDraftSelectionController = memo(function TaskDraftSelectionController(
   }
 
   return (
-    <>
+    <div
+      {...(secretaryWorkItemFocusConsumed && secretarySourceFocus
+        ? secretarySourceFocusDataAttributes(secretarySourceFocus, "CONSUMED")
+        : {})}
+    >
       <div className="workflow-state-actions" aria-label="选择任务草稿">
         {taskDrafts.map((taskDraft) => (
           <button
@@ -228,9 +285,23 @@ const TaskDraftSelectionController = memo(function TaskDraftSelectionController(
         onRequestAction={onRequestAction}
       />
       <TaskFieldsEditor projectRoot={projectRoot} selectedTaskDraft={selectedTaskDraft} onRequestAction={onRequestAction} />
-    </>
+    </div>
   );
 });
+
+function secretarySourceFocusDataAttributes(
+  focus: SecretarySourceFocus,
+  status: "CONSUMED",
+) {
+  return {
+    "data-secretary-source-focus-status": status,
+    "data-secretary-source-owner": focus.source_owner_ref,
+    "data-secretary-source-object-type": focus.source_object_type,
+    "data-secretary-source-object-id": focus.canonical_source_object_id,
+    "data-secretary-source-revision": focus.source_revision,
+    "data-secretary-source-route-ref": focus.source_route_ref,
+  } as const;
+}
 
 function TaskPreviewController({
   projectRoot,

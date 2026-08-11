@@ -494,6 +494,7 @@ function SecretaryAttentionSpine({
           onClick={() => onOpenDeepLink?.(item.deep_link)}
           disabled={!onOpenDeepLink}
           aria-label="在来源模块中查看此关注项"
+          {...secretarySourceActionDataAttributes(item.deep_link)}
         >
           回到来源
         </button>
@@ -932,6 +933,7 @@ function SecretaryModuleEntries({
                 onClick={() => onOpenDeepLink?.(entry.deep_link)}
                 disabled={!onOpenDeepLink}
                 aria-label="打开来源负责模块"
+                {...secretarySourceActionDataAttributes(entry.deep_link)}
               >
                 打开模块
               </button>
@@ -943,6 +945,17 @@ function SecretaryModuleEntries({
       )}
     </section>
   );
+}
+
+function secretarySourceActionDataAttributes(descriptor: SecretaryTypedDeepLinkDescriptor) {
+  if (descriptor.kind !== "M4_SOURCE_ROUTE") return {};
+  return {
+    "data-secretary-source-route-action": "OPEN",
+    "data-secretary-source-route-ref": descriptor.source_route_ref,
+    "data-secretary-source-owner": descriptor.source_owner_ref,
+    "data-secretary-source-object-type": descriptor.source_object_type,
+    "data-secretary-source-object-id": descriptor.source_object_ref,
+  } as const;
 }
 
 function SecretaryRecoveryCode({ code }: { code: string | null }) {

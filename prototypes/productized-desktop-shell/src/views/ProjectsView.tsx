@@ -25,6 +25,11 @@ import type {
   WorkflowRunCheck,
   WorkflowStateSnapshot,
 } from "../lib/types";
+import type { SecretarySourceFocus, SecretarySourceFocusOutcome } from "../lib/types/m4Secretary";
+import {
+  M4_PROPOSAL_SOURCE_OWNER_REF,
+  M4_WORK_ITEM_SOURCE_OWNER_REF,
+} from "../lib/types/m4Secretary";
 import { AgentSessionCenter } from "./AgentView";
 import { ProjectGallery } from "./projects/ProjectGallery";
 import { ProjectWorkflowCanvasView } from "./projects/ProjectWorkflowCanvasView";
@@ -71,6 +76,8 @@ type ProjectsViewProps = {
   projects: ProjectRecord[];
   sessions: SessionRecord[];
   workflowState?: WorkflowStateSnapshot | null;
+  secretarySourceFocus?: SecretarySourceFocus | null;
+  onSecretarySourceFocusOutcome?: (outcome: SecretarySourceFocusOutcome) => void;
   blackboardCandidateStore?: BlackboardCandidateStoreV1 | null;
   planAuthorizationStore?: PlanAuthorizationStoreV1 | null;
   projectConsultationProposalStore?: ProjectConsultationProposalStoreV1 | null;
@@ -82,6 +89,7 @@ type ProjectsViewProps = {
   realExecutionProductCommands?: RealExecutionProductCommandReadModel | null;
   projectWorkflowAutomation?: ProjectWorkflowAutomationReadModel | null;
   k3B1Recovery?: ProjectDetailProps["k3B1Recovery"];
+  hasRealSnapshot?: boolean;
   workflowStateLoading?: boolean;
   workflowStateError?: string | null;
   onReloadWorkflowState?: () => void;
@@ -101,10 +109,147 @@ type ProjectsViewProps = {
   onProposalStoreRefresh?: () => Promise<void>;
 };
 
+export type SecretarySourceProjectSelection =
+  | Readonly<{ status: "PENDING" }>
+  | Readonly<{ status: "READY"; project_root: string; tool: "task-packages" | "jiaoban" }>
+  | Readonly<{
+      status: "FAILED";
+      error_code:
+        | "SECRETARY_SOURCE_TARGET_PROJECT_MISSING"
+        | "SECRETARY_SOURCE_TARGET_AMBIGUOUS"
+        | "SECRETARY_SOURCE_TARGET_RECORD_MISSING";
+    }>;
+
+export function resolveSecretarySourceProjectSelection({
+  focus,
+  projects,
+  workflowState,
+  proposalStore,
+  hasRealSnapshot,
+  workflowStateLoading,
+  workflowStateError,
+}: {
+  focus: SecretarySourceFocus;
+  projects: ProjectRecord[];
+  workflowState: WorkflowStateSnapshot | null;
+  proposalStore: ProjectConsultationProposalStoreV1 | null;
+  hasRealSnapshot: boolean;
+  workflowStateLoading: boolean;
+  workflowStateError: string | null;
+}): SecretarySourceProjectSelection {
+  const target = focus.target;
+  const ownerBindingValid = target.kind === "WORK_ITEM"
+    ? focus.source_owner_ref === M4_WORK_ITEM_SOURCE_OWNER_REF
+      && focus.source_object_type === "workflow_attention"
+      && focus.canonical_source_object_id === target.work_item_id
+      && focus.source_revision === target.source_revision
+    : focus.source_owner_ref === M4_PROPOSAL_SOURCE_OWNER_REF
+      && focus.source_object_type === "proposal_decision"
+      && focus.canonical_source_object_id === target.proposal_id
+      && focus.source_revision === target.source_revision;
+  if (!ownerBindingValid) {
+    return Object.freeze({ status: "FAILED", error_code: "SECRETARY_SOURCE_TARGET_RECORD_MISSING" });
+  }
+
+  if (
+    !hasRealSnapshot
+    || workflowStateLoading
+    || (workflowState === null && workflowStateError === null)
+  ) {
+    return Object.freeze({ status: "PENDING" });
+  }
+
+  const workflows = workflowState?.project_workflows ?? [];
+  const projectWorkflows = workflows.filter((workflow) => workflow.project_id === target.project_id);
+  if (!projectWorkflows.length) {
+    return Object.freeze({ status: "FAILED", error_code: "SECRETARY_SOURCE_TARGET_PROJECT_MISSING" });
+  }
+  const exactWorkflows = projectWorkflows.filter((workflow) => workflow.workflow_id === target.workflow_id);
+  if (exactWorkflows.length > 1) {
+    return Object.freeze({ status: "FAILED", error_code: "SECRETARY_SOURCE_TARGET_AMBIGUOUS" });
+  }
+  const workflow = exactWorkflows[0];
+  if (!workflow) {
+    return Object.freeze({ status: "FAILED", error_code: "SECRETARY_SOURCE_TARGET_RECORD_MISSING" });
+  }
+  const exactProjects = projects.filter((project) => project.project_root === workflow.project_root);
+  if (exactProjects.length > 1) {
+    return Object.freeze({ status: "FAILED", error_code: "SECRETARY_SOURCE_TARGET_AMBIGUOUS" });
+  }
+  if (!exactProjects.length) {
+    return Object.freeze({ status: "FAILED", error_code: "SECRETARY_SOURCE_TARGET_PROJECT_MISSING" });
+  }
+
+  if (target.kind === "WORK_ITEM") {
+    const exactTasks = workflow.task_drafts.filter(
+      (task) => task.workflow_id === target.workflow_id && task.work_item_id === target.work_item_id,
+    );
+    if (exactTasks.length !== 1) {
+      return Object.freeze({
+        status: "FAILED",
+        error_code: exactTasks.length > 1
+          ? "SECRETARY_SOURCE_TARGET_AMBIGUOUS"
+          : "SECRETARY_SOURCE_TARGET_RECORD_MISSING",
+      });
+    }
+    return Object.freeze({ status: "READY", project_root: workflow.project_root, tool: "task-packages" });
+  }
+
+  const exactProposals = (proposalStore?.proposals ?? []).filter(
+    (proposal) => proposal.project_id === target.project_id
+      && proposal.workflow_id === target.workflow_id
+      && proposal.proposal_id === target.proposal_id,
+  );
+  if (exactProposals.length !== 1) {
+    return Object.freeze({
+      status: "FAILED",
+      error_code: exactProposals.length > 1
+        ? "SECRETARY_SOURCE_TARGET_AMBIGUOUS"
+        : "SECRETARY_SOURCE_TARGET_RECORD_MISSING",
+      });
+  }
+  return Object.freeze({ status: "READY", project_root: workflow.project_root, tool: "jiaoban" });
+}
+
 export function ProjectsView(props: ProjectsViewProps) {
-  const { projects, sessions, workflowState = null } = props;
+  const {
+    projects,
+    sessions,
+    workflowState = null,
+    hasRealSnapshot = false,
+    workflowStateLoading = false,
+    workflowStateError = null,
+    secretarySourceFocus = null,
+    onSecretarySourceFocusOutcome,
+    projectConsultationProposalStore = null,
+  } = props;
   const [selectedRoot, setSelectedRoot] = useState<string | null>(null);
   const [selectedTool, setSelectedTool] = useState<ProjectToolKey>("jiaoban");
+  const previousSelectedProjectRoot = useRef<string | null>(null);
+  const appliedSecretaryFocusAttempt = useRef<number | null>(null);
+  const reportedSecretaryFocusFailure = useRef<number | null>(null);
+  const secretaryFocusSelection = useMemo(
+    () => secretarySourceFocus
+      ? resolveSecretarySourceProjectSelection({
+          focus: secretarySourceFocus,
+          projects,
+          workflowState,
+          proposalStore: projectConsultationProposalStore,
+          hasRealSnapshot,
+          workflowStateLoading,
+          workflowStateError,
+        })
+      : null,
+    [
+      hasRealSnapshot,
+      projectConsultationProposalStore,
+      projects,
+      secretarySourceFocus,
+      workflowState,
+      workflowStateError,
+      workflowStateLoading,
+    ],
+  );
   const selectedProject = selectedRoot ? projects.find((project) => project.project_root === selectedRoot) ?? null : null;
   const projectSessions = useMemo(
     () => (selectedProject ? filterProjectSessionsForProject(sessions, selectedProject) : []),
@@ -118,8 +263,70 @@ export function ProjectsView(props: ProjectsViewProps) {
   }, [projects, selectedRoot]);
 
   useEffect(() => {
+    const nextRoot = selectedProject?.project_root ?? null;
+    const projectChanged = previousSelectedProjectRoot.current !== nextRoot;
+    previousSelectedProjectRoot.current = nextRoot;
+    if (secretarySourceFocus || !projectChanged) return;
     setSelectedTool("jiaoban");
-  }, [selectedProject?.project_root]);
+  }, [secretarySourceFocus, selectedProject?.project_root]);
+
+  useEffect(() => {
+    if (!secretarySourceFocus || !secretaryFocusSelection) return;
+    if (secretaryFocusSelection.status === "PENDING") return;
+    if (secretaryFocusSelection.status === "FAILED") {
+      if (reportedSecretaryFocusFailure.current === secretarySourceFocus.attempt_id) return;
+      reportedSecretaryFocusFailure.current = secretarySourceFocus.attempt_id;
+      onSecretarySourceFocusOutcome?.({
+        attempt_id: secretarySourceFocus.attempt_id,
+        source_route_ref: secretarySourceFocus.source_route_ref,
+        target_kind: secretarySourceFocus.target.kind,
+        status: "FAILED",
+        error_code: secretaryFocusSelection.error_code,
+      });
+      return;
+    }
+    if (appliedSecretaryFocusAttempt.current === secretarySourceFocus.attempt_id) return;
+    appliedSecretaryFocusAttempt.current = secretarySourceFocus.attempt_id;
+    setSelectedRoot(secretaryFocusSelection.project_root);
+    setSelectedTool(secretaryFocusSelection.tool);
+  }, [onSecretarySourceFocusOutcome, secretaryFocusSelection, secretarySourceFocus]);
+
+  if (secretarySourceFocus && secretaryFocusSelection?.status === "PENDING") {
+    return (
+      <section
+        className="stage-pad source-placeholder"
+        data-secretary-source-focus-status="PENDING"
+        data-secretary-source-owner={secretarySourceFocus.source_owner_ref}
+        data-secretary-source-object-type={secretarySourceFocus.source_object_type}
+        data-secretary-source-object-id={secretarySourceFocus.canonical_source_object_id}
+        data-secretary-source-revision={secretarySourceFocus.source_revision}
+        data-secretary-source-route-ref={secretarySourceFocus.source_route_ref}
+        aria-busy="true"
+      >
+        <h1>正在读取来源负责模块</h1>
+        <p>索引、工作流与方案读面完成后，将继续定位这条精确记录。</p>
+      </section>
+    );
+  }
+
+  if (secretarySourceFocus && secretaryFocusSelection?.status === "FAILED") {
+    return (
+      <section
+        className="stage-pad source-placeholder"
+        data-secretary-source-focus-status="FAILED"
+        data-secretary-source-focus-error-code={secretaryFocusSelection.error_code}
+        data-secretary-source-owner={secretarySourceFocus.source_owner_ref}
+        data-secretary-source-object-type={secretarySourceFocus.source_object_type}
+        data-secretary-source-object-id={secretarySourceFocus.canonical_source_object_id}
+        data-secretary-source-revision={secretarySourceFocus.source_revision}
+        data-secretary-source-route-ref={secretarySourceFocus.source_route_ref}
+        role="alert"
+      >
+        <h1>来源记录未定位</h1>
+        <p>{secretaryFocusSelection.error_code}</p>
+      </section>
+    );
+  }
 
   if (!projects.length) {
     return (
@@ -178,6 +385,8 @@ export function ProjectsView(props: ProjectsViewProps) {
           project={selectedProject}
           sessions={projectSessions}
           selectedTool={selectedTool}
+          secretarySourceFocus={secretarySourceFocus}
+          onSecretarySourceFocusOutcome={onSecretarySourceFocusOutcome}
           onSelectTool={setSelectedTool}
           onBackToGallery={() => setSelectedRoot(null)}
         />

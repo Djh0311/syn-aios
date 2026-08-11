@@ -29,12 +29,14 @@ import {
   type RoleSessionDirectoryRequest,
 } from "./roleSessionReadModel";
 import {
+  createSecretarySourceRouteRequest,
   createSecretaryCoordinationActionRequest,
   createSecretaryPersonalObjectRequest,
   parseSecretaryLegacyReadCompatibilityReportEnvelope,
   parseSecretaryCoordinationActionReceipt,
   parseSecretaryDailyReportEnvelope,
   parseSecretaryHomeContextEnvelope,
+  parseSecretarySourceRouteResolution,
   type M4SecretaryDailyReportEnvelopeDto,
   type M4LegacyReadCompatibilityReportEnvelopeDto,
 } from "./secretaryReadModel";
@@ -44,6 +46,8 @@ import type {
   M4SecretaryCoordinationActionRequestDto,
   M4SecretaryHomeContextEnvelopeDto,
   M4SecretaryPersonalObjectRequestDto,
+  M4SecretarySourceRouteRequestDto,
+  M4SecretarySourceRouteResolutionDto,
 } from "./types/m4Secretary";
 import type {
   AdoptMemoryCandidateInput,
@@ -1805,6 +1809,20 @@ export async function loadSecretaryLegacyReadCompatibilityReport(): Promise<M4Le
 export async function loadSecretaryHomeContext(): Promise<M4SecretaryHomeContextEnvelopeDto> {
   ensureTauriRuntime();
   return parseSecretaryHomeContextEnvelope(await invoke<unknown>("load_secretary_home_context"));
+}
+
+export async function resolveSecretarySourceRoute(
+  request: M4SecretarySourceRouteRequestDto,
+): Promise<M4SecretarySourceRouteResolutionDto> {
+  const safeRequest = createSecretarySourceRouteRequest(request);
+  ensureTauriRuntime();
+  const resolution = parseSecretarySourceRouteResolution(
+    await invoke<unknown>("resolve_secretary_source_route", { request: safeRequest }),
+  );
+  if (resolution.source_route_ref !== safeRequest.source_route_ref) {
+    throw new Error("m4_secretary_source_route_response_request_mismatch");
+  }
+  return resolution;
 }
 
 // M4C07 has no renderer-supplied selector, scope, timezone, window, or

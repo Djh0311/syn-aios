@@ -4,12 +4,14 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { App } from "./App";
 import {
   bootstrapProjectWorkflow,
+  createProjectConsultationProposal,
   createTaskDraft,
   initializeWorkflowState,
   loadSecretaryHomeContext,
   loadWorkflowStateSnapshot,
   operateSecretaryCoordination,
   operateSecretaryPersonalObject,
+  resolveSecretarySourceRoute,
   updateWorkItemState,
 } from "./lib/tauri";
 import { mintSecretaryCoordinationIdempotencyKey } from "./lib/secretaryReadModel";
@@ -998,6 +1000,729 @@ async function installM4R03OrdinaryClockTauriIpcBridge() {
   }
 }
 
+// M4R04 ordinary-product route proof. The host sends only bounded orchestration
+// events. Source resolution remains the registered product wrapper reached by
+// a real Secretary DOM click; this bridge never reconstructs a target route.
+const M4R04_IPC_READY_EVENT = "syn-m4r04-ordinary-route-ui-ready";
+const M4R04_IPC_INVOKE_EVENT = "syn-m4r04-ordinary-route-invoke";
+const M4R04_IPC_RESULT_EVENT = "syn-m4r04-ordinary-route-result";
+const M4R04_IPC_SCHEMA_VERSION = "syn_m4r04_ordinary_route_ipc.v1";
+const M4R04_WORK_ITEM_OWNER = "owner:m2-workflow-state-work-item:v1";
+const M4R04_PROPOSAL_OWNER = "owner:project-consultation-proposal:v1";
+const M4R04_HOME_LINK_TYPE = "workflow_attention";
+const M4R04_WORK_ITEM_NATIVE_TYPE = "workflow_attention";
+const M4R04_PROPOSAL_NATIVE_TYPE = "proposal_decision";
+const M4R04_DOM_WAIT_MS = 25_000;
+
+type M4R04Phase = "work_item" | "proposal" | "restart_negative";
+type M4R04Operation =
+  | "click_work_item_route"
+  | "create_proposal_source"
+  | "click_proposal_route"
+  | "click_restart_work_item"
+  | "click_restart_proposal"
+  | "advance_check_negatives_and_click_current";
+
+type M4R04OrdinaryRouteInvocation = {
+  schema_version: typeof M4R04_IPC_SCHEMA_VERSION;
+  phase: M4R04Phase;
+  operation: M4R04Operation;
+  nonce: string;
+  project_root: string;
+};
+
+type M4R04RouteAction = {
+  source_owner_ref: string;
+  source_object_type: string;
+  canonical_source_object_id: string;
+  source_route_ref: string;
+  source_action_dom_count: number;
+};
+
+type M4R04RouteObservation = M4R04RouteAction & {
+  source_revision: string | null;
+  source_action_seen: boolean;
+  route_action_clicks: number;
+  consumed_marker_count: number;
+  active_view: string;
+  route_phase: string;
+  success_notice_count: number;
+};
+
+type M4R04NegativeObservation = {
+  stale_error_code: string;
+  tampered_error_code: string;
+  resolver_wrapper_calls: number;
+  stale_ui_phase: string;
+  stale_notice_error_code: string;
+  stale_route_action_clicks: number;
+  active_view_before: string;
+  active_view_after: string;
+  route_phase_before: string;
+  route_phase_after: string;
+  consumed_marker_count_before: number;
+  consumed_marker_count_after: number;
+  success_notice_count_before: number;
+  success_notice_count_after: number;
+  zero_navigation: boolean;
+  zero_consume_delta: boolean;
+  zero_success_delta: boolean;
+};
+
+type M4R04PreparedState = {
+  nonce: string;
+  projectRoot: string;
+  workItem: M4R04RouteObservation | null;
+  proposal: M4R04RouteObservation | null;
+};
+
+const m4r04Counters = {
+  proposalCreateCalls: 0,
+  workItemUpdateCalls: 0,
+  routeActionClicks: 0,
+  navigationClicks: 0,
+  refreshClicks: 0,
+  resolverWrapperCalls: 0,
+};
+let m4r04PreparedState: M4R04PreparedState | null = null;
+let m4r04OperationQueue = Promise.resolve();
+
+function isM4R04Invocation(value: unknown): value is M4R04OrdinaryRouteInvocation {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<M4R04OrdinaryRouteInvocation>;
+  if (!hasExactKeys(value, ["nonce", "operation", "phase", "project_root", "schema_version"])) {
+    return false;
+  }
+  if (
+    candidate.schema_version !== M4R04_IPC_SCHEMA_VERSION
+    || typeof candidate.nonce !== "string"
+    || !/^[a-f0-9]{32}$/.test(candidate.nonce)
+    || typeof candidate.project_root !== "string"
+    || candidate.project_root.length === 0
+    || candidate.project_root.length > 1024
+    || /[\r\n]/.test(candidate.project_root)
+  ) return false;
+  return (
+    (candidate.phase === "work_item" && candidate.operation === "click_work_item_route")
+    || (candidate.phase === "proposal"
+      && (candidate.operation === "create_proposal_source"
+        || candidate.operation === "click_proposal_route"))
+    || (candidate.phase === "restart_negative"
+      && (candidate.operation === "click_restart_work_item"
+        || candidate.operation === "click_restart_proposal"
+        || candidate.operation === "advance_check_negatives_and_click_current"))
+  );
+}
+
+function m4r04Delay(milliseconds: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+function m4r04AppShell() {
+  const shell = document.querySelector<HTMLElement>(".app-shell[data-active-view]");
+  if (!shell) throw new Error("m4r04_app_shell_missing");
+  return shell;
+}
+
+function m4r04ActiveView() {
+  return m4r04AppShell().dataset.activeView ?? "";
+}
+
+function m4r04RoutePhase() {
+  return m4r04AppShell().dataset.secretarySourceRoutePhase ?? "";
+}
+
+function m4r04ConsumedMarkerCount() {
+  return document.querySelectorAll('[data-secretary-source-focus-status="CONSUMED"]').length;
+}
+
+function m4r04SuccessNoticeCount() {
+  return document.querySelectorAll('[data-secretary-source-route-notice="CONSUMED"]').length;
+}
+
+function m4r04ReadAction(element: HTMLElement): Omit<M4R04RouteAction, "source_action_dom_count"> {
+  const sourceRouteRef = element.dataset.secretarySourceRouteRef ?? "";
+  const sourceOwnerRef = element.dataset.secretarySourceOwner ?? "";
+  const sourceObjectType = element.dataset.secretarySourceObjectType ?? "";
+  const canonicalSourceObjectId = element.dataset.secretarySourceObjectId ?? "";
+  if (
+    !/^source-route:sha256:[a-f0-9]{64}$/.test(sourceRouteRef)
+    || sourceOwnerRef.length === 0
+    || sourceObjectType.length === 0
+    || canonicalSourceObjectId.length === 0
+    || canonicalSourceObjectId.length > 512
+    || /[\\/\r\n]/.test(canonicalSourceObjectId)
+  ) throw new Error("m4r04_source_action_binding_invalid");
+  return {
+    source_owner_ref: sourceOwnerRef,
+    source_object_type: sourceObjectType,
+    canonical_source_object_id: canonicalSourceObjectId,
+    source_route_ref: sourceRouteRef,
+  };
+}
+
+function m4r04FindSourceAction(
+  owner: string,
+  objectType: string,
+  objectId?: string,
+  excludedRouteRef?: string,
+): { action: M4R04RouteAction; button: HTMLButtonElement } | null {
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-secretary-source-route-action="OPEN"]'),
+  ).map((element) => ({ element, binding: m4r04ReadAction(element) }))
+    .filter(({ binding }) => (
+      binding.source_owner_ref === owner
+      && binding.source_object_type === objectType
+      && (objectId === undefined || binding.canonical_source_object_id === objectId)
+      && (excludedRouteRef === undefined || binding.source_route_ref !== excludedRouteRef)
+    ));
+  if (candidates.length === 0) return null;
+  const distinctRoutes = new Map<string, typeof candidates>();
+  for (const candidate of candidates) {
+    const group = distinctRoutes.get(candidate.binding.source_route_ref) ?? [];
+    group.push(candidate);
+    distinctRoutes.set(candidate.binding.source_route_ref, group);
+  }
+  if (distinctRoutes.size !== 1) throw new Error("m4r04_distinct_source_route_collision");
+  const group = Array.from(distinctRoutes.values())[0];
+  const first = group[0].binding;
+  if (group.some(({ binding }) => (
+    binding.source_owner_ref !== first.source_owner_ref
+    || binding.source_object_type !== first.source_object_type
+    || binding.canonical_source_object_id !== first.canonical_source_object_id
+  ))) throw new Error("m4r04_source_route_tuple_collision");
+  const button = group.map(({ element }) => element)
+    .find((element): element is HTMLButtonElement => (
+      element instanceof HTMLButtonElement && !element.disabled
+    ));
+  if (!button) throw new Error("m4r04_source_route_action_disabled");
+  return {
+    action: { ...first, source_action_dom_count: group.length },
+    button,
+  };
+}
+
+async function m4r04WaitForSourceAction(
+  owner: string,
+  objectType: string,
+  objectId?: string,
+  excludedRouteRef?: string,
+) {
+  const deadline = Date.now() + M4R04_DOM_WAIT_MS;
+  while (Date.now() < deadline) {
+    const match = m4r04FindSourceAction(owner, objectType, objectId, excludedRouteRef);
+    if (match) return match;
+    await m4r04Delay(150);
+  }
+  throw new Error("m4r04_source_action_timeout");
+}
+
+async function m4r04ClickRefresh() {
+  const button = document.querySelector<HTMLButtonElement>('[data-workbench-refresh="true"]');
+  if (!button || button.disabled) throw new Error("m4r04_refresh_action_missing");
+  m4r04Counters.refreshClicks += 1;
+  button.click();
+  await m4r04Delay(250);
+}
+
+async function m4r04NavigateHome() {
+  const button = document.querySelector<HTMLButtonElement>('button[aria-label="回到首页"]');
+  if (!button || button.disabled) throw new Error("m4r04_home_navigation_missing");
+  m4r04Counters.navigationClicks += 1;
+  button.click();
+  const deadline = Date.now() + M4R04_DOM_WAIT_MS;
+  while (Date.now() < deadline) {
+    if (
+      m4r04ActiveView() === "home"
+      && m4r04RoutePhase() === "IDLE"
+      && m4r04ConsumedMarkerCount() === 0
+      && m4r04SuccessNoticeCount() === 0
+    ) return;
+    await m4r04Delay(100);
+  }
+  throw new Error("m4r04_home_navigation_timeout");
+}
+
+async function m4r04ClickAndObserveRoute(
+  selected: { action: M4R04RouteAction; button: HTMLButtonElement },
+  expectedNativeType: string,
+): Promise<M4R04RouteObservation> {
+  m4r04Counters.routeActionClicks += 1;
+  // A successful product route click brackets the ordinary owner reads with
+  // two exact validations of the same sealed capability.
+  m4r04Counters.resolverWrapperCalls += 2;
+  selected.button.click();
+  const deadline = Date.now() + M4R04_DOM_WAIT_MS;
+  while (Date.now() < deadline) {
+    const shell = m4r04AppShell();
+    const routeStateMatchesClick = shell.dataset.secretarySourceRouteRef
+      === selected.action.source_route_ref;
+    if (routeStateMatchesClick && shell.dataset.secretarySourceRoutePhase === "FAILED") {
+      const errorCode = shell.dataset.secretarySourceRouteErrorCode ?? "M4_SOURCE_ROUTE_FAILED";
+      if (/^M4_SOURCE_[A-Z0-9_]{1,56}$/.test(errorCode)) {
+        throw new Error(`m4r04_source_resolver_failed:${errorCode}`);
+      }
+      if (/^SECRETARY_SOURCE_TARGET_[A-Z0-9_]{1,48}$/.test(errorCode)) {
+        throw new Error(`m4r04_source_consumer_failed:${errorCode}`);
+      }
+      throw new Error("m4r04_source_focus_failed_invalid_code");
+    }
+    const markers = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-secretary-source-focus-status="CONSUMED"]'),
+    ).filter((marker) => (
+      marker.dataset.secretarySourceOwner === selected.action.source_owner_ref
+      && marker.dataset.secretarySourceObjectType === expectedNativeType
+      && marker.dataset.secretarySourceObjectId === selected.action.canonical_source_object_id
+      && marker.dataset.secretarySourceRouteRef === selected.action.source_route_ref
+    ));
+    const revision = markers[0]?.dataset.secretarySourceRevision ?? "";
+    const notices = m4r04SuccessNoticeCount();
+    if (
+      shell.dataset.activeView === "projects"
+      && shell.dataset.secretarySourceRoutePhase === "CONSUMED"
+      && routeStateMatchesClick
+      && markers.length === 1
+      && /^(0|[1-9][0-9]*)$/.test(revision)
+      && notices === 1
+    ) {
+      return {
+        ...selected.action,
+        source_object_type: expectedNativeType,
+        source_revision: revision,
+        source_action_seen: true,
+        route_action_clicks: 1,
+        consumed_marker_count: 1,
+        active_view: "projects",
+        route_phase: "CONSUMED",
+        success_notice_count: 1,
+      };
+    }
+    await m4r04Delay(100);
+  }
+  const focusStatuses = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-secretary-source-focus-status]"),
+  ).map((element) => element.dataset.secretarySourceFocusStatus ?? "");
+  if (focusStatuses.includes("PENDING")) {
+    throw new Error("m4r04_focus_pending_timeout");
+  }
+  if (m4r04RoutePhase() === "CONSUMED") {
+    throw new Error("m4r04_focus_consumed_contract_timeout");
+  }
+  throw new Error("m4r04_focus_consumer_missing_timeout");
+}
+
+function m4r04ActionObservation(
+  action: M4R04RouteAction,
+  expectedNativeType: string,
+): M4R04RouteObservation {
+  return {
+    ...action,
+    source_object_type: expectedNativeType,
+    source_revision: null,
+    source_action_seen: true,
+    route_action_clicks: 0,
+    consumed_marker_count: 0,
+    active_view: m4r04ActiveView(),
+    route_phase: m4r04RoutePhase(),
+    success_notice_count: m4r04SuccessNoticeCount(),
+  };
+}
+
+function m4r04RequirePrepared(invocation: M4R04OrdinaryRouteInvocation) {
+  const prepared = m4r04PreparedState;
+  if (
+    !prepared
+    || prepared.nonce !== invocation.nonce
+    || prepared.projectRoot !== invocation.project_root
+  ) throw new Error("m4r04_prepared_binding_invalid");
+  return prepared;
+}
+
+function m4r04FlipRouteDigest(routeRef: string) {
+  if (!/^source-route:sha256:[a-f0-9]{64}$/.test(routeRef)) {
+    throw new Error("m4r04_route_ref_invalid");
+  }
+  const last = routeRef.at(-1);
+  return `${routeRef.slice(0, -1)}${last === "0" ? "1" : "0"}`;
+}
+
+async function m4r04ExpectedResolverFailure(sourceRouteRef: string, expectedCode: string) {
+  m4r04Counters.resolverWrapperCalls += 1;
+  try {
+    await resolveSecretarySourceRoute({ source_route_ref: sourceRouteRef });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes(expectedCode)) return expectedCode;
+    throw new Error("m4r04_resolver_error_code_mismatch");
+  }
+  throw new Error("m4r04_resolver_unexpected_success");
+}
+
+async function m4r04WaitForHomeRoute(
+  owner: string,
+  objectId: string,
+  excludedRouteRef?: string,
+): Promise<M4R04RouteAction> {
+  const deadline = Date.now() + M4R04_DOM_WAIT_MS;
+  while (Date.now() < deadline) {
+    const home = await loadSecretaryHomeContext();
+    if (home.status === "READY") {
+      const matches = home.application_outcome.deterministic_brief.attention_items.filter((item) => (
+        item.source_owner_ref === owner
+        && item.source_object_type === M4R04_HOME_LINK_TYPE
+        && item.source_object_ref === objectId
+        && (excludedRouteRef === undefined || item.source_route_ref !== excludedRouteRef)
+      ));
+      const routes = new Map(matches.map((item) => [item.source_route_ref, item]));
+      if (routes.size > 1) throw new Error("m4r04_current_route_collision");
+      const item = Array.from(routes.values())[0];
+      if (item && /^source-route:sha256:[a-f0-9]{64}$/.test(item.source_route_ref)) {
+        return {
+          source_owner_ref: item.source_owner_ref,
+          source_object_type: item.source_object_type,
+          canonical_source_object_id: item.source_object_ref,
+          source_route_ref: item.source_route_ref,
+          source_action_dom_count: 0,
+        };
+      }
+    }
+    await m4r04Delay(150);
+  }
+  throw new Error("m4r04_current_home_route_timeout");
+}
+
+async function m4r04ClickAndObserveStale(
+  selected: { action: M4R04RouteAction; button: HTMLButtonElement },
+) {
+  m4r04Counters.routeActionClicks += 1;
+  m4r04Counters.resolverWrapperCalls += 1;
+  selected.button.click();
+  const deadline = Date.now() + M4R04_DOM_WAIT_MS;
+  while (Date.now() < deadline) {
+    const shell = m4r04AppShell();
+    const notices = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-secretary-source-route-notice="FAILED"]'),
+    ).filter((notice) => (
+      notice.dataset.secretarySourceRouteNoticeErrorCode === "M4_SOURCE_ROUTE_STALE"
+    ));
+    if (
+      shell.dataset.activeView === "home"
+      && shell.dataset.secretarySourceRoutePhase === "FAILED"
+      && shell.dataset.secretarySourceRouteRef === selected.action.source_route_ref
+      && shell.dataset.secretarySourceRouteErrorCode === "M4_SOURCE_ROUTE_STALE"
+      && notices.length === 1
+      && m4r04ConsumedMarkerCount() === 0
+      && m4r04SuccessNoticeCount() === 0
+    ) return;
+    await m4r04Delay(100);
+  }
+  throw new Error("m4r04_stale_ui_timeout");
+}
+
+function m4r04ErrorFamily(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const fixedSourceFailureFamilies = new Map<string, string>([
+    ["M4_SOURCE_ROUTE_INVALID", "resolver_route_invalid"],
+    ["M4_SOURCE_ROUTE_TAMPERED", "resolver_route_tampered"],
+    ["M4_SOURCE_OWNER_UNREGISTERED", "resolver_owner_unregistered"],
+    ["M4_SOURCE_TYPE_UNREGISTERED", "resolver_type_unregistered"],
+    ["M4_SOURCE_SCOPE_MISMATCH", "resolver_scope_mismatch"],
+    ["M4_SOURCE_ROUTE_STALE", "resolver_route_stale"],
+    ["M4_SOURCE_REVISION_MISMATCH", "resolver_revision_mismatch"],
+    ["M4_SOURCE_TARGET_MISSING", "resolver_target_missing"],
+    ["M4_SOURCE_TARGET_INTEGRITY_FAILED", "resolver_target_integrity"],
+    ["M4_SOURCE_ROUTE_REGISTRY_UNAVAILABLE", "resolver_registry_unavailable"],
+    ["M4_SOURCE_ROUTE_RESOLUTION_UNAVAILABLE", "resolver_resolution_unavailable"],
+    ["M4_SOURCE_ROUTE_RESPONSE_INVALID", "resolver_response_invalid"],
+    ["M4_SOURCE_ROUTE_RESOLUTION_FAILED", "resolver_resolution_failed"],
+    ["SECRETARY_SOURCE_TARGET_PROJECT_MISSING", "consumer_project_missing"],
+    ["SECRETARY_SOURCE_TARGET_AMBIGUOUS", "consumer_ambiguous"],
+    ["SECRETARY_SOURCE_TARGET_RECORD_MISSING", "consumer_record_missing"],
+  ]);
+  for (const [code, family] of fixedSourceFailureFamilies) {
+    if (message.endsWith(`:${code}`)) return family;
+  }
+  if (message.includes("negative_zero_navigation_invalid")) return "negative_zero_navigation";
+  if (message.includes("current_route_refresh_binding_invalid")) return "current_route_binding";
+  if (message.includes("focus_pending_timeout")) return "focus_pending_timeout";
+  if (message.includes("focus_consumed_contract_timeout")) return "focus_consumed_contract_timeout";
+  if (message.includes("focus_consumer_missing_timeout")) return "focus_consumer_missing_timeout";
+  if (message.includes("timeout")) return "timeout";
+  if (message.includes("m4_secretary_home_")) return "home_read_contract";
+  if (message.includes("collision") || message.includes("cardinality")) return "cardinality";
+  if (message.includes("prepared")) return "prepared_binding";
+  if (message.includes("resolver")) return "resolver_contract";
+  if (message.includes("navigation")) return "navigation_contract";
+  if (message.includes("source_focus") || message.includes("source_action")) return "dom_contract";
+  return "command_rejected";
+}
+
+async function m4r04EmitResult(
+  invocation: M4R04OrdinaryRouteInvocation,
+  outcome: "PASS" | "REJECTED",
+  errorFamily?: string,
+) {
+  const prepared = m4r04PreparedState;
+  await emit(M4R04_IPC_RESULT_EVENT, {
+    schema_version: M4R04_IPC_SCHEMA_VERSION,
+    phase: invocation.phase,
+    operation: invocation.operation,
+    nonce: invocation.nonce,
+    outcome,
+    proposal_create_calls: m4r04Counters.proposalCreateCalls,
+    work_item_update_calls: m4r04Counters.workItemUpdateCalls,
+    route_action_clicks: m4r04Counters.routeActionClicks,
+    navigation_clicks: m4r04Counters.navigationClicks,
+    refresh_clicks: m4r04Counters.refreshClicks,
+    resolver_wrapper_calls: m4r04Counters.resolverWrapperCalls,
+    work_item: prepared?.workItem ?? null,
+    proposal: prepared?.proposal ?? null,
+    current_work_item: invocation.operation === "advance_check_negatives_and_click_current"
+      ? m4r04CurrentWorkItem
+      : null,
+    negative: invocation.operation === "advance_check_negatives_and_click_current"
+      ? m4r04Negative
+      : null,
+    error_family: errorFamily ?? null,
+  });
+}
+
+let m4r04CurrentWorkItem: M4R04RouteObservation | null = null;
+let m4r04Negative: M4R04NegativeObservation | null = null;
+
+async function m4r04RunOperation(invocation: M4R04OrdinaryRouteInvocation) {
+  switch (invocation.operation) {
+    case "click_work_item_route": {
+      await m4r04ClickRefresh();
+      const selected = await m4r04WaitForSourceAction(M4R04_WORK_ITEM_OWNER, M4R04_HOME_LINK_TYPE);
+      const workItem = await m4r04ClickAndObserveRoute(selected, M4R04_WORK_ITEM_NATIVE_TYPE);
+      m4r04PreparedState = {
+        nonce: invocation.nonce,
+        projectRoot: invocation.project_root,
+        workItem,
+        proposal: null,
+      };
+      return;
+    }
+    case "create_proposal_source": {
+      const snapshot = await loadWorkflowStateSnapshot();
+      const workflows = snapshot.project_workflows.filter(
+        (workflow) => workflow.project_root === invocation.project_root,
+      );
+      if (workflows.length !== 1) throw new Error("m4r04_workflow_cardinality_invalid");
+      const workflow = workflows[0];
+      m4r04Counters.proposalCreateCalls += 1;
+      const created = await createProjectConsultationProposal({
+        project_root: invocation.project_root,
+        project_id: workflow.project_id,
+        workflow_id: workflow.workflow_id,
+        title: "SYN M4R04 ordinary registered owner route",
+        user_goal: "Prove exact return from a Secretary source to its registered proposal owner.",
+        goal_summary: "Ordinary isolated App registered-owner route evidence.",
+        proposed_steps: ["Create the proposal through the product command.", "Open its Secretary source route."],
+        scope_draft: {
+          allowed_role_ids: ["codex-dev"],
+          allowed_agent_ids: [],
+          allowed_read_roots: [invocation.project_root],
+          allowed_write_roots: [],
+          allowed_tools: [],
+          allowed_checks: [],
+          allowed_task_package_kinds: [],
+          stop_conditions: ["Stop after M4R04 route evidence is observed."],
+          max_worker_dispatches: 1,
+          max_runtime_minutes: 5,
+        },
+        risks: [],
+        worker_acceptance_criteria: ["The proposal owner page consumes the exact registered source."],
+        control_core_acceptance_criteria: ["The route remains bound to the sealed owner provenance."],
+        supervisor_acceptance_criteria: ["Restart and negative controls preserve the exact owner boundary."],
+        acceptance_criteria: ["The registered proposal owner consumes the exact source target."],
+        created_by_role: "project_director",
+        actor_id: "m4r04-route-driver",
+      });
+      if (
+        created.proposal.project_id !== workflow.project_id
+        || created.proposal.workflow_id !== workflow.workflow_id
+      ) throw new Error("m4r04_proposal_create_binding_invalid");
+      const deliveredRoute = await m4r04WaitForHomeRoute(
+        M4R04_PROPOSAL_OWNER,
+        created.proposal.proposal_id,
+      );
+      await m4r04ClickRefresh();
+      const selected = await m4r04WaitForSourceAction(
+        M4R04_PROPOSAL_OWNER,
+        M4R04_HOME_LINK_TYPE,
+        created.proposal.proposal_id,
+      );
+      if (selected.action.source_route_ref !== deliveredRoute.source_route_ref) {
+        throw new Error("m4r04_proposal_refresh_route_binding_invalid");
+      }
+      m4r04PreparedState = {
+        nonce: invocation.nonce,
+        projectRoot: invocation.project_root,
+        workItem: null,
+        proposal: m4r04ActionObservation(selected.action, M4R04_PROPOSAL_NATIVE_TYPE),
+      };
+      return;
+    }
+    case "click_proposal_route": {
+      const prepared = m4r04RequirePrepared(invocation);
+      if (!prepared.proposal) throw new Error("m4r04_prepared_proposal_missing");
+      const selected = await m4r04WaitForSourceAction(
+        prepared.proposal.source_owner_ref,
+        M4R04_HOME_LINK_TYPE,
+        prepared.proposal.canonical_source_object_id,
+      );
+      if (selected.action.source_route_ref !== prepared.proposal.source_route_ref) {
+        throw new Error("m4r04_prepared_proposal_route_changed");
+      }
+      prepared.proposal = await m4r04ClickAndObserveRoute(selected, M4R04_PROPOSAL_NATIVE_TYPE);
+      return;
+    }
+    case "click_restart_work_item": {
+      await m4r04ClickRefresh();
+      const selected = await m4r04WaitForSourceAction(M4R04_WORK_ITEM_OWNER, M4R04_HOME_LINK_TYPE);
+      const workItem = await m4r04ClickAndObserveRoute(selected, M4R04_WORK_ITEM_NATIVE_TYPE);
+      m4r04PreparedState = {
+        nonce: invocation.nonce,
+        projectRoot: invocation.project_root,
+        workItem,
+        proposal: null,
+      };
+      return;
+    }
+    case "click_restart_proposal": {
+      const prepared = m4r04RequirePrepared(invocation);
+      await m4r04NavigateHome();
+      await m4r04ClickRefresh();
+      const selected = await m4r04WaitForSourceAction(M4R04_PROPOSAL_OWNER, M4R04_HOME_LINK_TYPE);
+      prepared.proposal = await m4r04ClickAndObserveRoute(selected, M4R04_PROPOSAL_NATIVE_TYPE);
+      return;
+    }
+    case "advance_check_negatives_and_click_current": {
+      const prepared = m4r04RequirePrepared(invocation);
+      if (!prepared.workItem || !prepared.proposal) {
+        throw new Error("m4r04_restart_prepared_routes_missing");
+      }
+      await m4r04NavigateHome();
+      const staleSelection = await m4r04WaitForSourceAction(
+        M4R04_WORK_ITEM_OWNER,
+        M4R04_HOME_LINK_TYPE,
+        prepared.workItem.canonical_source_object_id,
+      );
+      if (staleSelection.action.source_route_ref !== prepared.workItem.source_route_ref) {
+        throw new Error("m4r04_restart_old_route_changed_before_update");
+      }
+      m4r04Counters.workItemUpdateCalls += 1;
+      await updateWorkItemState({
+        project_root: invocation.project_root,
+        work_item_id: prepared.workItem.canonical_source_object_id,
+        next_state: "running",
+        client_request_ref: invocation.nonce,
+      });
+      // Poll the ordinary server-owned Home read until the replacement route
+      // is current, but deliberately leave the rendered old button in place.
+      const currentHomeRoute = await m4r04WaitForHomeRoute(
+        M4R04_WORK_ITEM_OWNER,
+        prepared.workItem.canonical_source_object_id,
+        prepared.workItem.source_route_ref,
+      );
+
+      const activeViewBefore = m4r04ActiveView();
+      const routePhaseBefore = m4r04RoutePhase();
+      const consumedBefore = m4r04ConsumedMarkerCount();
+      const successBefore = m4r04SuccessNoticeCount();
+      const navigationBefore = m4r04Counters.navigationClicks;
+      const resolverBefore = m4r04Counters.resolverWrapperCalls;
+      await m4r04ClickAndObserveStale(staleSelection);
+      const staleCode = "M4_SOURCE_ROUTE_STALE";
+      const tamperedCode = await m4r04ExpectedResolverFailure(
+        m4r04FlipRouteDigest(currentHomeRoute.source_route_ref),
+        "M4_SOURCE_ROUTE_TAMPERED",
+      );
+      const activeViewAfter = m4r04ActiveView();
+      const routePhaseAfter = m4r04RoutePhase();
+      const consumedAfter = m4r04ConsumedMarkerCount();
+      const successAfter = m4r04SuccessNoticeCount();
+      m4r04Negative = {
+        stale_error_code: staleCode,
+        tampered_error_code: tamperedCode,
+        resolver_wrapper_calls: m4r04Counters.resolverWrapperCalls - resolverBefore,
+        stale_ui_phase: routePhaseAfter,
+        stale_notice_error_code: "M4_SOURCE_ROUTE_STALE",
+        stale_route_action_clicks: 1,
+        active_view_before: activeViewBefore,
+        active_view_after: activeViewAfter,
+        route_phase_before: routePhaseBefore,
+        route_phase_after: routePhaseAfter,
+        consumed_marker_count_before: consumedBefore,
+        consumed_marker_count_after: consumedAfter,
+        success_notice_count_before: successBefore,
+        success_notice_count_after: successAfter,
+        zero_navigation: navigationBefore === m4r04Counters.navigationClicks
+          && activeViewBefore === activeViewAfter,
+        zero_consume_delta: consumedBefore === consumedAfter,
+        zero_success_delta: successBefore === successAfter,
+      };
+      if (
+        activeViewBefore !== "home"
+        || activeViewAfter !== "home"
+        || routePhaseBefore !== "IDLE"
+        || routePhaseAfter !== "FAILED"
+        || consumedBefore !== 0
+        || consumedAfter !== 0
+        || successBefore !== 0
+        || successAfter !== 0
+        || !m4r04Negative.zero_navigation
+        || !m4r04Negative.zero_consume_delta
+        || !m4r04Negative.zero_success_delta
+      ) throw new Error("m4r04_negative_zero_navigation_invalid");
+      await m4r04ClickRefresh();
+      const current = await m4r04WaitForSourceAction(
+        M4R04_WORK_ITEM_OWNER,
+        M4R04_HOME_LINK_TYPE,
+        prepared.workItem.canonical_source_object_id,
+        prepared.workItem.source_route_ref,
+      );
+      if (current.action.source_route_ref !== currentHomeRoute.source_route_ref) {
+        throw new Error("m4r04_current_route_refresh_binding_invalid");
+      }
+      m4r04CurrentWorkItem = await m4r04ClickAndObserveRoute(
+        current,
+        M4R04_WORK_ITEM_NATIVE_TYPE,
+      );
+      return;
+    }
+  }
+}
+
+async function installM4R04OrdinaryRouteTauriIpcBridge() {
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  try {
+    await listen<M4R04OrdinaryRouteInvocation>(M4R04_IPC_INVOKE_EVENT, ({ payload }) => {
+      if (!isM4R04Invocation(payload)) return;
+      m4r04OperationQueue = m4r04OperationQueue
+        .catch(() => undefined)
+        .then(async () => {
+          try {
+            await m4r04RunOperation(payload);
+            await m4r04EmitResult(payload, "PASS");
+          } catch (error) {
+            await m4r04EmitResult(payload, "REJECTED", m4r04ErrorFamily(error));
+          }
+        })
+        .catch(() => undefined);
+    });
+    await emit(M4R04_IPC_READY_EVENT, {
+      schema_version: M4R04_IPC_SCHEMA_VERSION,
+      surface: "ordinary_registered_tauri_command_and_dom_click",
+      phases: ["work_item", "proposal", "restart_negative"],
+    });
+  } catch {
+    // Rust owns the bounded readiness timeout and terminal receipt.
+  }
+}
+
 class BootErrorBoundary extends React.Component<BootErrorBoundaryProps, BootErrorBoundaryState> {
   state: BootErrorBoundaryState = { error: null };
 
@@ -1060,6 +1785,7 @@ void markFrontendLoaded();
 void installM2R4TauriIpcBridge();
 void installM4R02OrdinaryCompositionTauriIpcBridge();
 void installM4R03OrdinaryClockTauriIpcBridge();
+void installM4R04OrdinaryRouteTauriIpcBridge();
 
 window.addEventListener("error", (event) => {
   const root = document.getElementById("root");

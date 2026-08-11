@@ -30,6 +30,7 @@ import type {
   WorkflowRunCheck,
   WorkflowStateSnapshot,
 } from "../../lib/types";
+import type { SecretarySourceFocus, SecretarySourceFocusOutcome } from "../../lib/types/m4Secretary";
 import {
   DetailLine,
   ProjectAgentMovedPanel,
@@ -83,6 +84,8 @@ export type ProjectDetailProps = {
   blackboardCandidateStore?: BlackboardCandidateStoreV1 | null;
   planAuthorizationStore?: PlanAuthorizationStoreV1 | null;
   projectConsultationProposalStore?: ProjectConsultationProposalStoreV1 | null;
+  secretarySourceFocus?: SecretarySourceFocus | null;
+  onSecretarySourceFocusOutcome?: (outcome: SecretarySourceFocusOutcome) => void;
   observationStore?: ObservationStoreV1 | null;
   memoryCandidateStore?: MemoryCandidateStoreV1 | null;
   formalMemoryStore?: FormalMemoryStoreV1 | null;
@@ -127,6 +130,8 @@ export function ProjectWorkspaceShell({
   memoryCandidateStore = null,
   planAuthorizationStore = null,
   projectConsultationProposalStore = null,
+  secretarySourceFocus = null,
+  onSecretarySourceFocusOutcome,
   selectedTool = "jiaoban",
   onSelectTool = () => {},
   onOpenAgentSession = () => {},
@@ -214,6 +219,8 @@ export function ProjectWorkspaceShell({
             workflowState={workflowState}
             projectConsultationProposalStore={projectConsultationProposalStore}
             planAuthorizationStore={planAuthorizationStore}
+            secretarySourceFocus={secretarySourceFocus}
+            onSecretarySourceFocusOutcome={onSecretarySourceFocusOutcome}
             onRequestAction={onRequestAction}
             onOpenAgentSession={onOpenAgentSession}
             onProposalStoreRefresh={onProposalStoreRefresh}
@@ -246,6 +253,8 @@ export function ProjectWorkspaceShell({
           <ProjectWorkflowDraftPanel
             project={project}
             workflowState={workflowState}
+            secretarySourceFocus={secretarySourceFocus}
+            onSecretarySourceFocusOutcome={onSecretarySourceFocusOutcome}
             onRequestAction={onRequestAction}
             onRenderTaskPreview={onRenderTaskPreview}
             onInspectDispatchReadiness={onInspectDispatchReadiness}

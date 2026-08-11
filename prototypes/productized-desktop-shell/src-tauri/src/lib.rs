@@ -51,8 +51,8 @@ mod workbench_sqlite_importer;
 mod workbench_sqlite_observation_period;
 
 // M2 transaction foundation modules
-mod m2_domain_cutover;
 mod m2_clock;
+mod m2_domain_cutover;
 pub mod m2_dto;
 mod m2_isolated_app_acceptance;
 mod m2_legacy_adapter;
@@ -69,24 +69,26 @@ mod m2_workflow_state;
 // M3 owns its role-session domain, scratch schema, and repository.  These
 // modules may reuse the ordinary SQLite immediate-transaction primitive, but
 // never the M2 workflow-state sidecar or its R4 command gate.
-mod m3_conversation_transport;
 mod m3_acceptance;
+mod m3_conversation_transport;
 mod m3_handoff;
 mod m3_role_session;
-mod m3_role_session_repository;
 mod m3_role_session_read_model;
+mod m3_role_session_repository;
 mod m3_role_session_schema;
 mod m4_acceptance;
-mod m4r02_ordinary_composition_driver;
-mod m4r03_ordinary_clock_driver;
-mod m4_source_dispatcher;
-mod m4_source_owner_schema;
 mod m4_secretary_domain;
 mod m4_secretary_read_model;
 mod m4_secretary_repository;
 mod m4_secretary_scheduler;
-mod m4_secretary_service;
 mod m4_secretary_schema;
+mod m4_secretary_service;
+mod m4_source_dispatcher;
+mod m4_source_owner_schema;
+mod m4_source_route_resolver;
+mod m4r02_ordinary_composition_driver;
+mod m4r03_ordinary_clock_driver;
+mod m4r04_ordinary_route_driver;
 mod workbench_sqlite_preflight;
 mod workbench_sqlite_production_apply;
 mod workbench_sqlite_read_cut;
@@ -116,6 +118,11 @@ struct AppState {
     // ordinary Tauri constructor installs it.
     #[cfg(not(test))]
     m4_secretary_repository: Option<m4_secretary_repository::M4SecretarySqliteRepository>,
+    // Read capability is independent from the owner writeback port.  Only the
+    // ordinary constructor installs this closed two-owner registry.
+    #[cfg(not(test))]
+    m4_source_route_registry:
+        Option<m4_source_route_resolver::M4RegisteredSourceOwnerRouteRegistry>,
 }
 include!("types.rs");
 trait CodexResumeRunner {
@@ -147,6 +154,8 @@ impl AppState {
                     m3_role_session_read_runtime: installed.m3_read_runtime,
                     #[cfg(not(test))]
                     m4_secretary_repository: Some(installed.repository),
+                    #[cfg(not(test))]
+                    m4_source_route_registry: None,
                 });
             }
             let m3_role_session_read_runtime =
@@ -158,6 +167,8 @@ impl AppState {
                 m3_role_session_read_runtime,
                 #[cfg(not(test))]
                 m4_secretary_repository: None,
+                #[cfg(not(test))]
+                m4_source_route_registry: None,
             });
         }
         // Non-Tauri internal hosts still use this legacy composition for the
@@ -172,6 +183,8 @@ impl AppState {
             m3_role_session_read_runtime: Default::default(),
             #[cfg(not(test))]
             m4_secretary_repository: None,
+            #[cfg(not(test))]
+            m4_source_route_registry: None,
         })
     }
 
@@ -193,9 +206,7 @@ impl AppState {
     fn try_new_with_isolated_product_profile(
         paths: &acceptance_runtime_profile::RuntimePaths,
     ) -> Result<Self, String> {
-        let app_data_root = paths
-            .app_data_root
-            .join("local.codex.governance.workbench");
+        let app_data_root = paths.app_data_root.join("local.codex.governance.workbench");
         fs::create_dir_all(&app_data_root)
             .map_err(|_| "m4r02_isolated_app_data_root_create_failed".to_string())?;
         let canonical_app_data_root = fs::canonicalize(&app_data_root)
@@ -240,6 +251,12 @@ impl AppState {
             .map_err(|error| error.code)?;
         #[cfg(not(test))]
         start_m4_secretary_scheduler(m4_secretary_repository.clone())?;
+        #[cfg(not(test))]
+        let m4_source_route_registry =
+            m4_source_route_resolver::M4RegisteredSourceOwnerRouteRegistry::new(
+                &product_data_paths.workflow_state_path,
+                m4_secretary_repository.clone(),
+            );
         Ok(Self {
             index_path: product_data_paths.index_path,
             tasks_path: product_data_paths.tasks_path,
@@ -247,6 +264,8 @@ impl AppState {
             m3_role_session_read_runtime,
             #[cfg(not(test))]
             m4_secretary_repository: Some(m4_secretary_repository),
+            #[cfg(not(test))]
+            m4_source_route_registry: Some(m4_source_route_registry),
         })
     }
 }
@@ -330,10 +349,9 @@ fn run_m4_source_owner_tail_cycle(
     claimer_id: &str,
 ) -> Result<(), String> {
     for _ in 0..256 {
-        let expiry =
-            project_consultation_proposal_store::expire_due_proposals_at_server_clock(
-                workflow_state_path,
-            )?;
+        let expiry = project_consultation_proposal_store::expire_due_proposals_at_server_clock(
+            workflow_state_path,
+        )?;
         if expiry.drained {
             break;
         }
@@ -4275,7 +4293,7 @@ mod tests {
                     c4a_worker_report("done", &["permissive fixture report"], &[])
                 ),
             )
-                .map_err(|error| format!("fixture last message write failed: {error}"))?;
+            .map_err(|error| format!("fixture last message write failed: {error}"))?;
             Ok((
                 CodexResumeRunResult {
                     exit_code: 0,
@@ -5945,7 +5963,10 @@ docs/03-评审/恋点_红队对抗评审_V1.0.md\n\
                 "fresh DB-primary verification must stop at the typed M2 boundary until a real claim ledger/UoW exists"
             );
             assert!(
-                report_outcome.report_warning.as_deref().is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")),
+                report_outcome
+                    .report_warning
+                    .as_deref()
+                    .is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")),
                 "valid M2 grant report must report its hold truth"
             );
             assert_eq!(

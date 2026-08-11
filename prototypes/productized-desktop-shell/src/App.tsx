@@ -57,6 +57,7 @@ import {
   recordOperationControlDecision,
   recordProjectConsultationProposalDecision,
   recordUserResultDecision,
+  resolveSecretarySourceRoute,
   queryWorkbenchPageReadModel,
   operateSecretaryCoordination,
   operateSecretaryPersonalObject,
@@ -97,6 +98,8 @@ import {
   deriveSecretaryHomeReadModel,
   emptySecretaryContext,
   mintSecretaryCoordinationIdempotencyKey,
+  sameSecretarySourceRouteResolution,
+  shouldReleaseConsumedSecretarySourceReadCut,
   shouldUseSecretaryLegacyReadFallback,
   type M4LegacyReadCompatibilityReportEnvelopeDto,
 } from "./lib/secretaryReadModel";
@@ -105,6 +108,10 @@ import type {
   M4SecretaryCoordinationActionRequestDto,
   M4SecretaryHomeContextEnvelopeDto,
   M4SecretaryPersonalObjectRequestDto,
+  M4SecretarySourceNavigationTarget,
+  SecretarySourceFocus,
+  SecretarySourceFocusOutcome,
+  SecretarySourceRouteViewState,
   SecretaryHomeReadModel,
   SecretaryTypedDeepLinkDescriptor,
 } from "./lib/types/m4Secretary";
@@ -123,6 +130,7 @@ export { RightDetailPanel, workspaceRailItems };
 
 const viteEnv = import.meta.env ?? {};
 const browserPreviewEnabled = viteEnv.DEV === true && !("__TAURI_INTERNALS__" in window);
+export const SECRETARY_SOURCE_ROUTE_RESOLUTION_FAILED = "SECRETARY_SOURCE_ROUTE_RESOLUTION_FAILED";
 
 type SecretaryHomeTransportState = "loading" | "loaded" | "error";
 
@@ -146,10 +154,60 @@ export function App() {
   // ④「点击带上下文直达」:导航焦点与 activeView 同一次更新落地——跳哪一页 + 落在哪一条。
   // 不带 focus 的导航把它清空,免得旧焦点粘在下一页上。
   const [navigationFocus, setNavigationFocus] = useState<NavigationFocus | null>(null);
+  const [secretarySourceFocus, setSecretarySourceFocus] = useState<SecretarySourceFocus | null>(null);
+  const [secretarySourceRouteState, setSecretarySourceRouteState] = useState<SecretarySourceRouteViewState>({
+    source_route_ref: null,
+    phase: "IDLE",
+    error_code: null,
+  });
+  const [secretarySourceTargetReadCut, setSecretarySourceTargetReadCut] = useState<{
+    attempt_id: number;
+    snapshot: WorkbenchSnapshot;
+    workflow_state: WorkflowStateSnapshot;
+    proposal_store: ProjectConsultationProposalStoreV1 | null;
+  } | null>(null);
+  const secretarySourceRouteAttempt = useRef(0);
+  const secretarySourceRouteOrigin = useRef<{
+    attempt_id: number;
+    view: ViewKey;
+    navigation_focus: NavigationFocus | null;
+  } | null>(null);
   const navigate = useCallback<NavigateHandler>((view, focus) => {
+    secretarySourceRouteAttempt.current += 1;
     setActiveView(view);
     setNavigationFocus(focus ?? null);
+    setSecretarySourceFocus(null);
+    setSecretarySourceTargetReadCut(null);
+    setSecretarySourceRouteState({ source_route_ref: null, phase: "IDLE", error_code: null });
   }, []);
+  const releaseConsumedSecretarySourceFocus = useCallback((returnProposalToOrigin: boolean) => {
+    if (!shouldReleaseConsumedSecretarySourceReadCut({
+      phase: secretarySourceRouteState.phase,
+      route_state_ref: secretarySourceRouteState.source_route_ref,
+      focus_attempt_id: secretarySourceFocus?.attempt_id ?? null,
+      focus_route_ref: secretarySourceFocus?.source_route_ref ?? null,
+      read_cut_attempt_id: secretarySourceTargetReadCut?.attempt_id ?? null,
+    })) return false;
+    const origin = secretarySourceRouteOrigin.current;
+    const proposalFocus = secretarySourceFocus?.target.kind === "CONSULTATION_PROPOSAL";
+    secretarySourceRouteAttempt.current += 1;
+    secretarySourceRouteOrigin.current = null;
+    setSecretarySourceFocus(null);
+    setSecretarySourceTargetReadCut(null);
+    setSecretarySourceRouteState({ source_route_ref: null, phase: "IDLE", error_code: null });
+    if (returnProposalToOrigin && proposalFocus) {
+      const restoreOrigin = origin?.attempt_id === secretarySourceFocus?.attempt_id
+        && origin?.view !== "projects";
+      setActiveView(restoreOrigin ? origin.view : "home");
+      setNavigationFocus(restoreOrigin ? origin.navigation_focus : null);
+    }
+    return true;
+  }, [
+    secretarySourceFocus,
+    secretarySourceRouteState.phase,
+    secretarySourceRouteState.source_route_ref,
+    secretarySourceTargetReadCut,
+  ]);
   const [query, setQuery] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState(false);
@@ -263,12 +321,17 @@ export function App() {
     setNotice("正在读取索引。");
     setError(false);
     setSystemStatus(null);
+    // Home, the index, workflow state and proposal stores are independent
+    // reads.  Keep one owner-read barrier raised from the start so a source
+    // action cannot turn an in-flight read into a false "target missing".
+    setWorkflowStateLoading(true);
     void reloadSecretaryHome();
     if (browserPreviewEnabled) {
       setSnapshot(browserPreviewSnapshot);
       setWorkflowState(browserPreviewWorkflowState);
       setPlanAuthorizationStore(browserPreviewPlanAuthorizationStore);
       setProjectConsultationProposalStore(browserPreviewProposalStore);
+      setWorkflowStateLoading(false);
       setNotice("浏览器预览模式：使用示例会话数据；真实读取和发送请用 Tauri 桌面壳。");
       return;
     }
@@ -280,9 +343,15 @@ export function App() {
       void reloadWorkflowState();
     } catch (loadError) {
       setSnapshot(null);
+      setWorkflowStateLoading(false);
       setError(true);
       setNotice(`读取失败：${messageOf(loadError)}`);
     }
+  }
+
+  async function reloadFromUser() {
+    releaseConsumedSecretarySourceFocus(true);
+    await reload();
   }
 
   async function reloadSystemStatus() {
@@ -425,6 +494,9 @@ export function App() {
 
   async function confirmAction() {
     if (!pendingAction) return;
+    // The permission dialog already sealed the action payload. Return the
+    // owner page to ordinary live reads before the command can update it.
+    releaseConsumedSecretarySourceFocus(false);
     setActionBusy(true);
     try {
       if (pendingAction.kind === "initialize-workflow-state") {
@@ -852,19 +924,142 @@ export function App() {
       : null;
 
   const openSecretaryDeepLink = useCallback((descriptor: SecretaryTypedDeepLinkDescriptor) => {
-    // Route by the sealed descriptor kind only. The renderer never reads a
-    // path/URL or executes a payload; typed object fields only provide focus
-    // inside the fixed source-owner view.
-    if (descriptor.kind === "M4_SOURCE_ROUTE") {
-      navigate("projects", {
-        kind: descriptor.source_object_type,
-        id: descriptor.source_object_ref,
-      });
-      setNotice("已转到来源负责模块；事实详情只在来源模块读取。");
+    if (descriptor.kind !== "M4_SOURCE_ROUTE") {
+      setNotice("当前是降级摘要，尚未恢复可打开的来源负责模块。");
       return;
     }
-    setNotice("当前是降级摘要，尚未恢复可打开的来源负责模块。");
-  }, [navigate]);
+
+    // owner/type/id/revision are display-only fields on the home descriptor.
+    // The resolver receives only the sealed capability and returns the
+    // authoritative finite target. A later attempt or ordinary navigation
+    // invalidates this attempt before it may change the active view.
+    const attemptId = secretarySourceRouteAttempt.current + 1;
+    secretarySourceRouteAttempt.current = attemptId;
+    secretarySourceRouteOrigin.current = {
+      attempt_id: attemptId,
+      view: activeView,
+      navigation_focus: navigationFocus,
+    };
+    setSecretarySourceFocus(null);
+    setSecretarySourceTargetReadCut(null);
+    setSecretarySourceRouteState({
+      source_route_ref: descriptor.source_route_ref,
+      phase: "RESOLVING",
+      error_code: null,
+    });
+    setError(false);
+    setNotice("正在核验来源路由与当前记录……");
+
+    void resolveSecretarySourceRoute({ source_route_ref: descriptor.source_route_ref })
+      .then(async (initialResolution) => {
+        if (secretarySourceRouteAttempt.current !== attemptId) return;
+        // A sealed route resolves identity, but the owner page still consumes
+        // ordinary product read models. Refresh exactly the three read cuts it
+        // needs before publishing focus; do not tie route progress to unrelated
+        // memory/candidate store reads from the global refresh fan-out.
+        const [pageRead, nextWorkflowState, nextProposalStore] = await Promise.all([
+          loadWorkbenchSnapshotFromPageQueries(queryWorkbenchPageReadModel),
+          loadWorkflowStateSnapshot(),
+          initialResolution.target.kind === "CONSULTATION_PROPOSAL"
+            ? loadProjectConsultationProposalStore()
+            : Promise.resolve(null),
+        ]);
+        if (secretarySourceRouteAttempt.current !== attemptId) return;
+        // The owner read cut must sit between two validations of the same
+        // sealed capability.  If the owner advances while these reads are in
+        // flight, the second resolve fails STALE/REVISION_MISMATCH instead of
+        // letting a newer record consume an older route.
+        const resolution = await resolveSecretarySourceRoute({
+          source_route_ref: descriptor.source_route_ref,
+        });
+        if (secretarySourceRouteAttempt.current !== attemptId) return;
+        if (!sameSecretarySourceRouteResolution(initialResolution, resolution)) {
+          throw new Error("m4_secretary_source_route_resolution_changed");
+        }
+        // Exact source navigation is not a search result.  Clear any unrelated
+        // global query before the owner view consumes the freshly read index.
+        setQuery("");
+        setSnapshot(pageRead.snapshot);
+        setWorkflowState(nextWorkflowState);
+        if (nextProposalStore) setProjectConsultationProposalStore(nextProposalStore);
+        setWorkflowStateError(null);
+        setSecretarySourceTargetReadCut({
+          attempt_id: attemptId,
+          snapshot: pageRead.snapshot,
+          workflow_state: nextWorkflowState,
+          proposal_store: nextProposalStore,
+        });
+        const focus: SecretarySourceFocus = Object.freeze({
+          attempt_id: attemptId,
+          source_owner_ref: resolution.source_owner_ref,
+          source_object_type: resolution.source_object_type,
+          canonical_source_object_id: resolution.canonical_source_object_id,
+          source_revision: resolution.source_revision,
+          source_route_ref: resolution.source_route_ref,
+          target: resolution.target,
+        });
+        const targetView = secretarySourceViewForTarget(resolution.target);
+        setSecretarySourceFocus(focus);
+        setSecretarySourceRouteState({
+          source_route_ref: resolution.source_route_ref,
+          phase: "CONSUMING",
+          error_code: null,
+        });
+        setNavigationFocus(null);
+        setActiveView(targetView);
+        setNotice("来源路由已核验，正在定位负责页面中的精确记录……");
+      })
+      .catch((routeError) => {
+        if (secretarySourceRouteAttempt.current !== attemptId) return;
+        const errorCode = secretarySourceRouteFailureCode(routeError);
+        setSecretarySourceFocus(null);
+        setSecretarySourceTargetReadCut(null);
+        setSecretarySourceRouteState({
+          source_route_ref: descriptor.source_route_ref,
+          phase: "FAILED",
+          error_code: errorCode,
+        });
+        setError(true);
+        setNotice(`${SECRETARY_SOURCE_ROUTE_RESOLUTION_FAILED}:${errorCode}`);
+      });
+  }, [activeView, navigationFocus]);
+
+  const onSecretarySourceFocusOutcome = useCallback((outcome: SecretarySourceFocusOutcome) => {
+    if (
+      secretarySourceRouteAttempt.current !== outcome.attempt_id
+      || secretarySourceRouteState.phase !== "CONSUMING"
+      || !secretarySourceFocus
+      || secretarySourceFocus.attempt_id !== outcome.attempt_id
+      || secretarySourceRouteState.source_route_ref !== secretarySourceFocus.source_route_ref
+      || outcome.source_route_ref !== secretarySourceFocus.source_route_ref
+      || outcome.target_kind !== secretarySourceFocus.target.kind
+    ) return;
+    if (outcome.status === "FAILED") {
+      const errorCode = outcome.error_code ?? "SECRETARY_SOURCE_TARGET_RECORD_MISSING";
+      const origin = secretarySourceRouteOrigin.current;
+      if (origin?.attempt_id === outcome.attempt_id) {
+        setActiveView(origin.view);
+        setNavigationFocus(origin.navigation_focus);
+      }
+      setSecretarySourceFocus(null);
+      setSecretarySourceTargetReadCut(null);
+      setSecretarySourceRouteState({
+        source_route_ref: outcome.source_route_ref,
+        phase: "FAILED",
+        error_code: errorCode,
+      });
+      setError(true);
+      setNotice(`SECRETARY_SOURCE_FOCUS_CONSUMPTION_FAILED:${errorCode}`);
+      return;
+    }
+    setSecretarySourceRouteState({
+      source_route_ref: outcome.source_route_ref,
+      phase: "CONSUMED",
+      error_code: null,
+    });
+    setError(false);
+    setNotice("已打开来源负责模块中的精确记录。");
+  }, [secretarySourceFocus, secretarySourceRouteState]);
 
   const operateSecretaryAction = useCallback(async (intent: SecretaryCoordinationIntent) => {
     const revision = intent.item.coordination_revision;
@@ -966,6 +1161,10 @@ export function App() {
     ) ?? 0;
   const topbarReviewCount = pendingReviewCount + (workflowState?.counts.reviews ?? 0);
   const isDeveloperView = devNavItems.some((item) => item.key === activeView);
+  const activeSecretarySourceReadCut = secretarySourceFocus
+    && secretarySourceTargetReadCut?.attempt_id === secretarySourceFocus.attempt_id
+    ? secretarySourceTargetReadCut
+    : null;
 
   return (
     <WorkbenchShell
@@ -984,6 +1183,7 @@ export function App() {
       secretaryContext={secretaryContext}
       secretaryHome={secretaryHome}
       secretaryHomePresentationState={secretaryHomePresentationState}
+      secretarySourceRouteState={secretarySourceRouteState}
       systemStatus={systemStatus}
       topbarReviewCount={topbarReviewCount}
       workflowState={workflowState}
@@ -994,7 +1194,7 @@ export function App() {
       onCancelAction={() => setPendingAction(null)}
       onConfirmAction={confirmAction}
       onQueryChange={setQuery}
-      onReload={reload}
+      onReload={reloadFromUser}
       onReloadSecretaryHome={reloadSecretaryHome}
       onReloadWorkflowState={reloadWorkflowState}
       onOpenSecretaryDeepLink={openSecretaryDeepLink}
@@ -1015,27 +1215,32 @@ export function App() {
             home={secretaryHome}
             context={secretaryContext}
             presentationState={secretaryHomePresentationState}
+            sourceRouteState={secretarySourceRouteState}
             onOpenDeepLink={openSecretaryDeepLink}
             onReloadSecretaryHome={() => void reloadSecretaryHome()}
           />
         ) : renderActiveWorkbenchView({
           view: activeView,
-          snapshot: displaySnapshot,
+          snapshot: activeSecretarySourceReadCut?.snapshot ?? displaySnapshot,
           systemStatus,
           onRequestAction: setPendingAction,
           onNavigate: navigate,
           knowledgeOpenIntent,
           onKnowledgeOpenIntentOutcome: acknowledgeKnowledgeOpenIntent,
           navigationFocus,
+          secretarySourceFocus,
+          onSecretarySourceFocusOutcome,
           secretaryContext,
-          workflowState,
-          workflowStateLoading,
+          workflowState: activeSecretarySourceReadCut?.workflow_state ?? workflowState,
+          workflowStateLoading: secretarySourceFocus
+            ? activeSecretarySourceReadCut === null
+            : workflowStateLoading,
           workflowStateError,
           onReloadWorkflowState: reloadWorkflowState,
           onWorkflowStateReadRefresh: reloadWorkflowStateReadOnly,
           onNotice: setNotice,
           onProposalStoreRefresh: reloadJiaobanConversationProjection,
-          hasRealSnapshot: Boolean(filteredSnapshot),
+          hasRealSnapshot: Boolean(activeSecretarySourceReadCut?.snapshot ?? filteredSnapshot),
           onOpenAgentSession: (threadId) => {
             setFocusedAgentThreadId(threadId);
             // 走 navigate 而不是裸 setActiveView：顺带清掉上一页的焦点，免得旧 focus 粘过来。
@@ -1051,7 +1256,8 @@ export function App() {
           focusedAgentThreadId,
           blackboardCandidateStore,
           planAuthorizationStore,
-          projectConsultationProposalStore,
+          projectConsultationProposalStore:
+            activeSecretarySourceReadCut?.proposal_store ?? projectConsultationProposalStore,
           observationStore,
           memoryCaptureStore,
           memoryCandidateStore,
@@ -1093,6 +1299,42 @@ function legacyProductCommandBlockedNotice(commandName: string) {
 function secretaryHomeSafeErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return /^[A-Za-z0-9_:-]{1,128}$/.test(message) ? message : "M4_SECRETARY_HOME_READ_FAILED";
+}
+
+const SECRETARY_SOURCE_ROUTE_FIXED_FAILURE_CODES = [
+  "M4_SOURCE_ROUTE_INVALID",
+  "M4_SOURCE_ROUTE_TAMPERED",
+  "M4_SOURCE_OWNER_UNREGISTERED",
+  "M4_SOURCE_TYPE_UNREGISTERED",
+  "M4_SOURCE_SCOPE_MISMATCH",
+  "M4_SOURCE_ROUTE_STALE",
+  "M4_SOURCE_REVISION_MISMATCH",
+  "M4_SOURCE_TARGET_MISSING",
+  "M4_SOURCE_TARGET_INTEGRITY_FAILED",
+  "M4_SOURCE_ROUTE_REGISTRY_UNAVAILABLE",
+  "M4_SOURCE_ROUTE_RESOLUTION_UNAVAILABLE",
+] as const;
+
+export function secretarySourceRouteFailureCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const upper = message.toUpperCase();
+  const fixedCode = SECRETARY_SOURCE_ROUTE_FIXED_FAILURE_CODES.find((code) => upper.includes(code));
+  if (fixedCode) return fixedCode;
+  if (
+    message.startsWith("m4_secretary_source_route_")
+    || message.startsWith("m4_secretary_home_invalid_source_route_")
+    || message.startsWith("m4_secretary_home_unknown_source_route_")
+    || message.startsWith("m4_secretary_home_missing_source_route_")
+  ) return "M4_SOURCE_ROUTE_RESPONSE_INVALID";
+  return "M4_SOURCE_ROUTE_RESOLUTION_FAILED";
+}
+
+function secretarySourceViewForTarget(target: M4SecretarySourceNavigationTarget): ViewKey {
+  switch (target.kind) {
+    case "WORK_ITEM":
+    case "CONSULTATION_PROPOSAL":
+      return "projects";
+  }
 }
 
 function secretaryPersonalObjectStateKey(intent: SecretaryPersonalObjectIntent): string {

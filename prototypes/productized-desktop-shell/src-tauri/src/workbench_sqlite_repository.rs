@@ -4,8 +4,8 @@ use crate::workbench_sqlite_schema::{
     initialize_temp_workbench_sqlite_db,
 };
 use rusqlite::{
-    params, Connection, Error as SqlError, ErrorCode, OpenFlags, OptionalExtension,
-    Transaction, TransactionBehavior,
+    params, Connection, Error as SqlError, ErrorCode, OpenFlags, OptionalExtension, Transaction,
+    TransactionBehavior,
 };
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
@@ -96,6 +96,22 @@ pub(crate) enum RepositoryFailurePoint {
 pub(crate) struct RepositoryReceipt {
     pub(crate) rows_touched: usize,
     pub(crate) busy_retries: usize,
+}
+
+/// Read-only owner target material returned to the closed M4 route registry.
+/// Filesystem roots and renderer view names are intentionally absent.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum M4SourceOwnerNavigationTargetRead {
+    WorkItem {
+        project_id: String,
+        workflow_id: String,
+        work_item_id: String,
+    },
+    ConsultationProposal {
+        project_id: String,
+        workflow_id: String,
+        proposal_id: String,
+    },
 }
 
 /// A lease for the single M2 reference-slice projection capability.  This is
@@ -297,6 +313,26 @@ impl WorkbenchSqliteRepository {
         Ok(repository)
     }
 
+    /// Admit an already-initialized confirmed DB for a query-only owner read.
+    /// Unlike `open_confirmed`, this constructor never initializes schema,
+    /// changes journal mode, or creates a database file.
+    pub(crate) fn open_confirmed_read_only(
+        config: &ConfirmedWorkbenchSqliteRepositoryConfig,
+    ) -> Result<Self, String> {
+        validate_confirmed_repository_path(config)?;
+        let metadata = fs::symlink_metadata(&config.db_path)
+            .map_err(|_| "m4_source_route_owner_db_missing".to_string())?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err("m4_source_route_owner_db_not_regular".to_string());
+        }
+        let repository = Self {
+            db_path: config.db_path.clone(),
+            path_policy: WorkbenchSqlitePathPolicy::Confirmed,
+        };
+        repository.configured_read_connection()?;
+        Ok(repository)
+    }
+
     /// Opens only M3's fixed ordinary-product store. This is deliberately
     /// separate from `open_confirmed`: the generic confirmed gate continues to
     /// reject every `.codex` path, while this entry accepts that marker only in
@@ -444,6 +480,120 @@ impl WorkbenchSqliteRepository {
             },
         )
         .map(|_| ())
+    }
+
+    /// Resolve one immutable M4 provenance tuple back to the current native
+    /// owner record.  The read runs in one query-only SQLite transaction and
+    /// rebuilds the complete registered publication from the native
+    /// event/receipt/record before returning a finite target.
+    pub(crate) fn validate_current_source_revision_and_target(
+        &self,
+        expected: &crate::m4_source_owner_schema::M4SourceOwnerPublicationExpectationV1,
+    ) -> Result<M4SourceOwnerNavigationTargetRead, String> {
+        let mut connection = self.configured_read_connection()?;
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Deferred)
+            .map_err(|_| "m4_source_route_owner_read_transaction_failed".to_string())?;
+        let stored =
+            crate::m4_source_owner_schema::load_current_delivered_source_owner_publication(
+                &transaction,
+                expected,
+            )?;
+
+        let rebuilt = if stored.source_owner_ref
+            == crate::m4_source_owner_schema::M4_WORK_ITEM_SOURCE_OWNER_REF
+        {
+            let owner_current: Option<(String, String, i64, String)> = transaction
+                .query_row(
+                    "SELECT event.source_ref, event.source_revision,
+                            snapshot.object_revision, snapshot.source_watermark
+                     FROM events AS event
+                     JOIN current_snapshots AS snapshot
+                       ON snapshot.object_ref = event.source_ref
+                      AND snapshot.projector_id = 'workflow_projector'
+                     WHERE event.event_id = ?1",
+                    [stored.owner_native_event_id.as_str()],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .optional()
+                .map_err(|_| "m4_source_route_owner_current_read_failed".to_string())?;
+            let Some((_source_ref, event_revision, current_revision, current_watermark)) =
+                owner_current
+            else {
+                return Err("m4_source_route_target_missing".to_string());
+            };
+            validate_m4_work_item_owner_current_revision(
+                stored.source_revision,
+                &stored.owner_native_event_id,
+                &event_revision,
+                current_revision,
+                &current_watermark,
+            )?;
+            let receipt_ids = {
+                let mut statement = transaction
+                    .prepare(
+                        "SELECT receipt.receipt_id
+                         FROM events AS event
+                         JOIN command_receipts AS receipt ON receipt.command_id = event.command_id
+                         WHERE event.event_id = ?1
+                         ORDER BY receipt.receipt_id
+                         LIMIT 2",
+                    )
+                    .map_err(|_| "m4_source_route_owner_receipt_read_failed".to_string())?;
+                let rows = statement
+                    .query_map([stored.owner_native_event_id.as_str()], |row| {
+                        row.get::<_, String>(0)
+                    })
+                    .map_err(|_| "m4_source_route_owner_receipt_read_failed".to_string())?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| "m4_source_route_owner_receipt_read_failed".to_string())?;
+                rows
+            };
+            if receipt_ids.len() != 1 {
+                return Err(if receipt_ids.is_empty() {
+                    "m4_source_route_target_missing".to_string()
+                } else {
+                    "m4_source_route_target_integrity_failed".to_string()
+                });
+            }
+            crate::m4_source_owner_schema::build_m4_work_item_source_publication(
+                &transaction,
+                &stored.owner_native_event_id,
+                &receipt_ids[0],
+                &stored.canonical_object_id,
+                &stored.owner_status_code,
+            )
+            .map_err(map_m4_source_owner_rebuild_error)?
+        } else if stored.source_owner_ref
+            == crate::m4_source_owner_schema::M4_PROPOSAL_SOURCE_OWNER_REF
+        {
+            let revision = i64::try_from(stored.source_revision)
+                .map_err(|_| "m4_source_route_target_integrity_failed".to_string())?;
+            crate::m4_source_owner_schema::build_m4_proposal_source_publication(
+                &transaction,
+                &stored.canonical_object_id,
+                &stored.owner_native_event_id,
+                revision,
+            )
+            .map_err(map_m4_source_owner_rebuild_error)?
+        } else {
+            return Err("m4_source_route_owner_unregistered".to_string());
+        };
+        if rebuilt != stored {
+            return Err("m4_source_route_target_integrity_failed".to_string());
+        }
+
+        let target = if stored.source_owner_ref
+            == crate::m4_source_owner_schema::M4_WORK_ITEM_SOURCE_OWNER_REF
+        {
+            load_m4_work_item_navigation_target(&transaction, &stored)?
+        } else {
+            load_m4_proposal_navigation_target(&transaction, &stored)?
+        };
+        transaction
+            .commit()
+            .map_err(|_| "m4_source_route_owner_read_commit_failed".to_string())?;
+        Ok(target)
     }
 
     pub(crate) fn append_audit(
@@ -836,13 +986,7 @@ impl WorkbenchSqliteRepository {
         audit: &RepositoryAuditEntry,
         failure: Option<RepositoryFailurePoint>,
     ) -> Result<RepositoryReceipt, String> {
-        self.record_proposal_decision_with_audit_internal(
-            proposal,
-            decision,
-            audit,
-            None,
-            failure,
-        )
+        self.record_proposal_decision_with_audit_internal(proposal, decision, audit, None, failure)
     }
 
     pub(crate) fn record_proposal_decision_with_audit_and_m4_publication(
@@ -2021,9 +2165,7 @@ impl WorkbenchSqliteRepository {
             &admitted_path,
             OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW,
         )
-        .map_err(|error| {
-            format!("repository_open_failed:{}:{error}", admitted_path.display())
-        })?;
+        .map_err(|error| format!("repository_open_failed:{}:{error}", admitted_path.display()))?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .map_err(|error| format!("repository_enable_wal_failed:{error}"))?;
@@ -2033,6 +2175,50 @@ impl WorkbenchSqliteRepository {
         connection
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(|error| format!("repository_enable_foreign_keys_failed:{error}"))?;
+        Ok(connection)
+    }
+
+    fn configured_read_connection(&self) -> Result<Connection, String> {
+        let admitted_path = match self.path_policy {
+            WorkbenchSqlitePathPolicy::Rehearsal => {
+                let admitted = admit_temp_or_fixture_sqlite_path(&self.db_path).map_err(|_| {
+                    "m4_source_route_rehearsal_path_revalidation_failed".to_string()
+                })?;
+                if admitted != self.db_path {
+                    return Err("m4_source_route_rehearsal_path_identity_changed".to_string());
+                }
+                admitted
+            }
+            WorkbenchSqlitePathPolicy::Confirmed => {
+                let metadata = fs::symlink_metadata(&self.db_path)
+                    .map_err(|_| "m4_source_route_owner_db_missing".to_string())?;
+                if metadata.file_type().is_symlink() || !metadata.is_file() {
+                    return Err("m4_source_route_owner_db_not_regular".to_string());
+                }
+                let canonical = fs::canonicalize(&self.db_path)
+                    .map_err(|_| "m4_source_route_owner_db_unavailable".to_string())?;
+                if canonical != self.db_path {
+                    return Err("m4_source_route_owner_db_identity_changed".to_string());
+                }
+                canonical
+            }
+        };
+        let connection = Connection::open_with_flags(
+            &admitted_path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX
+                | OpenFlags::SQLITE_OPEN_NOFOLLOW,
+        )
+        .map_err(|_| "m4_source_route_owner_db_open_failed".to_string())?;
+        connection
+            .busy_timeout(Duration::from_millis(REPOSITORY_BUSY_TIMEOUT_MS))
+            .map_err(|_| "m4_source_route_owner_db_busy_timeout_failed".to_string())?;
+        connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .map_err(|_| "m4_source_route_owner_db_foreign_keys_failed".to_string())?;
+        connection
+            .pragma_update(None, "query_only", "ON")
+            .map_err(|_| "m4_source_route_owner_db_query_only_failed".to_string())?;
         Ok(connection)
     }
 
@@ -2100,9 +2286,7 @@ impl WorkbenchSqliteRepository {
             .optional()
             .map_err(|error| format!("m2_workflow_state_meta_binding_query_failed:{error}"))?
             .ok_or_else(|| {
-                format!(
-                    "m2_workflow_state_meta_binding_missing:work_item_id={work_item_id}"
-                )
+                format!("m2_workflow_state_meta_binding_missing:work_item_id={work_item_id}")
             })
     }
 
@@ -2277,7 +2461,8 @@ pub(crate) enum M2WorkflowStateSidecarConsumerId {
     StartupCheckpointRecovery,
 }
 
-pub(crate) const M2_WORKFLOW_STATE_SIDECAR_CONSUMERS: &[M2WorkflowStateSidecarConsumerRegistration] = &[
+pub(crate) const M2_WORKFLOW_STATE_SIDECAR_CONSUMERS:
+    &[M2WorkflowStateSidecarConsumerRegistration] = &[
     M2WorkflowStateSidecarConsumerRegistration {
         caller_id: "commands.update_work_item_state",
         repository_port_version: M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION,
@@ -2323,12 +2508,13 @@ fn m2_workflow_state_sidecar_consumer_registration(
 /// constructor cannot compile without a typed consumer id; a new route also
 /// makes this guard fail until it is explicitly registered.
 pub(crate) fn validate_m2_workflow_state_sidecar_consumer_registry() -> Result<(), String> {
-    if M2_WORKFLOW_STATE_SIDECAR_CONSUMER_REGISTRY_VERSION.trim().is_empty() {
+    if M2_WORKFLOW_STATE_SIDECAR_CONSUMER_REGISTRY_VERSION
+        .trim()
+        .is_empty()
+    {
         return Err("m2_workflow_state_sidecar_consumer_registry_version_missing".to_string());
     }
-    validate_m2_workflow_state_sidecar_consumer_registrations(
-        M2_WORKFLOW_STATE_SIDECAR_CONSUMERS,
-    )?;
+    validate_m2_workflow_state_sidecar_consumer_registrations(M2_WORKFLOW_STATE_SIDECAR_CONSUMERS)?;
     let required = [
         (
             "commands.update_work_item_state",
@@ -2353,7 +2539,9 @@ pub(crate) fn validate_m2_workflow_state_sidecar_consumer_registry() -> Result<(
     ];
     for (caller_id, source, marker) in required {
         if !source.contains(marker) {
-            return Err(format!("m2_workflow_state_sidecar_consumer_source_missing:{caller_id}"));
+            return Err(format!(
+                "m2_workflow_state_sidecar_consumer_source_missing:{caller_id}"
+            ));
         }
     }
     let owner_constructor_count = include_str!("workflow_run_dispatch_entrypoints.rs")
@@ -2404,7 +2592,9 @@ fn validate_m2_workflow_state_sidecar_consumer_registrations(
             || matching[0].repository_port_version != M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION
             || matching[0].migration_state != migration_state
         {
-            return Err(format!("m2_workflow_state_sidecar_consumer_registration_invalid:{caller_id}"));
+            return Err(format!(
+                "m2_workflow_state_sidecar_consumer_registration_invalid:{caller_id}"
+            ));
         }
     }
     Ok(())
@@ -2604,9 +2794,9 @@ pub(crate) fn m2_workflow_state_sidecar_snapshot_from_projection(
         .get("workflows")
         .and_then(Value::as_array)
         .and_then(|workflows| {
-            workflows.iter().find(|workflow| {
-                optional_text(workflow, "workflow_id") == Some(workflow_id)
-            })
+            workflows
+                .iter()
+                .find(|workflow| optional_text(workflow, "workflow_id") == Some(workflow_id))
         })
         .cloned()
         .ok_or_else(|| format!("m2_workflow_state_projection_workflow_missing:{workflow_id}"))?;
@@ -2680,9 +2870,8 @@ fn load_m2_workflow_state_snapshot_records(
     key_column: &str,
     workflow_id: &str,
 ) -> Result<Vec<Value>, String> {
-    let query = format!(
-        "SELECT record_json FROM {table} WHERE workflow_id = ?1 ORDER BY {key_column}"
-    );
+    let query =
+        format!("SELECT record_json FROM {table} WHERE workflow_id = ?1 ORDER BY {key_column}");
     let mut statement = connection
         .prepare(&query)
         .map_err(|error| format!("m2_workflow_state_snapshot_{table}_prepare:{error}"))?;
@@ -2753,13 +2942,17 @@ fn sorted_m2_workflow_state_snapshot_records(
     let mut keys = BTreeSet::new();
     for record in &records {
         if optional_text(record, "workflow_id") != Some(workflow_id) {
-            return Err(format!("m2_workflow_state_snapshot_{label}_workflow_mismatch"));
+            return Err(format!(
+                "m2_workflow_state_snapshot_{label}_workflow_mismatch"
+            ));
         }
         let record_key = optional_text(record, key)
             .filter(|value| !value.trim().is_empty())
             .ok_or_else(|| format!("m2_workflow_state_snapshot_{label}_{key}_missing"))?;
         if !keys.insert(record_key.to_string()) {
-            return Err(format!("m2_workflow_state_snapshot_{label}_{key}_duplicate"));
+            return Err(format!(
+                "m2_workflow_state_snapshot_{label}_{key}_duplicate"
+            ));
         }
     }
     records.sort_by(|left, right| {
@@ -2809,7 +3002,13 @@ pub(crate) fn record_m2_workflow_state_sidecar_snapshot_in_transaction(
                 source_watermark = excluded.source_watermark,
                 snapshot_hash = excluded.snapshot_hash,
                 built_at = excluded.built_at",
-            params![object_ref, revision, source_watermark, snapshot_hash, now_ms.to_string()],
+            params![
+                object_ref,
+                revision,
+                source_watermark,
+                snapshot_hash,
+                now_ms.to_string()
+            ],
         )
         .map_err(RepositoryMutationError::Sqlite)?;
     Ok(())
@@ -2901,8 +3100,7 @@ pub(crate) const M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_COMMAND: &str =
 pub(crate) const M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS: i64 = 300_000;
 pub(crate) const M2_R4_FAKE_EXTERNAL_ADAPTER_MAX_ATTEMPTS: i64 = 3;
 pub(crate) const M2_R4_FAKE_EXTERNAL_ADAPTER_MAX_LEASE_EXTENSIONS: i64 = 2;
-pub(crate) const M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_CHANNEL: &str =
-    "m2-r4-isolated-acceptance";
+pub(crate) const M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_CHANNEL: &str = "m2-r4-isolated-acceptance";
 pub(crate) const M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_PERMISSION: &str =
     "workflow_state.external_effect.result";
 pub(crate) const M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_ADMISSION: &str =
@@ -2979,9 +3177,16 @@ pub(crate) enum M2R4FakeExternalAdapterClaim {
     Leased(M2R4FakeExternalAdapterLease),
     /// A lease expiry is not a delivery failure.  The effect becomes
     /// claimable again without consuming retry budget or degrading the owner.
-    LeaseExpiredAvailable { outbox_item_id: String },
-    RetryScheduled { outbox_item_id: String, retry_not_before: i64 },
-    Poisoned { outbox_item_id: String },
+    LeaseExpiredAvailable {
+        outbox_item_id: String,
+    },
+    RetryScheduled {
+        outbox_item_id: String,
+        retry_not_before: i64,
+    },
+    Poisoned {
+        outbox_item_id: String,
+    },
 }
 
 /// Versioned, normalized request facts for the independent result command.
@@ -3104,9 +3309,11 @@ pub(crate) fn declare_m2_r4_armed_reference_effect_in_transaction(
         .map_err(RepositoryMutationError::Sqlite)?;
     let owner_current_object_ref = owner_current_object_ref
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| RepositoryMutationError::Message(
-            "m2_r4_armed_effect_owner_current_object_missing".to_string(),
-        ))?;
+        .ok_or_else(|| {
+            RepositoryMutationError::Message(
+                "m2_r4_armed_effect_owner_current_object_missing".to_string(),
+            )
+        })?;
     if owner_command_id != input.owning_command_id
         || owner_actor_id != input.actor_id
         || owner_scope_ref != input.scope_ref
@@ -3176,7 +3383,8 @@ pub(crate) fn declare_m2_r4_armed_reference_effect_in_transaction(
         )
         .optional()
         .map_err(RepositoryMutationError::Sqlite)?;
-    if let Some((stored_owner, stored_receipt, stored_effect, stored_correlation)) = existing_effect {
+    if let Some((stored_owner, stored_receipt, stored_effect, stored_correlation)) = existing_effect
+    {
         if stored_owner == input.owning_command_id
             && stored_receipt == input.owning_receipt_id
             && stored_effect == effect_id
@@ -3398,8 +3606,25 @@ pub(crate) fn load_m2_r4_armed_reference_effect_in_transaction(
     transaction: &Transaction<'_>,
     owning_command_id: &str,
 ) -> RepositoryMutationResult<M2R4ArmedReferenceEffectReceipt> {
-    let (outbox_item_id, effect_id, owning_receipt_id, actor_id, scope_ref, current_object_ref, correlation_id, owner_status):
-        (String, String, String, String, String, Option<String>, Option<String>, String) = transaction
+    let (
+        outbox_item_id,
+        effect_id,
+        owning_receipt_id,
+        actor_id,
+        scope_ref,
+        current_object_ref,
+        correlation_id,
+        owner_status,
+    ): (
+        String,
+        String,
+        String,
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+    ) = transaction
         .query_row(
             "SELECT outbox_items.outbox_item_id, outbox_items.effect_id,
                     outbox_items.owning_command_receipt_ref,
@@ -3417,26 +3642,40 @@ pub(crate) fn load_m2_r4_armed_reference_effect_in_transaction(
                 M2_R4_FAKE_EXTERNAL_ADAPTER_CAPABILITY,
                 M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_COMMAND,
             ],
-            |row| Ok((
-                row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?,
-                row.get(5)?, row.get(6)?, row.get(7)?,
-            )),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            },
         )
         .optional()
         .map_err(RepositoryMutationError::Sqlite)?
-        .ok_or_else(|| RepositoryMutationError::Message(format!(
-            "m2_r4_armed_effect_not_found:{owning_command_id}"
-        )))?;
+        .ok_or_else(|| {
+            RepositoryMutationError::Message(format!(
+                "m2_r4_armed_effect_not_found:{owning_command_id}"
+            ))
+        })?;
     let current_object_ref = current_object_ref
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| RepositoryMutationError::Message(
-            "m2_r4_armed_effect_owner_current_object_missing".to_string(),
-        ))?;
+        .ok_or_else(|| {
+            RepositoryMutationError::Message(
+                "m2_r4_armed_effect_owner_current_object_missing".to_string(),
+            )
+        })?;
     let correlation_id = correlation_id
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| RepositoryMutationError::Message(
-            "m2_r4_armed_effect_owner_correlation_missing".to_string(),
-        ))?;
+        .ok_or_else(|| {
+            RepositoryMutationError::Message(
+                "m2_r4_armed_effect_owner_correlation_missing".to_string(),
+            )
+        })?;
     if owner_status != "EXTERNAL_PENDING" && owner_status != "EXTERNAL_RESULT" {
         return Err(RepositoryMutationError::Message(format!(
             "m2_r4_armed_effect_owner_status_invalid:{owner_status}"
@@ -3453,9 +3692,11 @@ pub(crate) fn load_m2_r4_armed_reference_effect_in_transaction(
         .optional()
         .map_err(RepositoryMutationError::Sqlite)?
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| RepositoryMutationError::Message(
-            "m2_r4_armed_effect_owner_causation_missing".to_string(),
-        ))?;
+        .ok_or_else(|| {
+            RepositoryMutationError::Message(
+                "m2_r4_armed_effect_owner_causation_missing".to_string(),
+            )
+        })?;
     Ok(M2R4ArmedReferenceEffectReceipt {
         outbox_item_id,
         effect_id,
@@ -3489,11 +3730,9 @@ pub(crate) fn declare_m2_r4_fake_external_adapter_effect_in_transaction(
         input.subject_ref,
         input.payload_hash,
     ));
-    if let Some((receipt_id, existing_hash)) = find_m2_command_receipt_by_identity(
-        transaction,
-        input.command_id,
-        input.idempotency_key,
-    )? {
+    if let Some((receipt_id, existing_hash)) =
+        find_m2_command_receipt_by_identity(transaction, input.command_id, input.idempotency_key)?
+    {
         if existing_hash != request_hash {
             return Err(RepositoryMutationError::Message(format!(
                 "m2_r4_fake_external_adapter_idempotency_conflict:{}",
@@ -3730,9 +3969,11 @@ pub(crate) fn claim_m2_r4_fake_external_adapter_effect_in_transaction(
             "LEASE_EXPIRED_AVAILABLE",
             &row.outbox_item_id,
             &row.owning_command_id,
-            row.correlation_id.as_deref().ok_or_else(|| RepositoryMutationError::Message(
-                "m2_r4_fake_external_adapter_correlation_missing".to_string(),
-            ))?,
+            row.correlation_id.as_deref().ok_or_else(|| {
+                RepositoryMutationError::Message(
+                    "m2_r4_fake_external_adapter_correlation_missing".to_string(),
+                )
+            })?,
             "m2_r4_fake_external_adapter",
             "m2-r4-acceptance",
             now_ms,
@@ -3876,9 +4117,11 @@ pub(crate) fn extend_m2_r4_fake_external_adapter_lease_in_transaction(
         "LEASE_EXTENDED",
         &row.outbox_item_id,
         &row.owning_command_id,
-        row.correlation_id.as_deref().ok_or_else(|| RepositoryMutationError::Message(
-            "m2_r4_fake_external_adapter_correlation_missing".to_string(),
-        ))?,
+        row.correlation_id.as_deref().ok_or_else(|| {
+            RepositoryMutationError::Message(
+                "m2_r4_fake_external_adapter_correlation_missing".to_string(),
+            )
+        })?,
         "m2_r4_fake_external_adapter",
         "m2-r4-acceptance",
         now_ms,
@@ -3955,9 +4198,11 @@ pub(crate) fn deliver_m2_r4_fake_external_adapter_effect_in_transaction(
         "DELIVERED",
         &lease.outbox_item_id,
         &row.owning_command_id,
-        row.correlation_id.as_deref().ok_or_else(|| RepositoryMutationError::Message(
-            "m2_r4_fake_external_adapter_correlation_missing".to_string(),
-        ))?,
+        row.correlation_id.as_deref().ok_or_else(|| {
+            RepositoryMutationError::Message(
+                "m2_r4_fake_external_adapter_correlation_missing".to_string(),
+            )
+        })?,
         "m2_r4_fake_external_adapter",
         "m2-r4-acceptance",
         now_ms,
@@ -3977,11 +4222,9 @@ pub(crate) fn record_m2_r4_fake_external_adapter_result_command_in_transaction(
     let row = load_m2_r4_fake_external_adapter_outbox(transaction, input.outbox_item_id)?;
     validate_m2_r4_fake_external_adapter_result_owner_binding(transaction, input, &row)?;
     let request_hash = canonical_m2_r4_fake_external_adapter_result_request_hash(input);
-    if let Some((receipt_id, existing_hash)) = find_m2_command_receipt_by_identity(
-        transaction,
-        input.command_id,
-        input.idempotency_key,
-    )? {
+    if let Some((receipt_id, existing_hash)) =
+        find_m2_command_receipt_by_identity(transaction, input.command_id, input.idempotency_key)?
+    {
         if existing_hash == request_hash {
             return Ok(M2R4FakeExternalAdapterResultReceipt {
                 receipt_id,
@@ -4098,7 +4341,10 @@ pub(crate) fn record_m2_r4_fake_external_adapter_result_command_in_transaction(
                  error_code = NULL
                  WHERE receipt_id = ?3 AND command_id = ?4 AND status = 'EXTERNAL_PENDING'",
             params![
-                format!("{}:{}", M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_COMMAND, input.outbox_item_id),
+                format!(
+                    "{}:{}",
+                    M2_R4_FAKE_EXTERNAL_ADAPTER_RESULT_COMMAND, input.outbox_item_id
+                ),
                 input.result_hash,
                 row.owning_receipt_id,
                 row.owning_command_id,
@@ -4216,8 +4462,13 @@ fn validate_m2_r4_fake_external_adapter_result_owner_binding(
             "m2_r4_fake_external_result_envelope_binding_mismatch".to_string(),
         ));
     }
-    let (actor_id, scope_ref, current_object_ref, correlation_id, status):
-        (String, String, String, Option<String>, String) = transaction
+    let (actor_id, scope_ref, current_object_ref, correlation_id, status): (
+        String,
+        String,
+        String,
+        Option<String>,
+        String,
+    ) = transaction
         .query_row(
             "SELECT actor_id, scope_ref, current_object_ref, correlation_id, status
              FROM command_receipts WHERE receipt_id = ?1 AND command_id = ?2",
@@ -4418,9 +4669,11 @@ fn move_m2_r4_fake_external_adapter_to_retry_or_poison(
         status,
         &row.outbox_item_id,
         &row.owning_command_id,
-        row.correlation_id.as_deref().ok_or_else(|| RepositoryMutationError::Message(
-            "m2_r4_fake_external_adapter_correlation_missing".to_string(),
-        ))?,
+        row.correlation_id.as_deref().ok_or_else(|| {
+            RepositoryMutationError::Message(
+                "m2_r4_fake_external_adapter_correlation_missing".to_string(),
+            )
+        })?,
         "m2_r4_fake_external_adapter",
         "m2-r4-acceptance",
         now_ms,
@@ -4450,9 +4703,9 @@ fn m2_r4_fake_external_adapter_backoff_ms(
         RepositoryMutationError::Message("m2_r4_fake_external_adapter_backoff_overflow".to_string())
     })?;
     let jitter_hex = sha256_hex(&format!("{effect_id}:{attempt}"));
-    let jitter = i64::from_str_radix(&jitter_hex[..4], 16)
-        .map_err(|_| RepositoryMutationError::Message("m2_r4_fake_external_adapter_jitter_invalid".to_string()))?
-        % 251;
+    let jitter = i64::from_str_radix(&jitter_hex[..4], 16).map_err(|_| {
+        RepositoryMutationError::Message("m2_r4_fake_external_adapter_jitter_invalid".to_string())
+    })? % 251;
     base.checked_add(jitter).ok_or_else(|| {
         RepositoryMutationError::Message("m2_r4_fake_external_adapter_backoff_overflow".to_string())
     })
@@ -4484,7 +4737,11 @@ fn append_m2_r4_fake_external_adapter_audit(
              )",
             params![
                 audit_id,
-                if matches!(status, "POISON") { "DEGRADED" } else { "COMMITTED" },
+                if matches!(status, "POISON") {
+                    "DEGRADED"
+                } else {
+                    "COMMITTED"
+                },
                 format!("m2_r4_fake_external_adapter_{status}"),
                 format!("M2_R4_FAKE_EXTERNAL_ADAPTER_{status}"),
                 actor_id,
@@ -4547,13 +4804,17 @@ fn update_work_item_and_node_state_with_source_policy(
         )));
     }
     let workflow_id = optional_text(work_item_after, "workflow_id").map(ToString::to_string);
-    let node_id = optional_text(work_item_after, "node_id").map(ToString::to_string);
+    let node_id = optional_text(work_item_after, "node_id")
+        .or_else(|| optional_text(work_item_after, "current_node_id"))
+        .map(ToString::to_string);
     let work_item_source_id = if preserve_imported_source_binding {
-        current_source_id.filter(|source_id| !source_id.trim().is_empty()).ok_or_else(|| {
-            RepositoryMutationError::Message(
-                "m2_workflow_state_source_binding_missing:work_item".to_string(),
-            )
-        })?
+        current_source_id
+            .filter(|source_id| !source_id.trim().is_empty())
+            .ok_or_else(|| {
+                RepositoryMutationError::Message(
+                    "m2_workflow_state_source_binding_missing:work_item".to_string(),
+                )
+            })?
     } else {
         REPOSITORY_SOURCE_ID.to_string()
     };
@@ -4734,12 +4995,14 @@ fn claim_m2_sidecar_outbox_in_transaction(
         )));
     }
 
-    Ok(WorkflowStateProjectionClaim::Leased(WorkflowStateProjectionLease {
-        outbox_item_id: row.outbox_item_id,
-        receipt_id: row.receipt_id,
-        effect_id: row.effect_id,
-        lease_token,
-    }))
+    Ok(WorkflowStateProjectionClaim::Leased(
+        WorkflowStateProjectionLease {
+            outbox_item_id: row.outbox_item_id,
+            receipt_id: row.receipt_id,
+            effect_id: row.effect_id,
+            lease_token,
+        },
+    ))
 }
 
 /// Persist a failed attempt without exposing raw projection data.  At the
@@ -5392,11 +5655,7 @@ fn m2_sidecar_projection_source(
 }
 
 fn validate_projection_hash(projection_hash: &str) -> RepositoryMutationResult<()> {
-    if projection_hash.len() == 64
-        && projection_hash
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
-    {
+    if projection_hash.len() == 64 && projection_hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Ok(());
     }
     Err(RepositoryMutationError::Message(
@@ -6034,6 +6293,247 @@ fn serialized_record(value: &Value) -> Result<(String, String), String> {
     Ok((sha256_hex(&record_json), record_json))
 }
 
+fn map_m4_source_owner_rebuild_error(error: RepositoryMutationError) -> String {
+    match error {
+        RepositoryMutationError::Sqlite(SqlError::QueryReturnedNoRows) => {
+            "m4_source_route_target_missing".to_string()
+        }
+        _ => "m4_source_route_target_integrity_failed".to_string(),
+    }
+}
+
+fn validate_m4_work_item_owner_current_revision(
+    source_revision: u64,
+    owner_native_event_id: &str,
+    event_revision: &str,
+    current_revision: i64,
+    current_watermark: &str,
+) -> Result<(), String> {
+    let expected_revision = i64::try_from(source_revision)
+        .map_err(|_| "m4_source_route_target_integrity_failed".to_string())?;
+    if event_revision != source_revision.to_string() {
+        return Err("m4_source_route_target_integrity_failed".to_string());
+    }
+    if current_revision == expected_revision && current_watermark == owner_native_event_id {
+        return Ok(());
+    }
+    if current_revision > expected_revision {
+        return Err("m4_source_route_owner_revision_mismatch".to_string());
+    }
+    Err("m4_source_route_target_integrity_failed".to_string())
+}
+
+fn validated_m4_owner_record(record_hash: &str, record_json: &str) -> Result<Value, String> {
+    if record_hash.len() != 64
+        || !record_hash
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        || sha256_hex(record_json) != record_hash
+    {
+        return Err("m4_source_route_target_integrity_failed".to_string());
+    }
+    serde_json::from_str(record_json)
+        .map_err(|_| "m4_source_route_target_integrity_failed".to_string())
+}
+
+fn required_m4_owner_text<'a>(record: &'a Value, field: &str) -> Result<&'a str, String> {
+    record
+        .get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "m4_source_route_target_integrity_failed".to_string())
+}
+
+fn load_m4_work_item_navigation_target(
+    transaction: &Transaction<'_>,
+    publication: &crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1,
+) -> Result<M4SourceOwnerNavigationTargetRead, String> {
+    type WorkItemTargetRow = (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+    );
+    let row: Option<WorkItemTargetRow> = transaction
+        .query_row(
+            "SELECT item.workflow_id,
+                    COALESCE(item.node_id, json_extract(item.record_json, '$.current_node_id'),
+                             json_extract(item.record_json, '$.node_id')) AS resolved_node_id,
+                    item.record_hash, item.record_json,
+                    workflow.project_id, workflow.record_hash, workflow.record_json,
+                    node.record_hash, node.record_json,
+                    project.record_hash, project.record_json, project.project_id
+             FROM work_items AS item
+             JOIN workflows AS workflow ON workflow.workflow_id = item.workflow_id
+             JOIN workflow_nodes AS node
+               ON node.node_id = COALESCE(
+                    item.node_id,
+                    json_extract(item.record_json, '$.current_node_id'),
+                    json_extract(item.record_json, '$.node_id')
+                  )
+              AND node.workflow_id = item.workflow_id
+             JOIN projects AS project ON project.project_id = workflow.project_id
+             WHERE item.work_item_id = ?1",
+            [publication.canonical_object_id.as_str()],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                    row.get(9)?,
+                    row.get(10)?,
+                    row.get(11)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|_| "m4_source_route_target_read_failed".to_string())?;
+    let Some((
+        workflow_id,
+        node_id,
+        work_item_hash,
+        work_item_json,
+        project_id,
+        workflow_hash,
+        workflow_json,
+        node_hash,
+        node_json,
+        project_hash,
+        project_json,
+        stored_project_id,
+    )) = row
+    else {
+        return Err("m4_source_route_target_missing".to_string());
+    };
+    let work_item = validated_m4_owner_record(&work_item_hash, &work_item_json)?;
+    let workflow = validated_m4_owner_record(&workflow_hash, &workflow_json)?;
+    let node = validated_m4_owner_record(&node_hash, &node_json)?;
+    let project = validated_m4_owner_record(&project_hash, &project_json)?;
+    let record_node_id = work_item
+        .get("node_id")
+        .and_then(Value::as_str)
+        .or_else(|| work_item.get("current_node_id").and_then(Value::as_str));
+    let source_revision = i64::try_from(publication.source_revision)
+        .map_err(|_| "m4_source_route_target_integrity_failed".to_string())?;
+    if required_m4_owner_text(&work_item, "work_item_id")? != publication.canonical_object_id
+        || required_m4_owner_text(&work_item, "workflow_id")? != workflow_id
+        || record_node_id != Some(node_id.as_str())
+        || work_item
+            .get("workflow_revision_after")
+            .and_then(Value::as_i64)
+            != Some(source_revision)
+        || work_item.get("state").and_then(Value::as_str)
+            != Some(publication.owner_status_code.as_str())
+        || required_m4_owner_text(&workflow, "workflow_id")? != workflow_id
+        || required_m4_owner_text(&workflow, "project_id")? != project_id
+        || required_m4_owner_text(&node, "node_id")? != node_id
+        || required_m4_owner_text(&node, "workflow_id")? != workflow_id
+        || stored_project_id != project_id
+        || required_m4_owner_text(&project, "project_id")? != project_id
+    {
+        return Err("m4_source_route_target_integrity_failed".to_string());
+    }
+    Ok(M4SourceOwnerNavigationTargetRead::WorkItem {
+        project_id,
+        workflow_id,
+        work_item_id: publication.canonical_object_id.clone(),
+    })
+}
+
+fn load_m4_proposal_navigation_target(
+    transaction: &Transaction<'_>,
+    publication: &crate::m4_source_owner_schema::M4SourceOwnerOutboxEnvelopeV1,
+) -> Result<M4SourceOwnerNavigationTargetRead, String> {
+    type ProposalTargetRow = (
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+    );
+    let row: Option<ProposalTargetRow> = transaction
+        .query_row(
+            "SELECT proposal.project_id, proposal.workflow_id,
+                    proposal.record_hash, proposal.record_json,
+                    workflow.record_hash, workflow.record_json,
+                    project.record_hash, project.record_json, project.project_id
+             FROM project_proposals AS proposal
+             JOIN workflows AS workflow
+               ON workflow.workflow_id = proposal.workflow_id
+              AND workflow.project_id = proposal.project_id
+             JOIN projects AS project ON project.project_id = proposal.project_id
+             WHERE proposal.proposal_id = ?1",
+            [publication.canonical_object_id.as_str()],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|_| "m4_source_route_target_read_failed".to_string())?;
+    let Some((
+        project_id,
+        workflow_id,
+        proposal_hash,
+        proposal_json,
+        workflow_hash,
+        workflow_json,
+        project_hash,
+        project_json,
+        stored_project_id,
+    )) = row
+    else {
+        return Err("m4_source_route_target_missing".to_string());
+    };
+    let proposal = validated_m4_owner_record(&proposal_hash, &proposal_json)?;
+    let workflow = validated_m4_owner_record(&workflow_hash, &workflow_json)?;
+    let project = validated_m4_owner_record(&project_hash, &project_json)?;
+    if required_m4_owner_text(&proposal, "proposal_id")? != publication.canonical_object_id
+        || required_m4_owner_text(&proposal, "project_id")? != project_id
+        || required_m4_owner_text(&proposal, "workflow_id")? != workflow_id
+        || proposal.get("status").and_then(Value::as_str)
+            != Some(publication.owner_status_code.as_str())
+        || required_m4_owner_text(&workflow, "workflow_id")? != workflow_id
+        || required_m4_owner_text(&workflow, "project_id")? != project_id
+        || stored_project_id != project_id
+        || required_m4_owner_text(&project, "project_id")? != project_id
+    {
+        return Err("m4_source_route_target_integrity_failed".to_string());
+    }
+    Ok(M4SourceOwnerNavigationTargetRead::ConsultationProposal {
+        project_id,
+        workflow_id,
+        proposal_id: publication.canonical_object_id.clone(),
+    })
+}
+
 fn validate_confirmed_repository_path(
     config: &ConfirmedWorkbenchSqliteRepositoryConfig,
 ) -> Result<(), String> {
@@ -6334,6 +6834,30 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
+    fn m4_route_rejects_workflow_revision_advanced_by_unrelated_work_item() {
+        assert_eq!(
+            validate_m4_work_item_owner_current_revision(
+                7,
+                "event:work-item-a:7",
+                "7",
+                7,
+                "event:work-item-a:7",
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            validate_m4_work_item_owner_current_revision(
+                7,
+                "event:work-item-a:7",
+                "7",
+                8,
+                "event:unrelated-work-item-b:8",
+            ),
+            Err("m4_source_route_owner_revision_mismatch".to_string())
+        );
+    }
+
+    #[test]
     fn m2_workflow_state_sidecar_consumer_registry_is_complete_and_rejects_omission() {
         validate_m2_workflow_state_sidecar_consumer_registry()
             .expect("all named production consumers must be registered");
@@ -6456,7 +6980,9 @@ mod tests {
                 .expect("read armed declaration ledger");
             (
                 connection
-                    .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| row.get(0))
+                    .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| {
+                        row.get(0)
+                    })
                     .expect("count receipts"),
                 connection
                     .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
@@ -6473,8 +6999,11 @@ mod tests {
         let connection = repository
             .configured_connection()
             .expect("read declaration proof");
-        let (declared_event_count, declaration_audit_count, outbox_correlation):
-            (i64, i64, String) = connection
+        let (declared_event_count, declaration_audit_count, outbox_correlation): (
+            i64,
+            i64,
+            String,
+        ) = connection
             .query_row(
                 "SELECT
                     (SELECT COUNT(*) FROM events
@@ -6496,29 +7025,29 @@ mod tests {
         drop(connection);
 
         repository
-            .with_immediate_transaction(
-                "m2_r4_armed_declaration_replay",
-                None,
-                |transaction| {
-                    declare_m2_r4_armed_reference_effect_in_transaction(
-                        transaction,
-                        &M2R4ArmedReferenceEffectDeclaration {
-                            owning_command_id: owner_command_id,
-                            owning_receipt_id: owner_receipt_id,
-                            owning_event_id: owner_event_id,
-                            actor_id: "actor:m2-r4-armed",
-                            scope_ref: "scope:m2-r4-armed",
-                            subject_ref: "work-item:m2-r4-armed",
-                            payload_hash: &payload_hash,
-                            correlation_id: owner_correlation_id,
-                            causation_id: owner_causation_id,
-                        },
-                        NOW + 1,
-                    )
-                },
-            )
+            .with_immediate_transaction("m2_r4_armed_declaration_replay", None, |transaction| {
+                declare_m2_r4_armed_reference_effect_in_transaction(
+                    transaction,
+                    &M2R4ArmedReferenceEffectDeclaration {
+                        owning_command_id: owner_command_id,
+                        owning_receipt_id: owner_receipt_id,
+                        owning_event_id: owner_event_id,
+                        actor_id: "actor:m2-r4-armed",
+                        scope_ref: "scope:m2-r4-armed",
+                        subject_ref: "work-item:m2-r4-armed",
+                        payload_hash: &payload_hash,
+                        correlation_id: owner_correlation_id,
+                        causation_id: owner_causation_id,
+                    },
+                    NOW + 1,
+                )
+            })
             .expect("exact armed declaration replay is idempotent");
-        assert_eq!(ledger_counts(), after_first, "replay may not grow the owner ledger");
+        assert_eq!(
+            ledger_counts(),
+            after_first,
+            "replay may not grow the owner ledger"
+        );
 
         let before_rejected_binding = ledger_counts();
         let error = repository
@@ -6544,8 +7073,15 @@ mod tests {
                 },
             )
             .expect_err("wrong owner binding must fail before any declaration write");
-        assert!(error.contains("m2_r4_armed_effect_owner_binding_mismatch"), "{error}");
-        assert_eq!(ledger_counts(), before_rejected_binding, "wrong binding may not write");
+        assert!(
+            error.contains("m2_r4_armed_effect_owner_binding_mismatch"),
+            "{error}"
+        );
+        assert_eq!(
+            ledger_counts(),
+            before_rejected_binding,
+            "wrong binding may not write"
+        );
     }
 
     #[test]
@@ -6637,14 +7173,13 @@ mod tests {
         let canonical_root = fs::canonicalize(&requested_root).expect("canonical M3 app-data root");
         let db_path = canonical_root.join(M3_ORDINARY_PRODUCT_DB_RELATIVE_PATH);
 
-        let generic_error = WorkbenchSqliteRepository::open_confirmed(
-            &ConfirmedWorkbenchSqliteRepositoryConfig {
+        let generic_error =
+            WorkbenchSqliteRepository::open_confirmed(&ConfirmedWorkbenchSqliteRepositoryConfig {
                 db_path: db_path.clone(),
                 confirmed_db_path: db_path.clone(),
                 denied_path_markers: Vec::new(),
-            },
-        )
-        .expect_err("generic confirmed gate must keep rejecting .codex paths");
+            })
+            .expect_err("generic confirmed gate must keep rejecting .codex paths");
         assert!(
             generic_error.contains("confirmed_db_path_denied_marker"),
             "got: {generic_error}"
@@ -6808,6 +7343,58 @@ mod tests {
             )
             .expect("complete action");
         assert_constant_rows(&completion, 2);
+    }
+
+    #[test]
+    fn m4_route_work_item_transition_preserves_current_node_scalar_binding() {
+        let (repository, _) = test_repository("m4-route-current-node-binding");
+        seed_work_item(&repository, "work-route", "draft");
+        let work_item_after = json!({
+            "work_item_id": "work-route",
+            "workflow_id": "workflow-1",
+            "current_node_id": "node-1",
+            "state": "ready_to_dispatch"
+        });
+        repository
+            .transition_work_item_with_audit(
+                &work_item_after,
+                &node("node-1", "ready_to_dispatch"),
+                "draft",
+                &audit("m4-route-current-node-binding"),
+                None,
+            )
+            .expect("ordinary state transition preserves the canonical node binding");
+
+        let connection = repository
+            .configured_connection()
+            .expect("read route target projection");
+        let (node_id, record_json): (Option<String>, String) = connection
+            .query_row(
+                "SELECT node_id, record_json FROM work_items WHERE work_item_id = ?1",
+                ["work-route"],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read transitioned WorkItem");
+        assert_eq!(node_id.as_deref(), Some("node-1"));
+        assert_eq!(
+            serde_json::from_str::<Value>(&record_json)
+                .expect("parse transitioned WorkItem")
+                .get("current_node_id")
+                .and_then(Value::as_str),
+            Some("node-1")
+        );
+        let route_join_rows: i64 = connection
+            .query_row(
+                "SELECT COUNT(*)
+                 FROM work_items AS item
+                 JOIN workflow_nodes AS node
+                   ON node.node_id = item.node_id AND node.workflow_id = item.workflow_id
+                 WHERE item.work_item_id = ?1",
+                ["work-route"],
+                |row| row.get(0),
+            )
+            .expect("read exact route owner join");
+        assert_eq!(route_join_rows, 1);
     }
 
     #[test]
@@ -7290,14 +7877,18 @@ mod tests {
             )
             .expect_err("injected rollback must reject whole owner UoW");
         assert!(error.contains("injected_failure_before_commit"), "{error}");
-        let connection = repository.configured_connection().expect("inspect rollback");
+        let connection = repository
+            .configured_connection()
+            .expect("inspect rollback");
         for table in [
             "project_proposals",
             "workflow_audit_events",
             "m4_source_owner_publications",
         ] {
             let count: i64 = connection
-                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
                 .expect("count owner UoW table");
             assert_eq!(count, 0, "{table} must roll back with publication");
         }

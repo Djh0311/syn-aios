@@ -932,6 +932,9 @@ export type CreateProjectConsultationProposalInput = {
   proposed_steps: string[];
   scope_draft: ProjectConsultationProposalScopeDraft;
   risks: ProjectConsultationProposalRisk[];
+  worker_acceptance_criteria: string[];
+  control_core_acceptance_criteria: string[];
+  supervisor_acceptance_criteria: string[];
   acceptance_criteria: string[];
   created_by_role: ProjectConsultationProposalCreatorRole;
   actor_id: string;

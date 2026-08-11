@@ -406,6 +406,30 @@ pub(crate) struct M4SourceOwnerOutboxEnvelopeV1 {
     pub(crate) payload_hash: String,
 }
 
+/// Exact M4 provenance expected when resolving one server-minted source route.
+///
+/// The owner outbox is deliberately addressed by its immutable publication
+/// identity, never by `opaque_route_ref` (which is not a unique owner-table
+/// key).  The remaining fields are the cross-store seal/revision material that
+/// must survive an exact rebuild from the native owner fact.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M4SourceOwnerPublicationExpectationV1 {
+    pub(crate) publication_sequence: u64,
+    pub(crate) publication_id: String,
+    pub(crate) adapter_id: String,
+    pub(crate) publication_kind: String,
+    pub(crate) source_owner_ref: String,
+    pub(crate) object_type: String,
+    pub(crate) canonical_object_id: String,
+    pub(crate) source_revision: u64,
+    pub(crate) source_event_id: String,
+    pub(crate) source_owner_watermark: String,
+    pub(crate) native_scope_seal: String,
+    pub(crate) opaque_route_ref: String,
+    pub(crate) payload_hash: String,
+    pub(crate) m4_ingestion_receipt_id: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct M4ClaimedSourceOwnerPublicationV1 {
     pub(crate) publication_sequence: u64,
@@ -1886,6 +1910,86 @@ fn load_publication_by_sequence(
     Ok(envelope)
 }
 
+/// Load the owner publication named by M4's immutable provenance tuple and
+/// prove that it is still the latest publication for that exact owner object.
+/// Every envelope field and its canonical payload hash are rebuilt by
+/// `load_publication_by_sequence`; callers then rebuild the native owner fact
+/// itself with the registered WorkItem/proposal builder.
+pub(crate) fn load_current_delivered_source_owner_publication(
+    connection: &Connection,
+    expected: &M4SourceOwnerPublicationExpectationV1,
+) -> Result<M4SourceOwnerOutboxEnvelopeV1, String> {
+    verify_m4_source_owner_overlay(connection)?;
+    let sequence = i64::try_from(expected.publication_sequence)
+        .map_err(|_| "m4_source_route_owner_publication_sequence_invalid".to_string())?;
+    let terminal: Option<(String, Option<String>, Option<String>)> = connection
+        .query_row(
+            "SELECT dispatch_status, terminal_receipt_kind, terminal_receipt_ref
+             FROM m4_source_owner_publications
+             WHERE publication_sequence = ?1 AND publication_id = ?2 AND adapter_id = ?3",
+            params![sequence, expected.publication_id, expected.adapter_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|_| "m4_source_route_owner_publication_read_failed".to_string())?;
+    let Some((dispatch_status, terminal_receipt_kind, terminal_receipt_ref)) = terminal else {
+        return Err("m4_source_route_owner_publication_missing".to_string());
+    };
+    if dispatch_status != "DELIVERED"
+        || terminal_receipt_kind.as_deref() != Some("M4_INGESTION")
+        || terminal_receipt_ref.as_deref() != Some(expected.m4_ingestion_receipt_id.as_str())
+    {
+        return Err("m4_source_route_owner_terminal_receipt_mismatch".to_string());
+    }
+
+    let envelope = load_publication_by_sequence(connection, sequence)
+        .map_err(|_| "m4_source_route_owner_publication_invalid".to_string())?;
+    if envelope.native_scope_seal != expected.native_scope_seal {
+        return Err("m4_source_route_owner_scope_mismatch".to_string());
+    }
+    if envelope.publication_id != expected.publication_id
+        || envelope.adapter_id != expected.adapter_id
+        || envelope.publication_kind != expected.publication_kind
+        || envelope.source_owner_ref != expected.source_owner_ref
+        || envelope.object_type != expected.object_type
+        || envelope.canonical_object_id != expected.canonical_object_id
+        || envelope.source_revision != expected.source_revision
+        || envelope.source_event_id != expected.source_event_id
+        || envelope.source_owner_watermark != expected.source_owner_watermark
+        || envelope.opaque_route_ref != expected.opaque_route_ref
+        || envelope.payload_hash != expected.payload_hash
+    {
+        return Err("m4_source_route_owner_publication_mismatch".to_string());
+    }
+
+    let latest: Option<(i64, String, String)> = connection
+        .query_row(
+            "SELECT publication_sequence, publication_id, adapter_id
+             FROM m4_source_owner_publications
+             WHERE source_owner_ref = ?1 AND object_type = ?2 AND canonical_object_id = ?3
+             ORDER BY publication_sequence DESC
+             LIMIT 1",
+            params![
+                expected.source_owner_ref,
+                expected.object_type,
+                expected.canonical_object_id,
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .map_err(|_| "m4_source_route_owner_current_publication_read_failed".to_string())?;
+    if latest
+        != Some((
+            sequence,
+            expected.publication_id.clone(),
+            expected.adapter_id.clone(),
+        ))
+    {
+        return Err("m4_source_route_owner_revision_mismatch".to_string());
+    }
+    Ok(envelope)
+}
+
 fn require_binding(
     envelope: &M4SourceOwnerOutboxEnvelopeV1,
     adapter_id: &str,
@@ -2632,6 +2736,67 @@ mod tests {
             due_at_utc: None,
         })
         .expect("fixture envelope")
+    }
+
+    #[test]
+    fn route_owner_reader_uses_provenance_tuple_and_classifies_scope_mismatch() {
+        let mut connection = initialized_connection();
+        let envelope = fixture_envelope(
+            M4_PROPOSAL_DECISION_SOURCE_ADAPTER_ID,
+            7,
+            "pending_user_confirmation",
+        );
+        let transaction = connection.transaction().expect("append route fixture");
+        append_source_publication(&transaction, &envelope).expect("append publication");
+        transaction.commit().expect("commit publication");
+        let transaction = connection.transaction().expect("claim route fixture");
+        let M4SourceOwnerClaimOutcomeV1::Claimed(claim) =
+            claim_next_source_publication(&transaction, "route-reader", 10)
+                .expect("claim publication")
+        else {
+            panic!("claimed publication")
+        };
+        transaction.commit().expect("commit claim");
+        let transaction = connection.transaction().expect("terminal route fixture");
+        mark_source_publication_terminal(
+            &transaction,
+            &claim,
+            M4SourceOwnerTerminalStatusV1::Delivered,
+            "m4-ingestion-receipt:fixture",
+            None,
+            11,
+        )
+        .expect("terminal publication");
+        transaction.commit().expect("commit terminal");
+        let expected = M4SourceOwnerPublicationExpectationV1 {
+            publication_sequence: claim.publication_sequence,
+            publication_id: envelope.publication_id.clone(),
+            adapter_id: envelope.adapter_id.clone(),
+            publication_kind: envelope.publication_kind.clone(),
+            source_owner_ref: envelope.source_owner_ref.clone(),
+            object_type: envelope.object_type.clone(),
+            canonical_object_id: envelope.canonical_object_id.clone(),
+            source_revision: envelope.source_revision,
+            source_event_id: envelope.source_event_id.clone(),
+            source_owner_watermark: envelope.source_owner_watermark.clone(),
+            native_scope_seal: envelope.native_scope_seal.clone(),
+            opaque_route_ref: envelope.opaque_route_ref.clone(),
+            payload_hash: envelope.payload_hash.clone(),
+            m4_ingestion_receipt_id: "m4-ingestion-receipt:fixture".to_string(),
+        };
+        assert_eq!(
+            load_current_delivered_source_owner_publication(&connection, &expected)
+                .expect("exact provenance tuple"),
+            envelope
+        );
+        let mut wrong_scope = expected;
+        wrong_scope.native_scope_seal =
+            "native-scope:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                .to_string();
+        assert_eq!(
+            load_current_delivered_source_owner_publication(&connection, &wrong_scope),
+            Err("m4_source_route_owner_scope_mismatch".to_string())
+        );
     }
 
     #[test]

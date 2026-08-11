@@ -136,9 +136,8 @@ fn with_startup_json_projection_authority<T>(
 }
 
 fn has_startup_json_projection_authority(workflow_state_path: &Path) -> bool {
-    STARTUP_JSON_PROJECTION_AUTHORITY.with(|authority| {
-        authority.borrow().contains(workflow_state_path)
-    })
+    STARTUP_JSON_PROJECTION_AUTHORITY
+        .with(|authority| authority.borrow().contains(workflow_state_path))
 }
 
 // A blocked DB primary writer falls back to the established JSON path. Record that transition
@@ -172,8 +171,7 @@ pub(crate) fn storage_mode_path(workflow_state_path: &Path) -> Result<PathBuf, S
 pub(crate) fn install_db_primary_config_create_new(
     config: &DbPrimaryJsonProjectionConfig,
 ) -> Result<PathBuf, String> {
-    static TEMP_SEQUENCE: std::sync::atomic::AtomicU64 =
-        std::sync::atomic::AtomicU64::new(0);
+    static TEMP_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     validate_db_primary_config(&config.workflow_state_path, config)?;
     let config_path = storage_mode_path(&config.workflow_state_path)?;
     let parent = config_path.parent().ok_or_else(|| {
@@ -319,6 +317,30 @@ pub(crate) fn storage_mode_for(workflow_state_path: &Path) -> StorageMode {
     let mode = resolve_storage_mode(workflow_state_path);
     cache.insert(key, mode.clone());
     mode
+}
+
+/// Resolve the already-reconciled DB-primary owner store for a query-only M4
+/// source-route read.  JSON projection is never elevated to owner authority,
+/// and a blocked/uninitialized DB-primary process fails closed.
+pub(crate) fn primary_repository_for_m4_source_route_read(
+    workflow_state_path: &Path,
+) -> Result<Option<WorkbenchSqliteRepository>, String> {
+    match storage_mode_for(workflow_state_path) {
+        StorageMode::JsonOnly { .. } => Ok(None),
+        StorageMode::DbPrimaryJsonProjection(config) => {
+            let health = health_cache().lock().expect("storage mode health lock");
+            match health.get(workflow_state_path) {
+                Some(DbPrimaryHealth::Ready) => {}
+                Some(DbPrimaryHealth::Blocked(_)) => {
+                    return Err("m4_source_route_owner_db_blocked".to_string())
+                }
+                None => return Err("m4_source_route_owner_db_not_reconciled".to_string()),
+            }
+            drop(health);
+            WorkbenchSqliteRepository::open_confirmed_read_only(&config.repository_config())
+                .map(Some)
+        }
+    }
 }
 
 /// Called by the JSON writer while it holds `.workflow-state.v0.lock`.
@@ -531,16 +553,20 @@ pub(crate) fn rebuild_m2_workflow_state_sidecar_quarantine(
     quarantine_id: &str,
 ) -> Result<WorkflowStateSidecarQuarantineManifestEntry, String> {
     if inspect_m2_workflow_state_sidecar(config)?.is_some() {
-        return Err("m2_workflow_state_sidecar_quarantine_rebuild_current_input_not_green".to_string());
+        return Err(
+            "m2_workflow_state_sidecar_quarantine_rebuild_current_input_not_green".to_string(),
+        );
     }
     let report = reconcile_db_vs_json(config)?;
     if !report.is_green() {
-        return Err("m2_workflow_state_sidecar_quarantine_rebuild_reconciliation_not_green".to_string());
+        return Err(
+            "m2_workflow_state_sidecar_quarantine_rebuild_reconciliation_not_green".to_string(),
+        );
     }
-    let current_sha256 = sha256_hex_bytes(
-        &fs::read(&config.workflow_state_path)
-            .map_err(|error| format!("m2_workflow_state_sidecar_quarantine_rebuild_read:{error}"))?,
-    );
+    let current_sha256 =
+        sha256_hex_bytes(&fs::read(&config.workflow_state_path).map_err(|error| {
+            format!("m2_workflow_state_sidecar_quarantine_rebuild_read:{error}")
+        })?);
     let repository = WorkbenchSqliteRepository::open_confirmed(&config.repository_config())?;
     let (entry, _) = repository
         .with_immediate_transaction(
@@ -556,11 +582,10 @@ pub(crate) fn rebuild_m2_workflow_state_sidecar_quarantine(
             },
         )
         .map_err(|error| format!("m2_workflow_state_sidecar_quarantine_rebuild:{error}"))?;
-    let rechecked_sha256 = sha256_hex_bytes(
-        &fs::read(&config.workflow_state_path).map_err(|error| {
+    let rechecked_sha256 =
+        sha256_hex_bytes(&fs::read(&config.workflow_state_path).map_err(|error| {
             format!("m2_workflow_state_sidecar_quarantine_rebuild_recheck:{error}")
-        })?,
-    );
+        })?);
     if rechecked_sha256 != current_sha256 || entry.resolution_state != "REBUILT" {
         return Err("m2_workflow_state_sidecar_quarantine_rebuild_receipt_mismatch".to_string());
     }
@@ -605,7 +630,11 @@ fn inspect_m2_workflow_state_sidecar(
     };
     let value: Value = match serde_json::from_slice(&bytes) {
         Ok(value) => value,
-        Err(_) => return Ok(observation(WorkflowStateSidecarQuarantineReason::CorruptInput)),
+        Err(_) => {
+            return Ok(observation(
+                WorkflowStateSidecarQuarantineReason::CorruptInput,
+            ))
+        }
     };
     let Some(object) = value.as_object() else {
         return Ok(observation(
@@ -619,10 +648,14 @@ fn inspect_m2_workflow_state_sidecar(
     }
     for field in object.keys() {
         if m2_workflow_state_sidecar_sensitive_root_field(field) {
-            return Ok(observation(WorkflowStateSidecarQuarantineReason::SensitiveInput));
+            return Ok(observation(
+                WorkflowStateSidecarQuarantineReason::SensitiveInput,
+            ));
         }
         if !M2_WORKFLOW_STATE_SIDECAR_ALLOWED_ROOT_FIELDS.contains(&field.as_str()) {
-            return Ok(observation(WorkflowStateSidecarQuarantineReason::UnknownInput));
+            return Ok(observation(
+                WorkflowStateSidecarQuarantineReason::UnknownInput,
+            ));
         }
     }
     for (array_name, key_field) in [
@@ -1326,13 +1359,11 @@ fn has_stable_startup_mode_audit(value: &Value, db_path_hash: &str) -> bool {
         .and_then(Value::as_array)
         .is_some_and(|audits| {
             audits.iter().any(|audit| {
-                audit.get("event_type").and_then(Value::as_str)
-                    == Some("storage_mode_initialized")
+                audit.get("event_type").and_then(Value::as_str) == Some("storage_mode_initialized")
                     && audit.get("target_ref").and_then(Value::as_str) == Some(db_path_hash)
                     && audit.get("actor_ref").and_then(Value::as_str)
                         == Some("workbench_storage_mode")
-                    && audit.get("source_kind").and_then(Value::as_str)
-                        == Some("workspace_state")
+                    && audit.get("source_kind").and_then(Value::as_str) == Some("workspace_state")
                     && audit.get("permission_level").and_then(Value::as_str)
                         == Some("system_runtime")
                     && audit.get("before_state").and_then(Value::as_str)
@@ -2153,8 +2184,14 @@ fn validate_active_r4_root_binding(
         if actual_workflow_state_path == paths.workflow_state_path {
             (
                 paths.workflow_state_path.clone(),
-                paths.root.join("runtime-artifacts").join(STORAGE_MODE_FILE_NAME),
-                paths.root.join("runtime-artifacts").join("workbench.sqlite"),
+                paths
+                    .root
+                    .join("runtime-artifacts")
+                    .join(STORAGE_MODE_FILE_NAME),
+                paths
+                    .root
+                    .join("runtime-artifacts")
+                    .join("workbench.sqlite"),
             )
         } else if actual_workflow_state_path == ordinary_workflow_state_path {
             (
@@ -2426,13 +2463,11 @@ mod tests {
         let mut legacy_db = config.clone();
         legacy_db.db_path = paths.root.join("runtime-artifacts/workbench.sqlite");
         legacy_db.confirmed_db_path = legacy_db.db_path.clone();
-        assert!(validate_active_r4_root_binding(
-            &workflow_state_path,
-            &legacy_db,
-            Some(&paths),
-        )
-        .expect_err("ordinary product workflow must not bind the legacy acceptance DB")
-        .starts_with("storage_mode_r4_db_path_mismatch"));
+        assert!(
+            validate_active_r4_root_binding(&workflow_state_path, &legacy_db, Some(&paths),)
+                .expect_err("ordinary product workflow must not bind the legacy acceptance DB")
+                .starts_with("storage_mode_r4_db_path_mismatch")
+        );
     }
 
     #[test]
@@ -2841,13 +2876,14 @@ mod tests {
         )
         .expect("long sensitive proposal still uses ordinary owner UoW");
         assert!(created.proposal.proposal_id.starts_with("proposal:sha256:"));
-        assert_eq!(created.proposal.proposal_id.len(), "proposal:sha256:".len() + 64);
+        assert_eq!(
+            created.proposal.proposal_id.len(),
+            "proposal:sha256:".len() + 64
+        );
 
-        let connection = Connection::open_with_flags(
-            &fixture.config.db_path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .expect("open owner DB read only");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open owner DB read only");
         let outbox: [String; 13] = connection
             .query_row(
                 "SELECT publication_id, owner_native_event_id, owner_native_watermark,
@@ -2857,11 +2893,23 @@ mod tests {
                         payload_hash
                  FROM m4_source_owner_publications",
                 [],
-                |row| Ok([
-                    row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?,
-                    row.get(5)?, row.get(6)?, row.get(7)?, row.get(8)?, row.get(9)?,
-                    row.get(10)?, row.get(11)?, row.get(12)?,
-                ]),
+                |row| {
+                    Ok([
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                        row.get(7)?,
+                        row.get(8)?,
+                        row.get(9)?,
+                        row.get(10)?,
+                        row.get(11)?,
+                        row.get(12)?,
+                    ])
+                },
             )
             .expect("read scrubbed owner outbox");
         assert_eq!(outbox[8], created.proposal.proposal_id);
@@ -2901,8 +2949,10 @@ mod tests {
             crate::ProjectConsultationProposalStatus::PendingUserConfirmation
         );
 
-        let expired = crate::project_consultation_proposal_store::
-            expire_due_proposals_at_server_clock(&fixture.state_path)
+        let expired =
+            crate::project_consultation_proposal_store::expire_due_proposals_at_server_clock(
+                &fixture.state_path,
+            )
             .expect("server clock expiry sweep");
         assert_eq!(
             expired.expired_proposal_id.as_deref(),
@@ -2915,14 +2965,15 @@ mod tests {
             crate::unix_timestamp_ms(),
         )
         .expect("read expiry projection");
-        assert_eq!(store.proposals[0].status, crate::ProjectConsultationProposalStatus::Expired);
+        assert_eq!(
+            store.proposals[0].status,
+            crate::ProjectConsultationProposalStatus::Expired
+        );
         assert_eq!(store.revision, 2);
 
-        let connection = Connection::open_with_flags(
-            &fixture.config.db_path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .expect("read expiry owner DB");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("read expiry owner DB");
         let publications: Vec<(String, i64, Option<String>)> = {
             let mut statement = connection
                 .prepare(
@@ -2953,8 +3004,10 @@ mod tests {
         )
         .expect("create proposal without deadline");
         assert_eq!(no_default_ttl.proposal.expires_at_ms, None);
-        let idle = crate::project_consultation_proposal_store::
-            expire_due_proposals_at_server_clock(&fixture.state_path)
+        let idle =
+            crate::project_consultation_proposal_store::expire_due_proposals_at_server_clock(
+                &fixture.state_path,
+            )
             .expect("no-default-TTL sweep");
         assert_eq!(idle.expired_proposal_id, None);
         assert!(idle.drained);
@@ -4367,7 +4420,10 @@ mod tests {
             .query_row(
                 "SELECT snapshot_hash FROM current_snapshots
                  WHERE object_ref = ?1 AND projector_id = 'workflow_projector'",
-                [format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id)],
+                [format!(
+                    "workflow_state:{}:{}",
+                    fixture.project_root, fixture.workflow_id
+                )],
                 |row| row.get(0),
             )
             .expect("load authoritative snapshot hash");
@@ -4415,18 +4471,19 @@ mod tests {
             [1, 1, 1, 0, 1],
             "completed replay must not grow the M2 ledger"
         );
-        let publication_count: i64 = Connection::open_with_flags(
-            &fixture.config.db_path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .expect("reopen owner DB")
-        .query_row(
-            "SELECT COUNT(*) FROM m4_source_owner_publications",
-            [],
-            |row| row.get(0),
-        )
-        .expect("count replayed owner publications");
-        assert_eq!(publication_count, 1, "receipt replay may not duplicate publication");
+        let publication_count: i64 =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("reopen owner DB")
+                .query_row(
+                    "SELECT COUNT(*) FROM m4_source_owner_publications",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("count replayed owner publications");
+        assert_eq!(
+            publication_count, 1,
+            "receipt replay may not duplicate publication"
+        );
     }
 
     #[test]
@@ -4485,22 +4542,27 @@ mod tests {
         let repository = primary_repository_for_write(&fixture.state_path)
             .expect("DB-primary repository gate")
             .expect("DB-primary repository");
-        let object_ref = format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id);
+        let object_ref = format!(
+            "workflow_state:{}:{}",
+            fixture.project_root, fixture.workflow_id
+        );
         let watermark = "event:m2-snapshot-parity";
-        let content_hash = crate::m2_update_work_item_state::canonical_workflow_state_sidecar_snapshot_hash(
-            &fixture.project_root,
-            &fixture.workflow_id,
-            11,
-            &json!({"work_item_id": fixture.work_item_id, "state": "running"}),
-            &json!({"node_id": "node:m2-snapshot-parity", "state": "running"}),
-        );
-        let mismatched_hash = crate::m2_update_work_item_state::canonical_workflow_state_sidecar_snapshot_hash(
-            &fixture.project_root,
-            &fixture.workflow_id,
-            11,
-            &json!({"work_item_id": fixture.work_item_id, "state": "completed"}),
-            &json!({"node_id": "node:m2-snapshot-parity", "state": "completed"}),
-        );
+        let content_hash =
+            crate::m2_update_work_item_state::canonical_workflow_state_sidecar_snapshot_hash(
+                &fixture.project_root,
+                &fixture.workflow_id,
+                11,
+                &json!({"work_item_id": fixture.work_item_id, "state": "running"}),
+                &json!({"node_id": "node:m2-snapshot-parity", "state": "running"}),
+            );
+        let mismatched_hash =
+            crate::m2_update_work_item_state::canonical_workflow_state_sidecar_snapshot_hash(
+                &fixture.project_root,
+                &fixture.workflow_id,
+                11,
+                &json!({"work_item_id": fixture.work_item_id, "state": "completed"}),
+                &json!({"node_id": "node:m2-snapshot-parity", "state": "completed"}),
+            );
         repository
             .with_immediate_transaction(
                 "m2_snapshot_parity_seed_authoritative",
@@ -4545,10 +4607,14 @@ mod tests {
                 ),
             )
             .expect_err("mismatched projection may not advance a checkpoint");
-        assert!(mismatch.contains("m2_workflow_state_projection_snapshot_hash_mismatch"), "{mismatch}");
+        assert!(
+            mismatch.contains("m2_workflow_state_projection_snapshot_hash_mismatch"),
+            "{mismatch}"
+        );
 
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open checkpoint DB read only");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open checkpoint DB read only");
         let (checkpoint_status, checkpoint_watermark, stored_hash): (String, String, String) = connection
             .query_row(
                 "SELECT checkpoints.status, checkpoints.source_watermark, snapshots.snapshot_hash
@@ -4564,8 +4630,14 @@ mod tests {
             )
             .expect("read retained authoritative snapshot and checkpoint");
         assert_eq!(checkpoint_status, "CAUGHT_UP");
-        assert_eq!(checkpoint_watermark, watermark, "mismatch may not forge a later checkpoint");
-        assert_eq!(stored_hash, content_hash, "source snapshot remains durable for recovery");
+        assert_eq!(
+            checkpoint_watermark, watermark,
+            "mismatch may not forge a later checkpoint"
+        );
+        assert_eq!(
+            stored_hash, content_hash,
+            "source snapshot remains durable for recovery"
+        );
     }
 
     #[test]
@@ -4591,8 +4663,8 @@ mod tests {
 
         let persisted = crate::read_workflow_state_value(&fixture.state_path)
             .expect("read persisted full aggregate");
-        let snapshot = crate::workbench_sqlite_repository::
-            m2_workflow_state_sidecar_snapshot_from_projection(
+        let snapshot =
+            crate::workbench_sqlite_repository::m2_workflow_state_sidecar_snapshot_from_projection(
                 &fixture.project_root,
                 &fixture.workflow_id,
                 expected_revision + 1,
@@ -4601,7 +4673,10 @@ mod tests {
             .expect("derive canonical full aggregate snapshot");
         assert_eq!(
             snapshot.object_ref,
-            format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id)
+            format!(
+                "workflow_state:{}:{}",
+                fixture.project_root, fixture.workflow_id
+            )
         );
 
         // A different item and node in the same workflow must affect the
@@ -4630,8 +4705,8 @@ mod tests {
             .as_array_mut()
             .expect("fixture work item array")
             .push(another_item);
-        let changed_snapshot = crate::workbench_sqlite_repository::
-            m2_workflow_state_sidecar_snapshot_from_projection(
+        let changed_snapshot =
+            crate::workbench_sqlite_repository::m2_workflow_state_sidecar_snapshot_from_projection(
                 &fixture.project_root,
                 &fixture.workflow_id,
                 expected_revision + 1,
@@ -4656,8 +4731,8 @@ mod tests {
             reverse_order.insert(key.clone(), value.clone());
         }
         *work_item = Value::Object(reverse_order);
-        let reordered_snapshot = crate::workbench_sqlite_repository::
-            m2_workflow_state_sidecar_snapshot_from_projection(
+        let reordered_snapshot =
+            crate::workbench_sqlite_repository::m2_workflow_state_sidecar_snapshot_from_projection(
                 &fixture.project_root,
                 &fixture.workflow_id,
                 expected_revision + 1,
@@ -4697,7 +4772,8 @@ mod tests {
             .expect("model crash after projection before checkpoint");
         assert_eq!(rows, 1, "fixture has one named-slice checkpoint");
         drop(connection);
-        let json_before_restart = fs::read(&fixture.state_path).expect("read projection before restart");
+        let json_before_restart =
+            fs::read(&fixture.state_path).expect("read projection before restart");
         let owner_ledger_before_restart = m2_workflow_state_ledger_counts(&fixture.config);
 
         clear_storage_mode_cache_for_path_for_tests(&fixture.state_path);
@@ -4714,8 +4790,9 @@ mod tests {
             owner_ledger_before_restart,
             "checkpoint recovery must not duplicate owner receipt/event/audit/outbox/snapshot facts"
         );
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open checkpoint DB after restart");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open checkpoint DB after restart");
         let checkpoint: (Option<String>, String, String) = connection
             .query_row(
                 "SELECT last_event_id, source_watermark, status
@@ -4740,7 +4817,8 @@ mod tests {
     }
 
     #[test]
-    fn m2_reference_slice_persisted_projection_tamper_is_fail_closed_without_checkpoint_or_db_rewrite() {
+    fn m2_reference_slice_persisted_projection_tamper_is_fail_closed_without_checkpoint_or_db_rewrite(
+    ) {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("m2-reference-slice-persisted-projection-tamper");
         let expected_revision = primary_repository_for_write(&fixture.state_path)
@@ -4762,8 +4840,8 @@ mod tests {
 
         let persisted_before_tamper = crate::read_workflow_state_value(&fixture.state_path)
             .expect("read persisted canonical projection before tamper");
-        let equivalent_hash_left = crate::workbench_sqlite_repository::
-            m2_workflow_state_sidecar_snapshot_from_projection(
+        let equivalent_hash_left =
+            crate::workbench_sqlite_repository::m2_workflow_state_sidecar_snapshot_from_projection(
                 &fixture.project_root,
                 &fixture.workflow_id,
                 expected_revision + 1,
@@ -4782,8 +4860,8 @@ mod tests {
             reverse_order.insert(key.clone(), value.clone());
         }
         *work_item = Value::Object(reverse_order);
-        let equivalent_hash_right = crate::workbench_sqlite_repository::
-            m2_workflow_state_sidecar_snapshot_from_projection(
+        let equivalent_hash_right =
+            crate::workbench_sqlite_repository::m2_workflow_state_sidecar_snapshot_from_projection(
                 &fixture.project_root,
                 &fixture.workflow_id,
                 expected_revision + 1,
@@ -4796,8 +4874,9 @@ mod tests {
             "canonical snapshot hashing must not depend on JSON object key order"
         );
 
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open authoritative DB before disk tamper");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open authoritative DB before disk tamper");
         let checkpoint_before: (String, String, Option<String>) = connection
             .query_row(
                 "SELECT status, source_watermark, last_event_id
@@ -4810,7 +4889,10 @@ mod tests {
             .query_row(
                 "SELECT snapshot_hash FROM current_snapshots
                  WHERE object_ref = ?1 AND projector_id = 'workflow_projector'",
-                [format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id)],
+                [format!(
+                    "workflow_state:{}:{}",
+                    fixture.project_root, fixture.workflow_id
+                )],
                 |row| row.get(0),
             )
             .expect("read authoritative snapshot before disk tamper");
@@ -4852,8 +4934,9 @@ mod tests {
             "fail-closed startup must not reverse-overwrite the disk projection"
         );
 
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open DB after rejected tamper");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open DB after rejected tamper");
         let checkpoint_after: (String, String, Option<String>) = connection
             .query_row(
                 "SELECT status, source_watermark, last_event_id
@@ -4866,12 +4949,21 @@ mod tests {
             .query_row(
                 "SELECT snapshot_hash FROM current_snapshots
                  WHERE object_ref = ?1 AND projector_id = 'workflow_projector'",
-                [format!("workflow_state:{}:{}", fixture.project_root, fixture.workflow_id)],
+                [format!(
+                    "workflow_state:{}:{}",
+                    fixture.project_root, fixture.workflow_id
+                )],
                 |row| row.get(0),
             )
             .expect("read authoritative snapshot after rejected tamper");
-        assert_eq!(checkpoint_after, checkpoint_before, "tamper may not advance checkpoint");
-        assert_eq!(snapshot_after, snapshot_before, "tamper may not replace authoritative snapshot");
+        assert_eq!(
+            checkpoint_after, checkpoint_before,
+            "tamper may not advance checkpoint"
+        );
+        assert_eq!(
+            snapshot_after, snapshot_before,
+            "tamper may not replace authoritative snapshot"
+        );
     }
 
     #[test]
@@ -4911,8 +5003,9 @@ mod tests {
             .0;
         assert_eq!(success.status, "AVAILABLE");
 
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open declared effect DB read only");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open declared effect DB read only");
         let (available_status, pending_owner): (String, String) = connection
             .query_row(
                 "SELECT outbox_items.status, command_receipts.status
@@ -4943,8 +5036,9 @@ mod tests {
             crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Leased(lease) => lease,
             other => panic!("new fake effect must lease: {other:?}"),
         };
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open leased effect DB read only");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open leased effect DB read only");
         let expires_at: Option<String> = connection
             .query_row(
                 "SELECT expires_at FROM outbox_items WHERE outbox_item_id = ?1",
@@ -4976,7 +5070,10 @@ mod tests {
                 )
                 .expect("the first two 300s lease extensions are permitted")
                 .0;
-            assert_eq!(extended, lease, "extension preserves the exact lease identity");
+            assert_eq!(
+                extended, lease,
+                "extension preserves the exact lease identity"
+            );
         }
         let extension_limit = repository
             .with_immediate_transaction(
@@ -4989,9 +5086,13 @@ mod tests {
                 ),
             )
             .expect_err("a third extension is rejected without another outbox transition");
-        assert!(extension_limit.contains("lease_extension_limit"), "{extension_limit}");
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open extended lease DB read only");
+        assert!(
+            extension_limit.contains("lease_extension_limit"),
+            "{extension_limit}"
+        );
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open extended lease DB read only");
         let (extension_count, extended_expiry): (i64, String) = connection
             .query_row(
                 "SELECT lease_extension_count, expires_at FROM outbox_items WHERE outbox_item_id = ?1",
@@ -5005,7 +5106,10 @@ mod tests {
         );
         assert_eq!(
             extended_expiry,
-            (FIRST_CLAIM_AT + 2 + crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS).to_string(),
+            (FIRST_CLAIM_AT
+                + 2
+                + crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS)
+                .to_string(),
         );
         drop(connection);
         let result_hash = repository
@@ -5032,7 +5136,9 @@ mod tests {
             .expect("open result-admission DB read only");
             [
                 connection
-                    .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| row.get(0))
+                    .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| {
+                        row.get(0)
+                    })
                     .expect("count receipts"),
                 connection
                     .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
@@ -5111,7 +5217,11 @@ mod tests {
                 error.contains("m2_r4_fake_external_result"),
                 "{case_name}:{error}"
             );
-            assert_eq!(ledger_counts(), before, "{case_name} may not mutate any ledger");
+            assert_eq!(
+                ledger_counts(),
+                before,
+                "{case_name} may not mutate any ledger"
+            );
         }
         let result = repository
             .with_immediate_transaction(
@@ -5167,10 +5277,14 @@ mod tests {
                 ),
             )
             .expect_err("divergent result may not overwrite an accepted result");
-        assert!(divergent_error.contains("idempotency_conflict"), "{divergent_error}");
+        assert!(
+            divergent_error.contains("idempotency_conflict"),
+            "{divergent_error}"
+        );
 
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open result DB read only");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open result DB read only");
         let (result_status, owner_status, result_receipts): (String, String, i64) = connection
             .query_row(
                 "SELECT outbox_items.status, owning.status,
@@ -5238,8 +5352,9 @@ mod tests {
             other => panic!("expired first lease must return AVAILABLE: {other:?}"),
         };
         assert_eq!(expired_available, retry.outbox_item_id);
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open expired lease DB read only");
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open expired lease DB read only");
         let (expired_status, expiry_attempts): (String, i64) = connection
             .query_row(
                 "SELECT status, attempt_count FROM outbox_items WHERE outbox_item_id = ?1",
@@ -5311,7 +5426,10 @@ mod tests {
             .expect("second delivery failure schedules the last retry")
             .0;
         let retry_three_at = match poison {
-            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::RetryScheduled { retry_not_before, .. } => retry_not_before,
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::RetryScheduled {
+                retry_not_before,
+                ..
+            } => retry_not_before,
             other => panic!("second delivery failure must schedule final retry: {other:?}"),
         };
         let retry_lease_four = match repository
@@ -5334,9 +5452,13 @@ mod tests {
             )
             .expect("third delivery failure poisons")
             .0;
-        assert!(matches!(poison, crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Poisoned { .. }));
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open poison DB read only");
+        assert!(matches!(
+            poison,
+            crate::workbench_sqlite_repository::M2R4FakeExternalAdapterClaim::Poisoned { .. }
+        ));
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open poison DB read only");
         let (poison_status, attempts, poisoned_owner): (String, i64, String) = connection
             .query_row(
                 "SELECT outbox_items.status, outbox_items.attempt_count, command_receipts.status
@@ -5348,7 +5470,10 @@ mod tests {
             )
             .expect("read poison state");
         assert_eq!(poison_status, "POISON");
-        assert_eq!(attempts, crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_MAX_ATTEMPTS);
+        assert_eq!(
+            attempts,
+            crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_MAX_ATTEMPTS
+        );
         assert_eq!(poisoned_owner, "PROJECTION_DEGRADED");
         drop(connection);
 
@@ -5485,15 +5610,21 @@ mod tests {
             start.wait();
             (
                 first.join().expect("first concurrent result thread joined"),
-                second.join().expect("second concurrent result thread joined"),
+                second
+                    .join()
+                    .expect("second concurrent result thread joined"),
             )
         });
         let first = first.expect("first concurrent result command accepted");
         let second = second.expect("second concurrent result command replayed");
         assert_eq!(first.receipt_id, second.receipt_id);
-        assert_ne!(first.replayed, second.replayed, "one result writes and one replays");
-        let connection = Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .expect("open concurrent result DB read only");
+        assert_ne!(
+            first.replayed, second.replayed,
+            "one result writes and one replays"
+        );
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open concurrent result DB read only");
         let count: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM command_receipts
@@ -5502,7 +5633,10 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("count concurrent result receipts");
-        assert_eq!(count, 1, "concurrent identical result commands have one durable receipt");
+        assert_eq!(
+            count, 1,
+            "concurrent identical result commands have one durable receipt"
+        );
     }
 
     // Retained only as source-history context for the former JSON-projection
@@ -5561,7 +5695,8 @@ mod tests {
             )
             .expect_err("the mandatory local projection must not be silently cancelled");
         assert!(
-            cancellation_error.contains("m2_sidecar_outbox_cancellation_forbidden_required_projection"),
+            cancellation_error
+                .contains("m2_sidecar_outbox_cancellation_forbidden_required_projection"),
             "{cancellation_error}"
         );
 
@@ -5580,22 +5715,22 @@ mod tests {
 
         const FIRST_CLAIM_AT: i64 = 1_800_000_000_000;
         let first_lease = match repository
-            .with_immediate_transaction(
-                "m2_reference_slice_first_claim",
-                None,
-                |transaction| {
-                    crate::workbench_sqlite_repository::claim_m2_sidecar_outbox_in_transaction(
-                        transaction,
-                        &outbox_item_id,
-                        FIRST_CLAIM_AT,
-                    )
-                },
-            )
+            .with_immediate_transaction("m2_reference_slice_first_claim", None, |transaction| {
+                crate::workbench_sqlite_repository::claim_m2_sidecar_outbox_in_transaction(
+                    transaction,
+                    &outbox_item_id,
+                    FIRST_CLAIM_AT,
+                )
+            })
             .expect("claim the exact reference-slice effect")
             .0
         {
-            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => lease,
-            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned { .. } => {
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => {
+                lease
+            }
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned {
+                ..
+            } => {
                 panic!("a new reference-slice effect must not be poisoned")
             }
         };
@@ -5618,8 +5753,12 @@ mod tests {
             .expect("expired lease must enter the bounded retry path")
             .0
         {
-            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => lease,
-            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned { .. } => {
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => {
+                lease
+            }
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned {
+                ..
+            } => {
                 panic!("the first expired attempt must still be retryable")
             }
         };
@@ -5671,8 +5810,12 @@ mod tests {
             .expect("claim the final bounded retry")
             .0
         {
-            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => lease,
-            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned { .. } => {
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Leased(lease) => {
+                lease
+            }
+            crate::workbench_sqlite_repository::WorkflowStateProjectionClaim::Poisoned {
+                ..
+            } => {
                 panic!("the third attempt begins as a lease before its failure is recorded")
             }
         };
@@ -5710,8 +5853,11 @@ mod tests {
         assert_eq!(status, "POISON");
         assert_eq!(attempt_count, 3);
         assert_eq!(receipt_status, "PROJECTION_DEGRADED");
-        let (checkpoint_status, checkpoint_last_event, checkpoint_error_receipt):
-            (String, Option<String>, Option<String>) = connection
+        let (checkpoint_status, checkpoint_last_event, checkpoint_error_receipt): (
+            String,
+            Option<String>,
+            Option<String>,
+        ) = connection
             .query_row(
                 "SELECT status, last_event_id, error_receipt_ref
                  FROM projection_checkpoints WHERE projector_id = ?1",
@@ -5721,7 +5867,10 @@ mod tests {
             .expect("record degraded checkpoint for the exact failed sidecar");
         assert_eq!(checkpoint_status, "DEGRADED");
         assert_eq!(checkpoint_last_event, None);
-        assert_eq!(checkpoint_error_receipt.as_deref(), Some(receipt_id.as_str()));
+        assert_eq!(
+            checkpoint_error_receipt.as_deref(),
+            Some(receipt_id.as_str())
+        );
     }
 
     fn assert_m2_workflow_state_sidecar_quarantine_case(
@@ -5749,7 +5898,10 @@ mod tests {
             )),
             "{blocked}"
         );
-        assert_db_primary_health_blocked(&fixture.state_path, "m2_workflow_state_sidecar_quarantined");
+        assert_db_primary_health_blocked(
+            &fixture.state_path,
+            "m2_workflow_state_sidecar_quarantined",
+        );
         let manifest = m2_workflow_state_sidecar_quarantine_manifest(&fixture.config)
             .expect("value-free quarantine export");
         let [entry] = manifest.as_slice() else {
@@ -5812,18 +5964,17 @@ mod tests {
             );
         }
 
-        fs::write(&fixture.state_path, &original).expect("restore retained known-good fixture source");
+        fs::write(&fixture.state_path, &original)
+            .expect("restore retained known-good fixture source");
         let unresolved = initialize_for_startup(&fixture.state_path)
             .expect_err("manual rebuild decision is required after an input quarantine");
         assert!(
             unresolved.contains("m2_workflow_state_sidecar_unresolved_quarantine"),
             "{unresolved}"
         );
-        let rebuilt = rebuild_m2_workflow_state_sidecar_quarantine(
-            &fixture.config,
-            &entry.quarantine_id,
-        )
-        .expect("only a green replacement sidecar can rebuild the exact receipt");
+        let rebuilt =
+            rebuild_m2_workflow_state_sidecar_quarantine(&fixture.config, &entry.quarantine_id)
+                .expect("only a green replacement sidecar can rebuild the exact receipt");
         assert_eq!(rebuilt.quarantine_id, entry.quarantine_id);
         assert_eq!(rebuilt.resolution_state, "REBUILT");
         initialize_for_startup(&fixture.state_path)
@@ -5852,8 +6003,11 @@ mod tests {
                 )
                 .expect("fixture JSON");
                 value["future_unclassified_envelope"] = json!({"fixture_only": true});
-                fs::write(state_path, serde_json::to_vec(&value).expect("serialize unknown fixture"))
-                    .expect("write unknown fixture");
+                fs::write(
+                    state_path,
+                    serde_json::to_vec(&value).expect("serialize unknown fixture"),
+                )
+                .expect("write unknown fixture");
             },
         );
         assert_m2_workflow_state_sidecar_quarantine_case(
@@ -5866,8 +6020,11 @@ mod tests {
                 )
                 .expect("fixture JSON");
                 value["credential_token"] = json!("m2-quarantine-secret-never-persist");
-                fs::write(state_path, serde_json::to_vec(&value).expect("serialize sensitive fixture"))
-                    .expect("write sensitive fixture");
+                fs::write(
+                    state_path,
+                    serde_json::to_vec(&value).expect("serialize sensitive fixture"),
+                )
+                .expect("write sensitive fixture");
             },
         );
         assert_m2_workflow_state_sidecar_quarantine_case(
@@ -5880,8 +6037,11 @@ mod tests {
                 )
                 .expect("fixture JSON");
                 value["work_items"] = json!([{ "state": "running" }]);
-                fs::write(state_path, serde_json::to_vec(&value).expect("serialize unjoinable fixture"))
-                    .expect("write unjoinable fixture");
+                fs::write(
+                    state_path,
+                    serde_json::to_vec(&value).expect("serialize unjoinable fixture"),
+                )
+                .expect("write unjoinable fixture");
             },
         );
         assert_m2_workflow_state_sidecar_quarantine_case(
@@ -5889,8 +6049,7 @@ mod tests {
             "CORRUPT_INPUT",
             None,
             |state_path| {
-                fs::write(state_path, b"{m2-corrupt-json")
-                    .expect("write corrupt-input fixture");
+                fs::write(state_path, b"{m2-corrupt-json").expect("write corrupt-input fixture");
             },
         );
     }
@@ -5899,7 +6058,8 @@ mod tests {
     fn m2_reference_slice_scratch_export_manifest_and_noop_rollback_preserve_sidecar() {
         let _serial = test_lock().lock().expect("storage mode test lock");
         let fixture = db_primary_fixture("m2-reference-slice-scratch-export-noop-rollback");
-        let sidecar_before = fs::read(&fixture.state_path).expect("read retained sidecar before export");
+        let sidecar_before =
+            fs::read(&fixture.state_path).expect("read retained sidecar before export");
         let database_before = fs::read(&fixture.config.db_path).expect("read DB before export");
         let source_ref = format!(
             "workflow-state-sidecar:sha256:{}",
@@ -5918,7 +6078,10 @@ mod tests {
         assert_eq!(manifest.mode, "dry_run");
         assert_eq!(manifest.status, "planned");
         assert_eq!(manifest.target_root_ref, source_ref);
-        assert!(!manifest.export_hash.is_empty(), "canonical export hash required");
+        assert!(
+            !manifest.export_hash.is_empty(),
+            "canonical export hash required"
+        );
         let workflow_projection = manifest
             .projected_files
             .iter()
@@ -6054,17 +6217,18 @@ mod tests {
         let initial_revision = repository
             .m2_workflow_state_sidecar_revision(&fixture.workflow_id, &fixture.work_item_id)
             .expect("read initial M2 revision");
-        let request = |command_id: &str, idempotency_key: &str, expected_revision: i64, next_state: &str| {
-            crate::WorkItemStateUpdateRequest {
-                project_root: fixture.project_root.clone(),
-                work_item_id: fixture.work_item_id.clone(),
-                next_state: next_state.to_string(),
-                client_request_ref: None,
-                command_id: Some(command_id.to_string()),
-                idempotency_key: Some(idempotency_key.to_string()),
-                expected_revision: Some(expected_revision),
-            }
-        };
+        let request =
+            |command_id: &str, idempotency_key: &str, expected_revision: i64, next_state: &str| {
+                crate::WorkItemStateUpdateRequest {
+                    project_root: fixture.project_root.clone(),
+                    work_item_id: fixture.work_item_id.clone(),
+                    next_state: next_state.to_string(),
+                    client_request_ref: None,
+                    command_id: Some(command_id.to_string()),
+                    idempotency_key: Some(idempotency_key.to_string()),
+                    expected_revision: Some(expected_revision),
+                }
+            };
 
         let denied = request(
             "m2-reference-slice-denied-then-legal",
@@ -6101,13 +6265,14 @@ mod tests {
             crate::workbench_sqlite_schema_m2::M2_SCHEMA_VERSION
         );
         assert_eq!(response_provenance.caller_mode, "EXPLICIT_M2_REQUEST");
-        let connection = Connection::open_with_flags(
-            &fixture.config.db_path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .expect("open DB provenance ledger");
-        let (receipt_policy_ref, event_trace_context, audit_source_refs):
-            (String, Option<String>, Option<String>) = connection
+        let connection =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open DB provenance ledger");
+        let (receipt_policy_ref, event_trace_context, audit_source_refs): (
+            String,
+            Option<String>,
+            Option<String>,
+        ) = connection
             .query_row(
                 "SELECT r.policy_decision_ref, e.trace_context, a.source_refs
                  FROM command_receipts r
@@ -6123,7 +6288,10 @@ mod tests {
             crate::workbench_sqlite_repository::M2_WORKFLOW_STATE_SIDECAR_PORT_VERSION,
             crate::workbench_sqlite_schema_m2::M2_SCHEMA_VERSION,
         );
-        assert_eq!(event_trace_context.as_deref(), Some(expected_trace.as_str()));
+        assert_eq!(
+            event_trace_context.as_deref(),
+            Some(expected_trace.as_str())
+        );
         assert!(receipt_policy_ref.starts_with("policy_gateway:allowed;"));
         assert!(receipt_policy_ref.ends_with(&expected_trace));
         assert!(audit_source_refs
@@ -6166,8 +6334,9 @@ mod tests {
             revision_after_retry,
             "running",
         );
-        let running_again_result = crate::update_work_item_state_at(&fixture.state_path, &running_again)
-            .expect("retry_pending -> running must not collide with the first running command");
+        let running_again_result =
+            crate::update_work_item_state_at(&fixture.state_path, &running_again)
+                .expect("retry_pending -> running must not collide with the first running command");
         assert_ne!(
             running_again_result.receipt_id.as_deref(),
             Some(legal_receipt.as_str())
@@ -6176,13 +6345,13 @@ mod tests {
         let state = crate::read_workflow_state_value(&fixture.state_path)
             .expect("read the projected reference slice");
         assert_eq!(state["work_items"][0]["state"], "running");
-        let receipt_count: i64 = Connection::open_with_flags(
-            &fixture.config.db_path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .expect("open DB receipt ledger")
-        .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| row.get(0))
-        .expect("count command receipts");
+        let receipt_count: i64 =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open DB receipt ledger")
+                .query_row("SELECT COUNT(*) FROM command_receipts", [], |row| {
+                    row.get(0)
+                })
+                .expect("count command receipts");
         assert_eq!(
             receipt_count, 4,
             "one denied plus three logical commands; stale preflight must add no receipt"
@@ -6200,8 +6369,7 @@ mod tests {
             "m4-decision-recovery-create",
         )
         .expect("create base proposal");
-        let mut rejected_proposal =
-            serde_json::to_value(&created.proposal).expect("proposal JSON");
+        let mut rejected_proposal = serde_json::to_value(&created.proposal).expect("proposal JSON");
         rejected_proposal["status"] = Value::String("rejected".to_string());
         rejected_proposal["updated_at_ms"] = Value::from(1_786_200_000_001_i64);
         let decision = json!({
@@ -6274,23 +6442,22 @@ mod tests {
             recovered.proposals[0].status,
             crate::ProjectConsultationProposalStatus::Rejected
         );
-        assert!(
-            reconcile_db_vs_json(&fixture.config)
-                .expect("post-recovery reconciliation")
-                .is_green()
+        assert!(reconcile_db_vs_json(&fixture.config)
+            .expect("post-recovery reconciliation")
+            .is_green());
+        let publication_count: i64 =
+            Connection::open_with_flags(&fixture.config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .expect("open recovered owner DB")
+                .query_row(
+                    "SELECT COUNT(*) FROM m4_source_owner_publications",
+                    [],
+                    |row| row.get(0),
+                )
+                .expect("count owner publications after recovery");
+        assert_eq!(
+            publication_count, 2,
+            "restart must not duplicate owner events"
         );
-        let publication_count: i64 = Connection::open_with_flags(
-            &fixture.config.db_path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .expect("open recovered owner DB")
-        .query_row(
-            "SELECT COUNT(*) FROM m4_source_owner_publications",
-            [],
-            |row| row.get(0),
-        )
-        .expect("count owner publications after recovery");
-        assert_eq!(publication_count, 2, "restart must not duplicate owner events");
     }
 
     #[test]
