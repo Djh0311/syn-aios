@@ -8,6 +8,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -187,6 +188,93 @@ const M4R02_ORDINARY_COMPOSITION_OWNER_INVARIANT_FIELDS = [
   "source_revision_before",
   "source_revision_after",
   "unchanged",
+];
+const M4R03_SERVER_CLOCK_MODE_ARG = "--m4r03-server-clock";
+const M4R03_ORDINARY_CLOCK_DRIVER_ENV = "SYN_M4R03_ORDINARY_CLOCK_DRIVER";
+const M4R03_ORDINARY_CLOCK_PHASE_ENV = "SYN_M4R03_ORDINARY_CLOCK_PHASE";
+const M4R03_ORDINARY_CLOCK_NONCE_ENV = "SYN_M4R03_ORDINARY_CLOCK_NONCE";
+const M4R03_ORDINARY_CLOCK_DRIVER_VALUE = "ordinary-server-due-clock-v1";
+const M4R03_ORDINARY_CLOCK_MARKER_ENV_NAMES = [
+  M4R03_ORDINARY_CLOCK_DRIVER_ENV,
+  M4R03_ORDINARY_CLOCK_PHASE_ENV,
+  M4R03_ORDINARY_CLOCK_NONCE_ENV,
+];
+const M4R03_ORDINARY_CLOCK_PHASES = ["arm", "recovery_timer", "repeat"];
+const M4R03_ORDINARY_CLOCK_RECEIPT_PREFIX = "m4r03-ordinary-clock-";
+const M4R03_ORDINARY_CLOCK_RECEIPT_SCHEMA =
+  "syn_m4r03_ordinary_clock_driver_receipt.v1";
+const M4R03_SERVER_CLOCK_COMPOSITE_SCHEMA =
+  "syn.m4.remediation.behavior-receipt.v1";
+const M4R03_SERVER_CLOCK_COMPOSITE_FILE =
+  "m4r03-server-due-clock-composite-receipt.json";
+const M4R03_SERVER_CLOCK_PORTABLE_REPORT_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../docs/harness/reports/M4R03-server-due-clock-behavior-receipt.json",
+);
+const M4R03_SERVER_CLOCK_MODE_CONFLICT = "m4r03_server_clock_mode_conflict";
+const M4R03_ORDINARY_CLOCK_STDERR_MAX_BYTES = 16 * 1024;
+const M4R03_ORDINARY_CLOCK_RECEIPT_MAX_BYTES = 32 * 1024;
+const M4R03_ORDINARY_CLOCK_NORMAL_PHASE_TIMEOUT_MS = 270 * 1000;
+const M4R03_ORDINARY_CLOCK_ARM_RECEIPT_TIMEOUT_MS = 90 * 1000;
+const M4R03_ORDINARY_CLOCK_DUE_GRACE_MS = 1_200;
+const M4R03_ORDINARY_CLOCK_REAL_TIMER_WAIT_SECONDS = 98;
+const M4R03_ORDINARY_CLOCK_PASS_RECEIPT_FIELDS = [
+  "schema_version",
+  "phase",
+  "launch_ordinal",
+  "process_id_sha256",
+  "outcome",
+  "profile_fingerprint",
+  "nonce_sha256",
+  "previous_phase_receipt_sha256",
+  "ordinary_constructor",
+  "ordinary_composition",
+  "command_registry_surface",
+  "production_scheduler",
+  "renderer_due_transition_calls",
+  "renderer_fire_calls",
+  "renderer_user_schedule_marker_calls",
+  "acceptance_wrapper_calls",
+  "direct_repository_seed_calls",
+  "direct_transition_calls",
+  "external_capability_attempts",
+  "startup_due_marker_utc",
+  "timer_due_marker_utc",
+  "write_commands_invoked",
+  "open_loop_command_receipt_sha256",
+  "reminder_command_receipt_sha256",
+  "startup_evidence",
+  "timer_armed_evidence",
+  "timer_evidence",
+  "repeat_zero_delta",
+  "pre_due_sigkill_required",
+  "real_timer_wait_seconds",
+  "error_family",
+];
+const M4R03_ORDINARY_CLOCK_DUE_EVIDENCE_FIELDS = [
+  "open_loop_id_sha256",
+  "open_loop_status",
+  "open_loop_revision",
+  "open_loop_snoozed_until_utc",
+  "reminder_id_sha256",
+  "reminder_status",
+  "reminder_revision",
+  "reminder_scheduled_for_utc",
+  "reminder_snoozed_until_utc",
+  "reminder_last_fired_at_utc",
+  "server_clock_audit_rows",
+  "deterministic_due_receipt_rows",
+  "deterministic_due_event_rows",
+  "distinct_due_idempotency_keys",
+  "distinct_due_batch_timestamps",
+  "timer_tick_bound_due_receipt_rows",
+  "captured_server_now_utc",
+  "receipt_audit_time_mismatch_rows",
+  "timer_fired_event_rows",
+  "model_invocation_rows",
+  "source_owner_writeback_rows",
+  "sqlite_integrity_check",
+  "foreign_key_violation_rows",
 ];
 const M2_REFERENCE_SLICE_DRIVER_ENV = "SYN_M2_R4_REFERENCE_SLICE_DRIVER";
 const M2_REFERENCE_SLICE_ATTEMPT_ENV = "SYN_M2_R4_REFERENCE_SLICE_ATTEMPT";
@@ -616,6 +704,34 @@ async function writeJson(path, value, mode = MODE_0600) {
   const metadata = await lstat(path);
   if (!metadata.isFile() || metadata.isSymbolicLink()) {
     throw new Error("isolated runtime file must be a regular file");
+  }
+}
+
+async function writeM4R03PortableReport(value) {
+  const reportDirectory = dirname(M4R03_SERVER_CLOCK_PORTABLE_REPORT_PATH);
+  await mkdir(reportDirectory, { recursive: true });
+  const temporaryPath = join(
+    reportDirectory,
+    `.M4R03-server-due-clock-${randomBytes(12).toString("hex")}.tmp`,
+  );
+  try {
+    await writeJson(temporaryPath, value);
+    await rename(temporaryPath, M4R03_SERVER_CLOCK_PORTABLE_REPORT_PATH);
+    const metadata = await lstat(M4R03_SERVER_CLOCK_PORTABLE_REPORT_PATH);
+    if (
+      !metadata.isFile()
+      || metadata.isSymbolicLink()
+      || (metadata.mode & 0o777) !== MODE_0600
+    ) {
+      throw new Error("m4r03 portable report metadata invalid");
+    }
+  } catch (error) {
+    try {
+      await unlink(temporaryPath);
+    } catch {
+      // rename success or absent temp requires no cleanup.
+    }
+    throw error;
   }
 }
 
@@ -3719,6 +3835,868 @@ async function runM4R02OrdinaryCompositionSuite({
   };
 }
 
+function m4r03OrdinaryClockReceiptPath(root, phase) {
+  return join(
+    root,
+    "runtime-artifacts",
+    `${M4R03_ORDINARY_CLOCK_RECEIPT_PREFIX}${phase}.json`,
+  );
+}
+
+function m4r03IsCanonicalUtc(value) {
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/.test(value)
+    && Number.isFinite(Date.parse(value));
+}
+
+function m4r03IsNonnegativeCount(value) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function m4r03IsNextRevision(before, after) {
+  if (!m4r02IsCanonicalRevision(before) || !m4r02IsCanonicalRevision(after)) {
+    return false;
+  }
+  return BigInt(after) === BigInt(before) + 1n;
+}
+
+function m4r03EvidenceContractFailure(evidence, stage) {
+  if (!m4r02HasExactObjectFields(
+    evidence,
+    M4R03_ORDINARY_CLOCK_DUE_EVIDENCE_FIELDS,
+  )) {
+    return `${stage}_fields`;
+  }
+  const invalidHash = ["open_loop_id_sha256", "reminder_id_sha256"].find(
+    (field) => !m4r02IsLowerHexSha256(evidence[field]),
+  );
+  if (invalidHash) return `${stage}_${invalidHash}`;
+  const invalidCount = [
+    "server_clock_audit_rows",
+    "deterministic_due_receipt_rows",
+    "deterministic_due_event_rows",
+    "distinct_due_idempotency_keys",
+    "distinct_due_batch_timestamps",
+    "timer_tick_bound_due_receipt_rows",
+    "receipt_audit_time_mismatch_rows",
+    "timer_fired_event_rows",
+    "model_invocation_rows",
+    "source_owner_writeback_rows",
+    "foreign_key_violation_rows",
+  ].find((field) => !m4r03IsNonnegativeCount(evidence[field]));
+  if (invalidCount) return `${stage}_${invalidCount}`;
+  return m4r02FirstInvalidField([
+    [`${stage}_open_loop_revision`, m4r02IsCanonicalRevision(evidence.open_loop_revision)],
+    [`${stage}_reminder_revision`, m4r02IsCanonicalRevision(evidence.reminder_revision)],
+    [`${stage}_reminder_scheduled`, m4r03IsCanonicalUtc(evidence.reminder_scheduled_for_utc)],
+    [
+      `${stage}_open_loop_snoozed`,
+      evidence.open_loop_snoozed_until_utc === null
+        || m4r03IsCanonicalUtc(evidence.open_loop_snoozed_until_utc),
+    ],
+    [
+      `${stage}_reminder_snoozed`,
+      evidence.reminder_snoozed_until_utc === null
+        || m4r03IsCanonicalUtc(evidence.reminder_snoozed_until_utc),
+    ],
+    [
+      `${stage}_reminder_fired`,
+      evidence.reminder_last_fired_at_utc === null
+        || m4r03IsCanonicalUtc(evidence.reminder_last_fired_at_utc),
+    ],
+    [
+      `${stage}_captured_server_now`,
+      evidence.captured_server_now_utc === null
+        || m4r03IsCanonicalUtc(evidence.captured_server_now_utc),
+    ],
+    [`${stage}_receipt_audit_time_match`, evidence.receipt_audit_time_mismatch_rows === 0],
+    [`${stage}_model_invocations`, evidence.model_invocation_rows === 0],
+    [`${stage}_source_writeback`, evidence.source_owner_writeback_rows === 0],
+    [`${stage}_sqlite_integrity`, evidence.sqlite_integrity_check === "ok"],
+    [`${stage}_foreign_keys`, evidence.foreign_key_violation_rows === 0],
+  ]);
+}
+
+function m4r03EvidenceExactFailure(evidence, stage, expected) {
+  const structuralFailure = m4r03EvidenceContractFailure(evidence, stage);
+  if (structuralFailure) return structuralFailure;
+  return m4r02FirstInvalidField(
+    Object.entries(expected).map(([field, value]) => [
+      `${stage}_${field}`,
+      evidence[field] === value,
+    ]),
+  );
+}
+
+function m4r03PassReceiptContractFailure({
+  phase,
+  value,
+  expectedPreviousReceiptSha256,
+}) {
+  if (!m4r02HasExactObjectFields(
+    value,
+    M4R03_ORDINARY_CLOCK_PASS_RECEIPT_FIELDS,
+  )) {
+    return "top_level_fields";
+  }
+  const commonFailure = m4r02FirstInvalidField([
+    ["outcome", value.outcome === "PASS"],
+    ["error_family", value.error_family === null],
+    ["previous_receipt", value.previous_phase_receipt_sha256 === expectedPreviousReceiptSha256],
+    ["ordinary_constructor", value.ordinary_constructor === true],
+    ["ordinary_composition", value.ordinary_composition === true],
+    [
+      "command_registry_surface",
+      value.command_registry_surface === "ordinary_registered_tauri_command_ipc",
+    ],
+    ["production_scheduler", value.production_scheduler === true],
+    ["renderer_due_transition_calls", value.renderer_due_transition_calls === 0],
+    ["renderer_fire_calls", value.renderer_fire_calls === 0],
+    ["acceptance_wrapper_calls", value.acceptance_wrapper_calls === 0],
+    ["direct_repository_seed_calls", value.direct_repository_seed_calls === 0],
+    ["direct_transition_calls", value.direct_transition_calls === 0],
+    ["external_capability_attempts", value.external_capability_attempts === 0],
+  ]);
+  if (commonFailure) return commonFailure;
+
+  if (phase === "arm") {
+    const phaseFailure = m4r02FirstInvalidField([
+      ["arm_schedule_marker_calls", value.renderer_user_schedule_marker_calls === 1],
+      ["arm_startup_marker", m4r03IsCanonicalUtc(value.startup_due_marker_utc)],
+      ["arm_timer_marker", value.timer_due_marker_utc === null],
+      ["arm_write_commands", value.write_commands_invoked === 2],
+      ["arm_open_loop_receipt", m4r02IsLowerHexSha256(value.open_loop_command_receipt_sha256)],
+      ["arm_reminder_receipt", m4r02IsLowerHexSha256(value.reminder_command_receipt_sha256)],
+      [
+        "arm_command_receipts_distinct",
+        value.open_loop_command_receipt_sha256
+          !== value.reminder_command_receipt_sha256,
+      ],
+      ["arm_timer_armed_evidence", value.timer_armed_evidence === null],
+      ["arm_timer_evidence", value.timer_evidence === null],
+      ["arm_repeat_delta", value.repeat_zero_delta === null],
+      ["arm_sigkill_required", value.pre_due_sigkill_required === true],
+      ["arm_timer_wait", value.real_timer_wait_seconds === 0],
+    ]);
+    if (phaseFailure) return phaseFailure;
+    return m4r03EvidenceExactFailure(value.startup_evidence, "arm", {
+      open_loop_status: "SNOOZED",
+      open_loop_snoozed_until_utc: value.startup_due_marker_utc,
+      reminder_status: "SCHEDULED",
+      reminder_scheduled_for_utc: value.startup_due_marker_utc,
+      reminder_snoozed_until_utc: null,
+      reminder_last_fired_at_utc: null,
+      server_clock_audit_rows: 0,
+      deterministic_due_receipt_rows: 0,
+      deterministic_due_event_rows: 0,
+      distinct_due_idempotency_keys: 0,
+      distinct_due_batch_timestamps: 0,
+      timer_tick_bound_due_receipt_rows: 0,
+      captured_server_now_utc: null,
+    });
+  }
+
+  if (phase === "recovery_timer") {
+    const phaseFailure = m4r02FirstInvalidField([
+      ["recovery_schedule_marker_calls", value.renderer_user_schedule_marker_calls === 1],
+      ["recovery_startup_marker", m4r03IsCanonicalUtc(value.startup_due_marker_utc)],
+      ["recovery_timer_marker", m4r03IsCanonicalUtc(value.timer_due_marker_utc)],
+      ["recovery_marker_order", Date.parse(value.timer_due_marker_utc) > Date.parse(value.startup_due_marker_utc)],
+      ["recovery_write_commands", value.write_commands_invoked === 2],
+      ["recovery_open_loop_receipt", m4r02IsLowerHexSha256(value.open_loop_command_receipt_sha256)],
+      ["recovery_reminder_receipt", m4r02IsLowerHexSha256(value.reminder_command_receipt_sha256)],
+      [
+        "recovery_command_receipts_distinct",
+        value.open_loop_command_receipt_sha256
+          !== value.reminder_command_receipt_sha256,
+      ],
+      ["recovery_repeat_delta", value.repeat_zero_delta === null],
+      ["recovery_sigkill_required", value.pre_due_sigkill_required === false],
+      [
+        "recovery_real_timer_wait",
+        value.real_timer_wait_seconds
+          === M4R03_ORDINARY_CLOCK_REAL_TIMER_WAIT_SECONDS,
+      ],
+    ]);
+    if (phaseFailure) return phaseFailure;
+    const startupFailure = m4r03EvidenceExactFailure(value.startup_evidence, "startup", {
+      open_loop_status: "OPEN",
+      open_loop_snoozed_until_utc: null,
+      reminder_status: "FIRED",
+      reminder_scheduled_for_utc: value.startup_due_marker_utc,
+      reminder_snoozed_until_utc: null,
+      server_clock_audit_rows: 2,
+      deterministic_due_receipt_rows: 2,
+      deterministic_due_event_rows: 2,
+      distinct_due_idempotency_keys: 2,
+      distinct_due_batch_timestamps: 1,
+      timer_tick_bound_due_receipt_rows: 0,
+      receipt_audit_time_mismatch_rows: 0,
+    });
+    if (startupFailure) return startupFailure;
+    const armedFailure = m4r03EvidenceExactFailure(value.timer_armed_evidence, "timer_armed", {
+      open_loop_status: "SNOOZED",
+      open_loop_snoozed_until_utc: value.timer_due_marker_utc,
+      reminder_status: "SNOOZED",
+      reminder_scheduled_for_utc: value.startup_due_marker_utc,
+      reminder_snoozed_until_utc: value.timer_due_marker_utc,
+      server_clock_audit_rows: 2,
+      deterministic_due_receipt_rows: 2,
+      deterministic_due_event_rows: 2,
+      distinct_due_idempotency_keys: 2,
+      distinct_due_batch_timestamps: 1,
+      timer_tick_bound_due_receipt_rows: 0,
+      receipt_audit_time_mismatch_rows: 0,
+    });
+    if (armedFailure) return armedFailure;
+    const timerFailure = m4r03EvidenceExactFailure(value.timer_evidence, "timer", {
+      open_loop_status: "OPEN",
+      open_loop_snoozed_until_utc: null,
+      reminder_status: "FIRED",
+      reminder_scheduled_for_utc: value.startup_due_marker_utc,
+      reminder_snoozed_until_utc: null,
+      server_clock_audit_rows: 4,
+      deterministic_due_receipt_rows: 4,
+      deterministic_due_event_rows: 4,
+      distinct_due_idempotency_keys: 4,
+      distinct_due_batch_timestamps: 2,
+      timer_tick_bound_due_receipt_rows: 2,
+      receipt_audit_time_mismatch_rows: 0,
+    });
+    if (timerFailure) return timerFailure;
+    return m4r02FirstInvalidField([
+      [
+        "startup_object_binding",
+        value.startup_evidence.open_loop_id_sha256
+          === value.timer_armed_evidence.open_loop_id_sha256
+          && value.startup_evidence.reminder_id_sha256
+            === value.timer_armed_evidence.reminder_id_sha256,
+      ],
+      [
+        "timer_object_binding",
+        value.timer_armed_evidence.open_loop_id_sha256
+          === value.timer_evidence.open_loop_id_sha256
+          && value.timer_armed_evidence.reminder_id_sha256
+            === value.timer_evidence.reminder_id_sha256,
+      ],
+      [
+        "startup_captured_after_due",
+        Date.parse(value.startup_evidence.captured_server_now_utc)
+          >= Date.parse(value.startup_due_marker_utc),
+      ],
+      [
+        "startup_reminder_fired_after_due",
+        Date.parse(value.startup_evidence.reminder_last_fired_at_utc)
+          >= Date.parse(value.startup_due_marker_utc),
+      ],
+      [
+        "startup_reminder_fired_at_captured_now",
+        value.startup_evidence.reminder_last_fired_at_utc
+          === value.startup_evidence.captured_server_now_utc,
+      ],
+      [
+        "timer_armed_last_fired_continuity",
+        value.timer_armed_evidence.reminder_last_fired_at_utc
+          === value.startup_evidence.reminder_last_fired_at_utc,
+      ],
+      [
+        "timer_armed_captured_now_continuity",
+        value.timer_armed_evidence.captured_server_now_utc
+          === value.startup_evidence.captured_server_now_utc,
+      ],
+      [
+        "timer_armed_timer_event_monotonic",
+        value.timer_armed_evidence.timer_fired_event_rows
+          >= value.startup_evidence.timer_fired_event_rows,
+      ],
+      [
+        "timer_captured_after_due",
+        Date.parse(value.timer_evidence.captured_server_now_utc)
+          >= Date.parse(value.timer_due_marker_utc),
+      ],
+      [
+        "timer_reminder_fired_after_due",
+        Date.parse(value.timer_evidence.reminder_last_fired_at_utc)
+          >= Date.parse(value.timer_due_marker_utc),
+      ],
+      [
+        "timer_reminder_fired_at_captured_now",
+        value.timer_evidence.reminder_last_fired_at_utc
+          === value.timer_evidence.captured_server_now_utc,
+      ],
+      [
+        "startup_to_timer_arm_open_loop_revision",
+        m4r03IsNextRevision(
+          value.startup_evidence.open_loop_revision,
+          value.timer_armed_evidence.open_loop_revision,
+        ),
+      ],
+      [
+        "startup_to_timer_arm_reminder_revision",
+        m4r03IsNextRevision(
+          value.startup_evidence.reminder_revision,
+          value.timer_armed_evidence.reminder_revision,
+        ),
+      ],
+      [
+        "timer_arm_to_fire_open_loop_revision",
+        m4r03IsNextRevision(
+          value.timer_armed_evidence.open_loop_revision,
+          value.timer_evidence.open_loop_revision,
+        ),
+      ],
+      [
+        "timer_arm_to_fire_reminder_revision",
+        m4r03IsNextRevision(
+          value.timer_armed_evidence.reminder_revision,
+          value.timer_evidence.reminder_revision,
+        ),
+      ],
+      [
+        "timer_fired_event_advanced",
+        value.timer_evidence.timer_fired_event_rows
+          > value.timer_armed_evidence.timer_fired_event_rows,
+      ],
+    ]);
+  }
+
+  if (phase === "repeat") {
+    const phaseFailure = m4r02FirstInvalidField([
+      ["repeat_schedule_marker_calls", value.renderer_user_schedule_marker_calls === 0],
+      ["repeat_startup_marker", m4r03IsCanonicalUtc(value.startup_due_marker_utc)],
+      ["repeat_timer_marker", m4r03IsCanonicalUtc(value.timer_due_marker_utc)],
+      ["repeat_write_commands", value.write_commands_invoked === 0],
+      ["repeat_open_loop_receipt", value.open_loop_command_receipt_sha256 === null],
+      ["repeat_reminder_receipt", value.reminder_command_receipt_sha256 === null],
+      ["repeat_timer_armed_evidence", value.timer_armed_evidence === null],
+      ["repeat_timer_evidence", value.timer_evidence === null],
+      ["repeat_zero_delta", value.repeat_zero_delta === true],
+      ["repeat_sigkill_required", value.pre_due_sigkill_required === false],
+      ["repeat_timer_wait", value.real_timer_wait_seconds === 0],
+    ]);
+    if (phaseFailure) return phaseFailure;
+    return m4r03EvidenceContractFailure(value.startup_evidence, "repeat");
+  }
+  return "phase";
+}
+
+async function readM4R03OrdinaryClockReceipt({
+  root,
+  phase,
+  expectedNonceSha256,
+  expectedProfileFingerprint,
+  expectedPreviousReceiptSha256,
+  expectedProcessIdSha256,
+  visibilityDeadline,
+  abortWhen = null,
+}) {
+  const path = m4r03OrdinaryClockReceiptPath(root, phase);
+  while (true) {
+    try {
+      const metadata = await lstat(path);
+      if (
+        !metadata.isFile()
+        || metadata.isSymbolicLink()
+        || (metadata.mode & 0o777) !== MODE_0600
+        || metadata.size > M4R03_ORDINARY_CLOCK_RECEIPT_MAX_BYTES
+      ) {
+        const error = new Error("m4r03_ordinary_clock_receipt_metadata_invalid");
+        error.failureFamily = "receipt_invalid_metadata";
+        throw error;
+      }
+      const bytes = await readFile(path);
+      const value = JSON.parse(bytes.toString("utf8"));
+      const expectedLaunchOrdinal = M4R03_ORDINARY_CLOCK_PHASES.indexOf(phase) + 1;
+      const invalidBinding = m4r02FirstInvalidField([
+        ["schema", value.schema_version === M4R03_ORDINARY_CLOCK_RECEIPT_SCHEMA],
+        ["phase", value.phase === phase],
+        ["launch_ordinal", value.launch_ordinal === expectedLaunchOrdinal],
+        ["nonce", value.nonce_sha256 === expectedNonceSha256],
+        ["profile", value.profile_fingerprint === expectedProfileFingerprint],
+        ["process_id", value.process_id_sha256 === expectedProcessIdSha256],
+      ]);
+      if (invalidBinding) {
+        const error = new Error(`m4r03_ordinary_clock_receipt_binding_invalid:${invalidBinding}`);
+        error.failureFamily = `receipt_binding_${invalidBinding}`;
+        throw error;
+      }
+      if (
+        value.outcome === "REJECTED"
+        && /^[a-z0-9_:-]{1,128}$/.test(value.error_family ?? "")
+      ) {
+        const error = new Error(`m4r03_ordinary_clock_driver_${value.error_family}`);
+        error.failureFamily = `driver_${value.error_family}`;
+        throw error;
+      }
+      const invalidPassField = m4r03PassReceiptContractFailure({
+        phase,
+        value,
+        expectedPreviousReceiptSha256,
+      });
+      if (invalidPassField) {
+        const error = new Error(
+          `m4r03_ordinary_clock_pass_contract_invalid:${phase}:${invalidPassField}`,
+        );
+        error.failureFamily = `receipt_contract_${phase}_${invalidPassField}`;
+        throw error;
+      }
+      return { path, sha256: sha256(bytes), value };
+    } catch (error) {
+      if (error?.code === "ENOENT" && Date.now() < visibilityDeadline) {
+        if (abortWhen?.()) {
+          const closedError = new Error("m4r03_ordinary_clock_child_closed_before_receipt");
+          closedError.failureFamily = "child_closed_before_receipt";
+          throw closedError;
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+        continue;
+      }
+      if (typeof error?.failureFamily === "string") throw error;
+      const receiptError = new Error("m4r03_ordinary_clock_receipt_invalid");
+      receiptError.failureFamily = error instanceof SyntaxError
+        ? "receipt_invalid_json"
+        : "receipt_invalid_io";
+      throw receiptError;
+    }
+  }
+}
+
+function spawnM4R03OrdinaryClockApp({
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  phase,
+  nonce,
+}) {
+  const environment = {
+    ...normalBuildEnvironment,
+    [PROFILE_ENV]: profilePath,
+    [REENTRY_CAPABILITY_ENV]: reentryCapability,
+    [M4R03_ORDINARY_CLOCK_DRIVER_ENV]: M4R03_ORDINARY_CLOCK_DRIVER_VALUE,
+    [M4R03_ORDINARY_CLOCK_PHASE_ENV]: phase,
+    [M4R03_ORDINARY_CLOCK_NONCE_ENV]: nonce,
+  };
+  const child = spawn(debugAppExecutablePath, [], {
+    cwd: desktopRoot,
+    env: environment,
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let boundedOutput = "";
+  let closed = false;
+  child.stdout?.on("data", (chunk) => {
+    boundedOutput = `${boundedOutput}${chunk.toString("utf8")}`
+      .slice(-M4R03_ORDINARY_CLOCK_STDERR_MAX_BYTES);
+  });
+  child.stderr?.on("data", (chunk) => {
+    boundedOutput = `${boundedOutput}${chunk.toString("utf8")}`
+      .slice(-M4R03_ORDINARY_CLOCK_STDERR_MAX_BYTES);
+  });
+  const closePromise = new Promise((resolveClose) => {
+    let settled = false;
+    const settle = (result) => {
+      if (settled) return;
+      settled = true;
+      closed = true;
+      resolveClose(result);
+    };
+    child.once("error", () => settle({ exit_code: null, launched: false, signal: null }));
+    child.once("close", (code, signal) => settle({
+      exit_code: code,
+      launched: true,
+      signal: signal ?? null,
+    }));
+  });
+  return {
+    child,
+    closePromise,
+    output: () => boundedOutput,
+    isClosed: () => closed,
+  };
+}
+
+async function closeM4R03AppAtDeadline(process, timeoutMs) {
+  let timer;
+  const timeout = new Promise((resolveTimeout) => {
+    timer = setTimeout(() => resolveTimeout({ timed_out: true }), timeoutMs);
+  });
+  const result = await Promise.race([process.closePromise, timeout]);
+  clearTimeout(timer);
+  if (result.timed_out) {
+    if (typeof process.child.pid === "number") {
+      try {
+        process.child.kill("SIGKILL");
+      } catch {
+        // The close event may have won the race after the deadline fired.
+      }
+    }
+    const killed = await process.closePromise;
+    return { ...killed, timed_out: true };
+  }
+  return { ...result, timed_out: false };
+}
+
+function m4r03DriverFailureFamily(output, launch) {
+  const driverFailure = output.match(
+    /M4R03 ordinary clock (?:driver|early setup) failed:([a-z0-9_:-]{1,128})/,
+  );
+  if (driverFailure) return `driver_${driverFailure[1]}`;
+  if (launch.timed_out) return "phase_timeout";
+  if (!launch.launched) return "child_spawn";
+  if (launch.signal !== null) return `child_signal_${launch.signal.toLowerCase()}`;
+  return `child_exit_${launch.exit_code ?? "unknown"}`;
+}
+
+async function runM4R03ArmPhase({
+  root,
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  nonce,
+  expectedProfileFingerprint,
+}) {
+  const process = spawnM4R03OrdinaryClockApp({
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    phase: "arm",
+    nonce,
+  });
+  const pid = process.child.pid;
+  if (!Number.isSafeInteger(pid)) {
+    const error = new Error("m4r03_ordinary_clock_child_spawn");
+    error.failureFamily = "child_spawn";
+    error.phase = "arm";
+    throw error;
+  }
+  let receipt;
+  try {
+    receipt = await readM4R03OrdinaryClockReceipt({
+      root,
+      phase: "arm",
+      expectedNonceSha256: sha256(nonce),
+      expectedProfileFingerprint,
+      expectedPreviousReceiptSha256: null,
+      expectedProcessIdSha256: sha256(String(pid)),
+      visibilityDeadline: Date.now() + M4R03_ORDINARY_CLOCK_ARM_RECEIPT_TIMEOUT_MS,
+      abortWhen: process.isClosed,
+    });
+    if (process.isClosed()) {
+      const error = new Error("m4r03_ordinary_clock_arm_exited_before_sigkill");
+      error.failureFamily = "arm_exited_before_sigkill";
+      throw error;
+    }
+    const markerMs = Date.parse(receipt.value.startup_due_marker_utc);
+    const receiptObservedAtMs = Date.now();
+    if (!Number.isFinite(markerMs) || markerMs <= receiptObservedAtMs) {
+      const error = new Error("m4r03_ordinary_clock_arm_marker_not_future");
+      error.failureFamily = "arm_marker_not_future";
+      throw error;
+    }
+    const killRequested = process.child.kill("SIGKILL");
+    const killedAtMs = Date.now();
+    if (!killRequested || killedAtMs >= markerMs) {
+      const error = new Error("m4r03_ordinary_clock_pre_due_sigkill_failed");
+      error.failureFamily = "pre_due_sigkill_failed";
+      throw error;
+    }
+    const launch = await process.closePromise;
+    const sigkillConfirmedAtMs = Date.now();
+    if (
+      !launch.launched
+      || launch.exit_code !== null
+      || launch.signal !== "SIGKILL"
+    ) {
+      const error = new Error("m4r03_ordinary_clock_pre_due_sigkill_unconfirmed");
+      error.failureFamily = "pre_due_sigkill_unconfirmed";
+      error.launch = launch;
+      throw error;
+    }
+    if (sigkillConfirmedAtMs >= markerMs) {
+      const error = new Error("m4r03_ordinary_clock_pre_due_sigkill_confirmation_late");
+      error.failureFamily = "pre_due_sigkill_confirmation_late";
+      error.launch = launch;
+      throw error;
+    }
+    const dueWaitMs = markerMs + M4R03_ORDINARY_CLOCK_DUE_GRACE_MS - Date.now();
+    if (dueWaitMs > 0) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, dueWaitMs));
+    }
+    return {
+      phase: "arm",
+      launch,
+      app_pid_sha256: sha256(String(pid)),
+      receipt_observed_at_utc: new Date(receiptObservedAtMs).toISOString(),
+      sigkill_requested_at_utc: new Date(killedAtMs).toISOString(),
+      sigkill_confirmed_at_utc: new Date(sigkillConfirmedAtMs).toISOString(),
+      sigkill_before_due: sigkillConfirmedAtMs < markerMs,
+      receipt_sha256: receipt.sha256,
+      receipt: receipt.value,
+    };
+  } catch (error) {
+    if (!process.isClosed() && typeof pid === "number") {
+      try {
+        process.child.kill("SIGKILL");
+      } catch {
+        // Best-effort cleanup is bounded to the exact child created above.
+      }
+      await process.closePromise;
+    }
+    error.phase = "arm";
+    throw error;
+  }
+}
+
+async function runM4R03NormalPhase({
+  root,
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  phase,
+  nonce,
+  expectedProfileFingerprint,
+  expectedPreviousReceiptSha256,
+}) {
+  const process = spawnM4R03OrdinaryClockApp({
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    phase,
+    nonce,
+  });
+  const pid = process.child.pid;
+  if (!Number.isSafeInteger(pid)) {
+    const error = new Error("m4r03_ordinary_clock_child_spawn");
+    error.failureFamily = "child_spawn";
+    error.phase = phase;
+    throw error;
+  }
+  const launch = await closeM4R03AppAtDeadline(
+    process,
+    M4R03_ORDINARY_CLOCK_NORMAL_PHASE_TIMEOUT_MS,
+  );
+  if (
+    launch.timed_out
+    || !launch.launched
+    || launch.exit_code !== 0
+    || launch.signal !== null
+  ) {
+    const failureFamily = m4r03DriverFailureFamily(process.output(), launch);
+    const error = new Error(`m4r03_ordinary_clock_${failureFamily}`);
+    error.failureFamily = failureFamily;
+    error.launch = launch;
+    error.phase = phase;
+    throw error;
+  }
+  let receipt;
+  try {
+    receipt = await readM4R03OrdinaryClockReceipt({
+      root,
+      phase,
+      expectedNonceSha256: sha256(nonce),
+      expectedProfileFingerprint,
+      expectedPreviousReceiptSha256,
+      expectedProcessIdSha256: sha256(String(pid)),
+      visibilityDeadline: Date.now() + 5_000,
+    });
+  } catch (error) {
+    error.launch = launch;
+    error.phase = phase;
+    throw error;
+  }
+  return {
+    phase,
+    launch,
+    app_pid_sha256: sha256(String(pid)),
+    receipt_sha256: receipt.sha256,
+    receipt: receipt.value,
+  };
+}
+
+async function runM4R03ServerClockSuite({
+  root,
+  normalBuildEnvironment,
+  profilePath,
+  reentryCapability,
+  buildResult,
+}) {
+  // Prepare only through the already-accepted ordinary R02 product flow. No
+  // repository seed, acceptance wrapper, or direct transition enters R03.
+  const ordinaryPreparation = await runM4R02OrdinaryCompositionSuite({
+    root,
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    buildResult,
+  });
+  const phaseNonces = Object.fromEntries(
+    M4R03_ORDINARY_CLOCK_PHASES.map((phase) => [
+      phase,
+      randomBytes(16).toString("hex"),
+    ]),
+  );
+  if (new Set(Object.values(phaseNonces)).size !== M4R03_ORDINARY_CLOCK_PHASES.length) {
+    const error = new Error("m4r03_ordinary_clock_nonce_collision");
+    error.failureFamily = "nonce_collision";
+    error.phase = "arm";
+    throw error;
+  }
+  const expectedProfileFingerprint = sha256(await readFile(profilePath));
+  const arm = await runM4R03ArmPhase({
+    root,
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    nonce: phaseNonces.arm,
+    expectedProfileFingerprint,
+  });
+  const recoveryTimer = await runM4R03NormalPhase({
+    root,
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    phase: "recovery_timer",
+    nonce: phaseNonces.recovery_timer,
+    expectedProfileFingerprint,
+    expectedPreviousReceiptSha256: arm.receipt_sha256,
+  });
+  const repeat = await runM4R03NormalPhase({
+    root,
+    normalBuildEnvironment,
+    profilePath,
+    reentryCapability,
+    phase: "repeat",
+    nonce: phaseNonces.repeat,
+    expectedProfileFingerprint,
+    expectedPreviousReceiptSha256: recoveryTimer.receipt_sha256,
+  });
+  const distinctProcesses = new Set(
+    [arm, recoveryTimer, repeat].map((entry) => entry.app_pid_sha256),
+  ).size === 3;
+  const repeatEvidenceMatchesTimer = JSON.stringify(repeat.receipt.startup_evidence)
+    === JSON.stringify(recoveryTimer.receipt.timer_evidence);
+  const crossLaunchFailure = m4r02FirstInvalidField([
+    ["distinct_app_processes", distinctProcesses],
+    ["same_profile_arm_recovery", arm.receipt.profile_fingerprint === recoveryTimer.receipt.profile_fingerprint],
+    ["same_profile_recovery_repeat", recoveryTimer.receipt.profile_fingerprint === repeat.receipt.profile_fingerprint],
+    ["startup_marker_chain", arm.receipt.startup_due_marker_utc === recoveryTimer.receipt.startup_due_marker_utc],
+    ["repeat_startup_marker_chain", recoveryTimer.receipt.startup_due_marker_utc === repeat.receipt.startup_due_marker_utc],
+    ["repeat_timer_marker_chain", recoveryTimer.receipt.timer_due_marker_utc === repeat.receipt.timer_due_marker_utc],
+    ["repeat_zero_delta_evidence", repeatEvidenceMatchesTimer],
+    [
+      "arm_startup_object_binding",
+      arm.receipt.startup_evidence.open_loop_id_sha256
+        === recoveryTimer.receipt.startup_evidence.open_loop_id_sha256
+        && arm.receipt.startup_evidence.reminder_id_sha256
+          === recoveryTimer.receipt.startup_evidence.reminder_id_sha256,
+    ],
+    [
+      "arm_startup_open_loop_revision",
+      m4r03IsNextRevision(
+        arm.receipt.startup_evidence.open_loop_revision,
+        recoveryTimer.receipt.startup_evidence.open_loop_revision,
+      ),
+    ],
+    [
+      "arm_startup_reminder_revision",
+      m4r03IsNextRevision(
+        arm.receipt.startup_evidence.reminder_revision,
+        recoveryTimer.receipt.startup_evidence.reminder_revision,
+      ),
+    ],
+    [
+      "arm_startup_timer_fired_baseline",
+      arm.receipt.startup_evidence.timer_fired_event_rows
+        === recoveryTimer.receipt.startup_evidence.timer_fired_event_rows,
+    ],
+  ]);
+  if (crossLaunchFailure) {
+    const error = new Error(`m4r03_ordinary_clock_cross_launch_invalid:${crossLaunchFailure}`);
+    error.failureFamily = `cross_launch_${crossLaunchFailure}`;
+    error.phase = "repeat";
+    throw error;
+  }
+  return {
+    schema_version: M4R03_SERVER_CLOCK_COMPOSITE_SCHEMA,
+    task_package: "M4R03",
+    outcome: "PASS",
+    evidence_family: "server_due_clock_startup_and_timer_recovery",
+    evidence_level: "ISOLATED_PRODUCT_APP",
+    synthetic_fixture_only: true,
+    ordinary_composition: true,
+    acceptance_wrapper_calls: 0,
+    direct_repository_seed_calls: 0,
+    direct_transition_calls: 0,
+    renderer_due_transition_calls: 0,
+    renderer_fire_calls: 0,
+    renderer_user_schedule_marker_calls: 2,
+    ordinary_product_preparation: {
+      task_package: ordinaryPreparation.task_package,
+      outcome: ordinaryPreparation.outcome,
+      ordinary_composition: ordinaryPreparation.ordinary_composition,
+      acceptance_wrapper_calls: ordinaryPreparation.acceptance_wrapper_calls,
+      direct_repository_seed_calls: ordinaryPreparation.direct_repository_seed_calls,
+      mutate_receipt_sha256: ordinaryPreparation.launches[1].receipt_sha256,
+      readback_receipt_sha256: ordinaryPreparation.launches[2].receipt_sha256,
+    },
+    startup_recovery: {
+      startup_due_marker_utc: arm.receipt.startup_due_marker_utc,
+      sigkill_requested_at_utc: arm.sigkill_requested_at_utc,
+      sigkill_confirmed_at_utc: arm.sigkill_confirmed_at_utc,
+      pre_due_sigkill_observed: arm.sigkill_before_due,
+      server_clock_audit_rows: recoveryTimer.receipt.startup_evidence.server_clock_audit_rows,
+      deterministic_due_receipt_rows:
+        recoveryTimer.receipt.startup_evidence.deterministic_due_receipt_rows,
+      deterministic_due_event_rows:
+        recoveryTimer.receipt.startup_evidence.deterministic_due_event_rows,
+      distinct_due_idempotency_keys:
+        recoveryTimer.receipt.startup_evidence.distinct_due_idempotency_keys,
+      distinct_due_batch_timestamps:
+        recoveryTimer.receipt.startup_evidence.distinct_due_batch_timestamps,
+    },
+    timer_tick: {
+      timer_due_marker_utc: recoveryTimer.receipt.timer_due_marker_utc,
+      real_timer_wait_seconds: recoveryTimer.receipt.real_timer_wait_seconds,
+      server_clock_audit_rows: recoveryTimer.receipt.timer_evidence.server_clock_audit_rows,
+      deterministic_due_receipt_rows:
+        recoveryTimer.receipt.timer_evidence.deterministic_due_receipt_rows,
+      deterministic_due_event_rows:
+        recoveryTimer.receipt.timer_evidence.deterministic_due_event_rows,
+      distinct_due_idempotency_keys:
+        recoveryTimer.receipt.timer_evidence.distinct_due_idempotency_keys,
+      distinct_due_batch_timestamps:
+        recoveryTimer.receipt.timer_evidence.distinct_due_batch_timestamps,
+      timer_tick_bound_due_receipt_rows:
+        recoveryTimer.receipt.timer_evidence.timer_tick_bound_due_receipt_rows,
+    },
+    recovery_phase_ordinary_writes: recoveryTimer.receipt.write_commands_invoked,
+    recovery_phase_command_receipt_sha256: {
+      open_loop: recoveryTimer.receipt.open_loop_command_receipt_sha256,
+      reminder: recoveryTimer.receipt.reminder_command_receipt_sha256,
+    },
+    restart_idempotency: {
+      repeat_zero_delta: repeat.receipt.repeat_zero_delta,
+      evidence_exact_match: repeatEvidenceMatchesTimer,
+    },
+    phase_receipt_sha256: {
+      arm: arm.receipt_sha256,
+      recovery_timer: recoveryTimer.receipt_sha256,
+      repeat: repeat.receipt_sha256,
+    },
+    same_profile: true,
+    distinct_app_processes: distinctProcesses,
+    launches: [arm, recoveryTimer, repeat],
+    isolation_boundary: {
+      real_model_attempts: 0,
+      real_provider_attempts: 0,
+      external_connector_attempts: 0,
+      external_network_writes: 0,
+      real_codex_message_attempts: 0,
+    },
+    build: buildResult,
+  };
+}
+
 // This policy is intentionally pure: it runs before the launcher creates a
 // root, scrubs inherited environment, builds, or spawns a child.  Values are
 // never returned or logged; marker names are normalized only as a fixed
@@ -3734,10 +4712,12 @@ function resolveLauncherModeConflict({
   m3c07IsolatedMode,
   m4c09IsolatedMode = false,
   m4r02OrdinaryCompositionMode = false,
+  m4r03ServerClockMode = false,
   inheritedM2ReferenceSliceMarkers,
   inheritedM3C07ModeMarker,
   inheritedM4C09ModeMarker = false,
   inheritedM4R02OrdinaryCompositionMarkers = [],
+  inheritedM4R03OrdinaryClockMarkers = [],
 }) {
   if (
     [
@@ -3745,10 +4725,21 @@ function resolveLauncherModeConflict({
       m3c07IsolatedMode,
       m4c09IsolatedMode,
       m4r02OrdinaryCompositionMode,
+      m4r03ServerClockMode,
     ].filter(Boolean)
       .length > 1
   ) {
     return "mode_argument";
+  }
+  if (
+    inheritedM4R03OrdinaryClockMarkers.length > 0
+    || (m4r03ServerClockMode
+      && (inheritedM2ReferenceSliceMarkers.length > 0
+        || inheritedM3C07ModeMarker
+        || inheritedM4C09ModeMarker
+        || inheritedM4R02OrdinaryCompositionMarkers.length > 0))
+  ) {
+    return M4R03_SERVER_CLOCK_MODE_CONFLICT;
   }
   if (
     inheritedM4R02OrdinaryCompositionMarkers.length > 0
@@ -3786,6 +4777,9 @@ const m4c09IsolatedMode = launcherArguments.includes(M4C09_ISOLATED_MODE_ARG);
 const m4r02OrdinaryCompositionMode = launcherArguments.includes(
   M4R02_ORDINARY_COMPOSITION_MODE_ARG,
 );
+const m4r03ServerClockMode = launcherArguments.includes(
+  M4R03_SERVER_CLOCK_MODE_ARG,
+);
 const inheritedM2ReferenceSliceMarkers = normalizeInheritedMarkerNames(
   process.env,
   M2_REFERENCE_SLICE_MARKER_ENV_NAMES,
@@ -3796,15 +4790,21 @@ const inheritedM4R02OrdinaryCompositionMarkers = normalizeInheritedMarkerNames(
   process.env,
   M4R02_ORDINARY_COMPOSITION_MARKER_ENV_NAMES,
 );
+const inheritedM4R03OrdinaryClockMarkers = normalizeInheritedMarkerNames(
+  process.env,
+  M4R03_ORDINARY_CLOCK_MARKER_ENV_NAMES,
+);
 const launcherModeConflict = resolveLauncherModeConflict({
   m2ReferenceSliceMode,
   m3c07IsolatedMode,
   m4c09IsolatedMode,
   m4r02OrdinaryCompositionMode,
+  m4r03ServerClockMode,
   inheritedM2ReferenceSliceMarkers,
   inheritedM3C07ModeMarker,
   inheritedM4C09ModeMarker,
   inheritedM4R02OrdinaryCompositionMarkers,
+  inheritedM4R03OrdinaryClockMarkers,
 });
 const m2M3ReceiptModesMutuallyExclusive =
   !(m2ReferenceSliceMode && m3c07IsolatedMode);
@@ -3815,6 +4815,7 @@ const launcherModeArgumentsValid =
     m3c07IsolatedMode,
     m4c09IsolatedMode,
     m4r02OrdinaryCompositionMode,
+    m4r03ServerClockMode,
   ].filter(Boolean).length <= 1;
 const homeInitialViewConfigPinned =
   !Object.hasOwn(process.env, "VITE_STAGE_K_INITIAL_VIEW") ||
@@ -3838,6 +4839,10 @@ let m4r02OrdinaryCompositionSuite = null;
 let m4r02OrdinaryCompositionErrorFamily = null;
 let m4r02OrdinaryCompositionFailedLaunch = null;
 let m4r02OrdinaryCompositionFailedPhase = null;
+let m4r03ServerClockSuite = null;
+let m4r03ServerClockErrorFamily = null;
+let m4r03ServerClockFailedLaunch = null;
+let m4r03ServerClockFailedPhase = null;
 
 try {
   if (!launcherModeArgumentsValid) {
@@ -3874,6 +4879,9 @@ try {
     delete normalBuildEnvironment[M4R02_ORDINARY_COMPOSITION_DRIVER_ENV];
     delete normalBuildEnvironment[M4R02_ORDINARY_COMPOSITION_PHASE_ENV];
     delete normalBuildEnvironment[M4R02_ORDINARY_COMPOSITION_NONCE_ENV];
+    delete normalBuildEnvironment[M4R03_ORDINARY_CLOCK_DRIVER_ENV];
+    delete normalBuildEnvironment[M4R03_ORDINARY_CLOCK_PHASE_ENV];
+    delete normalBuildEnvironment[M4R03_ORDINARY_CLOCK_NONCE_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_DRIVER_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_ATTEMPT_ENV];
     delete normalBuildEnvironment[M2_REFERENCE_SLICE_PHASE_ENV];
@@ -3980,6 +4988,35 @@ try {
                 ? error.phase
                 : null;
             failureStage = "m4r02_ordinary_composition";
+            process.exitCode = 1;
+          }
+        } else if (m4r03ServerClockMode) {
+          try {
+            m4r03ServerClockSuite = await runM4R03ServerClockSuite({
+              root,
+              normalBuildEnvironment,
+              profilePath: join(root, PROFILE_FILE_NAME),
+              reentryCapability,
+              buildResult,
+            });
+            launchResult = m4r03ServerClockSuite.launches.at(-1)?.launch
+              ?? launchResult;
+          } catch (error) {
+            m4r03ServerClockErrorFamily =
+              typeof error?.failureFamily === "string"
+              && /^[a-z0-9_:-]{1,160}$/.test(error.failureFamily)
+                ? error.failureFamily
+                : "unclassified";
+            m4r03ServerClockFailedLaunch =
+              error?.launch && typeof error.launch === "object"
+                ? error.launch
+                : null;
+            m4r03ServerClockFailedPhase =
+              typeof error?.phase === "string"
+              && M4R03_ORDINARY_CLOCK_PHASES.includes(error.phase)
+                ? error.phase
+                : null;
+            failureStage = "m4r03_server_clock";
             process.exitCode = 1;
           }
         } else if (m3c07IsolatedMode) {
@@ -4161,6 +5198,27 @@ try {
               && process.env.CODEX_HOME === initialCodexHome,
             home_initial_view_config_pinned: homeInitialViewConfigPinned,
           }
+      : m4r03ServerClockMode
+        ? {
+            ...(m4r03ServerClockSuite ?? {
+              schema_version: M4R03_SERVER_CLOCK_COMPOSITE_SCHEMA,
+              task_package: "M4R03",
+              outcome: "REJECTED",
+              evidence_family: "server_due_clock_startup_and_timer_recovery",
+              evidence_level: "ISOLATED_PRODUCT_APP",
+              ordinary_composition: false,
+              error_family: m4r03ServerClockErrorFamily ?? "unclassified",
+              failed_phase: m4r03ServerClockFailedPhase,
+              failed_launch: m4r03ServerClockFailedLaunch,
+              launches: [],
+              build: buildResult,
+            }),
+            ...(failureStage ? { failure_stage: failureStage } : {}),
+            environment_unchanged:
+              process.env.HOME === initialHome
+              && process.env.CODEX_HOME === initialCodexHome,
+            home_initial_view_config_pinned: homeInitialViewConfigPinned,
+          }
       : m3c07IsolatedMode
         ? {
             ...m3c07ReadinessReceipt(
@@ -4214,6 +5272,8 @@ try {
           ? "m2-reference-slice-suite-receipt.json"
           : m4r02OrdinaryCompositionMode
             ? M4R02_ORDINARY_COMPOSITION_COMPOSITE_FILE
+          : m4r03ServerClockMode
+            ? M4R03_SERVER_CLOCK_COMPOSITE_FILE
           : m3c07IsolatedMode
             ? M3C07_READINESS_RECEIPT_FILE_NAME
             : m4c09IsolatedMode
@@ -4222,6 +5282,17 @@ try {
       ),
       receipt,
     );
+    if (
+      m4r03ServerClockMode
+      && m4r03ServerClockSuite?.outcome === "PASS"
+      && !failureStage
+      && receipt.ordinary_composition === true
+      && receipt.acceptance_wrapper_calls === 0
+      && receipt.direct_repository_seed_calls === 0
+      && receipt.direct_transition_calls === 0
+    ) {
+      await writeM4R03PortableReport(receipt);
+    }
     process.stdout.write(`${JSON.stringify(receipt)}\n`);
     if (parentSignalToReraise) {
       process.kill(process.pid, parentSignalToReraise);

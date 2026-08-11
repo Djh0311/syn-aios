@@ -39,9 +39,10 @@ use crate::m4_secretary_domain::{
     M4ReminderTransitionCommand, M4ScopeWatermarkEntry, M4SourceLinkInput,
     M4SourceOwnerCommandIntent, M4SourceOwnerWritebackIntent, M4SourceOwnerWritebackOutcome,
     M4SourceOwnerWritebackResult, M4SourceRecordRef, M4SourceStatus, M4StateTransitionResult,
-    M4WorkflowAttentionAdmission, M4WorkflowAttentionSourceInput, M4_ATTENTION_POLICY_REF,
-    M4_ATTENTION_PROJECTOR_ID, M4_ATTENTION_PROJECTOR_VERSION, M4_IN_APP_DELIVERY_CHANNEL,
-    M4_SCRUBBED_SENSITIVITY, M4_WORKFLOW_ATTENTION_OBJECT_TYPE, M4_WORKFLOW_ATTENTION_SOURCE_TYPE,
+    M4UtcSortKey, M4WorkflowAttentionAdmission, M4WorkflowAttentionSourceInput,
+    M4_ATTENTION_POLICY_REF, M4_ATTENTION_PROJECTOR_ID, M4_ATTENTION_PROJECTOR_VERSION,
+    M4_IN_APP_DELIVERY_CHANNEL, M4_SCRUBBED_SENSITIVITY, M4_WORKFLOW_ATTENTION_OBJECT_TYPE,
+    M4_WORKFLOW_ATTENTION_SOURCE_TYPE,
 };
 use crate::m4_secretary_read_model::{
     build_m4_legacy_shadow_parity_report, m4_priority_reason_text, sort_m4_inbox_items,
@@ -729,9 +730,10 @@ impl M4SecretarySqliteRepository {
         Ok(snapshot)
     }
 
-    /// Run one local, model-free C07 scheduling cycle.  `TimerTick` records
-    /// its own idempotent local event first; every durable daily projection
-    /// mutation then shares one SQLite `IMMEDIATE` transaction.
+    /// Run one local, model-free scheduling cycle. `TimerTick` records its own
+    /// idempotent local event first; due coordination recovery and every
+    /// durable daily projection mutation then share one SQLite `IMMEDIATE`
+    /// transaction.
     pub(crate) fn run_daily_scheduler_cycle(
         &self,
         trigger: M4SchedulerTrigger,
@@ -773,6 +775,13 @@ impl M4SecretarySqliteRepository {
                     )?;
                 }
                 M4PersistedSchedulerConfiguration::Active(active) => {
+                    self.run_due_transition_batch(
+                        transaction,
+                        trigger,
+                        &active.configuration,
+                        now_utc,
+                        &recorded_at_utc,
+                    )?;
                     let checkpoint =
                         load_scheduler_checkpoint(transaction, m4_primary_scope_ref())?;
                     let planner_checkpoint = scheduler_checkpoint_from_stored(
@@ -937,6 +946,192 @@ impl M4SecretarySqliteRepository {
                 .map_err(|_| M4SecretaryRepositoryError::new("m4_schema_verify_failed"))
         })?;
         Ok(())
+    }
+
+    /// Advance every OpenLoop/Reminder whose durable due marker is at or
+    /// before the one server-clock instant captured by the enclosing scheduler
+    /// cycle. Candidate discovery, CAS updates, receipt/event/audit evidence,
+    /// and the one resulting brief projection share the caller's IMMEDIATE
+    /// transaction, so a crash or injected failure leaves the entire batch
+    /// available to the next startup/tick.
+    fn run_due_transition_batch(
+        &self,
+        transaction: &Transaction<'_>,
+        trigger: M4SchedulerTrigger,
+        configuration: &M4SchedulerConfiguration,
+        now_utc: i64,
+        recorded_at_utc: &str,
+    ) -> Result<usize, M4SecretaryRepositoryError> {
+        let Some(open_loop_reason) = open_loop_transition_reason(trigger) else {
+            return Ok(0);
+        };
+        let Some(reminder_reason) = reminder_transition_reason(trigger) else {
+            return Ok(0);
+        };
+        let candidates = load_due_transition_candidates(transaction, recorded_at_utc)?;
+        let mut applied_count = 0usize;
+
+        for candidate in candidates {
+            match candidate {
+                M4DueTransitionCandidate::OpenLoop {
+                    open_loop_id,
+                    expected_revision,
+                    due_marker_utc,
+                    ..
+                } => {
+                    let current = load_open_loop(transaction, &open_loop_id)?;
+                    if current.revision != expected_revision
+                        || current.status != M4OpenLoopStatus::Snoozed
+                        || current.snoozed_until_utc.as_deref()
+                            != Some(due_marker_utc.as_str())
+                    {
+                        return Err(M4SecretaryRepositoryError::new(
+                            "m4_due_open_loop_candidate_conflict",
+                        ));
+                    }
+                    let idempotency_key = due_transition_idempotency_key(
+                        "OPEN_LOOP",
+                        &open_loop_id,
+                        expected_revision,
+                        &due_marker_utc,
+                    )?;
+                    let receipt_id = coordination_receipt_id(
+                        "OPEN_LOOP_CLOCK",
+                        m4_server_clock_idempotency_scope_ref(),
+                        &idempotency_key,
+                    )?;
+                    let metadata = coordination_metadata(&idempotency_key, recorded_at_utc);
+                    let transition = m4_reopen_snoozed_open_loop_on_clock(
+                        &current,
+                        &M4OpenLoopClockCommand {
+                            open_loop_id: open_loop_id.clone(),
+                            expected_revision,
+                            metadata,
+                        },
+                    )
+                    .map_err(M4SecretaryRepositoryError::new)?;
+                    let request_hash =
+                        coordination_request_hash(&transition.idempotency_fingerprint)?;
+                    insert_coordination_command_receipt_with_idempotency_scope(
+                        transaction,
+                        &receipt_id,
+                        "OPEN_LOOP_CLOCK",
+                        m4_server_clock_idempotency_scope_ref(),
+                        m4_primary_scope_ref(),
+                        &idempotency_key,
+                        &request_hash,
+                        "OPEN_LOOP",
+                        &open_loop_id,
+                        Some(expected_revision),
+                        "APPLIED",
+                        recorded_at_utc,
+                        transition.aggregate.revision,
+                    )?;
+                    update_open_loop(transaction, &transition)?;
+                    self.maybe_fail_after_coordination_state()?;
+                    insert_coordination_event_and_audit(
+                        transaction,
+                        &receipt_id,
+                        "OPEN_LOOP_SNOOZE_ELAPSED",
+                        "OPEN_LOOP",
+                        &open_loop_id,
+                        transition.aggregate.revision,
+                        m4_primary_scope_ref(),
+                        "OPEN_LOOP_CLOCK",
+                        "APPLIED",
+                        open_loop_reason,
+                        &request_hash,
+                        recorded_at_utc,
+                    )?;
+                    applied_count += 1;
+                }
+                M4DueTransitionCandidate::Reminder {
+                    reminder_id,
+                    expected_revision,
+                    due_marker_utc,
+                    ..
+                } => {
+                    let current = load_reminder(transaction, &reminder_id)?;
+                    let current_due_marker = match current.status {
+                        M4ReminderStatus::Scheduled => Some(current.scheduled_for_utc.as_str()),
+                        M4ReminderStatus::Snoozed => current.snoozed_until_utc.as_deref(),
+                        _ => None,
+                    };
+                    if current.revision != expected_revision
+                        || current_due_marker != Some(due_marker_utc.as_str())
+                    {
+                        return Err(M4SecretaryRepositoryError::new(
+                            "m4_due_reminder_candidate_conflict",
+                        ));
+                    }
+                    let idempotency_key = due_transition_idempotency_key(
+                        "REMINDER",
+                        &reminder_id,
+                        expected_revision,
+                        &due_marker_utc,
+                    )?;
+                    let receipt_id = coordination_receipt_id(
+                        "REMINDER_FIRE",
+                        m4_server_clock_idempotency_scope_ref(),
+                        &idempotency_key,
+                    )?;
+                    let transition = m4_transition_reminder(
+                        &current,
+                        &M4ReminderTransitionCommand {
+                            reminder_id: reminder_id.clone(),
+                            expected_revision,
+                            transition: M4ReminderTransition::Fire,
+                            metadata: coordination_metadata(&idempotency_key, recorded_at_utc),
+                        },
+                    )
+                    .map_err(M4SecretaryRepositoryError::new)?;
+                    let request_hash =
+                        coordination_request_hash(&transition.idempotency_fingerprint)?;
+                    insert_coordination_command_receipt_with_idempotency_scope(
+                        transaction,
+                        &receipt_id,
+                        "REMINDER_FIRE",
+                        m4_server_clock_idempotency_scope_ref(),
+                        m4_primary_scope_ref(),
+                        &idempotency_key,
+                        &request_hash,
+                        "REMINDER",
+                        &reminder_id,
+                        Some(expected_revision),
+                        "APPLIED",
+                        recorded_at_utc,
+                        transition.aggregate.revision,
+                    )?;
+                    update_reminder(transaction, &transition)?;
+                    self.maybe_fail_after_coordination_state()?;
+                    insert_coordination_event_and_audit(
+                        transaction,
+                        &receipt_id,
+                        "REMINDER_FIRED",
+                        "REMINDER",
+                        &reminder_id,
+                        transition.aggregate.revision,
+                        m4_primary_scope_ref(),
+                        "REMINDER_FIRE",
+                        "APPLIED",
+                        reminder_reason,
+                        &request_hash,
+                        recorded_at_utc,
+                    )?;
+                    applied_count += 1;
+                }
+            }
+        }
+
+        if applied_count > 0 {
+            reproject_current_daily_brief_for_server_due(
+                transaction,
+                configuration,
+                now_utc,
+                recorded_at_utc,
+            )?;
+        }
+        Ok(applied_count)
     }
 
     /// Explicit open/refresh is the only read API which reprojects the
@@ -1359,12 +1554,11 @@ impl M4SecretarySqliteRepository {
         }
     }
 
-    /// A structured-source admission or an explicit user coordination write
-    /// may refresh the current mechanical brief in its *existing* IMMEDIATE
-    /// transaction.  Scheduler timer/startup/recovery paths deliberately do
-    /// not call this helper.  In particular, this helper never writes the
-    /// scheduler checkpoint: opening a brief must not consume source-event
-    /// accounting reserved for a later closed-window run.
+    /// A structured-source admission or explicit user coordination write may
+    /// refresh the current mechanical brief in its *existing* IMMEDIATE
+    /// transaction. This helper never writes the scheduler checkpoint: opening
+    /// a brief must not consume source-event accounting reserved for a later
+    /// closed-window run.
     fn reproject_current_daily_brief_for_explicit_trigger(
         &self,
         transaction: &Transaction<'_>,
@@ -4109,6 +4303,31 @@ fn maybe_fail_daily_stage(
         ));
     }
     Ok(())
+}
+
+/// Reproject one non-empty server due batch against the exact active timezone
+/// configuration and server-clock instant already captured by its enclosing
+/// scheduler cycle. The projector itself deduplicates identical item bindings.
+fn reproject_current_daily_brief_for_server_due(
+    transaction: &Transaction<'_>,
+    configuration: &M4SchedulerConfiguration,
+    now_utc: i64,
+    recorded_at_utc: &str,
+) -> Result<(), M4SecretaryRepositoryError> {
+    let current_candidate = m4_daily_window_at_utc(configuration, now_utc)
+        .map_err(|error| M4SecretaryRepositoryError::new(error.code()))?;
+    let (current_window, _) =
+        ensure_daily_window(transaction, &current_candidate, recorded_at_utc)?;
+    let scope_source_watermark =
+        scope_watermark_in_transaction(transaction, m4_primary_scope_ref())?;
+    let items = daily_projection_items_in_transaction(transaction, m4_primary_scope_ref())?;
+    upsert_daily_brief(
+        transaction,
+        &current_window,
+        &scope_source_watermark,
+        &items,
+        recorded_at_utc,
+    )
 }
 
 fn daily_projection_items_in_transaction(
@@ -7937,6 +8156,162 @@ struct StoredCoordinationReceipt {
     outcome_code: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum M4DueTransitionCandidate {
+    OpenLoop {
+        open_loop_id: String,
+        expected_revision: u64,
+        due_marker_utc: String,
+        due_at_key: M4UtcSortKey,
+    },
+    Reminder {
+        reminder_id: String,
+        expected_revision: u64,
+        due_marker_utc: String,
+        due_at_key: M4UtcSortKey,
+    },
+}
+
+impl M4DueTransitionCandidate {
+    fn due_at_key(&self) -> M4UtcSortKey {
+        match self {
+            Self::OpenLoop { due_at_key, .. } | Self::Reminder { due_at_key, .. } => *due_at_key,
+        }
+    }
+
+    fn kind_rank(&self) -> u8 {
+        match self {
+            Self::OpenLoop { .. } => 0,
+            Self::Reminder { .. } => 1,
+        }
+    }
+
+    fn aggregate_id(&self) -> &str {
+        match self {
+            Self::OpenLoop { open_loop_id, .. } => open_loop_id,
+            Self::Reminder { reminder_id, .. } => reminder_id,
+        }
+    }
+}
+
+fn open_loop_transition_reason(trigger: M4SchedulerTrigger) -> Option<&'static str> {
+    matches!(
+        trigger,
+        M4SchedulerTrigger::StartupRecovery | M4SchedulerTrigger::TimerTick
+    )
+    .then_some("SERVER_CLOCK")
+}
+
+fn reminder_transition_reason(trigger: M4SchedulerTrigger) -> Option<&'static str> {
+    matches!(
+        trigger,
+        M4SchedulerTrigger::StartupRecovery | M4SchedulerTrigger::TimerTick
+    )
+    .then_some("SERVER_CLOCK")
+}
+
+fn load_due_transition_candidates(
+    transaction: &Transaction<'_>,
+    recorded_at_utc: &str,
+) -> Result<Vec<M4DueTransitionCandidate>, M4SecretaryRepositoryError> {
+    let now_key = m4_parse_rfc3339_utc_key(recorded_at_utc)
+        .ok_or_else(|| M4SecretaryRepositoryError::new("m4_scheduler_utc_timestamp_invalid"))?;
+    let open_loop_ids = transaction
+        .prepare(
+            "SELECT open_loop_id FROM m4_open_loops
+             WHERE status = 'SNOOZED' ORDER BY open_loop_id ASC",
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_due_open_loop_prepare", error)
+        })?
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_due_open_loop_query", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_due_open_loop_row", error))?;
+    let reminder_ids = transaction
+        .prepare(
+            "SELECT reminder_id FROM m4_reminders
+             WHERE status IN ('SCHEDULED','SNOOZED') ORDER BY reminder_id ASC",
+        )
+        .map_err(|error| {
+            M4SecretaryRepositoryError::sqlite("m4_due_reminder_prepare", error)
+        })?
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_due_reminder_query", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| M4SecretaryRepositoryError::sqlite("m4_due_reminder_row", error))?;
+
+    let mut candidates = Vec::with_capacity(open_loop_ids.len() + reminder_ids.len());
+    for open_loop_id in open_loop_ids {
+        let open_loop = load_open_loop(transaction, &open_loop_id)?;
+        let due_marker_utc = open_loop
+            .snoozed_until_utc
+            .clone()
+            .ok_or_else(|| M4SecretaryRepositoryError::new("m4_open_loop_snooze_missing"))?;
+        let due_at_key = m4_parse_rfc3339_utc_key(&due_marker_utc)
+            .ok_or_else(|| M4SecretaryRepositoryError::new("m4_scheduler_utc_timestamp_invalid"))?;
+        if due_at_key <= now_key {
+            candidates.push(M4DueTransitionCandidate::OpenLoop {
+                open_loop_id,
+                expected_revision: open_loop.revision,
+                due_marker_utc,
+                due_at_key,
+            });
+        }
+    }
+    for reminder_id in reminder_ids {
+        let reminder = load_reminder(transaction, &reminder_id)?;
+        let due_marker_utc = match reminder.status {
+            M4ReminderStatus::Scheduled => reminder.scheduled_for_utc.clone(),
+            M4ReminderStatus::Snoozed => reminder
+                .snoozed_until_utc
+                .clone()
+                .ok_or_else(|| M4SecretaryRepositoryError::new("m4_reminder_snooze_missing"))?,
+            _ => {
+                return Err(M4SecretaryRepositoryError::new(
+                    "m4_due_reminder_status_invalid",
+                ))
+            }
+        };
+        let due_at_key = m4_parse_rfc3339_utc_key(&due_marker_utc)
+            .ok_or_else(|| M4SecretaryRepositoryError::new("m4_scheduler_utc_timestamp_invalid"))?;
+        if due_at_key <= now_key {
+            candidates.push(M4DueTransitionCandidate::Reminder {
+                reminder_id,
+                expected_revision: reminder.revision,
+                due_marker_utc,
+                due_at_key,
+            });
+        }
+    }
+    candidates.sort_by(|left, right| {
+        left.due_at_key()
+            .cmp(&right.due_at_key())
+            .then_with(|| left.kind_rank().cmp(&right.kind_rank()))
+            .then_with(|| left.aggregate_id().cmp(right.aggregate_id()))
+    });
+    Ok(candidates)
+}
+
+fn due_transition_idempotency_key(
+    aggregate_kind: &str,
+    aggregate_id: &str,
+    expected_revision: u64,
+    due_marker_utc: &str,
+) -> Result<String, M4SecretaryRepositoryError> {
+    let revision = expected_revision.to_string();
+    m4_internal_id(
+        "server-clock-due:sha256:",
+        "syn.m4.server-clock-due-transition/v1",
+        &[aggregate_kind, aggregate_id, &revision, due_marker_utc],
+    )
+    .map_err(M4SecretaryRepositoryError::new)
+}
+
+fn m4_server_clock_idempotency_scope_ref() -> &'static str {
+    "idempotency-scope:server-clock:personal-primary"
+}
+
 fn coordination_metadata(
     idempotency_key: &str,
     recorded_at_utc: &str,
@@ -8097,6 +8472,39 @@ fn insert_coordination_command_receipt(
     recorded_at_utc: &str,
     aggregate_revision: u64,
 ) -> Result<(), M4SecretaryRepositoryError> {
+    insert_coordination_command_receipt_with_idempotency_scope(
+        transaction,
+        command_receipt_id,
+        command_kind,
+        scope_ref,
+        scope_ref,
+        idempotency_key,
+        request_hash,
+        aggregate_kind,
+        aggregate_id,
+        expected_revision,
+        outcome_code,
+        recorded_at_utc,
+        aggregate_revision,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_coordination_command_receipt_with_idempotency_scope(
+    transaction: &Transaction<'_>,
+    command_receipt_id: &str,
+    command_kind: &str,
+    idempotency_scope_ref: &str,
+    scope_ref: &str,
+    idempotency_key: &str,
+    request_hash: &str,
+    aggregate_kind: &str,
+    aggregate_id: &str,
+    expected_revision: Option<u64>,
+    outcome_code: &str,
+    recorded_at_utc: &str,
+    aggregate_revision: u64,
+) -> Result<(), M4SecretaryRepositoryError> {
     let expected_revision = expected_revision.map(local_revision_to_sql).transpose()?;
     let aggregate_revision = local_revision_to_sql(aggregate_revision)?;
     transaction
@@ -8106,14 +8514,15 @@ fn insert_coordination_command_receipt(
                 idempotency_key, request_hash, actor_ref, scope_ref,
                 aggregate_kind, aggregate_id, expected_revision, outcome_code,
                 recorded_at_utc, revision
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?3, ?7, ?8, ?9, ?10, ?11, ?12)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 command_receipt_id,
                 command_kind,
-                scope_ref,
+                idempotency_scope_ref,
                 idempotency_key,
                 request_hash,
                 m4_primary_actor_ref(),
+                scope_ref,
                 aggregate_kind,
                 aggregate_id,
                 expected_revision,
@@ -10440,6 +10849,73 @@ mod tests {
             .expect("read current daily brief state")
     }
 
+    fn seed_m4r03_due_pair(
+        fixture: &RepositoryFixture,
+        seed: &str,
+        due_marker_utc: &str,
+    ) -> (String, String) {
+        fixture
+            .repository
+            .ingest_workflow_attention_source(&source(
+                &format!("m4r03-{seed}"),
+                1,
+                "OPEN",
+                attention_signals(),
+            ))
+            .expect("seed M4R03 source through ordinary repository admission");
+        let snapshot = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read M4R03 source projection");
+        let open_loop = snapshot
+            .open_loops
+            .iter()
+            .find(|candidate| candidate.status == "OPEN")
+            .expect("seeded source has open loop");
+        fixture
+            .repository
+            .snooze_open_loop(
+                &open_loop.open_loop_id,
+                open_loop.revision as u64,
+                due_marker_utc,
+                &opaque("command", &format!("m4r03-{seed}-loop-snooze")),
+            )
+            .expect("snooze M4R03 open loop before its due marker");
+        let action = fixture
+            .repository
+            .create_personal_action(
+                &format!("M4R03 {seed} reminder owner"),
+                None,
+                &opaque("command", &format!("m4r03-{seed}-action")),
+            )
+            .expect("create typed personal owner for M4R03 reminder");
+        let reminder = fixture
+            .repository
+            .create_reminder(
+                &action.aggregate_id,
+                due_marker_utc,
+                "Asia/Shanghai",
+                &opaque("command", &format!("m4r03-{seed}-reminder")),
+            )
+            .expect("create scheduled M4R03 reminder");
+        (open_loop.open_loop_id.clone(), reminder.aggregate_id)
+    }
+
+    fn server_clock_audit_count(fixture: &RepositoryFixture) -> i64 {
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("open M4R03 audit count");
+        connection
+            .query_row(
+                "SELECT COUNT(*) FROM m4_coordination_audit_records
+                 WHERE reason_code = 'SERVER_CLOCK'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count M4R03 server-clock audit rows")
+    }
+
     fn scheduler_checkpoint_source_accounting(
         fixture: &RepositoryFixture,
     ) -> (String, i64, i64, Option<String>, i64) {
@@ -10649,6 +11125,601 @@ mod tests {
             1,
             "pure timer/startup did not write a second current brief"
         );
+    }
+
+    #[test]
+    fn m4r03_pre_due_tick_and_post_due_startup_advance_once_with_server_reason() {
+        let fixture = RepositoryFixture::new("m4r03-startup-recovery");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        let due_marker = "2026-08-10T12:05:00.000Z";
+        let (open_loop_id, reminder_id) =
+            seed_m4r03_due_pair(&fixture, "startup-recovery", due_marker);
+        let brief_before = current_daily_brief_state(&fixture);
+        let receipts_before = fixture.count("m4_coordination_command_receipts");
+
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T12:04:59.999Z")
+            .expect("set pre-due server clock");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+            .expect("pre-due timer is a coordination no-op");
+        let pre_due = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read pre-due state");
+        assert_eq!(pre_due.open_loops[0].status, "SNOOZED");
+        assert_eq!(pre_due.reminders[0].status, "SCHEDULED");
+        assert_eq!(server_clock_audit_count(&fixture), 0);
+        assert_eq!(current_daily_brief_state(&fixture), brief_before);
+
+        let restarted = fixture.reopen();
+        set_repository_test_timezone(&restarted, &fixture, "Asia/Shanghai");
+        let recovery_now = "2026-08-10T12:05:00.001Z";
+        restarted
+            .set_test_server_utc_now(recovery_now)
+            .expect("set post-due restart clock");
+        restarted
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("startup recovery advances all due coordination objects");
+        let recovered = restarted
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read post-startup recovered state");
+        let recovered_loop = recovered
+            .open_loops
+            .iter()
+            .find(|candidate| candidate.open_loop_id == open_loop_id)
+            .expect("recover exact open loop");
+        let recovered_reminder = recovered
+            .reminders
+            .iter()
+            .find(|candidate| candidate.reminder_id == reminder_id)
+            .expect("recover exact reminder");
+        assert_eq!(recovered_loop.status, "OPEN");
+        assert_eq!(recovered_loop.snoozed_until_utc, None);
+        assert_eq!(recovered_reminder.status, "FIRED");
+        assert_eq!(
+            recovered_reminder.last_fired_at_utc.as_deref(),
+            Some(recovery_now)
+        );
+        assert_eq!(recovered_reminder.snoozed_until_utc, None);
+        assert_eq!(server_clock_audit_count(&fixture), 2);
+        assert_eq!(
+            fixture.count("m4_coordination_command_receipts"),
+            receipts_before + 2
+        );
+        let brief_after = current_daily_brief_state(&fixture);
+        assert_eq!(brief_after.0, brief_before.0);
+        assert_eq!(
+            brief_after, brief_before,
+            "the one batch-level reproject is a durable no-op when item bindings are unchanged"
+        );
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("inspect due evidence bindings");
+        let due_receipts: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM m4_coordination_command_receipts
+                 WHERE command_kind IN ('OPEN_LOOP_CLOCK','REMINDER_FIRE')
+                   AND idempotency_key LIKE 'server-clock-due:sha256:%'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count deterministic due receipts");
+        assert_eq!(due_receipts, 2);
+        let captured_times = connection
+            .prepare(
+                "SELECT receipt.recorded_at_utc, audit.occurred_at_utc
+                 FROM m4_coordination_command_receipts AS receipt
+                 JOIN m4_coordination_events AS event
+                   ON event.command_receipt_id = receipt.command_receipt_id
+                 JOIN m4_coordination_audit_records AS audit
+                   ON audit.command_receipt_id = receipt.command_receipt_id
+                  AND audit.coordination_event_id = event.coordination_event_id
+                 WHERE audit.reason_code = 'SERVER_CLOCK'
+                 ORDER BY receipt.command_kind ASC",
+            )
+            .expect("prepare captured server-clock evidence query")
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .expect("query captured server-clock evidence")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect captured server-clock evidence");
+        assert_eq!(captured_times.len(), 2);
+        assert!(captured_times.iter().all(|(recorded_at, occurred_at)| {
+            recorded_at == recovery_now && occurred_at == recovery_now
+        }));
+        drop(connection);
+
+        restarted
+            .set_test_server_utc_now("2026-08-10T12:06:00.000Z")
+            .expect("set repeated timer clock");
+        restarted
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+            .expect("repeated timer does not replay committed due effects");
+        let restarted_again = fixture.reopen();
+        set_repository_test_timezone(&restarted_again, &fixture, "Asia/Shanghai");
+        restarted_again
+            .set_test_server_utc_now("2026-08-10T12:07:00.000Z")
+            .expect("set repeated startup clock");
+        restarted_again
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("repeated startup does not replay committed due effects");
+        assert_eq!(server_clock_audit_count(&fixture), 2);
+        assert_eq!(
+            fixture.count("m4_coordination_command_receipts"),
+            receipts_before + 2
+        );
+        assert_eq!(current_daily_brief_state(&fixture), brief_after);
+        assert_eq!(fixture.count("m4_model_invocations"), 0);
+        assert_eq!(fixture.count("m4_source_owner_writeback_requests"), 0);
+    }
+
+    #[test]
+    fn m4r03_server_clock_idempotency_scope_survives_user_key_preoccupation() {
+        let fixture = RepositoryFixture::new("m4r03-internal-idempotency-scope");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        let due_marker = "2026-08-10T12:05:00.000Z";
+        let (open_loop_id, reminder_id) =
+            seed_m4r03_due_pair(&fixture, "internal-idempotency-scope", due_marker);
+        let snapshot = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read due revisions before user key preoccupation");
+        let open_loop_revision = u64::try_from(
+            snapshot
+                .open_loops
+                .iter()
+                .find(|candidate| candidate.open_loop_id == open_loop_id)
+                .expect("find due open loop")
+                .revision,
+        )
+        .expect("open-loop revision is non-negative");
+        let reminder_revision = snapshot
+            .reminders
+            .iter()
+            .find(|candidate| candidate.reminder_id == reminder_id)
+            .expect("find due reminder")
+            .revision
+            .parse::<u64>()
+            .expect("parse reminder revision");
+        let open_loop_due_key = due_transition_idempotency_key(
+            "OPEN_LOOP",
+            &open_loop_id,
+            open_loop_revision,
+            due_marker,
+        )
+        .expect("derive exact future open-loop due key");
+        let reminder_due_key = due_transition_idempotency_key(
+            "REMINDER",
+            &reminder_id,
+            reminder_revision,
+            due_marker,
+        )
+        .expect("derive exact future reminder due key");
+
+        fixture
+            .repository
+            .create_personal_action(
+                "M4R03 user-scope preoccupation A",
+                None,
+                &open_loop_due_key,
+            )
+            .expect("ordinary user command may reuse the opaque text in its own scope");
+        fixture
+            .repository
+            .create_personal_action(
+                "M4R03 user-scope preoccupation B",
+                None,
+                &reminder_due_key,
+            )
+            .expect("second ordinary command occupies the other future due key");
+
+        fixture
+            .repository
+            .set_test_server_utc_now(due_marker)
+            .expect("set exact due clock after user-scope preoccupation");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("internal server-clock scope remains independent");
+        let advanced = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read due state after isolated internal receipts");
+        assert_eq!(
+            advanced
+                .open_loops
+                .iter()
+                .find(|candidate| candidate.open_loop_id == open_loop_id)
+                .expect("find advanced open loop")
+                .status,
+            "OPEN"
+        );
+        assert_eq!(
+            advanced
+                .reminders
+                .iter()
+                .find(|candidate| candidate.reminder_id == reminder_id)
+                .expect("find fired reminder")
+                .status,
+            "FIRED"
+        );
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("inspect separated idempotency scopes");
+        let user_scope_rows: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM m4_coordination_command_receipts
+                 WHERE idempotency_scope_ref = ?1
+                   AND idempotency_key IN (?2, ?3)",
+                params![
+                    m4_primary_scope_ref(),
+                    open_loop_due_key,
+                    reminder_due_key
+                ],
+                |row| row.get(0),
+            )
+            .expect("count user-scope preoccupation receipts");
+        let internal_scope_rows: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM m4_coordination_command_receipts
+                 WHERE idempotency_scope_ref = ?1
+                   AND idempotency_key IN (?2, ?3)",
+                params![
+                    m4_server_clock_idempotency_scope_ref(),
+                    open_loop_due_key,
+                    reminder_due_key
+                ],
+                |row| row.get(0),
+            )
+            .expect("count internal server-clock receipts");
+        assert_eq!(user_scope_rows, 2);
+        assert_eq!(internal_scope_rows, 2);
+        assert_eq!(server_clock_audit_count(&fixture), 2);
+    }
+
+    #[test]
+    fn m4r03_disabled_timezone_keeps_due_objects_pending_until_scheduler_recovers() {
+        let fixture = RepositoryFixture::new("m4r03-disabled-timezone");
+        set_test_timezone(&fixture, "Invalid/M4R03-Timezone");
+        let due_marker = "2026-08-10T12:05:00.000Z";
+        let _ = seed_m4r03_due_pair(&fixture, "disabled-timezone", due_marker);
+        let receipts_before = fixture.count("m4_coordination_command_receipts");
+        fixture
+            .repository
+            .set_test_server_utc_now(due_marker)
+            .expect("set due server clock under invalid timezone");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("disabled scheduler persists degraded state without due mutation");
+        let disabled = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read disabled-scheduler coordination state");
+        assert_eq!(disabled.open_loops[0].status, "SNOOZED");
+        assert_eq!(disabled.reminders[0].status, "SCHEDULED");
+        assert_eq!(server_clock_audit_count(&fixture), 0);
+        assert_eq!(
+            fixture.count("m4_coordination_command_receipts"),
+            receipts_before
+        );
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("inspect degraded scheduler checkpoint");
+        let health: String = connection
+            .query_row(
+                "SELECT status FROM m4_scheduler_checkpoints
+                 WHERE scope_ref = ?1",
+                [m4_primary_scope_ref()],
+                |row| row.get(0),
+            )
+            .expect("read degraded scheduler health");
+        assert_eq!(health, "DEGRADED");
+        drop(connection);
+
+        let recovered = fixture.reopen();
+        set_repository_test_timezone(&recovered, &fixture, "Asia/Shanghai");
+        recovered
+            .set_test_server_utc_now(due_marker)
+            .expect("restore valid scheduler timezone at same due instant");
+        recovered
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("valid scheduler recovery advances retained due work");
+        let advanced = recovered
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read recovered due state");
+        assert_eq!(advanced.open_loops[0].status, "OPEN");
+        assert_eq!(advanced.reminders[0].status, "FIRED");
+        assert_eq!(server_clock_audit_count(&fixture), 2);
+        assert_eq!(fixture.count("m4_model_invocations"), 0);
+    }
+
+    #[test]
+    fn m4r03_snoozed_reminder_waits_for_second_due_marker_then_refires_once() {
+        let fixture = RepositoryFixture::new("m4r03-reminder-refire");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        let first_due = "2026-08-10T12:05:00.000Z";
+        let second_due = "2026-08-10T12:10:00.999Z";
+        let action = fixture
+            .repository
+            .create_personal_action(
+                "M4R03 reminder refire owner",
+                None,
+                &opaque("command", "m4r03-reminder-refire-owner"),
+            )
+            .expect("create reminder refire owner");
+        let reminder = fixture
+            .repository
+            .create_reminder(
+                &action.aggregate_id,
+                first_due,
+                "Asia/Shanghai",
+                &opaque("command", "m4r03-reminder-refire-create"),
+            )
+            .expect("create first scheduled reminder");
+        fixture
+            .repository
+            .set_test_server_utc_now(first_due)
+            .expect("set first reminder due clock");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("startup fires first scheduled reminder");
+        let first_fired = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read first fired reminder");
+        assert_eq!(first_fired.reminders[0].status, "FIRED");
+        assert_eq!(first_fired.reminders[0].revision, "2");
+        fixture
+            .repository
+            .snooze_reminder(
+                &reminder.aggregate_id,
+                2,
+                second_due,
+                &opaque("command", "m4r03-reminder-refire-snooze"),
+            )
+            .expect("user snoozes fired reminder to a second due marker");
+
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T12:10:00.000Z")
+            .expect("set same-second clock before fractional due marker");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+            .expect("pre-second-due tick is a no-op");
+        let before_second_due = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read reminder before second due");
+        assert_eq!(before_second_due.reminders[0].status, "SNOOZED");
+        assert_eq!(before_second_due.reminders[0].revision, "3");
+        assert_eq!(server_clock_audit_count(&fixture), 1);
+
+        fixture
+            .repository
+            .set_test_server_utc_now(second_due)
+            .expect("set exact second reminder due clock");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+            .expect("timer refires snoozed reminder at second due marker");
+        let refired = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read refired reminder");
+        assert_eq!(refired.reminders[0].status, "FIRED");
+        assert_eq!(refired.reminders[0].revision, "4");
+        assert_eq!(
+            refired.reminders[0].last_fired_at_utc.as_deref(),
+            Some(second_due)
+        );
+        assert_eq!(refired.reminders[0].snoozed_until_utc, None);
+        assert_eq!(server_clock_audit_count(&fixture), 2);
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+            .expect("same-instant repeated tick does not refire reminder");
+        assert_eq!(server_clock_audit_count(&fixture), 2);
+        assert_eq!(fixture.count("m4_model_invocations"), 0);
+    }
+
+    #[test]
+    fn m4r03_scheduler_commit_makes_stale_user_reminder_cas_fail_without_extra_evidence() {
+        let fixture = RepositoryFixture::new("m4r03-stale-user-cas");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        let due_marker = "2026-08-10T12:05:00.000Z";
+        let action = fixture
+            .repository
+            .create_personal_action(
+                "M4R03 stale CAS owner",
+                None,
+                &opaque("command", "m4r03-stale-cas-owner"),
+            )
+            .expect("create stale CAS reminder owner");
+        let reminder = fixture
+            .repository
+            .create_reminder(
+                &action.aggregate_id,
+                due_marker,
+                "Asia/Shanghai",
+                &opaque("command", "m4r03-stale-cas-create"),
+            )
+            .expect("create stale CAS reminder");
+        fixture
+            .repository
+            .set_test_server_utc_now(due_marker)
+            .expect("set scheduler-first due clock");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("scheduler commits reminder fire before stale user command");
+        let receipts_after_scheduler = fixture.count("m4_coordination_command_receipts");
+        let events_after_scheduler = fixture.count("m4_coordination_events");
+        let audits_after_scheduler = fixture.count("m4_coordination_audit_records");
+        let stale = fixture
+            .repository
+            .snooze_reminder(
+                &reminder.aggregate_id,
+                1,
+                "2026-08-10T12:15:00.000Z",
+                &opaque("command", "m4r03-stale-cas-user"),
+            )
+            .expect_err("stale user revision loses to committed scheduler CAS");
+        assert_eq!(stale.code, "m4_expected_revision_conflict");
+        let stable = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read state after stale CAS rejection");
+        assert_eq!(stable.reminders[0].status, "FIRED");
+        assert_eq!(stable.reminders[0].revision, "2");
+        assert_eq!(
+            fixture.count("m4_coordination_command_receipts"),
+            receipts_after_scheduler
+        );
+        assert_eq!(fixture.count("m4_coordination_events"), events_after_scheduler);
+        assert_eq!(fixture.count("m4_coordination_audit_records"), audits_after_scheduler);
+        assert_eq!(server_clock_audit_count(&fixture), 1);
+    }
+
+    #[test]
+    fn m4r03_due_batch_failure_rolls_back_all_objects_and_retry_commits_once() {
+        let fixture = RepositoryFixture::new("m4r03-batch-rollback");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        let due_marker = "2026-08-10T12:05:00.000Z";
+        let _ = seed_m4r03_due_pair(&fixture, "batch-rollback", due_marker);
+        let receipts_before = fixture.count("m4_coordination_command_receipts");
+        let events_before = fixture.count("m4_coordination_events");
+        let audits_before = fixture.count("m4_coordination_audit_records");
+        let brief_before = current_daily_brief_state(&fixture);
+        fixture
+            .repository
+            .set_test_server_utc_now(due_marker)
+            .expect("set due clock for rollback injection");
+        fixture.repository.fail_after_coordination_state_once();
+        let failure = fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect_err("failure after first due state update rolls back whole batch");
+        assert_eq!(failure.code, "m4_test_failure_after_coordination_state");
+        let rolled_back = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read atomically rolled-back due state");
+        assert_eq!(rolled_back.open_loops[0].status, "SNOOZED");
+        assert_eq!(rolled_back.reminders[0].status, "SCHEDULED");
+        assert_eq!(
+            fixture.count("m4_coordination_command_receipts"),
+            receipts_before
+        );
+        assert_eq!(fixture.count("m4_coordination_events"), events_before);
+        assert_eq!(fixture.count("m4_coordination_audit_records"), audits_before);
+        assert_eq!(current_daily_brief_state(&fixture), brief_before);
+
+        let restarted = fixture.reopen();
+        set_repository_test_timezone(&restarted, &fixture, "Asia/Shanghai");
+        restarted
+            .set_test_server_utc_now(due_marker)
+            .expect("restore same due clock after restart");
+        restarted
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("next startup retries rolled-back due batch");
+        let committed = restarted
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read committed retry state");
+        assert_eq!(committed.open_loops[0].status, "OPEN");
+        assert_eq!(committed.reminders[0].status, "FIRED");
+        assert_eq!(
+            fixture.count("m4_coordination_command_receipts"),
+            receipts_before + 2
+        );
+        assert_eq!(fixture.count("m4_coordination_events"), events_before + 2);
+        assert_eq!(
+            fixture.count("m4_coordination_audit_records"),
+            audits_before + 2
+        );
+        assert_eq!(server_clock_audit_count(&fixture), 2);
+        let brief_after = current_daily_brief_state(&fixture);
+        assert_eq!(brief_after, brief_before);
+        assert_eq!(fixture.count("m4_model_invocations"), 0);
+    }
+
+    #[test]
+    fn m4r03_concurrent_timer_ticks_serialize_cas_and_emit_one_due_batch() {
+        let fixture = RepositoryFixture::new("m4r03-concurrent-ticks");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        let due_marker = "2026-08-10T12:05:00.000Z";
+        let _ = seed_m4r03_due_pair(&fixture, "concurrent-ticks", due_marker);
+        let receipts_before = fixture.count("m4_coordination_command_receipts");
+        let brief_before = current_daily_brief_state(&fixture);
+        let first = fixture.reopen();
+        let second = fixture.reopen();
+        set_repository_test_timezone(&first, &fixture, "Asia/Shanghai");
+        set_repository_test_timezone(&second, &fixture, "Asia/Shanghai");
+        first
+            .set_test_server_utc_now(due_marker)
+            .expect("set first concurrent timer clock");
+        second
+            .set_test_server_utc_now(due_marker)
+            .expect("set second concurrent timer clock");
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+        let first_barrier = barrier.clone();
+        let second_barrier = barrier.clone();
+        let first_tick = std::thread::spawn(move || {
+            first_barrier.wait();
+            first.run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+        });
+        let second_tick = std::thread::spawn(move || {
+            second_barrier.wait();
+            second.run_daily_scheduler_cycle(M4SchedulerTrigger::TimerTick)
+        });
+        barrier.wait();
+        first_tick
+            .join()
+            .expect("join first concurrent timer")
+            .expect("first concurrent timer completes");
+        second_tick
+            .join()
+            .expect("join second concurrent timer")
+            .expect("second concurrent timer completes");
+
+        let advanced = fixture
+            .repository
+            .read_coordination_snapshot(m4_primary_scope_ref())
+            .expect("read state after concurrent timers");
+        assert_eq!(advanced.open_loops[0].status, "OPEN");
+        assert_eq!(advanced.reminders[0].status, "FIRED");
+        assert_eq!(
+            fixture.count("m4_coordination_command_receipts"),
+            receipts_before + 2
+        );
+        assert_eq!(server_clock_audit_count(&fixture), 2);
+        let brief_after = current_daily_brief_state(&fixture);
+        assert_eq!(brief_after.0, brief_before.0);
+        assert_eq!(brief_after, brief_before);
+        assert_eq!(fixture.count("m4_model_invocations"), 0);
+        let connection = fixture
+            .repository
+            .open_read_connection()
+            .expect("inspect concurrent due evidence uniqueness");
+        let unique_due_keys: i64 = connection
+            .query_row(
+                "SELECT COUNT(DISTINCT idempotency_key)
+                 FROM m4_coordination_command_receipts
+                 WHERE idempotency_key LIKE 'server-clock-due:sha256:%'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count unique concurrent due keys");
+        assert_eq!(unique_due_keys, 2);
     }
 
     #[test]

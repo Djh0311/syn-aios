@@ -7,13 +7,18 @@
 允许动：
 
 - prototypes/productized-desktop-shell/src-tauri/src/lib.rs
+- prototypes/productized-desktop-shell/src-tauri/src/index_host_app_entrypoints.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m4r03_ordinary_clock_driver.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_domain.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_repository.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m4_secretary_scheduler.rs
 - prototypes/productized-desktop-shell/src-tauri/src/commands.rs
+- prototypes/productized-desktop-shell/src/main.tsx
 - prototypes/productized-desktop-shell/tests/
 - prototypes/productized-desktop-shell/scripts/
 - docs/harness/
+
+写域增补说明：R03 的 green receipt 必须由普通产品 composition 直接证明，不得以 repository seed 或 transition 直调冒充。新增的 host driver 与 renderer bridge 只编排现有普通 Tauri command registry、普通 AppState、source dispatcher 和 scheduler；它们不新增产品命令、不替代 handler，也不获得 renderer clock/fire 权限。隔离验证只替换 app-data root，并使用本机 server clock。
 
 ## 步骤
 

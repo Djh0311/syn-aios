@@ -78,6 +78,7 @@ mod m3_role_session_read_model;
 mod m3_role_session_schema;
 mod m4_acceptance;
 mod m4r02_ordinary_composition_driver;
+mod m4r03_ordinary_clock_driver;
 mod m4_source_dispatcher;
 mod m4_source_owner_schema;
 mod m4_secretary_domain;
@@ -259,27 +260,36 @@ impl AppState {
 fn start_m4_secretary_scheduler(
     repository: m4_secretary_repository::M4SecretarySqliteRepository,
 ) -> Result<(), String> {
+    if let Err(error) = run_m4_secretary_scheduler_cycle(
+        &repository,
+        m4_secretary_scheduler::M4SchedulerTrigger::StartupRecovery,
+    ) {
+        eprintln!("M4 Secretary scheduler startup unavailable:{error}");
+    }
     std::thread::Builder::new()
         .name("syn-m4-secretary-scheduler".to_string())
-        .spawn(move || {
-            if let Err(error) = repository.run_daily_scheduler_cycle(
-                m4_secretary_scheduler::M4SchedulerTrigger::StartupRecovery,
+        .spawn(move || loop {
+            std::thread::sleep(Duration::from_secs(
+                m4_secretary_scheduler::M4_SCHEDULER_TICK_SECONDS as u64,
+            ));
+            if let Err(error) = run_m4_secretary_scheduler_cycle(
+                &repository,
+                m4_secretary_scheduler::M4SchedulerTrigger::TimerTick,
             ) {
-                eprintln!("M4 Secretary scheduler startup unavailable:{}", error.code);
-            }
-            loop {
-                std::thread::sleep(Duration::from_secs(
-                    m4_secretary_scheduler::M4_SCHEDULER_TICK_SECONDS as u64,
-                ));
-                if let Err(error) = repository.run_daily_scheduler_cycle(
-                    m4_secretary_scheduler::M4SchedulerTrigger::TimerTick,
-                ) {
-                    eprintln!("M4 Secretary scheduler tick unavailable:{}", error.code);
-                }
+                eprintln!("M4 Secretary scheduler tick unavailable:{error}");
             }
         })
         .map(|_| ())
         .map_err(|_| "m4_secretary_scheduler_thread_spawn_failed".to_string())
+}
+
+fn run_m4_secretary_scheduler_cycle(
+    repository: &m4_secretary_repository::M4SecretarySqliteRepository,
+    trigger: m4_secretary_scheduler::M4SchedulerTrigger,
+) -> Result<(), String> {
+    repository
+        .run_daily_scheduler_cycle(trigger)
+        .map_err(|error| error.code)
 }
 
 /// Start the ordinary owner-outbox tail only after workflow DB-primary startup

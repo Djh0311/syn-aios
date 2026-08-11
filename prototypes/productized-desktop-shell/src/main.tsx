@@ -8,6 +8,7 @@ import {
   initializeWorkflowState,
   loadSecretaryHomeContext,
   loadWorkflowStateSnapshot,
+  operateSecretaryCoordination,
   operateSecretaryPersonalObject,
   updateWorkItemState,
 } from "./lib/tauri";
@@ -591,6 +592,412 @@ async function installM4R02OrdinaryCompositionTauriIpcBridge() {
   }
 }
 
+// M4R03 generic-profile server-clock proof. The bridge has no clock or fire
+// operation: it can only issue the same user-facing snooze/create commands as
+// the Home surface and then reread ordinary server state. StartupRecovery and
+// TimerTick remain owned entirely by the Rust scheduler.
+const M4R03_IPC_READY_EVENT = "syn-m4r03-ordinary-clock-ui-ready";
+const M4R03_IPC_INVOKE_EVENT = "syn-m4r03-ordinary-clock-invoke";
+const M4R03_IPC_RESULT_EVENT = "syn-m4r03-ordinary-clock-result";
+const M4R03_IPC_SCHEMA_VERSION = "syn_m4r03_ordinary_clock_ipc.v1";
+// Leave the launcher enough room to observe the arm receipt and SIGKILL the
+// exact bundled process while both user-scheduled objects are still pre-due.
+const M4R03_STARTUP_DUE_DELAY_MS = 45_000;
+// The two ordinary snooze commands are serialized. Keep their shared marker
+// beyond the complete operation window so a production tick cannot split them.
+const M4R03_TIMER_DUE_DELAY_MS = 30_000;
+const M4R03_HOME_READ_TIMEOUT_MS = 15_000;
+
+type M4R03Phase = "arm" | "recovery_timer" | "repeat";
+type M4R03Operation =
+  | "arm_startup_recovery"
+  | "observe_startup_recovery"
+  | "arm_timer_tick"
+  | "observe_timer_tick"
+  | "observe_repeat";
+
+type M4R03OrdinaryClockInvocation = {
+  schema_version: typeof M4R03_IPC_SCHEMA_VERSION;
+  phase: M4R03Phase;
+  operation: M4R03Operation;
+  nonce: string;
+  startup_due_marker_utc: string | null;
+  timer_due_marker_utc: string | null;
+};
+
+type M4R03PreparedObjects = {
+  openLoopId: string;
+  reminderId: string;
+  startupDueMarkerUtc: string;
+  timerDueMarkerUtc: string | null;
+};
+
+let m4r03PreparedObjects: M4R03PreparedObjects | null = null;
+let m4r03OperationQueue: Promise<void> = Promise.resolve();
+let m4r03WriteCommandsInvoked = 0;
+
+function isM4R03Utc(value: unknown): value is string {
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+    && !Number.isNaN(Date.parse(value));
+}
+
+function isM4R03Invocation(value: unknown): value is M4R03OrdinaryClockInvocation {
+  if (!value || typeof value !== "object") return false;
+  if (!hasExactKeys(value, [
+    "nonce",
+    "operation",
+    "phase",
+    "schema_version",
+    "startup_due_marker_utc",
+    "timer_due_marker_utc",
+  ])) return false;
+  const candidate = value as Partial<M4R03OrdinaryClockInvocation>;
+  if (
+    candidate.schema_version !== M4R03_IPC_SCHEMA_VERSION
+    || typeof candidate.nonce !== "string"
+    || !/^[a-f0-9]{32}$/.test(candidate.nonce)
+  ) return false;
+  if (candidate.phase === "arm" && candidate.operation === "arm_startup_recovery") {
+    return candidate.startup_due_marker_utc === null
+      && candidate.timer_due_marker_utc === null;
+  }
+  if (candidate.phase === "recovery_timer") {
+    if (!isM4R03Utc(candidate.startup_due_marker_utc)) return false;
+    if (
+      candidate.operation === "observe_startup_recovery"
+      || candidate.operation === "arm_timer_tick"
+    ) return candidate.timer_due_marker_utc === null;
+    return candidate.operation === "observe_timer_tick"
+      && isM4R03Utc(candidate.timer_due_marker_utc);
+  }
+  return candidate.phase === "repeat"
+    && candidate.operation === "observe_repeat"
+    && isM4R03Utc(candidate.startup_due_marker_utc)
+    && isM4R03Utc(candidate.timer_due_marker_utc);
+}
+
+async function loadM4R03ReadyHome() {
+  const home = await loadSecretaryHomeContext();
+  if (home.status !== "READY") throw new Error("m4r03_home_context_not_ready");
+  return home;
+}
+
+function findM4R03OpenLoop(home: Awaited<ReturnType<typeof loadM4R03ReadyHome>>) {
+  const matches = home.application_outcome.deterministic_brief.attention_items.filter(
+    (item) => item.item_kind_code === "OPEN_LOOP",
+  );
+  if (matches.length !== 1) throw new Error("m4r03_open_loop_cardinality_invalid");
+  return matches[0];
+}
+
+function findM4R03PersonalAction(home: Awaited<ReturnType<typeof loadM4R03ReadyHome>>) {
+  const matches = home.application_outcome.local_objects.personal_actions.filter(
+    (item) => item.title === M4R02_PERSONAL_ACTION_TITLE,
+  );
+  if (matches.length !== 1) throw new Error("m4r03_personal_action_cardinality_invalid");
+  return matches[0];
+}
+
+function findM4R03Reminder(
+  home: Awaited<ReturnType<typeof loadM4R03ReadyHome>>,
+  startupDueMarkerUtc: string,
+) {
+  const matches = home.application_outcome.local_objects.reminders.filter(
+    (item) => item.scheduled_for_utc === startupDueMarkerUtc,
+  );
+  if (matches.length !== 1) throw new Error("m4r03_reminder_cardinality_invalid");
+  return matches[0];
+}
+
+async function waitForM4R03State(
+  startupDueMarkerUtc: string,
+  openLoopStatus: "OPEN" | "SNOOZED",
+  reminderStatus: "SCHEDULED" | "SNOOZED" | "FIRED",
+) {
+  const deadline = Date.now() + M4R03_HOME_READ_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const home = await loadM4R03ReadyHome();
+    const openLoop = findM4R03OpenLoop(home);
+    const reminder = findM4R03Reminder(home, startupDueMarkerUtc);
+    if (openLoop.status_code === openLoopStatus && reminder.status === reminderStatus) {
+      return { openLoop, reminder };
+    }
+    await delayM4R02(250);
+  }
+  throw new Error("m4r03_state_read_timeout");
+}
+
+function m4r03ErrorFamily(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes("state_read_timeout")) return "state_read_timeout";
+  if (message.includes("home_context")) return "home_read_contract";
+  if (message.includes("cardinality")) return "object_cardinality";
+  if (message.includes("prepared")) return "prepared_binding";
+  return "command_rejected";
+}
+
+async function emitM4R03Result(
+  invocation: M4R03OrdinaryClockInvocation,
+  result: Record<string, unknown>,
+) {
+  await emit(M4R03_IPC_RESULT_EVENT, {
+    schema_version: M4R03_IPC_SCHEMA_VERSION,
+    phase: invocation.phase,
+    operation: invocation.operation,
+    nonce: invocation.nonce,
+    ...result,
+  });
+}
+
+async function runM4R03OrdinaryClockOperation(
+  invocation: M4R03OrdinaryClockInvocation,
+) {
+  m4r03WriteCommandsInvoked = 0;
+  switch (invocation.operation) {
+    case "arm_startup_recovery": {
+      const home = await loadM4R03ReadyHome();
+      const openLoop = findM4R03OpenLoop(home);
+      const personalAction = findM4R03PersonalAction(home);
+      if (openLoop.status_code !== "OPEN") throw new Error("m4r03_open_loop_not_open");
+      const startupDueMarkerUtc = new Date(
+        Date.now() + M4R03_STARTUP_DUE_DELAY_MS,
+      ).toISOString();
+      const openLoopIdempotencyKey = await mintSecretaryCoordinationIdempotencyKey();
+      m4r03WriteCommandsInvoked += 1;
+      const openLoopReceipt = await operateSecretaryCoordination({
+        action: "OPEN_LOOP_SNOOZE",
+        item_ref: openLoop.item_ref,
+        expected_revision: openLoop.coordination_revision,
+        snoozed_until_utc: startupDueMarkerUtc,
+        idempotency_key: openLoopIdempotencyKey,
+      });
+      const reminderIdempotencyKey = await mintSecretaryCoordinationIdempotencyKey();
+      m4r03WriteCommandsInvoked += 1;
+      const reminderReceipt = await operateSecretaryPersonalObject({
+        action: "REMINDER_CREATE",
+        owner_ref: personalAction.personal_action_id,
+        scheduled_for_utc: startupDueMarkerUtc,
+        iana_timezone: "Asia/Shanghai",
+        idempotency_key: reminderIdempotencyKey,
+      });
+      const armed = await waitForM4R03State(startupDueMarkerUtc, "SNOOZED", "SCHEDULED");
+      if (
+        openLoopReceipt.item_ref !== armed.openLoop.item_ref
+        || reminderReceipt.item_ref !== armed.reminder.reminder_id
+        || openLoopReceipt.aggregate_kind_code !== "OPEN_LOOP"
+        || reminderReceipt.aggregate_kind_code !== "REMINDER"
+        || openLoopReceipt.coordination_revision !== armed.openLoop.coordination_revision
+        || reminderReceipt.coordination_revision !== armed.reminder.revision
+        || openLoopReceipt.outcome_code !== "APPLIED"
+        || reminderReceipt.outcome_code !== "CREATED"
+        || openLoopReceipt.replayed
+        || reminderReceipt.replayed
+      ) throw new Error("m4r03_arm_receipt_binding_invalid");
+      m4r03PreparedObjects = {
+        openLoopId: armed.openLoop.item_ref,
+        reminderId: armed.reminder.reminder_id,
+        startupDueMarkerUtc,
+        timerDueMarkerUtc: null,
+      };
+      await emitM4R03Result(invocation, {
+        outcome: "PASS",
+        startup_due_marker_utc: startupDueMarkerUtc,
+        timer_due_marker_utc: null,
+        open_loop_id: armed.openLoop.item_ref,
+        open_loop_status: armed.openLoop.status_code,
+        open_loop_revision: armed.openLoop.coordination_revision,
+        reminder_id: armed.reminder.reminder_id,
+        reminder_status: armed.reminder.status,
+        reminder_revision: armed.reminder.revision,
+        reminder_last_fired_at_utc: armed.reminder.last_fired_at_utc,
+        open_loop_command_receipt_ref: openLoopReceipt.command_receipt_ref,
+        reminder_command_receipt_ref: reminderReceipt.command_receipt_ref,
+        write_commands_invoked: 2,
+      });
+      return;
+    }
+    case "observe_startup_recovery": {
+      const startupDueMarkerUtc = invocation.startup_due_marker_utc;
+      if (!startupDueMarkerUtc) throw new Error("m4r03_startup_marker_missing");
+      const recovered = await waitForM4R03State(startupDueMarkerUtc, "OPEN", "FIRED");
+      m4r03PreparedObjects = {
+        openLoopId: recovered.openLoop.item_ref,
+        reminderId: recovered.reminder.reminder_id,
+        startupDueMarkerUtc,
+        timerDueMarkerUtc: null,
+      };
+      await emitM4R03Result(invocation, {
+        outcome: "PASS",
+        startup_due_marker_utc: startupDueMarkerUtc,
+        timer_due_marker_utc: null,
+        open_loop_id: recovered.openLoop.item_ref,
+        open_loop_status: recovered.openLoop.status_code,
+        open_loop_revision: recovered.openLoop.coordination_revision,
+        reminder_id: recovered.reminder.reminder_id,
+        reminder_status: recovered.reminder.status,
+        reminder_revision: recovered.reminder.revision,
+        reminder_last_fired_at_utc: recovered.reminder.last_fired_at_utc,
+        open_loop_command_receipt_ref: null,
+        reminder_command_receipt_ref: null,
+        write_commands_invoked: 0,
+      });
+      return;
+    }
+    case "arm_timer_tick": {
+      const prepared = m4r03PreparedObjects;
+      if (!prepared || prepared.startupDueMarkerUtc !== invocation.startup_due_marker_utc) {
+        throw new Error("m4r03_prepared_binding_invalid");
+      }
+      const home = await loadM4R03ReadyHome();
+      const openLoop = findM4R03OpenLoop(home);
+      const reminder = findM4R03Reminder(home, prepared.startupDueMarkerUtc);
+      if (
+        openLoop.item_ref !== prepared.openLoopId
+        || reminder.reminder_id !== prepared.reminderId
+        || openLoop.status_code !== "OPEN"
+        || reminder.status !== "FIRED"
+      ) throw new Error("m4r03_timer_arm_state_invalid");
+      const timerDueMarkerUtc = new Date(Date.now() + M4R03_TIMER_DUE_DELAY_MS).toISOString();
+      const openLoopIdempotencyKey = await mintSecretaryCoordinationIdempotencyKey();
+      m4r03WriteCommandsInvoked += 1;
+      const openLoopReceipt = await operateSecretaryCoordination({
+        action: "OPEN_LOOP_SNOOZE",
+        item_ref: openLoop.item_ref,
+        expected_revision: openLoop.coordination_revision,
+        snoozed_until_utc: timerDueMarkerUtc,
+        idempotency_key: openLoopIdempotencyKey,
+      });
+      const reminderIdempotencyKey = await mintSecretaryCoordinationIdempotencyKey();
+      m4r03WriteCommandsInvoked += 1;
+      const reminderReceipt = await operateSecretaryPersonalObject({
+        action: "REMINDER_SNOOZE",
+        item_ref: reminder.reminder_id,
+        expected_revision: reminder.revision,
+        snoozed_until_utc: timerDueMarkerUtc,
+        idempotency_key: reminderIdempotencyKey,
+      });
+      const armed = await waitForM4R03State(prepared.startupDueMarkerUtc, "SNOOZED", "SNOOZED");
+      if (
+        openLoopReceipt.item_ref !== armed.openLoop.item_ref
+        || reminderReceipt.item_ref !== armed.reminder.reminder_id
+        || openLoopReceipt.aggregate_kind_code !== "OPEN_LOOP"
+        || reminderReceipt.aggregate_kind_code !== "REMINDER"
+        || openLoopReceipt.coordination_revision !== armed.openLoop.coordination_revision
+        || reminderReceipt.coordination_revision !== armed.reminder.revision
+        || openLoopReceipt.outcome_code !== "APPLIED"
+        || reminderReceipt.outcome_code !== "APPLIED"
+        || openLoopReceipt.replayed
+        || reminderReceipt.replayed
+      ) throw new Error("m4r03_timer_arm_receipt_binding_invalid");
+      prepared.timerDueMarkerUtc = timerDueMarkerUtc;
+      await emitM4R03Result(invocation, {
+        outcome: "PASS",
+        startup_due_marker_utc: prepared.startupDueMarkerUtc,
+        timer_due_marker_utc: timerDueMarkerUtc,
+        open_loop_id: armed.openLoop.item_ref,
+        open_loop_status: armed.openLoop.status_code,
+        open_loop_revision: armed.openLoop.coordination_revision,
+        reminder_id: armed.reminder.reminder_id,
+        reminder_status: armed.reminder.status,
+        reminder_revision: armed.reminder.revision,
+        reminder_last_fired_at_utc: armed.reminder.last_fired_at_utc,
+        open_loop_command_receipt_ref: openLoopReceipt.command_receipt_ref,
+        reminder_command_receipt_ref: reminderReceipt.command_receipt_ref,
+        write_commands_invoked: 2,
+      });
+      return;
+    }
+    case "observe_timer_tick": {
+      const prepared = m4r03PreparedObjects;
+      if (
+        !prepared
+        || prepared.startupDueMarkerUtc !== invocation.startup_due_marker_utc
+        || prepared.timerDueMarkerUtc !== invocation.timer_due_marker_utc
+      ) throw new Error("m4r03_prepared_binding_invalid");
+      const advanced = await waitForM4R03State(
+        prepared.startupDueMarkerUtc,
+        "OPEN",
+        "FIRED",
+      );
+      await emitM4R03Result(invocation, {
+        outcome: "PASS",
+        startup_due_marker_utc: prepared.startupDueMarkerUtc,
+        timer_due_marker_utc: prepared.timerDueMarkerUtc,
+        open_loop_id: advanced.openLoop.item_ref,
+        open_loop_status: advanced.openLoop.status_code,
+        open_loop_revision: advanced.openLoop.coordination_revision,
+        reminder_id: advanced.reminder.reminder_id,
+        reminder_status: advanced.reminder.status,
+        reminder_revision: advanced.reminder.revision,
+        reminder_last_fired_at_utc: advanced.reminder.last_fired_at_utc,
+        open_loop_command_receipt_ref: null,
+        reminder_command_receipt_ref: null,
+        write_commands_invoked: 0,
+      });
+      return;
+    }
+    case "observe_repeat": {
+      const startupDueMarkerUtc = invocation.startup_due_marker_utc;
+      if (!startupDueMarkerUtc) throw new Error("m4r03_startup_marker_missing");
+      const stable = await waitForM4R03State(startupDueMarkerUtc, "OPEN", "FIRED");
+      await emitM4R03Result(invocation, {
+        outcome: "PASS",
+        startup_due_marker_utc: startupDueMarkerUtc,
+        timer_due_marker_utc: invocation.timer_due_marker_utc,
+        open_loop_id: stable.openLoop.item_ref,
+        open_loop_status: stable.openLoop.status_code,
+        open_loop_revision: stable.openLoop.coordination_revision,
+        reminder_id: stable.reminder.reminder_id,
+        reminder_status: stable.reminder.status,
+        reminder_revision: stable.reminder.revision,
+        reminder_last_fired_at_utc: stable.reminder.last_fired_at_utc,
+        open_loop_command_receipt_ref: null,
+        reminder_command_receipt_ref: null,
+        write_commands_invoked: 0,
+      });
+    }
+  }
+}
+
+async function installM4R03OrdinaryClockTauriIpcBridge() {
+  if (!("__TAURI_INTERNALS__" in window)) return;
+  try {
+    await listen<M4R03OrdinaryClockInvocation>(M4R03_IPC_INVOKE_EVENT, ({ payload }) => {
+      if (!isM4R03Invocation(payload)) return;
+      m4r03OperationQueue = m4r03OperationQueue.then(async () => {
+        try {
+          await runM4R03OrdinaryClockOperation(payload);
+        } catch (error) {
+          await emitM4R03Result(payload, {
+            outcome: "REJECTED",
+            startup_due_marker_utc: payload.startup_due_marker_utc,
+            timer_due_marker_utc: payload.timer_due_marker_utc,
+            open_loop_id: null,
+            open_loop_status: null,
+            open_loop_revision: null,
+            reminder_id: null,
+            reminder_status: null,
+            reminder_revision: null,
+            reminder_last_fired_at_utc: null,
+            open_loop_command_receipt_ref: null,
+            reminder_command_receipt_ref: null,
+            write_commands_invoked: m4r03WriteCommandsInvoked,
+            error_family: m4r03ErrorFamily(error),
+          });
+        }
+      });
+    });
+    await emit(M4R03_IPC_READY_EVENT, {
+      schema_version: M4R03_IPC_SCHEMA_VERSION,
+      surface: "ordinary_registered_tauri_command_ipc",
+      phases: ["arm", "recovery_timer", "repeat"],
+    });
+  } catch {
+    // The host owns bounded timeouts and a terminal, value-free receipt.
+  }
+}
+
 class BootErrorBoundary extends React.Component<BootErrorBoundaryProps, BootErrorBoundaryState> {
   state: BootErrorBoundaryState = { error: null };
 
@@ -652,6 +1059,7 @@ mountVisibleBootProbe();
 void markFrontendLoaded();
 void installM2R4TauriIpcBridge();
 void installM4R02OrdinaryCompositionTauriIpcBridge();
+void installM4R03OrdinaryClockTauriIpcBridge();
 
 window.addEventListener("error", (event) => {
   const root = document.getElementById("root");
