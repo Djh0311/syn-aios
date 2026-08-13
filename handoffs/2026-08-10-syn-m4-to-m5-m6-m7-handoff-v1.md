@@ -1,15 +1,15 @@
 # Syn M4 收口至 M5 / M6 / M7 指引 v1
 
 日期：2026-08-10<br>
-状态：`GUIDANCE_ONLY / M4R07_V2_PRODUCT_CHAIN_PASS / STAGE_07_CLOSEOUT_PENDING / NOT_EXECUTION_AUTHORITY`
+状态：`GUIDANCE_ONLY / M4R07_V2_PRODUCT_CHAIN_PASS / STAGE_07_CLOSED / NOT_EXECUTION_AUTHORITY`
 
-本文件保留 M4 已进入主线的 typed ref/event 交接素材和下游 HOLD 边界。2026-08-11 独立总线复核的五项 P1 已由 M4R01–M4R06 修正，M4R07 v2 后端/普通产品链为 12/12 PASS；但 `stage-07` closeout / lifecycle 尚未完成，本交接仍不是 M5–M7 的执行前置或授权。当前入口见 `docs/plans/2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。
+本文件保留 M4 已进入主线的 typed ref/event 交接素材和下游 HOLD 边界。2026-08-11 独立总线复核的五项 P1 已由 M4R01–M4R06 修正，M4R07 v2 后端/普通产品链为 12/12 PASS；M4R01–M4R07 已归档，`stage-07` 已关闭。该关闭事实不激活 M5–M7，本交接仍不是其执行前置或授权。完成记录见 `docs/plans/2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。
 
 本文件不激活 M5、M6、M7 或任何真实数据、模型、connector、远端与发布工作。
 
 ## 5 分钟接手顺序
 
-1. 读当前用户指令、根/仓库 `AGENTS.md`、`docs/harness/plan.md` 和当前 M4R07 leaf，确认 `stage-07` 仍在 lifecycle closeout，不误写成已关闭。
+1. 读当前用户指令、根/仓库 `AGENTS.md`、`docs/harness/plan.md` 与 `docs/harness/done/2026-08/`，确认 M4R01–M4R07 已归档、`stage-07` 已关闭且当前没有活动 stage / leaf。
 2. 先读 `docs/current-state.md`、当前 M4 修正计划、M4R07 v2 portable receipt 与 v2 manifest；把 `docs/harness/reports/M4-independent-bus-review-2026-08-11.md` 当作修正前基线，把 M4C10 报告当作更早的机械与隔离证据。
 3. 读 `docs/contracts/m4-secretary-attention-daily-resolution-v1.md` 的唯一 `m4-resolution-v1` JSON，机器消费必须拒绝缺失、重复或格式漂移。
 4. 需要实现下游时，再读对应 M5/M6/M7 独立计划，并由新的用户指令、stage、唯一 leaf 和授权建立施工入口；本交接和 M4 历史授权都不授予实现权。
@@ -54,8 +54,8 @@ M7 按合同 idempotency key 消费，并只创建 M7-owned artifact/annotation 
 ## 回切、证据与停止线
 
 - 回切只可选择受守卫 legacy read-only 展示，或关闭 M4 ingestion/scheduler/read projection；保留 M1/M3 guards、M4 coordination/event/audit/receipt/quarantine/report version，不重放 effect、不删除旧面。
-- 当前产品链完成标记：M4R07 portable receipt 为 v2 PASS、12/12，v2 manifest 精确绑定 portable receipt SHA 与 `launch_8_ui_validation` canonical SHA；`stage-07` 尚未关闭。
+- 当前产品链完成标记：M4R07 portable receipt 为 v2 PASS、12/12，v2 manifest 精确绑定 portable receipt SHA 与 `launch_8_ui_validation` canonical SHA；M4R01–M4R07 已归档，`stage-07` 已关闭。
 - 未进入：真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/connector、网络外部写入、真实迁移、push/merge/rebase、部署、发布、M5–M10 产品实现。
 - 接手时若需要扩大上述边界、source owner 不唯一、revision/watermark 无法精确绑定、协调动作会反写 owner、事件含正文/secret，或空事件会触发模型，停在事实并回到新任务包裁决。
 
-当前停止点是 M4R07 v2 产品链 PASS，文档、独立复核与 `stage-07` Harness 生命周期仍待收口。M5–M10 未激活；真实资料/provider/connector/远端/发布未验，没有自动下一包。
+当前停止点是 M4R07 v2 产品链 PASS、M4R01–M4R07 已归档且 `stage-07` 已关闭。当前没有活动 stage、活动 leaf 或持续授权；M5–M10 为 `PLANNED / NOT_ACTIVE`，真实资料/provider/connector/远端/发布未验，没有自动下一包。

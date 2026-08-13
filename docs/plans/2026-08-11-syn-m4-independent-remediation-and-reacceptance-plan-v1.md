@@ -2,8 +2,8 @@
 
 日期：2026-08-11<br>
 里程碑：`M4 corrective closure`<br>
-状态：`M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSEOUT PENDING`<br>
-当前 Harness 生命周期：`stage-07`；任务包前缀：`M4R`<br>
+状态：`M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`<br>
+Harness 生命周期：`stage-07 CLOSED`；M4R01–M4R07 已归档；任务包前缀：`M4R`<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` 的 M4<br>
 原阶段：`stage-06` 已程序性关闭，M4C01–M4C10 已归档；本计划不重开、不改写历史链。
 
@@ -13,9 +13,9 @@
 
 读取顺序：当前用户指令 → 产品正本 / 权威登记 / 现行架构与前端显示边界 → 当前总计划 → M4 阶段计划 → 本计划 → 新的活动 stage / 唯一 leaf / 当前授权。
 
-本文件存在不产生施工权限。`stage-07` 已按独立授权执行 M4R01–M4R07；M4R01–M4R06 已归档，M4R07 已取得 v2 产品链完成标记，当前只剩文档、独立复核与 Harness 生命周期收口。历史 `stage-06` 授权不得复用，也不能从当前收口推导 M5–M10 权限。
+本文件存在不产生施工权限。`stage-07` 已按独立授权执行 M4R01–M4R07，全部任务已完成并归档，M4R07 已取得 v2 产品链完成标记，`stage-07` 已关闭。当前没有活动 stage、活动 leaf 或持续授权；历史 `stage-06` / `stage-07` 授权不得复用，也不能从本次完成事实推导 M5–M10 权限。
 
-独立复核依据见 [`M4-independent-bus-review-2026-08-11.md`](../harness/reports/M4-independent-bus-review-2026-08-11.md)。其 P0=0、P1=5、P2=4 是修正前基线；五项 P1 已映射并由 M4R01–M4R06 修正。2026-08-13 的当前完成标记是 M4R07 v2 portable receipt 与 v2 manifest 的精确交叉绑定；`stage-07` 尚未关闭。
+独立复核依据见 [`M4-independent-bus-review-2026-08-11.md`](../harness/reports/M4-independent-bus-review-2026-08-11.md)。其 P0=0、P1=5、P2=4 是修正前基线；五项 P1 已映射并由 M4R01–M4R06 修正。2026-08-13 的当前完成标记是 M4R07 v2 portable receipt 与 v2 manifest 的精确交叉绑定；M4R01–M4R07 已归档，`stage-07` 已关闭。
 
 ## 1. 这次修什么
 
@@ -124,14 +124,14 @@
 - 当前用户范围明确取消第 8 次 UI / Computer Use / PNG / attestation gate；不得生成或补造视觉证据。v2 receipt 必须把该范围记为 `NOT_EXECUTED / NOT_APPLICABLE`，同时保留第 8 次普通 `recovery_timer` 的真实 98 秒等待和后端恢复验证。
 - M4 定向矩阵、完整 Rust、typecheck、全部离线入口、production build、launcher syntax、rustfmt 与冻结合同 exact 全部通过。完整 Rust 使用新建专用 `TMPDIR`，并验证 fixture 清理。
 - Git/Harness、代码/测试、文档/下游三条独立只读复核完成；已知 P1 全部关闭，P2 如有必须如实列明并判断是否影响验收。
-- v2 产品链完成标记成立后，再单独完成文档、独立复核和 `stage-07` 生命周期归档；在真正 close-stage 前只能写 closeout pending，不自动激活 M5–M10。
+- v2 产品链完成标记成立后，文档、独立复核和 `stage-07` 生命周期归档已单独完成；close-stage 不自动激活 M5–M10。
 
 当前结果（2026-08-13）：
 
 - `../harness/reports/M4R07-isolated-product-reacceptance-closeout-behavior-receipt.json` 使用 `syn.m4.isolated-product-reacceptance.behavior-receipt.v2`，结果 `PASS`，expected/observed launches 为 12/12。
 - launch 8 保留普通 `recovery_timer`、真实 98 秒等待和后端恢复验证；`launch_8_ui_validation` 为 `required_by_current_contract=false`、`NOT_EXECUTED / NOT_APPLICABLE`，Computer Use 0 次，PNG、attestation、capture signal 均未写。
 - `../harness/reports/M4R07-isolated-product-reacceptance-evidence/manifest.json` 使用 `syn.m4r07.closeout-evidence-manifest.v2`，只绑定 portable receipt SHA 与 `launch_8_ui_validation` canonical SHA。
-- 该 PASS 不是视觉 PASS，也不覆盖真实资料、真实用户项目写入、真实模型/provider/connector、远端、部署或发布；`stage-07` lifecycle 仍 pending。
+- 该 PASS 不是视觉 PASS，也不覆盖真实资料、真实用户项目写入、真实模型/provider/connector、远端、部署或发布；M4R01–M4R07 已归档，`stage-07` 已关闭。
 
 ## 4. 依赖与单写顺序
 
@@ -157,7 +157,7 @@ M4R03、M4R04、M4R05 都依赖 M4R02；M4R06 功能上依赖 M4R02 + M4R04；M4
 
 ## 6. 整阶段退出门
 
-以下全部成立后，才可完成 M4 修正阶段生命周期收口：
+以下退出门已经全部成立，M4 修正阶段生命周期已完成收口：
 
 1. 五项 P1 均有普通产品生产调用链、正向证据和失败反例；测试旁路不再承担产品闭环证明。
 2. M1/M3/M4 冻结边界保持 exact；没有 renderer 双真源、owner 反写、secret/raw payload 扩散或静默副作用。
@@ -168,7 +168,7 @@ M4R03、M4R04、M4R05 都依赖 M4R02；M4R06 功能上依赖 M4R02 + M4R04；M4
 
 ## 7. 授权、停止与保全
 
-`stage-07` 与 M4R01…M4R07 已经实际启用；当前只执行 M4R07 文档与生命周期收口，不扩回产品功能施工。新的代码、真实资料/服务、Git 生命周期、远端或下游阶段仍需新的明确授权。
+`stage-07` 与 M4R01…M4R07 已完成并归档；当前没有活动 stage、活动 leaf 或持续授权。新的代码、真实资料/服务、Git 生命周期、远端或下游阶段仍需新的明确授权。
 
 始终停止并回报：source owner / revision 无法精确绑定；修正需要 M5/M8 或真实数据/provider 才能成立；对话或日报会持久化 raw transcript、prompt、tool output、secret；协调动作会改 owner 事实；空事件触发模型；验收 launcher 只能靠 direct seed 通过；发现与冻结合同或产品正本冲突；目标文件存在不明 WIP。
 

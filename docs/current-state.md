@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-13，M1–M3 已完成各自具名主线范围。M3 内容提交 `fa8e392`，状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4C01–M4C10 已进入主线，`stage-06` 已程序性关闭；2026-08-11 独立总线复核发现的五项普通产品 P1 已由 M4R01–M4R06 修正，M4R07 的 v2 可携带 receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。`stage-07` 尚未关闭，当前状态是 `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSEOUT PENDING`；M5–M10 继续 `PLANNED / NOT_ACTIVE`。
+截至 2026-08-13，M1–M3 已完成各自具名主线范围。M3 内容提交 `fa8e392`，状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4C01–M4C10 已进入主线，`stage-06` 已程序性关闭；2026-08-11 独立总线复核发现的五项普通产品 P1 已由 M4R01–M4R06 修正，M4R07 的 v2 可携带 receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。M4R01–M4R07 均已完成并归档，`stage-07` 已关闭，当前状态是 `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`；当前没有活动 stage、活动 leaf 或持续授权，M5–M10 继续 `PLANNED / NOT_ACTIVE`。
 
 ## 现在分别看哪里
 
@@ -9,7 +9,7 @@
 3. `docs/product/authority-register-v1.md`：决定各类文件当前有什么效力；
 4. `docs/workbench-system-architecture-v1.md`：决定现行系统边界；
 5. 本文件、源码与新鲜验证：说明已实现事实、未知和证据上限；
-6. `AGENTS.md`、`docs/harness/plan.md`、当前 `stage-07` / M4R07 leaf 与 `docs/harness/done/2026-08/`：确认已关闭的历史阶段、已归档 M4R01–M4R06 和仍待生命周期收口的 M4R07；历史授权只证明当时施工有依据，不延续为新的实现权限。
+6. `AGENTS.md`、`docs/harness/plan.md` 与 `docs/harness/done/2026-08/`：确认 M4R01–M4R07 均已归档、`stage-07` 已关闭且当前没有活动 stage / leaf；历史授权只证明当时施工有依据，不延续为新的实现权限。
 
 验收报告、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
 
@@ -44,7 +44,7 @@
 - 第 8 次仍执行普通 `recovery_timer`，真实等待 98 秒并保留后端恢复验证；其 receipt SHA 被 `launch_8_ui_validation` 范围对象绑定。取消的只是 UI / Computer Use / PNG / attestation gate。
 - `launch_8_ui_validation` 明确记录 `required_by_current_contract=false`、`execution_status=NOT_EXECUTED`、`acceptance_result=NOT_APPLICABLE`、Computer Use 次数 0、截图/attestation/capture signal 均未写。这既不是视觉失败，也不是页面、Accessibility、截图质量或 Computer Use 的 `PASS`。
 - `docs/harness/reports/M4R07-isolated-product-reacceptance-evidence/manifest.json` 使用 `syn.m4r07.closeout-evidence-manifest.v2`，精确绑定 portable receipt SHA 与 `launch_8_ui_validation` canonical SHA。当前完成标记只证明该 v2 后端/普通产品链范围。
-- `stage-07` 与 M4R07 生命周期收口仍待完成；本次状态同步只记录 closeout / lifecycle pending，也不自动激活 M5–M10。
+- M4R07 已归档，`stage-07` Harness 生命周期已经关闭；该关闭事实不自动激活 M5–M10，也不扩大上述 v2 产品链证据范围。
 
 ## M3C01–M3C07 已证实的主线事实
 
@@ -74,12 +74,13 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 - M8 真实 connector、credential 与外部 source 未进入；M9 旧路 command unregister/物理退役、M10 全日真实试点与发布硬化也未进入。
 - 真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/connector、网络外部写入、真实数据迁移、push、merge、rebase、部署和发布均未进入。
 - M4R07 v2 只证明本机隔离普通产品的后端/产品链；第 8 次 UI / Computer Use / PNG / attestation 为 `NOT_EXECUTED / NOT_APPLICABLE`，没有视觉验收结论。它也不证明长期运行、真实日常节奏、真实数据/provider/connector、发布包或生产结论。
+- 5600X / WSL / Tailscale 只作为未来迁移与访问方向保留；尚未建立对应 stage / leaf 或验收证据，不是当前实现、完成事实或执行入口。
 
 ## 当前开发状态与停止点
 
-M4 / stage-06 已程序性关闭；新的 `stage-07` 已执行 M4R01–M4R07，M4R01–M4R06 已归档，M4R07 v2 产品链证据为 PASS。当前只停在 M4R07 文档与 `stage-07` 生命周期收口，stage 尚未关闭；不得把证据通过写成 Harness 生命周期已经完成。`USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810` 只作为历史授权记录，不延续到 M5 或其他工作。
+M4 / stage-06 已程序性关闭；M4R01–M4R07 已完成并归档，M4R07 v2 产品链证据为 PASS，`stage-07` 已关闭。当前没有活动 stage、活动 leaf 或持续授权。`USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810` 只作为历史授权记录，不延续到 M5 或其他工作。
 
-除当前 M4R07 / stage-07 收口外，后续任何实现都需要新的当前用户指令、匹配 stage、唯一 leaf 与授权。若需要真实数据/模型/provider/connector/远端/发布，或要进入 M5–M10，必须停在该事实，不扩大本次 M4R07 v2 结论。
+后续任何实现都需要新的当前用户指令、匹配 stage、唯一 leaf 与授权。若需要真实数据/模型/provider/connector/远端/发布，或要进入 M5–M10，必须停在该事实，不扩大本次 M4R07 v2 结论。
 
 ## 保全
 

@@ -19,7 +19,7 @@
 - M0 产品正本、权威分级、候选收口和文档入口整理已经完成；它是文档收口，不是产品代码阶段。
 - M1、M2 已完成主线收口。
 - M3 已完成：M3C01–M3C08 已进入主线并归档，M3C08 内容提交为 `fa8e392`，阶段状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。
-- M4C01–M4C10 已进入主线并归档，`stage-06` 已程序性关闭。2026-08-11 独立总线复核的五项 P1 已由 M4R01–M4R06 修正；M4R07 v2 portable receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12），但 `stage-07` 仍处于 closeout / lifecycle pending，不能写成已关闭。M5–M10 继续未激活。
+- M4C01–M4C10 已进入主线并归档，`stage-06` 已程序性关闭。2026-08-11 独立总线复核的五项 P1 已由 M4R01–M4R06 修正；M4R07 v2 portable receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。M4R01–M4R07 均已归档，`stage-07` 已关闭；当前没有活动 stage / leaf，M5–M10 继续未激活。
 - M4 当前修正与收口入口：`2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。第 8 次后端 `recovery_timer` 保留真实 98 秒等待；UI / Computer Use / PNG / attestation 为 `NOT_EXECUTED / NOT_APPLICABLE`，既非失败也非视觉 PASS。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
 
@@ -30,8 +30,8 @@
 | M1 | `2026-08-01-syn-stage-1-contracts-and-security-foundation-plan-v1.md` | `COMPLETED / MAINLINE`；关闭验收只证明 M1 |
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE`；真实工作台切换未进入 |
 | M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-05 CLOSED`；内容提交 `fa8e392` |
-| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSEOUT PENDING`；不含视觉、真实数据或发布验收 |
-| M4 修正 | `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md` | M4R01–M4R06 已归档，M4R07 v2 PASS；`stage-07` lifecycle pending，不重开 stage-06 |
+| M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`；不含视觉、真实数据或发布验收 |
+| M4 修正 | `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md` | M4R01–M4R07 已完成并归档，`stage-07` 已关闭；不重开 stage-06，不自动激活下游 |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |
 | M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE`；存储策略片与真实日常接入分层依赖 |
@@ -73,7 +73,7 @@
 - `STOPPED_BEFORE_ACTIVATION`：激活前停止，没有产生施工授权。
 - `CANDIDATE_SOURCE`：候选来源材料；开放状态只看候选登记。
 - `COMPLETED / MAINLINE / STAGE-05 CLOSED`：M3 内容提交已进入主线；与本次状态回写同批的终态控制提交执行并归档 M3C08 `done` 与 stage-05 `close-stage`，不据此激活下游实现。
-- `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSEOUT PENDING`：12/12 普通产品链和第 8 次 98 秒后端恢复通过；UI / Computer Use / PNG / attestation 明确未执行，stage 生命周期尚未关闭。
+- `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`：12/12 普通产品链和第 8 次 98 秒后端恢复通过；UI / Computer Use / PNG / attestation 明确未执行，M4R01–M4R07 已归档且 stage 生命周期已关闭。
 
 正文内旧的“当前”“下一步”“唯一”只在文件状态与本索引一致时有效。
 
