@@ -8,7 +8,7 @@
 //! command twice. This module independently verifies the returned report and
 //! performs read-only SQLite before/after checks.
 
-use rusqlite::{types::ValueRef, Connection, OpenFlags};
+use rusqlite::{types::ValueRef, Connection, OpenFlags, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::BTreeSet;
@@ -32,6 +32,7 @@ pub(crate) const M4R06_ORDINARY_LEGACY_READ_NONCE_ENV: &str =
     "SYN_M4R06_ORDINARY_LEGACY_READ_NONCE";
 pub(crate) const M4R06_ORDINARY_LEGACY_READ_DRIVER_VALUE: &str =
     "ordinary-real-legacy-read-parity-v1";
+pub(crate) const M4R07_ORDINARY_PRODUCT_CLOSEOUT_ENV: &str = "SYN_M4R07_ORDINARY_PRODUCT_CLOSEOUT";
 
 const DRIVER_RECEIPT_SCHEMA_VERSION: &str = "syn.m4.remediation.behavior-receipt.v1";
 const TAURI_IPC_SCHEMA_VERSION: &str = "syn_m4r06_ordinary_legacy_read_ipc.v1";
@@ -149,6 +150,23 @@ const M4_WRITEBACK_TABLES: [&str; 2] = [
     "m4_source_owner_writeback_requests",
     "m4_source_owner_writeback_receipts",
 ];
+// M4C07's fixed daily catalog is twelve tables. The checkpoint is deliberately
+// read separately because every explicit zero-argument daily read increments
+// its revision mechanically. The other eleven tables must be unchanged on the
+// second replay when no source material arrived between the two reads.
+const M4_DAILY_BUSINESS_TABLES: [&str; 11] = [
+    "m4_scheduler_configurations",
+    "m4_catch_up_truncation_receipts",
+    "m4_daily_windows",
+    "m4_daily_briefs",
+    "m4_daily_brief_item_refs",
+    "m4_daily_reports",
+    "m4_daily_report_item_refs",
+    "m4_daily_events",
+    "m4_scheduler_runs",
+    "m4_model_budget_ledgers",
+    "m4_model_invocations",
+];
 const LEGACY_OR_CONFLICTING_ENVIRONMENTS: [&str; 15] = [
     "SYN_M2_R4_REFERENCE_SLICE_DRIVER",
     "SYN_M3C07_ISOLATED_ACCEPTANCE",
@@ -221,6 +239,8 @@ struct TauriIpcInvocation {
     phase: &'static str,
     operation: &'static str,
     nonce: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    r07_closeout_mode: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -235,6 +255,10 @@ struct TauriIpcResult {
     report: Option<Value>,
     ui_fallback_evidence: Option<TauriUiFallbackEvidence>,
     error_family: Option<String>,
+    #[serde(default)]
+    daily_report_load_calls: u8,
+    #[serde(default)]
+    daily_report: Option<Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -253,6 +277,11 @@ struct TauriUiFallbackEvidence {
     source_owner_ref: String,
     source_object_type: String,
     canonical_source_object_id: String,
+    consumed_marker_count: Option<u8>,
+    success_notice_count: Option<u8>,
+    active_view: Option<String>,
+    route_phase: Option<String>,
+    consumed_source_revision: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -273,6 +302,18 @@ struct UiFallbackEvidence {
     canonical_source_object_id_sha256: String,
     source_revision: String,
     exact_work_item_parity_binding: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    consumed_marker_count: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    success_notice_count: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    active_view: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    route_phase: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    consumed_source_revision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exact_consumed_binding: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -359,6 +400,72 @@ struct DatabaseEvidence {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
+struct R07DailyReportEvidence {
+    zero_arg_load_calls: u8,
+    first_envelope_sha256: String,
+    exact_replay_envelope_sha256: String,
+    exact_replay_matches_first: bool,
+    current_daily_window_id_sha256: String,
+    closed_daily_window_id_sha256: String,
+    daily_report_id_sha256: String,
+    report_version: String,
+    report_status: String,
+    daily_brief_item_count: u64,
+    daily_report_item_count: u64,
+    last_run_outcome_code: String,
+    last_run_admitted_material_event_count: u64,
+    last_run_agent_turn_count: u64,
+    last_run_model_invocation_count: u64,
+    daily_database_exact_binding: bool,
+    daily_business_snapshot_before_sha256: String,
+    daily_business_snapshot_after_first_sha256: String,
+    daily_business_snapshot_after_replay_sha256: String,
+    exact_replay_zero_business_delta: bool,
+    first_read_checkpoint_revision_delta: String,
+    replay_checkpoint_revision_delta: String,
+    m4_model_invocation_rows_before: u64,
+    m4_model_invocation_rows_after: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct R07DailyDatabaseSnapshot {
+    business: SqliteFingerprint,
+    checkpoint_revision: u64,
+    m4_model_invocation_rows: u64,
+    provider_call_count: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ParsedR07DailyReport {
+    current_daily_window_id: String,
+    closed_daily_window_id: String,
+    configuration_revision: String,
+    daily_brief_watermark: String,
+    daily_brief_projector_version: String,
+    daily_brief_item_count: u64,
+    // Kept only while the raw daily envelope is joined back to the server DB.
+    // Receipt construction reduces these to counts and hashes.
+    daily_brief_item_refs: Vec<String>,
+    daily_report_id: String,
+    daily_report_window_id: String,
+    report_version: String,
+    report_status: String,
+    daily_report_watermark: String,
+    daily_report_projector_version: String,
+    daily_report_item_count: u64,
+    daily_report_item_refs: Vec<String>,
+    last_run_id: String,
+    last_run_window_id: String,
+    last_run_watermark_before: String,
+    last_run_watermark_after: String,
+    last_run_admitted_material_event_count: u64,
+    last_run_agent_turn_count: u64,
+    last_run_model_invocation_count: u64,
+    last_run_outcome_code: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 struct R02PreparationEvidence {
     r02_readback_receipt_sha256: String,
     r02_ingestion_adapter_id_sha256: String,
@@ -397,6 +504,10 @@ struct DriverReceipt {
     work_item_parity: Option<WorkItemParityEvidence>,
     guarded_fallback: Option<GuardedFallbackEvidence>,
     database: Option<DatabaseEvidence>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    r07_closeout_mode: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    r07_daily_report: Option<R07DailyReportEvidence>,
     error_family: Option<String>,
 }
 
@@ -405,6 +516,7 @@ struct OrdinaryLegacyReadPaths {
     profile_path: PathBuf,
     owner_db_path: PathBuf,
     m4_db_path: PathBuf,
+    provider_db_path: PathBuf,
     receipt_root: PathBuf,
 }
 
@@ -436,7 +548,19 @@ pub(crate) fn requested() -> Result<bool, String> {
     }
     driver_phase()?;
     driver_nonce()?;
+    r07_closeout_requested()?;
     Ok(true)
+}
+
+// R07 supplies this only to the existing R06 child launch. It is deliberately
+// not a competing product driver: other ordinary R02--R05 phases may carry an
+// upper-level orchestration environment without interpreting it.
+fn r07_closeout_requested() -> Result<bool, String> {
+    match std::env::var_os(M4R07_ORDINARY_PRODUCT_CLOSEOUT_ENV) {
+        None => Ok(false),
+        Some(value) if value == "1" => Ok(true),
+        Some(_) => Err("m4r07_ordinary_product_closeout_marker_invalid".to_string()),
+    }
 }
 
 pub(crate) fn start_early_process_watchdog() -> Result<(), String> {
@@ -668,18 +792,20 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<(), String> 
     if !requested()? {
         return Ok(());
     }
+    let r07_closeout_mode = r07_closeout_requested()?;
     let nonce = driver_nonce()?;
     let paths = active_ordinary_paths(&app_handle.state::<crate::AppState>())?;
     let r02_preparation = validate_r02_preparation(&paths)?;
 
     let mut read_only_connections = 2_u8;
     let baseline = take_pre_renderer_database_baseline()?;
-    let ui_fallback_result = invoke_renderer_operation(app_handle, "ui_fallback", &nonce)?;
+    let ui_fallback_result =
+        invoke_renderer_operation(app_handle, "ui_fallback", &nonce, r07_closeout_mode)?;
     let ui_fallback_raw = ui_fallback_result
         .ui_fallback_evidence
         .as_ref()
         .ok_or_else(|| "m4r06_ordinary_legacy_read_ui_fallback_evidence_missing".to_string())?;
-    validate_ui_fallback_evidence(ui_fallback_raw)?;
+    validate_ui_fallback_evidence(ui_fallback_raw, r07_closeout_mode)?;
     let synthetic_home_unavailable_trigger = synthetic_home_unavailable_trigger_observed()?;
     if !synthetic_home_unavailable_trigger {
         return Err("m4r06_ordinary_legacy_read_synthetic_home_trigger_missing".to_string());
@@ -689,7 +815,7 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<(), String> 
     }
     let after_ui_fallback = read_database_snapshot(&paths, &mut read_only_connections)?;
 
-    let first_result = invoke_renderer_operation(app_handle, "first_read", &nonce)?;
+    let first_result = invoke_renderer_operation(app_handle, "first_read", &nonce, false)?;
     let first_report = first_result
         .report
         .as_ref()
@@ -697,7 +823,7 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<(), String> 
     let first = validate_report(first_report)?;
     let after_first_read = read_database_snapshot(&paths, &mut read_only_connections)?;
 
-    let replay_result = invoke_renderer_operation(app_handle, "exact_replay", &nonce)?;
+    let replay_result = invoke_renderer_operation(app_handle, "exact_replay", &nonce, false)?;
     let replay_report = replay_result
         .report
         .as_ref()
@@ -711,8 +837,11 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<(), String> 
     if first.reader_receipts != replay.reader_receipts {
         return Err("m4r06_ordinary_legacy_read_exact_replay_reader_receipt_mismatch".to_string());
     }
-    let ui_fallback =
-        bind_ui_fallback_to_work_item(ui_fallback_raw, first.work_item_canonical_source)?;
+    let ui_fallback = bind_ui_fallback_to_work_item(
+        ui_fallback_raw,
+        first.work_item_canonical_source,
+        r07_closeout_mode,
+    )?;
     let work_item_parity = verify_work_item_parity(
         &paths,
         first.work_item_canonical_source,
@@ -730,6 +859,11 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<(), String> 
     if actual_legacy_report_load_calls != 3 {
         return Err("m4r06_ordinary_legacy_read_report_load_count_invalid".to_string());
     }
+    let r07_daily_report = if r07_closeout_mode {
+        Some(run_r07_daily_closeout(app_handle, &paths, &nonce)?)
+    } else {
+        None
+    };
     let receipt = DriverReceipt {
         schema_version: DRIVER_RECEIPT_SCHEMA_VERSION.to_string(),
         task_package: "M4R06".to_string(),
@@ -761,6 +895,8 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<(), String> 
         work_item_parity: Some(work_item_parity),
         guarded_fallback: Some(first.fallback),
         database: Some(database),
+        r07_closeout_mode: r07_closeout_mode.then_some(true),
+        r07_daily_report,
         error_family: None,
     };
     publish_terminal_driver_receipt(&paths, &receipt)
@@ -770,12 +906,14 @@ fn invoke_renderer_operation(
     app_handle: &tauri::AppHandle,
     operation: &'static str,
     nonce: &str,
+    r07_closeout_mode: bool,
 ) -> Result<TauriIpcResult, String> {
     let invocation = TauriIpcInvocation {
         schema_version: TAURI_IPC_SCHEMA_VERSION,
         phase: DRIVER_PHASE,
         operation,
         nonce: nonce.to_string(),
+        r07_closeout_mode: r07_closeout_mode.then_some(true),
     };
     let (sender, receiver) = mpsc::sync_channel::<TauriIpcResult>(1);
     let expected_operation = operation.to_string();
@@ -801,18 +939,40 @@ fn invoke_renderer_operation(
         .map_err(|_| "m4r06_ordinary_legacy_read_ipc_result_timeout".to_string());
     app_handle.unlisten(listener);
     let result = result?;
-    let contract_valid = match operation {
-        "ui_fallback" => {
+    let contract_valid = match (operation, r07_closeout_mode) {
+        ("ui_fallback", true) => {
             result.outcome == "PASS"
                 && result.zero_arg_load_calls == 0
+                && result.daily_report_load_calls == 0
                 && result.report.is_none()
+                && result.daily_report.is_none()
                 && result.ui_fallback_evidence.is_some()
                 && result.error_family.is_none()
         }
-        "first_read" | "exact_replay" => {
+        ("first_read" | "exact_replay", true) => {
+            result.outcome == "PASS"
+                && result.zero_arg_load_calls == 0
+                && result.daily_report_load_calls == 1
+                && result.report.is_none()
+                && result.daily_report.is_some()
+                && result.ui_fallback_evidence.is_none()
+                && result.error_family.is_none()
+        }
+        ("ui_fallback", false) => {
+            result.outcome == "PASS"
+                && result.zero_arg_load_calls == 0
+                && result.daily_report_load_calls == 0
+                && result.report.is_none()
+                && result.daily_report.is_none()
+                && result.ui_fallback_evidence.is_some()
+                && result.error_family.is_none()
+        }
+        ("first_read" | "exact_replay", false) => {
             result.outcome == "PASS"
                 && result.zero_arg_load_calls == 1
+                && result.daily_report_load_calls == 0
                 && result.report.is_some()
+                && result.daily_report.is_none()
                 && result.ui_fallback_evidence.is_none()
                 && result.error_family.is_none()
         }
@@ -831,7 +991,10 @@ fn invoke_renderer_operation(
     Ok(result)
 }
 
-fn validate_ui_fallback_evidence(evidence: &TauriUiFallbackEvidence) -> Result<(), String> {
+fn validate_ui_fallback_evidence(
+    evidence: &TauriUiFallbackEvidence,
+    r07_closeout_mode: bool,
+) -> Result<(), String> {
     if evidence.open_conversation_clicks != 1
         || evidence.compatibility_fallback_roots != 1
         || evidence.parity_primary_attention_rows != 1
@@ -840,7 +1003,6 @@ fn validate_ui_fallback_evidence(evidence: &TauriUiFallbackEvidence) -> Result<(
         || evidence.nested_summary_source_route_controls != 0
         || evidence.board_coordination_action_controls != 0
         || evidence.board_personal_action_controls != 0
-        || evidence.source_route_clicks != 0
         || !is_safe_ui_route_reference(&evidence.source_route_ref)
         || !is_safe_ui_route_reference(&evidence.source_owner_ref)
         || !is_bounded_code(&evidence.source_object_type)
@@ -848,12 +1010,34 @@ fn validate_ui_fallback_evidence(evidence: &TauriUiFallbackEvidence) -> Result<(
     {
         return Err("m4r06_ordinary_legacy_read_ui_fallback_contract_invalid".to_string());
     }
+    let closeout_contract = if r07_closeout_mode {
+        evidence.source_route_clicks == 1
+            && evidence.consumed_marker_count == Some(1)
+            && evidence.success_notice_count == Some(1)
+            && evidence.active_view.as_deref() == Some("projects")
+            && evidence.route_phase.as_deref() == Some("CONSUMED")
+            && evidence
+                .consumed_source_revision
+                .as_deref()
+                .is_some_and(is_canonical_revision)
+    } else {
+        evidence.source_route_clicks == 0
+            && evidence.consumed_marker_count.is_none()
+            && evidence.success_notice_count.is_none()
+            && evidence.active_view.is_none()
+            && evidence.route_phase.is_none()
+            && evidence.consumed_source_revision.is_none()
+    };
+    if !closeout_contract {
+        return Err("m4r06_ordinary_legacy_read_ui_fallback_closeout_contract_invalid".to_string());
+    }
     Ok(())
 }
 
 fn bind_ui_fallback_to_work_item(
     dom: &TauriUiFallbackEvidence,
     source: &Map<String, Value>,
+    r07_closeout_mode: bool,
 ) -> Result<UiFallbackEvidence, String> {
     let source = exact_map(
         source,
@@ -920,6 +1104,14 @@ fn bind_ui_fallback_to_work_item(
     if !exact_binding {
         return Err("m4r06_ordinary_legacy_read_ui_fallback_work_item_binding_invalid".to_string());
     }
+    let exact_consumed_binding = if r07_closeout_mode {
+        dom.consumed_source_revision.as_deref() == Some(source_revision)
+    } else {
+        true
+    };
+    if !exact_consumed_binding {
+        return Err("m4r06_ordinary_legacy_read_ui_fallback_consumed_binding_invalid".to_string());
+    }
     Ok(UiFallbackEvidence {
         open_conversation_clicks: dom.open_conversation_clicks,
         compatibility_fallback_roots: dom.compatibility_fallback_roots,
@@ -938,6 +1130,12 @@ fn bind_ui_fallback_to_work_item(
         ),
         source_revision: source_revision.to_string(),
         exact_work_item_parity_binding: true,
+        consumed_marker_count: r07_closeout_mode.then_some(1),
+        success_notice_count: r07_closeout_mode.then_some(1),
+        active_view: r07_closeout_mode.then(|| "projects".to_string()),
+        route_phase: r07_closeout_mode.then(|| "CONSUMED".to_string()),
+        consumed_source_revision: r07_closeout_mode.then(|| source_revision.to_string()),
+        exact_consumed_binding: r07_closeout_mode.then_some(true),
     })
 }
 
@@ -1145,6 +1343,269 @@ fn validate_report(report: &Value) -> Result<ParsedReport<'_>, String> {
             eligible_row_count: parity_primary_rows,
             eligible_rows_all_parity_primary: primary_rows_outside_guarded_fallback == 0,
         },
+    })
+}
+
+fn parse_r07_daily_report(value: &Value) -> Result<ParsedR07DailyReport, String> {
+    let root = exact_object(
+        value,
+        &[
+            "schema_version",
+            "status",
+            "scheduler",
+            "daily_brief",
+            "daily_report",
+            "last_run",
+            "recovery_code",
+        ],
+        "r07_daily_envelope",
+    )?;
+    if root.get("schema_version").and_then(Value::as_str)
+        != Some(crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION)
+        || root.get("status").and_then(Value::as_str) != Some("READY")
+        || !matches!(root.get("recovery_code"), Some(Value::Null))
+    {
+        return Err("m4r07_daily_envelope_contract_invalid".to_string());
+    }
+    let scheduler = exact_object(
+        root.get("scheduler")
+            .ok_or_else(|| "m4r07_daily_scheduler_missing".to_string())?,
+        &[
+            "configuration_revision",
+            "iana_timezone",
+            "timezone_rules_version",
+            "current_daily_window_id",
+            "last_closed_daily_window_id",
+            "catch_up_pending_count",
+            "pending_catch_up_receipt_refs",
+            "status",
+        ],
+        "r07_daily_scheduler",
+    )?;
+    let configuration_revision = r07_required_revision(
+        scheduler.get("configuration_revision"),
+        "m4r07_daily_scheduler_revision_invalid",
+    )?;
+    let _iana_timezone = r07_required_text(
+        scheduler.get("iana_timezone"),
+        "m4r07_daily_scheduler_timezone_invalid",
+    )?;
+    let _timezone_rules_version = r07_required_text(
+        scheduler.get("timezone_rules_version"),
+        "m4r07_daily_scheduler_rules_invalid",
+    )?;
+    let current_daily_window_id = r07_required_daily_window(
+        scheduler.get("current_daily_window_id"),
+        "m4r07_daily_current_window_invalid",
+    )?;
+    let closed_daily_window_id = r07_required_daily_window(
+        scheduler.get("last_closed_daily_window_id"),
+        "m4r07_daily_closed_window_invalid",
+    )?;
+    let catch_up_pending_count = r07_required_counter(
+        scheduler.get("catch_up_pending_count"),
+        "m4r07_daily_catch_up_count_invalid",
+    )?;
+    let pending_catch_up_receipt_refs = r07_required_safe_string_array(
+        scheduler.get("pending_catch_up_receipt_refs"),
+        "m4r07_daily_catch_up_refs_invalid",
+    )?;
+    if scheduler.get("status").and_then(Value::as_str) != Some("READY")
+        || (catch_up_pending_count == 0 && !pending_catch_up_receipt_refs.is_empty())
+        || (catch_up_pending_count > 0 && pending_catch_up_receipt_refs.is_empty())
+    {
+        return Err("m4r07_daily_scheduler_contract_invalid".to_string());
+    }
+
+    let brief = exact_object(
+        root.get("daily_brief")
+            .ok_or_else(|| "m4r07_daily_brief_missing".to_string())?,
+        &[
+            "daily_window_id",
+            "scope_source_watermark",
+            "projector_version",
+            "ordered_item_refs",
+            "generated_at_utc",
+        ],
+        "r07_daily_brief",
+    )?;
+    let brief_daily_window_id = r07_required_daily_window(
+        brief.get("daily_window_id"),
+        "m4r07_daily_brief_window_invalid",
+    )?;
+    let daily_brief_watermark = r07_required_hash(
+        brief.get("scope_source_watermark"),
+        "m4r07_daily_brief_watermark_invalid",
+    )?;
+    let daily_brief_projector_version = r07_required_revision(
+        brief.get("projector_version"),
+        "m4r07_daily_brief_projector_invalid",
+    )?;
+    let daily_brief_item_refs = r07_required_safe_string_array(
+        brief.get("ordered_item_refs"),
+        "m4r07_daily_brief_items_invalid",
+    )?;
+    let daily_brief_item_count = daily_brief_item_refs.len() as u64;
+    r07_validate_optional_text(
+        brief.get("generated_at_utc"),
+        "m4r07_daily_brief_generated_invalid",
+    )?;
+
+    let daily_report = exact_object(
+        root.get("daily_report")
+            .ok_or_else(|| "m4r07_daily_report_missing".to_string())?,
+        &[
+            "daily_report_id",
+            "daily_window_id",
+            "report_version",
+            "status",
+            "scope_source_watermark",
+            "projector_version",
+            "ordered_item_refs",
+            "supersedes_report_ref",
+            "generated_at_utc",
+        ],
+        "r07_daily_report",
+    )?;
+    let daily_report_id = r07_required_daily_report_id(
+        daily_report.get("daily_report_id"),
+        "m4r07_daily_report_id_invalid",
+    )?;
+    let daily_report_window_id = r07_required_daily_window(
+        daily_report.get("daily_window_id"),
+        "m4r07_daily_report_window_invalid",
+    )?;
+    let report_version = r07_required_revision(
+        daily_report.get("report_version"),
+        "m4r07_daily_report_revision_invalid",
+    )?;
+    let report_status = daily_report
+        .get("status")
+        .and_then(Value::as_str)
+        // The common M4C07 read-model validator accepts historical report
+        // states too.  R07 is the ordinary closeout observation of the
+        // current, stable report, so a superseded or failed version must not
+        // be promoted into its portable success receipt.
+        .filter(|status| *status == "GENERATED")
+        .map(str::to_string)
+        .ok_or_else(|| "m4r07_daily_report_not_generated".to_string())?;
+    let daily_report_watermark = r07_required_hash(
+        daily_report.get("scope_source_watermark"),
+        "m4r07_daily_report_watermark_invalid",
+    )?;
+    let daily_report_projector_version = r07_required_revision(
+        daily_report.get("projector_version"),
+        "m4r07_daily_report_projector_invalid",
+    )?;
+    let daily_report_item_refs = r07_required_safe_string_array(
+        daily_report.get("ordered_item_refs"),
+        "m4r07_daily_report_items_invalid",
+    )?;
+    let daily_report_item_count = daily_report_item_refs.len() as u64;
+    r07_validate_nullable_daily_report_id(
+        daily_report.get("supersedes_report_ref"),
+        "m4r07_daily_report_supersedes_invalid",
+    )?;
+    r07_validate_optional_text(
+        daily_report.get("generated_at_utc"),
+        "m4r07_daily_report_generated_invalid",
+    )?;
+
+    let last_run = exact_object(
+        root.get("last_run")
+            .ok_or_else(|| "m4r07_daily_last_run_missing".to_string())?,
+        &[
+            "scheduler_run_id",
+            "configuration_revision",
+            "window_ref",
+            "scope_source_watermark_before",
+            "scope_source_watermark_after",
+            "admitted_material_event_count",
+            "agent_turn_count",
+            "model_invocation_count",
+            "outcome_code",
+            "recorded_at_utc",
+        ],
+        "r07_daily_last_run",
+    )?;
+    let last_run_id = r07_required_scheduler_run_id(
+        last_run.get("scheduler_run_id"),
+        "m4r07_daily_last_run_id_invalid",
+    )?;
+    let last_run_configuration_revision = r07_required_revision(
+        last_run.get("configuration_revision"),
+        "m4r07_daily_last_run_revision_invalid",
+    )?;
+    let last_run_window_id = r07_required_daily_window(
+        last_run.get("window_ref"),
+        "m4r07_daily_last_run_window_invalid",
+    )?;
+    let last_run_watermark_before = r07_required_hash(
+        last_run.get("scope_source_watermark_before"),
+        "m4r07_daily_last_run_before_invalid",
+    )?;
+    let last_run_watermark_after = r07_required_hash(
+        last_run.get("scope_source_watermark_after"),
+        "m4r07_daily_last_run_after_invalid",
+    )?;
+    let last_run_admitted_material_event_count = r07_required_counter(
+        last_run.get("admitted_material_event_count"),
+        "m4r07_daily_last_run_admitted_invalid",
+    )?;
+    let last_run_agent_turn_count = r07_required_counter(
+        last_run.get("agent_turn_count"),
+        "m4r07_daily_last_run_agent_turn_invalid",
+    )?;
+    let last_run_model_invocation_count = r07_required_counter(
+        last_run.get("model_invocation_count"),
+        "m4r07_daily_last_run_model_invalid",
+    )?;
+    let last_run_outcome_code = bounded_code(
+        last_run.get("outcome_code"),
+        "m4r07_daily_last_run_outcome_invalid",
+    )?;
+    r07_validate_optional_text(
+        last_run.get("recorded_at_utc"),
+        "m4r07_daily_last_run_recorded_invalid",
+    )?;
+
+    if brief_daily_window_id != current_daily_window_id
+        || daily_report_window_id != closed_daily_window_id
+        || current_daily_window_id == closed_daily_window_id
+        || last_run_configuration_revision != configuration_revision
+        || last_run_window_id != closed_daily_window_id
+        || last_run_watermark_after != daily_report_watermark
+        || last_run_admitted_material_event_count != 0
+        || last_run_agent_turn_count != 0
+        || last_run_model_invocation_count != 0
+        || last_run_outcome_code != "WINDOWS_PLANNED"
+    {
+        return Err("m4r07_daily_cross_object_binding_invalid".to_string());
+    }
+    Ok(ParsedR07DailyReport {
+        current_daily_window_id,
+        closed_daily_window_id,
+        configuration_revision,
+        daily_brief_watermark,
+        daily_brief_projector_version,
+        daily_brief_item_count,
+        daily_brief_item_refs,
+        daily_report_id,
+        daily_report_window_id,
+        report_version,
+        report_status,
+        daily_report_watermark,
+        daily_report_projector_version,
+        daily_report_item_count,
+        daily_report_item_refs,
+        last_run_id,
+        last_run_window_id,
+        last_run_watermark_before,
+        last_run_watermark_after,
+        last_run_admitted_material_event_count,
+        last_run_agent_turn_count,
+        last_run_model_invocation_count,
+        last_run_outcome_code,
     })
 }
 
@@ -1442,6 +1903,279 @@ fn database_evidence(
     })
 }
 
+fn run_r07_daily_closeout(
+    app_handle: &tauri::AppHandle,
+    paths: &OrdinaryLegacyReadPaths,
+    nonce: &str,
+) -> Result<R07DailyReportEvidence, String> {
+    let before = read_r07_daily_database_snapshot(paths)?;
+    let first_result = invoke_renderer_operation(app_handle, "first_read", nonce, true)?;
+    let first_envelope = first_result
+        .daily_report
+        .as_ref()
+        .ok_or_else(|| "m4r07_daily_first_envelope_missing".to_string())?;
+    let first = parse_r07_daily_report(first_envelope)?;
+    let after_first = read_r07_daily_database_snapshot(paths)?;
+
+    let replay_result = invoke_renderer_operation(app_handle, "exact_replay", nonce, true)?;
+    let replay_envelope = replay_result
+        .daily_report
+        .as_ref()
+        .ok_or_else(|| "m4r07_daily_replay_envelope_missing".to_string())?;
+    let replay = parse_r07_daily_report(replay_envelope)?;
+    let after_replay = read_r07_daily_database_snapshot(paths)?;
+
+    if first_envelope != replay_envelope || first != replay {
+        return Err("m4r07_daily_exact_replay_envelope_mismatch".to_string());
+    }
+    let first_checkpoint_delta =
+        checkpoint_revision_delta(before.checkpoint_revision, after_first.checkpoint_revision)?;
+    let replay_checkpoint_delta = checkpoint_revision_delta(
+        after_first.checkpoint_revision,
+        after_replay.checkpoint_revision,
+    )?;
+    let exact_replay_zero_business_delta = after_first.business == after_replay.business;
+    if first_checkpoint_delta != "1"
+        || replay_checkpoint_delta != "1"
+        || !exact_replay_zero_business_delta
+        || before.m4_model_invocation_rows != 0
+        || after_first.m4_model_invocation_rows != 0
+        || after_replay.m4_model_invocation_rows != 0
+        || before.provider_call_count != after_first.provider_call_count
+        || after_first.provider_call_count != after_replay.provider_call_count
+        || first.last_run_agent_turn_count != 0
+        || first.last_run_model_invocation_count != 0
+    {
+        return Err("m4r07_daily_mechanical_replay_contract_invalid".to_string());
+    }
+    verify_r07_daily_database_binding(paths, &first)?;
+    Ok(R07DailyReportEvidence {
+        zero_arg_load_calls: first_result
+            .daily_report_load_calls
+            .checked_add(replay_result.daily_report_load_calls)
+            .ok_or_else(|| "m4r07_daily_load_count_overflow".to_string())?,
+        first_envelope_sha256: hash_json(first_envelope)?,
+        exact_replay_envelope_sha256: hash_json(replay_envelope)?,
+        exact_replay_matches_first: true,
+        current_daily_window_id_sha256: crate::utils::hash::sha256_hex(
+            &first.current_daily_window_id,
+        ),
+        closed_daily_window_id_sha256: crate::utils::hash::sha256_hex(
+            &first.closed_daily_window_id,
+        ),
+        daily_report_id_sha256: crate::utils::hash::sha256_hex(&first.daily_report_id),
+        report_version: first.report_version,
+        report_status: first.report_status,
+        daily_brief_item_count: first.daily_brief_item_count,
+        daily_report_item_count: first.daily_report_item_count,
+        last_run_outcome_code: first.last_run_outcome_code,
+        last_run_admitted_material_event_count: first.last_run_admitted_material_event_count,
+        last_run_agent_turn_count: first.last_run_agent_turn_count,
+        last_run_model_invocation_count: first.last_run_model_invocation_count,
+        daily_database_exact_binding: true,
+        daily_business_snapshot_before_sha256: hash_r07_daily_business_snapshot(&before.business)?,
+        daily_business_snapshot_after_first_sha256: hash_r07_daily_business_snapshot(
+            &after_first.business,
+        )?,
+        daily_business_snapshot_after_replay_sha256: hash_r07_daily_business_snapshot(
+            &after_replay.business,
+        )?,
+        exact_replay_zero_business_delta,
+        first_read_checkpoint_revision_delta: first_checkpoint_delta,
+        replay_checkpoint_revision_delta: replay_checkpoint_delta,
+        m4_model_invocation_rows_before: before.m4_model_invocation_rows,
+        m4_model_invocation_rows_after: after_replay.m4_model_invocation_rows,
+    })
+}
+
+fn read_r07_daily_database_snapshot(
+    paths: &OrdinaryLegacyReadPaths,
+) -> Result<R07DailyDatabaseSnapshot, String> {
+    // The M4 part is one query_only deferred read transaction.  Its first
+    // query establishes one SQLite snapshot, so the twelve-table fingerprint,
+    // checkpoint revision, and model count cannot be mixed across an ordinary
+    // scheduler write that happens while this driver is observing the app.
+    let mut m4 = open_read_only(&paths.m4_db_path, "r07_daily_m4_db")?;
+    let m4_snapshot = m4
+        .transaction_with_behavior(TransactionBehavior::Deferred)
+        .map_err(|_| "m4r07_daily_m4_snapshot_begin_failed".to_string())?;
+    let business = fingerprint_named_tables(&m4_snapshot, &M4_DAILY_BUSINESS_TABLES, "r07_daily")?;
+    let checkpoint_revision: i64 = m4_snapshot
+        .query_row(
+            "SELECT revision FROM m4_scheduler_checkpoints WHERE scope_ref = ?1",
+            [crate::m4_secretary_domain::m4_primary_scope_ref()],
+            |row| row.get(0),
+        )
+        .map_err(|_| "m4r07_daily_checkpoint_revision_query_failed".to_string())?;
+    let checkpoint_revision = u64::try_from(checkpoint_revision)
+        .map_err(|_| "m4r07_daily_checkpoint_revision_invalid".to_string())?;
+    let m4_model_invocation_rows = query_count(
+        &m4_snapshot,
+        "SELECT COUNT(*) FROM m4_model_invocations",
+        "r07_daily_model_invocations",
+    )?;
+    m4_snapshot
+        .commit()
+        .map_err(|_| "m4r07_daily_m4_snapshot_end_failed".to_string())?;
+    let provider_call_count = read_r07_provider_call_count(paths)?;
+    Ok(R07DailyDatabaseSnapshot {
+        business,
+        checkpoint_revision,
+        m4_model_invocation_rows,
+        provider_call_count,
+    })
+}
+
+fn read_r07_provider_call_count(paths: &OrdinaryLegacyReadPaths) -> Result<u64, String> {
+    // The provider transcript is a separate database and therefore this is an
+    // independent read-only cut, not a cross-database atomic snapshot. R07
+    // proves its relevance by comparing this exact count before, after first
+    // daily read, and after replay while the phase has no provider dispatch.
+    let mut provider = open_read_only(&paths.provider_db_path, "r07_daily_provider_db")?;
+    let provider_cut = provider
+        .transaction_with_behavior(TransactionBehavior::Deferred)
+        .map_err(|_| "m4r07_daily_provider_cut_begin_failed".to_string())?;
+    let provider_calls: i64 = provider_cut
+        .query_row(
+            "SELECT COALESCE(SUM(call_count), 0) FROM m4_secretary_provider_call_counts",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|_| "m4r07_daily_provider_call_count_query_failed".to_string())?;
+    provider_cut
+        .commit()
+        .map_err(|_| "m4r07_daily_provider_cut_end_failed".to_string())?;
+    u64::try_from(provider_calls).map_err(|_| "m4r07_daily_provider_call_count_invalid".to_string())
+}
+
+fn checkpoint_revision_delta(before: u64, after: u64) -> Result<String, String> {
+    after
+        .checked_sub(before)
+        .map(|value| value.to_string())
+        .ok_or_else(|| "m4r07_daily_checkpoint_revision_regressed".to_string())
+}
+
+fn hash_r07_daily_business_snapshot(snapshot: &SqliteFingerprint) -> Result<String, String> {
+    let value = serde_json::to_value(snapshot)
+        .map_err(|_| "m4r07_daily_business_snapshot_serialize_failed".to_string())?;
+    hash_json(&value)
+}
+
+fn verify_r07_daily_database_binding(
+    paths: &OrdinaryLegacyReadPaths,
+    report: &ParsedR07DailyReport,
+) -> Result<(), String> {
+    // This is the final M4-only binding cut for the exact envelope. All six
+    // joins below observe one query_only deferred SQLite snapshot; provider
+    // evidence remains an explicitly separate cut in the surrounding daily
+    // closeout and is not represented as a cross-database atomic claim.
+    let mut connection = open_read_only(&paths.m4_db_path, "r07_daily_binding_m4_db")?;
+    let binding_cut = connection
+        .transaction_with_behavior(TransactionBehavior::Deferred)
+        .map_err(|_| "m4r07_daily_binding_cut_begin_failed".to_string())?;
+    let scope = crate::m4_secretary_domain::m4_primary_scope_ref();
+    let checkpoint_rows = query_count_with_params(
+        &binding_cut,
+        "SELECT COUNT(*) FROM m4_scheduler_checkpoints
+         WHERE scope_ref = ?1 AND configuration_revision = ?2
+           AND last_closed_daily_window_id = ?3 AND status = 'READY'",
+        &[
+            scope,
+            &report.configuration_revision,
+            &report.closed_daily_window_id,
+        ],
+        "r07_daily_checkpoint_binding",
+    )?;
+    let brief_rows = query_count_with_params(
+        &binding_cut,
+        "SELECT COUNT(*) FROM m4_daily_briefs
+         WHERE daily_window_id = ?1 AND scope_ref = ?2
+           AND scope_source_watermark = ?3 AND projector_version = ?4",
+        &[
+            &report.current_daily_window_id,
+            scope,
+            &report.daily_brief_watermark,
+            &report.daily_brief_projector_version,
+        ],
+        "r07_daily_brief_binding",
+    )?;
+    let brief_item_refs = query_ordered_text_values(
+        &binding_cut,
+        "SELECT item_ref FROM m4_daily_brief_item_refs
+         WHERE daily_window_id = ?1 AND scope_ref = ?2 ORDER BY ordinal ASC",
+        &[&report.current_daily_window_id, scope],
+        "r07_daily_brief_items",
+    )?;
+    let report_rows = query_count_with_params(
+        &binding_cut,
+        "SELECT COUNT(*) FROM m4_daily_reports
+         WHERE daily_report_id = ?1 AND scope_ref = ?2 AND daily_window_id = ?3
+           AND report_version = ?4 AND status = ?5
+           AND scope_source_watermark = ?6 AND projector_version = ?7",
+        &[
+            &report.daily_report_id,
+            scope,
+            &report.daily_report_window_id,
+            &report.report_version,
+            &report.report_status,
+            &report.daily_report_watermark,
+            &report.daily_report_projector_version,
+        ],
+        "r07_daily_report_binding",
+    )?;
+    let report_item_refs = query_ordered_text_values(
+        &binding_cut,
+        "SELECT item_ref FROM m4_daily_report_item_refs
+         WHERE daily_report_id = ?1 AND scope_ref = ?2 AND daily_window_id = ?3
+         ORDER BY ordinal ASC",
+        &[
+            &report.daily_report_id,
+            scope,
+            &report.daily_report_window_id,
+        ],
+        "r07_daily_report_items",
+    )?;
+    let admitted = report.last_run_admitted_material_event_count.to_string();
+    let agent_turns = report.last_run_agent_turn_count.to_string();
+    let model_invocations = report.last_run_model_invocation_count.to_string();
+    let run_rows = query_count_with_params(
+        &binding_cut,
+        "SELECT COUNT(*) FROM m4_scheduler_runs
+         WHERE scheduler_run_id = ?1 AND configuration_revision = ?2
+           AND daily_window_id = ?3 AND scope_source_watermark_before = ?4
+           AND scope_source_watermark_after = ?5
+           AND admitted_material_event_count = CAST(?6 AS INTEGER)
+           AND agent_turn_count = CAST(?7 AS INTEGER)
+           AND model_invocation_count = CAST(?8 AS INTEGER)
+           AND outcome_code = ?9",
+        &[
+            &report.last_run_id,
+            &report.configuration_revision,
+            &report.last_run_window_id,
+            &report.last_run_watermark_before,
+            &report.last_run_watermark_after,
+            &admitted,
+            &agent_turns,
+            &model_invocations,
+            &report.last_run_outcome_code,
+        ],
+        "r07_daily_scheduler_run_binding",
+    )?;
+    if checkpoint_rows != 1
+        || brief_rows != 1
+        || brief_item_refs != report.daily_brief_item_refs
+        || report_rows != 1
+        || report_item_refs != report.daily_report_item_refs
+        || run_rows != 1
+    {
+        return Err("m4r07_daily_database_exact_binding_invalid".to_string());
+    }
+    binding_cut
+        .commit()
+        .map_err(|_| "m4r07_daily_binding_cut_end_failed".to_string())?;
+    Ok(())
+}
+
 fn read_database_snapshot(
     paths: &OrdinaryLegacyReadPaths,
     read_only_connections: &mut u8,
@@ -1590,6 +2324,26 @@ fn query_count_with_params(
     u64::try_from(count).map_err(|_| format!("m4r06_ordinary_legacy_read_{label}_count_invalid"))
 }
 
+fn query_ordered_text_values(
+    connection: &Connection,
+    sql: &str,
+    parameters: &[&str],
+    label: &str,
+) -> Result<Vec<String>, String> {
+    let mut statement = connection
+        .prepare(sql)
+        .map_err(|_| format!("m4r06_ordinary_legacy_read_{label}_prepare_failed"))?;
+    let rows = statement
+        .query_map(rusqlite::params_from_iter(parameters.iter()), |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(|_| format!("m4r06_ordinary_legacy_read_{label}_query_failed"))?;
+    let values = rows
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| format!("m4r06_ordinary_legacy_read_{label}_row_invalid"))?;
+    Ok(values)
+}
+
 fn increment_connection_count(value: &mut u8) -> Result<(), String> {
     *value = value
         .checked_add(1)
@@ -1623,6 +2377,8 @@ fn early_ordinary_paths() -> Result<OrdinaryLegacyReadPaths, String> {
         owner_db_path: product_root.join("runtime-artifacts/workbench.sqlite"),
         m4_db_path: app_data_root
             .join(crate::m4_secretary_repository::M4_ORDINARY_SECRETARY_RELATIVE_PATH),
+        provider_db_path: app_data_root
+            .join(crate::m4_secretary_conversation::M4_SECRETARY_PROVIDER_RELATIVE_PATH),
         receipt_root,
         profile_root,
     })
@@ -1740,6 +2496,8 @@ fn success_receipt_placeholder(
         work_item_parity: None,
         guarded_fallback: None,
         database: None,
+        r07_closeout_mode: None,
+        r07_daily_report: None,
         error_family: Some(family.to_string()),
     }
 }
@@ -1850,6 +2608,105 @@ fn bounded_code(value: Option<&Value>, error: &str) -> Result<String, String> {
     Ok(value.to_string())
 }
 
+fn r07_required_text(value: Option<&Value>, error: &str) -> Result<String, String> {
+    let value = value
+        .and_then(Value::as_str)
+        .ok_or_else(|| error.to_string())?;
+    if !is_safe_ui_route_reference(value) {
+        return Err(error.to_string());
+    }
+    Ok(value.to_string())
+}
+
+fn r07_required_hash(value: Option<&Value>, error: &str) -> Result<String, String> {
+    let value = r07_required_text(value, error)?;
+    if !is_lower_hex_sha256(&value) {
+        return Err(error.to_string());
+    }
+    Ok(value)
+}
+
+fn r07_required_revision(value: Option<&Value>, error: &str) -> Result<String, String> {
+    let value = r07_required_text(value, error)?;
+    if !is_canonical_revision(&value) {
+        return Err(error.to_string());
+    }
+    Ok(value)
+}
+
+fn r07_required_counter(value: Option<&Value>, error: &str) -> Result<u64, String> {
+    value
+        .and_then(Value::as_u64)
+        .ok_or_else(|| error.to_string())
+}
+
+fn r07_required_daily_window(value: Option<&Value>, error: &str) -> Result<String, String> {
+    let value = r07_required_text(value, error)?;
+    if !value.starts_with("daily-window:") || !is_lower_hex_sha256(&value["daily-window:".len()..])
+    {
+        return Err(error.to_string());
+    }
+    Ok(value)
+}
+
+fn r07_required_daily_report_id(value: Option<&Value>, error: &str) -> Result<String, String> {
+    let value = r07_required_text(value, error)?;
+    if !value.starts_with("daily-report:") || !is_lower_hex_sha256(&value["daily-report:".len()..])
+    {
+        return Err(error.to_string());
+    }
+    Ok(value)
+}
+
+fn r07_required_scheduler_run_id(value: Option<&Value>, error: &str) -> Result<String, String> {
+    let value = r07_required_text(value, error)?;
+    let valid = value
+        .strip_prefix("scheduler-run:")
+        .is_some_and(is_lower_hex_sha256)
+        || value
+            .strip_prefix("scheduler-run:sha256:")
+            .is_some_and(is_lower_hex_sha256);
+    if !valid {
+        return Err(error.to_string());
+    }
+    Ok(value)
+}
+
+fn r07_required_safe_string_array(
+    value: Option<&Value>,
+    error: &str,
+) -> Result<Vec<String>, String> {
+    let values = value
+        .and_then(Value::as_array)
+        .ok_or_else(|| error.to_string())?;
+    let mut seen = BTreeSet::new();
+    let mut parsed = Vec::with_capacity(values.len());
+    for entry in values {
+        let value = r07_required_text(Some(entry), error)?;
+        if !seen.insert(value.clone()) {
+            return Err(error.to_string());
+        }
+        parsed.push(value);
+    }
+    Ok(parsed)
+}
+
+fn r07_validate_optional_text(value: Option<&Value>, error: &str) -> Result<(), String> {
+    match value {
+        Some(Value::Null) => Ok(()),
+        Some(value) => r07_required_text(Some(value), error).map(|_| ()),
+        None => Err(error.to_string()),
+    }
+}
+
+fn r07_validate_nullable_daily_report_id(value: Option<&Value>, error: &str) -> Result<(), String> {
+    match value {
+        Some(Value::Null) => Ok(()),
+        Some(value) => r07_required_daily_report_id(Some(value), error).map(|_| ()),
+        None => Err(error.to_string()),
+    }
+}
+
 fn bounded_reader_id(value: Option<&Value>, error: &str) -> Result<String, String> {
     let value = value
         .and_then(Value::as_str)
@@ -1891,6 +2748,13 @@ fn is_bounded_code(value: &str) -> bool {
                 || byte.is_ascii_digit()
                 || matches!(byte, b'_' | b'-' | b'.' | b':')
         })
+}
+
+fn is_lower_hex_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn is_canonical_revision(value: &str) -> bool {
@@ -1944,6 +2808,139 @@ fn error_family(error: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
+
+    fn archived_r06_fingerprint() -> SqliteFingerprint {
+        SqliteFingerprint {
+            sqlite_integrity_check: "ok".to_string(),
+            foreign_key_violation_rows: 0,
+            table_count: 1,
+            record_count: 1,
+            canonical_record_hashes_sha256: "a".repeat(64),
+        }
+    }
+
+    fn archived_r06_snapshot() -> DatabaseSnapshot {
+        let fingerprint = archived_r06_fingerprint();
+        DatabaseSnapshot {
+            owner: fingerprint.clone(),
+            m4: fingerprint.clone(),
+            coordination: fingerprint.clone(),
+            effects: fingerprint.clone(),
+            writeback: fingerprint,
+        }
+    }
+
+    fn archived_r06_pass_receipt() -> DriverReceipt {
+        let snapshot = archived_r06_snapshot();
+        DriverReceipt {
+            schema_version: DRIVER_RECEIPT_SCHEMA_VERSION.to_string(),
+            task_package: "M4R06".to_string(),
+            phase: DRIVER_PHASE.to_string(),
+            launch_ordinal: 4,
+            process_id_sha256: "b".repeat(64),
+            profile_fingerprint: "c".repeat(64),
+            nonce_sha256: "d".repeat(64),
+            outcome: "PASS".to_string(),
+            portable: true,
+            ordinary_constructor: true,
+            ordinary_composition: true,
+            command_registry_surface: COMMAND_REGISTRY_SURFACE.to_string(),
+            acceptance_wrapper_calls: Some(0),
+            direct_repository_seed_calls: Some(0),
+            manual_legacy_candidate_calls: Some(0),
+            zero_arg_load_calls: Some(2),
+            actual_legacy_report_load_calls: Some(3),
+            synthetic_home_unavailable_trigger: Some(false),
+            actual_ui_fallback_visible: Some(true),
+            ui_fallback: Some(UiFallbackEvidence {
+                open_conversation_clicks: 1,
+                compatibility_fallback_roots: 1,
+                parity_primary_attention_rows: 1,
+                non_parity_rows_visible: 0,
+                source_route_controls: 1,
+                nested_summary_source_route_controls: 0,
+                board_coordination_action_controls: 0,
+                board_personal_action_controls: 0,
+                source_route_clicks: 0,
+                source_route_ref_sha256: "e".repeat(64),
+                source_owner_ref_sha256: "f".repeat(64),
+                source_object_type: WORK_ITEM_SOURCE_OBJECT_TYPE.to_string(),
+                canonical_source_object_id_sha256: "0".repeat(64),
+                source_revision: "1".to_string(),
+                exact_work_item_parity_binding: true,
+                consumed_marker_count: None,
+                success_notice_count: None,
+                active_view: None,
+                route_phase: None,
+                consumed_source_revision: None,
+                exact_consumed_binding: None,
+            }),
+            r02_preparation: Some(R02PreparationEvidence {
+                r02_readback_receipt_sha256: "1".repeat(64),
+                r02_ingestion_adapter_id_sha256: "2".repeat(64),
+                same_profile: true,
+                ingestion_adapter_matches_work_item_reader: true,
+            }),
+            first_report_sha256: Some("3".repeat(64)),
+            exact_replay_report_sha256: Some("3".repeat(64)),
+            exact_replay_matches_first_read: Some(true),
+            reader_receipts: Some(vec![ReaderReceiptEvidence {
+                legacy_source_kind: WORK_ITEM_LEGACY_SOURCE_KIND.to_string(),
+                reader_id_sha256: "4".repeat(64),
+                source_surface_code: "SERVER_RUNTIME_ATTENTION_PROJECTION".to_string(),
+                read_state: "OBSERVED".to_string(),
+                reason_code: None,
+                legacy_reader_adapter_id_sha256: Some("5".repeat(64)),
+                candidate_count: 1,
+                complete_tuple_count: 1,
+            }]),
+            work_item_parity: Some(WorkItemParityEvidence {
+                legacy_source_kind: WORK_ITEM_LEGACY_SOURCE_KIND.to_string(),
+                canonical_source_object_id_sha256: "6".repeat(64),
+                source_owner_ref_sha256: "7".repeat(64),
+                source_revision: "1".to_string(),
+                r02_ingestion_adapter_id_sha256: "8".repeat(64),
+                reader_adapter_matches_r02_ingestion: true,
+                owner_publication_rows: 1,
+                m4_current_rows: 1,
+                m4_provenance_rows: 1,
+                parity_primary_rows: 1,
+            }),
+            guarded_fallback: Some(GuardedFallbackEvidence {
+                eligible_row_count: 1,
+                eligible_rows_all_parity_primary: true,
+            }),
+            database: Some(DatabaseEvidence {
+                m4_snapshot_scope: "READER_RELATED_M4_EXCLUDING_INDEPENDENT_DAILY_SCHEDULER"
+                    .to_string(),
+                independent_daily_scheduler_tables_excluded: true,
+                baseline: snapshot.clone(),
+                after_ui_fallback: snapshot.clone(),
+                after_first_read: snapshot.clone(),
+                after_exact_replay: snapshot,
+                ui_fallback_zero_owner_delta: true,
+                ui_fallback_zero_m4_delta: true,
+                ui_fallback_zero_coordination_delta: true,
+                ui_fallback_zero_effect_delta: true,
+                ui_fallback_zero_writeback_delta: true,
+                first_read_zero_owner_delta: true,
+                first_read_zero_m4_delta: true,
+                first_read_zero_coordination_delta: true,
+                first_read_zero_effect_delta: true,
+                first_read_zero_writeback_delta: true,
+                exact_replay_zero_owner_delta: true,
+                exact_replay_zero_m4_delta: true,
+                exact_replay_zero_coordination_delta: true,
+                exact_replay_zero_effect_delta: true,
+                exact_replay_zero_writeback_delta: true,
+                read_only_query_only_connection_count: 10,
+            }),
+            r07_closeout_mode: None,
+            r07_daily_report: None,
+            error_family: None,
+        }
+    }
 
     #[test]
     fn driver_phase_and_deadline_are_bounded_for_one_extra_r06_launch() {
@@ -1962,6 +2959,7 @@ mod tests {
             profile_path: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
             owner_db_path: PathBuf::from("owner.sqlite"),
             m4_db_path: PathBuf::from("m4.sqlite"),
+            provider_db_path: PathBuf::from("provider.sqlite"),
             receipt_root: PathBuf::from(env!("CARGO_MANIFEST_DIR")),
         };
         let receipt = failure_receipt(&paths, &"a".repeat(32), "timeout", false);
@@ -1969,7 +2967,245 @@ mod tests {
         assert!(!serialized.contains("owner.sqlite"));
         assert!(!serialized.contains("m4.sqlite"));
         assert!(serialized.contains(&crate::utils::hash::sha256_hex(&"a".repeat(32))));
+        assert!(
+            !serialized.contains("\"r07_closeout_mode\"")
+                && !serialized.contains("\"r07_daily_report\""),
+            "archived R06 receipt keyset must remain byte-compatible"
+        );
         assert!(!receipt.portable);
+    }
+
+    #[test]
+    fn archived_r06_pass_receipt_preserves_its_exact_top_and_fallback_keysets() {
+        let value = serde_json::to_value(archived_r06_pass_receipt())
+            .expect("archived PASS receipt serializes");
+        let top = value.as_object().expect("receipt object");
+        let keys: BTreeSet<_> = top.keys().map(String::as_str).collect();
+        let expected: BTreeSet<_> = [
+            "schema_version",
+            "task_package",
+            "phase",
+            "launch_ordinal",
+            "process_id_sha256",
+            "profile_fingerprint",
+            "nonce_sha256",
+            "outcome",
+            "portable",
+            "ordinary_constructor",
+            "ordinary_composition",
+            "command_registry_surface",
+            "acceptance_wrapper_calls",
+            "direct_repository_seed_calls",
+            "manual_legacy_candidate_calls",
+            "zero_arg_load_calls",
+            "actual_legacy_report_load_calls",
+            "synthetic_home_unavailable_trigger",
+            "actual_ui_fallback_visible",
+            "ui_fallback",
+            "r02_preparation",
+            "first_report_sha256",
+            "exact_replay_report_sha256",
+            "exact_replay_matches_first_read",
+            "reader_receipts",
+            "work_item_parity",
+            "guarded_fallback",
+            "database",
+            "error_family",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(keys, expected);
+        assert!(!top.contains_key("r07_closeout_mode"));
+        assert!(!top.contains_key("r07_daily_report"));
+
+        let fallback = top
+            .get("ui_fallback")
+            .and_then(Value::as_object)
+            .expect("archived PASS fallback evidence");
+        let fallback_keys: BTreeSet<_> = fallback.keys().map(String::as_str).collect();
+        let expected_fallback: BTreeSet<_> = [
+            "open_conversation_clicks",
+            "compatibility_fallback_roots",
+            "parity_primary_attention_rows",
+            "non_parity_rows_visible",
+            "source_route_controls",
+            "nested_summary_source_route_controls",
+            "board_coordination_action_controls",
+            "board_personal_action_controls",
+            "source_route_clicks",
+            "source_route_ref_sha256",
+            "source_owner_ref_sha256",
+            "source_object_type",
+            "canonical_source_object_id_sha256",
+            "source_revision",
+            "exact_work_item_parity_binding",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(fallback_keys, expected_fallback);
+        assert_eq!(
+            fallback.get("source_route_clicks").and_then(Value::as_u64),
+            Some(0)
+        );
+        for key in [
+            "consumed_marker_count",
+            "success_notice_count",
+            "active_view",
+            "route_phase",
+            "consumed_source_revision",
+            "exact_consumed_binding",
+        ] {
+            assert!(
+                !fallback.contains_key(key),
+                "archived key {key} stays absent"
+            );
+        }
+        serde_json::from_value::<DriverReceipt>(value)
+            .expect("archived PASS receipt remains deserializable");
+    }
+
+    #[test]
+    fn r07_closeout_daily_envelope_requires_ready_generated_empty_run() {
+        let hash = "a".repeat(64);
+        let window = format!("daily-window:{hash}");
+        let report_id = format!("daily-report:{hash}");
+        let run_id = format!("scheduler-run:{hash}");
+        let valid = serde_json::json!({
+            "schema_version": crate::m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION,
+            "status": "READY",
+            "scheduler": {
+                "configuration_revision": "1",
+                "iana_timezone": "Asia/Shanghai",
+                "timezone_rules_version": "tzif-v1",
+                "current_daily_window_id": window,
+                "last_closed_daily_window_id": format!("daily-window:{}", "b".repeat(64)),
+                "catch_up_pending_count": 0,
+                "pending_catch_up_receipt_refs": [],
+                "status": "READY"
+            },
+            "daily_brief": {
+                "daily_window_id": format!("daily-window:{hash}"),
+                "scope_source_watermark": hash,
+                "projector_version": "1",
+                "ordered_item_refs": ["source-event:one"],
+                "generated_at_utc": null
+            },
+            "daily_report": {
+                "daily_report_id": report_id,
+                "daily_window_id": format!("daily-window:{}", "b".repeat(64)),
+                "report_version": "1",
+                "status": "GENERATED",
+                "scope_source_watermark": hash,
+                "projector_version": "1",
+                "ordered_item_refs": ["source-event:one"],
+                "supersedes_report_ref": null,
+                "generated_at_utc": null
+            },
+            "last_run": {
+                "scheduler_run_id": run_id,
+                "configuration_revision": "1",
+                "window_ref": format!("daily-window:{}", "b".repeat(64)),
+                "scope_source_watermark_before": hash,
+                "scope_source_watermark_after": hash,
+                "admitted_material_event_count": 0,
+                "agent_turn_count": 0,
+                "model_invocation_count": 0,
+                "outcome_code": "WINDOWS_PLANNED",
+                "recorded_at_utc": null
+            },
+            "recovery_code": null
+        });
+        let parsed = parse_r07_daily_report(&valid).expect("valid R07 daily envelope");
+        assert_eq!(
+            parsed.daily_brief_item_refs,
+            vec!["source-event:one".to_string()]
+        );
+        assert_eq!(
+            parsed.daily_report_item_refs,
+            vec!["source-event:one".to_string()]
+        );
+        let mut invalid = valid;
+        invalid["last_run"]["model_invocation_count"] = Value::from(1);
+        assert!(parse_r07_daily_report(&invalid).is_err());
+        invalid["last_run"]["model_invocation_count"] = Value::from(0);
+        invalid["daily_report"]["status"] = Value::from("FAILED");
+        assert!(parse_r07_daily_report(&invalid).is_err());
+        invalid["daily_report"]["status"] = Value::from("GENERATED");
+        invalid["last_run"]["outcome_code"] = Value::from("FAILED");
+        assert!(parse_r07_daily_report(&invalid).is_err());
+        invalid["last_run"]["outcome_code"] = Value::from("WINDOWS_PLANNED");
+        invalid["last_run"]["admitted_material_event_count"] = Value::from(1);
+        assert!(parse_r07_daily_report(&invalid).is_err());
+    }
+
+    #[test]
+    fn r07_closeout_ui_contract_is_opt_in_and_archived_r06_remains_click_free() {
+        let archived = TauriUiFallbackEvidence {
+            open_conversation_clicks: 1,
+            compatibility_fallback_roots: 1,
+            parity_primary_attention_rows: 1,
+            non_parity_rows_visible: 0,
+            source_route_controls: 1,
+            nested_summary_source_route_controls: 0,
+            board_coordination_action_controls: 0,
+            board_personal_action_controls: 0,
+            source_route_clicks: 0,
+            source_route_ref: "source-route:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            source_owner_ref: "owner:m2-workflow-state-work-item:v1".to_string(),
+            source_object_type: WORK_ITEM_SOURCE_OBJECT_TYPE.to_string(),
+            canonical_source_object_id: "work-item:one".to_string(),
+            consumed_marker_count: None,
+            success_notice_count: None,
+            active_view: None,
+            route_phase: None,
+            consumed_source_revision: None,
+        };
+        assert!(validate_ui_fallback_evidence(&archived, false).is_ok());
+        assert!(validate_ui_fallback_evidence(&archived, true).is_err());
+        let mut closeout = archived;
+        closeout.source_route_clicks = 1;
+        closeout.consumed_marker_count = Some(1);
+        closeout.success_notice_count = Some(1);
+        closeout.active_view = Some("projects".to_string());
+        closeout.route_phase = Some("CONSUMED".to_string());
+        closeout.consumed_source_revision = Some("2".to_string());
+        assert!(validate_ui_fallback_evidence(&closeout, true).is_ok());
+    }
+
+    #[test]
+    fn r07_closeout_renderer_bridge_stays_on_existing_product_surfaces() {
+        let source = include_str!("../../src/main.tsx");
+        assert!(!source.contains("SYN_M4R07_ORDINARY_PRODUCT_CLOSEOUT"));
+        assert!(source.contains("r07_closeout_mode"));
+        assert!(source.contains("m4r04ClickAndObserveRoute"));
+        assert!(source.contains("loadSecretaryDailyReport"));
+        assert!(source.contains("loadSecretaryLegacyReadCompatibilityReport"));
+    }
+
+    #[test]
+    fn r07_daily_snapshot_has_one_m4_read_transaction_and_a_separate_provider_cut() {
+        let source = include_str!("m4r06_ordinary_legacy_read_driver.rs");
+        assert!(source.contains("transaction_with_behavior(TransactionBehavior::Deferred)"));
+        assert!(source.contains("fn read_r07_provider_call_count"));
+        assert!(source.contains("not a cross-database atomic snapshot"));
+        let binding_cut = source
+            .split("fn verify_r07_daily_database_binding")
+            .nth(1)
+            .and_then(|tail| tail.split("fn read_database_snapshot").next())
+            .expect("R07 final binding function body");
+        assert!(binding_cut.contains("m4r07_daily_binding_cut_begin_failed"));
+        assert!(binding_cut.contains("transaction_with_behavior(TransactionBehavior::Deferred)"));
+        assert!(binding_cut.contains("m4r07_daily_binding_cut_end_failed"));
+        for label in [
+            "r07_daily_checkpoint_binding",
+            "r07_daily_brief_binding",
+            "r07_daily_brief_items",
+            "r07_daily_report_binding",
+            "r07_daily_report_items",
+            "r07_daily_scheduler_run_binding",
+        ] {
+            assert!(binding_cut.contains(label), "binding cut contains {label}");
+        }
     }
 
     #[test]

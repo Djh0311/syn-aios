@@ -194,6 +194,10 @@ for (const receiptToken of [
 assert(
   ordinaryClockDriver.includes("OpenFlags::SQLITE_OPEN_READ_ONLY")
     && ordinaryClockDriver.includes("const EARLY_PROCESS_DEADLINE: Duration = Duration::from_secs(240)")
+    && ordinaryClockDriver.includes("const R07_EARLY_PROCESS_DEADLINE: Duration = Duration::from_secs(390)")
+    && ordinaryClockDriver.includes("let r07_recovery_ui_capture = r07_recovery_ui_capture_requested(phase)?")
+    && ordinaryClockDriver.includes("let early_process_deadline = if r07_recovery_ui_capture")
+    && ordinaryClockDriver.includes("std::thread::sleep(early_process_deadline)")
     && ordinaryClockDriver.includes("const TIMER_OBSERVATION_DELAY: Duration = Duration::from_secs(98)")
     && ordinaryClockDriver.includes("std::thread::sleep(TIMER_OBSERVATION_DELAY)")
     && ordinaryClockDriver.includes("validate_prior_receipt(")
@@ -203,7 +207,7 @@ assert(
     && ordinaryClockDriver.includes("<= timer_armed_evidence.timer_fired_event_rows")
     && ordinaryClockDriver.includes("PRAGMA integrity_check")
     && ordinaryClockDriver.includes("pragma_foreign_key_check"),
-  "M4R03 driver 必须只读取证并覆盖真实 60s TimerTick 的合法运行上界",
+  "M4R03 driver 必须只读取证、保留普通 240s 上界，并仅为 R07 post-tick capture 使用 390s 上界",
 );
 const rendererArmPhase = main.slice(
   main.indexOf('case "arm_startup_recovery": {'),
@@ -276,7 +280,10 @@ assert(
 assert(
   armRunner.includes("expectedProcessIdSha256: sha256(String(pid))")
     && armRunner.includes("markerMs <= receiptObservedAtMs")
-    && armRunner.includes('process.child.kill("SIGKILL")')
+    && armRunner.includes('signalProcess(process.child.pid, "SIGKILL")')
+    && armRunner.includes('error.failureFamily = "pre_due_sigkill_failed"')
+    && armRunner.includes('error.failureFamily = "pre_due_sigkill_unconfirmed"')
+    && armRunner.includes("m4r03AwaitCloseGrace(process)")
     && armRunner.includes('launch.signal !== "SIGKILL"')
     && armRunner.includes("killedAtMs >= markerMs")
     && armRunner.includes("sigkillConfirmedAtMs >= markerMs")

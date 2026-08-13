@@ -12,31 +12,65 @@ use serde_json::Value;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 #[cfg(unix)]
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex, MutexGuard, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Listener, Manager};
 
 pub(crate) const M4R03_ORDINARY_CLOCK_DRIVER_ENV: &str = "SYN_M4R03_ORDINARY_CLOCK_DRIVER";
 pub(crate) const M4R03_ORDINARY_CLOCK_PHASE_ENV: &str = "SYN_M4R03_ORDINARY_CLOCK_PHASE";
 pub(crate) const M4R03_ORDINARY_CLOCK_NONCE_ENV: &str = "SYN_M4R03_ORDINARY_CLOCK_NONCE";
 pub(crate) const M4R03_ORDINARY_CLOCK_DRIVER_VALUE: &str = "ordinary-server-due-clock-v1";
+pub(crate) const M4R07_RECOVERY_UI_CAPTURE_ENV: &str = "SYN_M4R07_RECOVERY_UI_CAPTURE";
+pub(crate) const M4R07_POST_TICK_RENDERER_DIAGNOSTIC_ENV: &str =
+    "SYN_M4R07_POST_TICK_RENDERER_DIAGNOSTIC";
 
 const DRIVER_RECEIPT_SCHEMA_VERSION: &str = "syn_m4r03_ordinary_clock_driver_receipt.v1";
 const TAURI_IPC_SCHEMA_VERSION: &str = "syn_m4r03_ordinary_clock_ipc.v1";
+const R07_POST_TICK_RENDERER_IPC_SCHEMA_VERSION: &str = "syn_m4r07_post_tick_renderer_ipc.v1";
+const R07_POST_TICK_RENDERER_DIAGNOSTIC_IPC_SCHEMA_VERSION: &str =
+    "syn_m4r07_post_tick_renderer_diagnostic_ipc.v1";
+const R07_POST_TICK_RENDERER_DIAGNOSTIC_SCHEMA_VERSION: &str =
+    "syn.m4r07.post-tick-renderer-diagnostic.v1";
+const R07_RECOVERY_UI_CAPTURE_READY_SCHEMA_VERSION: &str = "syn.m4r07.post-tick-ui-ready.v2";
+const R07_RECOVERY_UI_CAPTURE_ACK_SCHEMA_VERSION: &str = "syn.m4r07.recovery-ui-ack.v2";
+const R07_RECOVERY_UI_CAPTURE_READY_PREFIX: &str = "SYN_M4R07_UI_CAPTURE_READY ";
+const R07_RECOVERY_UI_CAPTURE_READY_FILE: &str = "m4r07-ui-capture-ready.json";
+const R07_RECOVERY_UI_CAPTURE_ACK_FILE: &str = "m4r07-ui-capture-ack.json";
+const R07_POST_TICK_RENDERER_DIAGNOSTIC_FILE: &str = "m4r07-post-tick-renderer-diagnostic.json";
 const TAURI_IPC_READY_EVENT: &str = "syn-m4r03-ordinary-clock-ui-ready";
 const TAURI_IPC_INVOKE_EVENT: &str = "syn-m4r03-ordinary-clock-invoke";
 const TAURI_IPC_RESULT_EVENT: &str = "syn-m4r03-ordinary-clock-result";
 const TAURI_IPC_READY_TIMEOUT: Duration = Duration::from_secs(20);
 const TAURI_IPC_RESULT_TIMEOUT: Duration = Duration::from_secs(20);
-// RecoveryTimer may legitimately spend 20s waiting for renderer readiness,
-// 3x20s on ordinary-command/read results, and 98s waiting for the 30s user
-// marker plus one complete 60s production-tick period and an 8s margin.
-// Keep the process watchdog beyond that complete legal envelope.
+const R07_POST_TICK_IPC_RESULT_TIMEOUT: Duration = Duration::from_secs(40);
 const EARLY_PROCESS_DEADLINE: Duration = Duration::from_secs(240);
+// Only the opt-in R07 RecoveryTimer capture may add a post-tick renderer
+// confirmation plus the bounded evidence/ack hold to the ordinary M4R03 run.
+// Ordinary arm/recovery/repeat phases retain the tighter 240s watchdog.
+const R07_EARLY_PROCESS_DEADLINE: Duration = Duration::from_secs(390);
 const TIMER_OBSERVATION_DELAY: Duration = Duration::from_secs(98);
+const R07_RECOVERY_UI_CAPTURE_ACK_TIMEOUT: Duration = Duration::from_secs(120);
+const R07_POST_TICK_RENDERER_DIAGNOSTIC_HOLD: Duration = Duration::from_secs(120);
+const R07_POST_TICK_RENDERER_DIAGNOSTIC_CODES: [&str; 15] = [
+    "m4r03_state_read_timeout",
+    "m4r03_home_context_not_ready",
+    "m4r03_open_loop_cardinality_invalid",
+    "m4r03_reminder_cardinality_invalid",
+    "m4r03_prepared_binding_invalid",
+    "m4r03_home_visible_prior_state_invalid",
+    "m4r03_home_refresh_cardinality_invalid",
+    "m4r03_home_visible_terminal_state",
+    "m4r07_post_tick_refresh_transition_not_observed",
+    "m4r07_post_tick_fresh_ready_not_observed",
+    "m4r07_post_tick_old_ready_reused",
+    "m4r07_post_tick_dom_recovery_markers_not_observed",
+    "m4r07_post_tick_screenshot_markers_not_visible",
+    "m4r07_post_tick_backend_binding_invalid",
+    "m4r07_post_tick_renderer_unclassified",
+];
 const COMMAND_REGISTRY_SURFACE: &str = "ordinary_registered_tauri_command_ipc";
 const RECEIPT_PREFIX: &str = "m4r03-ordinary-clock-";
 const RECEIPT_SUFFIX: &str = ".json";
@@ -122,7 +156,170 @@ struct TauriIpcResult {
     reminder_command_receipt_ref: Option<String>,
     write_commands_invoked: u8,
     #[serde(default)]
+    ui_refresh_clicked: bool,
+    #[serde(default)]
+    ui_refresh_transition_observed: bool,
+    #[serde(default)]
+    ui_recovery_dom_projection_sha256: Option<String>,
+    #[serde(default)]
+    ui_recovery_screenshot_projection_sha256: Option<String>,
+    #[serde(default)]
     error_family: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct R07PostTickRendererDiagnosticIpcResult {
+    schema_version: String,
+    phase: String,
+    operation: String,
+    nonce: String,
+    outcome: String,
+    startup_due_marker_utc: Option<String>,
+    timer_due_marker_utc: Option<String>,
+    open_loop_id: Option<String>,
+    open_loop_status: Option<String>,
+    open_loop_revision: Option<String>,
+    reminder_id: Option<String>,
+    reminder_status: Option<String>,
+    reminder_revision: Option<String>,
+    reminder_last_fired_at_utc: Option<String>,
+    open_loop_command_receipt_ref: Option<String>,
+    reminder_command_receipt_ref: Option<String>,
+    write_commands_invoked: u8,
+    ui_refresh_clicked: bool,
+    ui_refresh_transition_observed: bool,
+    ui_recovery_dom_projection_sha256: Option<String>,
+    ui_recovery_screenshot_projection_sha256: Option<String>,
+    error_family: Option<String>,
+    diagnostic_code: Option<String>,
+    diagnostic_checkpoint: R07PostTickRendererDiagnosticCheckpoint,
+}
+
+impl R07PostTickRendererDiagnosticIpcResult {
+    fn ordinary_projection(&self) -> TauriIpcResult {
+        TauriIpcResult {
+            schema_version: self.schema_version.clone(),
+            phase: self.phase.clone(),
+            operation: self.operation.clone(),
+            nonce: self.nonce.clone(),
+            outcome: self.outcome.clone(),
+            startup_due_marker_utc: self.startup_due_marker_utc.clone(),
+            timer_due_marker_utc: self.timer_due_marker_utc.clone(),
+            open_loop_id: self.open_loop_id.clone(),
+            open_loop_status: self.open_loop_status.clone(),
+            open_loop_revision: self.open_loop_revision.clone(),
+            reminder_id: self.reminder_id.clone(),
+            reminder_status: self.reminder_status.clone(),
+            reminder_revision: self.reminder_revision.clone(),
+            reminder_last_fired_at_utc: self.reminder_last_fired_at_utc.clone(),
+            open_loop_command_receipt_ref: self.open_loop_command_receipt_ref.clone(),
+            reminder_command_receipt_ref: self.reminder_command_receipt_ref.clone(),
+            write_commands_invoked: self.write_commands_invoked,
+            ui_refresh_clicked: self.ui_refresh_clicked,
+            ui_refresh_transition_observed: self.ui_refresh_transition_observed,
+            ui_recovery_dom_projection_sha256: self.ui_recovery_dom_projection_sha256.clone(),
+            ui_recovery_screenshot_projection_sha256: self
+                .ui_recovery_screenshot_projection_sha256
+                .clone(),
+            error_family: self.error_family.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct R07PostTickRendererDiagnosticCheckpoint {
+    prior_ready: bool,
+    refresh_clicked: bool,
+    transition_seen: bool,
+    new_ready_seen: bool,
+    dom5_seen: bool,
+    screenshot_pair_seen: bool,
+    old_ready_reused_after_transition: bool,
+}
+
+impl R07PostTickRendererDiagnosticCheckpoint {
+    fn empty() -> Self {
+        Self {
+            prior_ready: false,
+            refresh_clicked: false,
+            transition_seen: false,
+            new_ready_seen: false,
+            dom5_seen: false,
+            screenshot_pair_seen: false,
+            old_ready_reused_after_transition: false,
+        }
+    }
+
+    fn monotonic(&self) -> bool {
+        let steps = [
+            self.prior_ready,
+            self.refresh_clicked,
+            self.transition_seen,
+            self.new_ready_seen,
+            self.dom5_seen,
+            self.screenshot_pair_seen,
+        ];
+        !steps.windows(2).any(|pair| !pair[0] && pair[1])
+            && !(self.old_ready_reused_after_transition && !self.transition_seen)
+            && !(self.old_ready_reused_after_transition && self.new_ready_seen)
+    }
+
+    fn complete(&self) -> bool {
+        self.prior_ready
+            && self.refresh_clicked
+            && self.transition_seen
+            && self.new_ready_seen
+            && self.dom5_seen
+            && self.screenshot_pair_seen
+            && !self.old_ready_reused_after_transition
+    }
+}
+
+fn is_r07_post_tick_renderer_diagnostic_code(value: &str) -> bool {
+    R07_POST_TICK_RENDERER_DIAGNOSTIC_CODES.contains(&value)
+}
+
+fn r07_diagnostic_code_matches_checkpoint(
+    code: &str,
+    checkpoint: &R07PostTickRendererDiagnosticCheckpoint,
+) -> bool {
+    match code {
+        "m4r07_post_tick_refresh_transition_not_observed" => {
+            checkpoint.refresh_clicked && !checkpoint.transition_seen
+        }
+        "m4r07_post_tick_fresh_ready_not_observed" => {
+            checkpoint.transition_seen
+                && !checkpoint.new_ready_seen
+                && !checkpoint.old_ready_reused_after_transition
+        }
+        "m4r07_post_tick_old_ready_reused" => {
+            checkpoint.transition_seen
+                && checkpoint.old_ready_reused_after_transition
+                && !checkpoint.new_ready_seen
+        }
+        "m4r07_post_tick_dom_recovery_markers_not_observed" => {
+            checkpoint.new_ready_seen && !checkpoint.dom5_seen
+        }
+        "m4r07_post_tick_screenshot_markers_not_visible" => {
+            checkpoint.dom5_seen && !checkpoint.screenshot_pair_seen
+        }
+        "m4r07_post_tick_backend_binding_invalid" => checkpoint.complete(),
+        _ => true,
+    }
+}
+
+#[derive(Serialize)]
+struct R07PostTickRendererDiagnostic {
+    schema_version: &'static str,
+    phase: &'static str,
+    outcome: String,
+    diagnostic_code: Option<String>,
+    diagnostic_checkpoint: R07PostTickRendererDiagnosticCheckpoint,
+    nonce_sha256: String,
+    process_id_sha256: String,
+    observed_at_ms: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -150,6 +347,165 @@ struct DueEvidence {
     source_owner_writeback_rows: i64,
     sqlite_integrity_check: String,
     foreign_key_violation_rows: i64,
+}
+
+// This is deliberately a projection instead of a serialized DueEvidence:
+// the ready line only transports a hash, and neither raw object refs nor raw
+// timestamps participate in the portable stdout payload. Timestamp hashes
+// still bind the capture token to the exact verified observations.
+#[derive(Serialize)]
+struct R07RecoveryUiCaptureEvidence {
+    open_loop_id_sha256: String,
+    open_loop_status: String,
+    open_loop_revision: String,
+    open_loop_snoozed_until_utc_sha256: Option<String>,
+    reminder_id_sha256: String,
+    reminder_status: String,
+    reminder_revision: String,
+    reminder_scheduled_for_utc_sha256: String,
+    reminder_snoozed_until_utc_sha256: Option<String>,
+    reminder_last_fired_at_utc_sha256: Option<String>,
+    server_clock_audit_rows: i64,
+    deterministic_due_receipt_rows: i64,
+    deterministic_due_event_rows: i64,
+    distinct_due_idempotency_keys: i64,
+    distinct_due_batch_timestamps: i64,
+    timer_tick_bound_due_receipt_rows: i64,
+    captured_server_now_utc_sha256: Option<String>,
+    receipt_audit_time_mismatch_rows: i64,
+    timer_fired_event_rows: i64,
+    model_invocation_rows: i64,
+    source_owner_writeback_rows: i64,
+    sqlite_integrity_check: String,
+    foreign_key_violation_rows: i64,
+}
+
+impl From<&DueEvidence> for R07RecoveryUiCaptureEvidence {
+    fn from(evidence: &DueEvidence) -> Self {
+        Self {
+            open_loop_id_sha256: evidence.open_loop_id_sha256.clone(),
+            open_loop_status: evidence.open_loop_status.clone(),
+            open_loop_revision: evidence.open_loop_revision.clone(),
+            open_loop_snoozed_until_utc_sha256: evidence
+                .open_loop_snoozed_until_utc
+                .as_deref()
+                .map(crate::utils::hash::sha256_hex),
+            reminder_id_sha256: evidence.reminder_id_sha256.clone(),
+            reminder_status: evidence.reminder_status.clone(),
+            reminder_revision: evidence.reminder_revision.clone(),
+            reminder_scheduled_for_utc_sha256: crate::utils::hash::sha256_hex(
+                &evidence.reminder_scheduled_for_utc,
+            ),
+            reminder_snoozed_until_utc_sha256: evidence
+                .reminder_snoozed_until_utc
+                .as_deref()
+                .map(crate::utils::hash::sha256_hex),
+            reminder_last_fired_at_utc_sha256: evidence
+                .reminder_last_fired_at_utc
+                .as_deref()
+                .map(crate::utils::hash::sha256_hex),
+            server_clock_audit_rows: evidence.server_clock_audit_rows,
+            deterministic_due_receipt_rows: evidence.deterministic_due_receipt_rows,
+            deterministic_due_event_rows: evidence.deterministic_due_event_rows,
+            distinct_due_idempotency_keys: evidence.distinct_due_idempotency_keys,
+            distinct_due_batch_timestamps: evidence.distinct_due_batch_timestamps,
+            timer_tick_bound_due_receipt_rows: evidence.timer_tick_bound_due_receipt_rows,
+            captured_server_now_utc_sha256: evidence
+                .captured_server_now_utc
+                .as_deref()
+                .map(crate::utils::hash::sha256_hex),
+            receipt_audit_time_mismatch_rows: evidence.receipt_audit_time_mismatch_rows,
+            timer_fired_event_rows: evidence.timer_fired_event_rows,
+            model_invocation_rows: evidence.model_invocation_rows,
+            source_owner_writeback_rows: evidence.source_owner_writeback_rows,
+            sqlite_integrity_check: evidence.sqlite_integrity_check.clone(),
+            foreign_key_violation_rows: evidence.foreign_key_violation_rows,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct R07RecoveryUiCaptureState {
+    phase: &'static str,
+    startup_evidence: R07RecoveryUiCaptureEvidence,
+    timer_evidence: R07RecoveryUiCaptureEvidence,
+    ui_recovery_projection: R07RecoveryUiProjection,
+}
+
+#[derive(Serialize)]
+struct R07RecoveryUiProjection {
+    dom_recovery_markers_sha256: String,
+    dom_marker_list_sha256: String,
+    screenshot_visible_markers_sha256: String,
+    startup_due_marker_sha256: String,
+    open_loop_id_sha256: String,
+    open_loop_status: &'static str,
+    reminder_id_sha256: String,
+    reminder_status: &'static str,
+    refresh_clicked: bool,
+    refresh_transition_observed: bool,
+    scroll_performed: bool,
+    scroll_settled: bool,
+    dom_projection_sha256: String,
+}
+
+#[derive(Serialize)]
+struct R07RecoveryUiRawDomProjection {
+    visible_markers: [&'static str; 5],
+    startup_due_marker_sha256: String,
+    open_loop_status: &'static str,
+    reminder_status: &'static str,
+    refresh_clicked: bool,
+    refresh_transition_observed: bool,
+    scroll_performed: bool,
+    scroll_settled: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct R07RecoveryUiCaptureReady {
+    schema_version: String,
+    phase: String,
+    nonce_sha256: String,
+    process_id_sha256: String,
+    state_sha256: String,
+    dom_recovery_markers_sha256: String,
+    screenshot_visible_markers_sha256: String,
+    ready_published_at_ms: u64,
+    capture_deadline_at_ms: u64,
+    ack_deadline_at_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct R07RecoveryUiCaptureAck {
+    schema_version: String,
+    phase: String,
+    nonce_sha256: String,
+    process_id_sha256: String,
+    state_sha256: String,
+    dom_recovery_markers_sha256: String,
+    screenshot_visible_markers_sha256: String,
+    ready_file_sha256: String,
+    public_signal_sha256: String,
+    screenshot_sha256: String,
+    screenshot_bytes: u64,
+    attestation_sha256: String,
+    accessibility_tree_sha256: String,
+    capture_evidence_sha256: String,
+    acknowledged_at_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct R07StablePrivateFileFingerprint {
+    dev: u64,
+    ino: u64,
+    mode: u32,
+    nlink: u64,
+    len: u64,
+    mtime: i64,
+    mtime_nsec: i64,
+    sha256: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -230,7 +586,9 @@ pub(crate) fn requested() -> Result<bool, String> {
     {
         return Err("m4r03_ordinary_clock_mode_conflict".to_string());
     }
-    driver_phase()?;
+    let phase = driver_phase()?;
+    r07_recovery_ui_capture_requested(phase)?;
+    r07_post_tick_renderer_diagnostic_requested(phase)?;
     driver_nonce()?;
     Ok(true)
 }
@@ -239,6 +597,14 @@ pub(crate) fn start_early_process_watchdog() -> Result<(), String> {
     if !requested()? {
         return Ok(());
     }
+    let phase = driver_phase()?;
+    let r07_recovery_ui_capture = r07_recovery_ui_capture_requested(phase)?;
+    let r07_renderer_diagnostic = r07_post_tick_renderer_diagnostic_requested(phase)?;
+    let early_process_deadline = if r07_recovery_ui_capture || r07_renderer_diagnostic {
+        R07_EARLY_PROCESS_DEADLINE
+    } else {
+        EARLY_PROCESS_DEADLINE
+    };
     let lifecycle = Arc::new(EarlyLifecycle {
         active: Mutex::new(true),
         ordinary_constructor_ready: AtomicBool::new(false),
@@ -249,7 +615,7 @@ pub(crate) fn start_early_process_watchdog() -> Result<(), String> {
     std::thread::Builder::new()
         .name("syn-m4r03-early-process-watchdog".to_string())
         .spawn(move || {
-            std::thread::sleep(EARLY_PROCESS_DEADLINE);
+            std::thread::sleep(early_process_deadline);
             let mut active = lifecycle.lock();
             if !*active {
                 return;
@@ -345,6 +711,34 @@ fn finish_after_runtime_ready(app_handle: &tauri::AppHandle) {
 
 fn finish_after_runtime_ready_with_error(app_handle: &tauri::AppHandle, error: &str) {
     let family = error_family(error);
+    if driver_phase().ok() == Some(DriverPhase::RecoveryTimer)
+        && r07_post_tick_renderer_diagnostic_requested(DriverPhase::RecoveryTimer).unwrap_or(false)
+    {
+        let diagnostic_published = if let (Ok(paths), Ok(nonce)) = (
+            active_ordinary_paths(&app_handle.state::<crate::AppState>()),
+            driver_nonce(),
+        ) {
+            publish_r07_post_tick_renderer_diagnostic(
+                &paths,
+                &nonce,
+                "REJECTED",
+                Some("m4r07_post_tick_renderer_unclassified"),
+                R07PostTickRendererDiagnosticCheckpoint::empty(),
+            )
+            .is_ok()
+        } else {
+            false
+        };
+        deactivate_early_lifecycle();
+        if diagnostic_published {
+            std::thread::sleep(R07_POST_TICK_RENDERER_DIAGNOSTIC_HOLD);
+            app_handle.exit(0);
+        } else {
+            eprintln!("M4R07 post-tick renderer diagnostic failed:unavailable");
+            std::process::exit(83);
+        }
+        return;
+    }
     if let Ok(paths) = active_ordinary_paths(&app_handle.state::<crate::AppState>()) {
         if let (Ok(phase), Ok(nonce)) = (driver_phase(), driver_nonce()) {
             let receipt = failure_receipt(&paths, phase, &nonce, family, true);
@@ -358,6 +752,8 @@ fn finish_after_runtime_ready_with_error(app_handle: &tauri::AppHandle, error: &
 fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<bool, String> {
     let phase = driver_phase()?;
     let nonce = driver_nonce()?;
+    let r07_recovery_ui_capture = r07_recovery_ui_capture_requested(phase)?;
+    let r07_renderer_diagnostic = r07_post_tick_renderer_diagnostic_requested(phase)?;
     let state = app_handle.state::<crate::AppState>();
     let paths = active_ordinary_paths(&state)?;
     match phase {
@@ -492,18 +888,70 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<bool, String
             {
                 return Err("m4r03_ordinary_clock_timer_arm_evidence_invalid".to_string());
             }
+            // The full ordinary wait happens before any R07 capture-ready
+            // marker. A capture can therefore attest only the recovered UI,
+            // never the earlier snoozed state.
             std::thread::sleep(TIMER_OBSERVATION_DELAY);
-            let advanced = invoke_renderer_operation(
-                app_handle,
-                phase,
-                "observe_timer_tick",
-                &nonce,
-                Some(startup_marker.clone()),
-                Some(timer_marker.clone()),
-            )?;
-            validate_result(phase, "observe_timer_tick", &nonce, &advanced)?;
-            let timer_evidence = query_due_evidence(&paths, &advanced)?;
-            if timer_evidence.open_loop_status != "OPEN"
+            let diagnostic_observation = if r07_renderer_diagnostic {
+                Some(invoke_r07_post_tick_renderer_diagnostic_operation(
+                    app_handle,
+                    &nonce,
+                    startup_marker.clone(),
+                    timer_marker.clone(),
+                )?)
+            } else {
+                None
+            };
+            let advanced = if let Some(diagnostic) = diagnostic_observation.as_ref() {
+                validate_r07_post_tick_renderer_diagnostic_result(&nonce, diagnostic)?;
+                if diagnostic.outcome == "REJECTED" {
+                    publish_r07_post_tick_renderer_diagnostic(
+                        &paths,
+                        &nonce,
+                        &diagnostic.outcome,
+                        diagnostic.diagnostic_code.as_deref(),
+                        diagnostic.diagnostic_checkpoint.clone(),
+                    )?;
+                    deactivate_early_lifecycle();
+                    std::thread::sleep(R07_POST_TICK_RENDERER_DIAGNOSTIC_HOLD);
+                    return Ok(true);
+                }
+                diagnostic.ordinary_projection()
+            } else {
+                let result = invoke_renderer_operation(
+                    app_handle,
+                    phase,
+                    "observe_timer_tick",
+                    &nonce,
+                    Some(startup_marker.clone()),
+                    Some(timer_marker.clone()),
+                )?;
+                validate_result(phase, "observe_timer_tick", &nonce, &result)?;
+                result
+            };
+            let diagnostic_checkpoint = diagnostic_observation
+                .as_ref()
+                .map(|observation| observation.diagnostic_checkpoint.clone());
+            let timer_evidence = match query_due_evidence(&paths, &advanced) {
+                Ok(evidence) => evidence,
+                Err(error) if r07_renderer_diagnostic => {
+                    let _ = error;
+                    publish_r07_post_tick_renderer_diagnostic(
+                        &paths,
+                        &nonce,
+                        "REJECTED",
+                        Some("m4r07_post_tick_backend_binding_invalid"),
+                        diagnostic_checkpoint.clone().ok_or_else(|| {
+                            "m4r07_post_tick_renderer_diagnostic_checkpoint_missing".to_string()
+                        })?,
+                    )?;
+                    deactivate_early_lifecycle();
+                    std::thread::sleep(R07_POST_TICK_RENDERER_DIAGNOSTIC_HOLD);
+                    return Ok(true);
+                }
+                Err(error) => return Err(error),
+            };
+            let timer_evidence_invalid = timer_evidence.open_loop_status != "OPEN"
                 || timer_evidence.reminder_status != "FIRED"
                 || !same_object_binding(&timer_armed_evidence, &timer_evidence)
                 || timer_evidence.open_loop_snoozed_until_utc.is_some()
@@ -527,9 +975,47 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<bool, String
                 || timer_evidence.timer_tick_bound_due_receipt_rows != 2
                 || !evidence_has_no_external_side_effects(&timer_evidence)
                 || timer_evidence.timer_fired_event_rows
-                    <= timer_armed_evidence.timer_fired_event_rows
-            {
+                    <= timer_armed_evidence.timer_fired_event_rows;
+            if timer_evidence_invalid {
+                if r07_renderer_diagnostic {
+                    publish_r07_post_tick_renderer_diagnostic(
+                        &paths,
+                        &nonce,
+                        "REJECTED",
+                        Some("m4r07_post_tick_backend_binding_invalid"),
+                        diagnostic_checkpoint.clone().ok_or_else(|| {
+                            "m4r07_post_tick_renderer_diagnostic_checkpoint_missing".to_string()
+                        })?,
+                    )?;
+                    deactivate_early_lifecycle();
+                    std::thread::sleep(R07_POST_TICK_RENDERER_DIAGNOSTIC_HOLD);
+                    return Ok(true);
+                }
                 return Err("m4r03_ordinary_clock_timer_evidence_invalid".to_string());
+            }
+            if r07_renderer_diagnostic {
+                publish_r07_post_tick_renderer_diagnostic(
+                    &paths,
+                    &nonce,
+                    &advanced.outcome,
+                    None,
+                    diagnostic_checkpoint.ok_or_else(|| {
+                        "m4r07_post_tick_renderer_diagnostic_checkpoint_missing".to_string()
+                    })?,
+                )?;
+                deactivate_early_lifecycle();
+                std::thread::sleep(R07_POST_TICK_RENDERER_DIAGNOSTIC_HOLD);
+                return Ok(true);
+            }
+            if r07_recovery_ui_capture {
+                let ready = publish_r07_recovery_ui_capture_ready(
+                    &paths,
+                    &nonce,
+                    &startup_evidence,
+                    &timer_evidence,
+                    &advanced,
+                )?;
+                wait_for_r07_recovery_ui_capture_ack(&paths, &ready)?;
             }
             let receipt = success_receipt(
                 &paths,
@@ -598,8 +1084,16 @@ fn invoke_renderer_operation(
     startup_due_marker_utc: Option<String>,
     timer_due_marker_utc: Option<String>,
 ) -> Result<TauriIpcResult, String> {
+    let r07_post_tick = phase == DriverPhase::RecoveryTimer
+        && operation == "observe_timer_tick"
+        && r07_recovery_ui_capture_requested(phase)?;
+    let ipc_schema_version = if r07_post_tick {
+        R07_POST_TICK_RENDERER_IPC_SCHEMA_VERSION
+    } else {
+        TAURI_IPC_SCHEMA_VERSION
+    };
     let invocation = TauriIpcInvocation {
-        schema_version: TAURI_IPC_SCHEMA_VERSION,
+        schema_version: ipc_schema_version,
         phase: phase.as_str(),
         operation,
         nonce: nonce.to_string(),
@@ -610,11 +1104,12 @@ fn invoke_renderer_operation(
     let expected_phase = phase.as_str().to_string();
     let expected_operation = operation.to_string();
     let expected_nonce = nonce.to_string();
+    let expected_schema = ipc_schema_version.to_string();
     let listener = app_handle.listen_any(TAURI_IPC_RESULT_EVENT, move |event| {
         let Ok(result) = serde_json::from_str::<TauriIpcResult>(event.payload()) else {
             return;
         };
-        if result.schema_version == TAURI_IPC_SCHEMA_VERSION
+        if result.schema_version == expected_schema
             && result.phase == expected_phase
             && result.operation == expected_operation
             && result.nonce == expected_nonce
@@ -625,8 +1120,13 @@ fn invoke_renderer_operation(
     app_handle
         .emit(TAURI_IPC_INVOKE_EVENT, invocation)
         .map_err(|_| "m4r03_ordinary_clock_ipc_emit_failed".to_string())?;
+    let result_timeout = if r07_post_tick {
+        R07_POST_TICK_IPC_RESULT_TIMEOUT
+    } else {
+        TAURI_IPC_RESULT_TIMEOUT
+    };
     let result = receiver
-        .recv_timeout(TAURI_IPC_RESULT_TIMEOUT)
+        .recv_timeout(result_timeout)
         .map_err(|_| "m4r03_ordinary_clock_ipc_result_timeout".to_string());
     app_handle.unlisten(listener);
     let result = result?;
@@ -643,13 +1143,61 @@ fn invoke_renderer_operation(
     Ok(result)
 }
 
+fn invoke_r07_post_tick_renderer_diagnostic_operation(
+    app_handle: &tauri::AppHandle,
+    nonce: &str,
+    startup_due_marker_utc: String,
+    timer_due_marker_utc: String,
+) -> Result<R07PostTickRendererDiagnosticIpcResult, String> {
+    let invocation = TauriIpcInvocation {
+        schema_version: R07_POST_TICK_RENDERER_DIAGNOSTIC_IPC_SCHEMA_VERSION,
+        phase: DriverPhase::RecoveryTimer.as_str(),
+        operation: "observe_timer_tick",
+        nonce: nonce.to_string(),
+        startup_due_marker_utc: Some(startup_due_marker_utc),
+        timer_due_marker_utc: Some(timer_due_marker_utc),
+    };
+    let (sender, receiver) = mpsc::sync_channel::<R07PostTickRendererDiagnosticIpcResult>(1);
+    let expected_nonce = nonce.to_string();
+    let listener = app_handle.listen_any(TAURI_IPC_RESULT_EVENT, move |event| {
+        let Ok(result) =
+            serde_json::from_str::<R07PostTickRendererDiagnosticIpcResult>(event.payload())
+        else {
+            return;
+        };
+        if result.schema_version == R07_POST_TICK_RENDERER_DIAGNOSTIC_IPC_SCHEMA_VERSION
+            && result.phase == DriverPhase::RecoveryTimer.as_str()
+            && result.operation == "observe_timer_tick"
+            && result.nonce == expected_nonce
+        {
+            let _ = sender.try_send(result);
+        }
+    });
+    app_handle
+        .emit(TAURI_IPC_INVOKE_EVENT, invocation)
+        .map_err(|_| "m4r07_post_tick_renderer_diagnostic_ipc_emit_failed".to_string())?;
+    let result = receiver
+        .recv_timeout(R07_POST_TICK_IPC_RESULT_TIMEOUT)
+        .map_err(|_| "m4r07_post_tick_renderer_diagnostic_ipc_result_timeout".to_string());
+    app_handle.unlisten(listener);
+    result
+}
+
 fn validate_result(
     phase: DriverPhase,
     operation: &str,
     nonce: &str,
     result: &TauriIpcResult,
 ) -> Result<(), String> {
-    if result.schema_version != TAURI_IPC_SCHEMA_VERSION
+    let expected_schema = if phase == DriverPhase::RecoveryTimer
+        && operation == "observe_timer_tick"
+        && r07_recovery_ui_capture_requested(phase)?
+    {
+        R07_POST_TICK_RENDERER_IPC_SCHEMA_VERSION
+    } else {
+        TAURI_IPC_SCHEMA_VERSION
+    };
+    if result.schema_version != expected_schema
         || result.phase != phase.as_str()
         || result.operation != operation
         || result.nonce != nonce
@@ -674,7 +1222,11 @@ fn validate_result(
     }
     match operation {
         "arm_startup_recovery" => {
-            if result.open_loop_status.as_deref() != Some("SNOOZED")
+            if result.ui_refresh_clicked
+                || result.ui_refresh_transition_observed
+                || result.ui_recovery_dom_projection_sha256.is_some()
+                || result.ui_recovery_screenshot_projection_sha256.is_some()
+                || result.open_loop_status.as_deref() != Some("SNOOZED")
                 || result.reminder_status.as_deref() != Some("SCHEDULED")
                 || result.write_commands_invoked != 2
                 || result.timer_due_marker_utc.is_some()
@@ -692,7 +1244,11 @@ fn validate_result(
             }
         }
         "observe_startup_recovery" => {
-            if result.open_loop_status.as_deref() != Some("OPEN")
+            if result.ui_refresh_clicked
+                || result.ui_refresh_transition_observed
+                || result.ui_recovery_dom_projection_sha256.is_some()
+                || result.ui_recovery_screenshot_projection_sha256.is_some()
+                || result.open_loop_status.as_deref() != Some("OPEN")
                 || result.reminder_status.as_deref() != Some("FIRED")
                 || result.write_commands_invoked != 0
                 || result.timer_due_marker_utc.is_some()
@@ -705,7 +1261,11 @@ fn validate_result(
             }
         }
         "arm_timer_tick" => {
-            if result.open_loop_status.as_deref() != Some("SNOOZED")
+            if result.ui_refresh_clicked
+                || result.ui_refresh_transition_observed
+                || result.ui_recovery_dom_projection_sha256.is_some()
+                || result.ui_recovery_screenshot_projection_sha256.is_some()
+                || result.open_loop_status.as_deref() != Some("SNOOZED")
                 || result.reminder_status.as_deref() != Some("SNOOZED")
                 || result.write_commands_invoked != 2
                 || !result
@@ -724,8 +1284,43 @@ fn validate_result(
                 return Err("m4r03_ordinary_clock_timer_arm_result_invalid".to_string());
             }
         }
-        "observe_timer_tick" | "observe_repeat" => {
-            if result.open_loop_status.as_deref() != Some("OPEN")
+        "observe_timer_tick" => {
+            let r07_capture = r07_recovery_ui_capture_requested(phase)?;
+            if result.ui_refresh_clicked != r07_capture
+                || result.ui_refresh_transition_observed != r07_capture
+                || (r07_capture
+                    && !result
+                        .ui_recovery_dom_projection_sha256
+                        .as_deref()
+                        .is_some_and(is_lower_hex_sha256))
+                || (r07_capture
+                    && !result
+                        .ui_recovery_screenshot_projection_sha256
+                        .as_deref()
+                        .is_some_and(is_lower_hex_sha256))
+                || (!r07_capture && result.ui_recovery_dom_projection_sha256.is_some())
+                || (!r07_capture && result.ui_recovery_screenshot_projection_sha256.is_some())
+                || result.open_loop_status.as_deref() != Some("OPEN")
+                || result.reminder_status.as_deref() != Some("FIRED")
+                || result.write_commands_invoked != 0
+                || !result
+                    .timer_due_marker_utc
+                    .as_deref()
+                    .is_some_and(is_utc_timestamp)
+                || !result
+                    .reminder_last_fired_at_utc
+                    .as_deref()
+                    .is_some_and(is_utc_timestamp)
+            {
+                return Err("m4r03_ordinary_clock_observe_result_invalid".to_string());
+            }
+        }
+        "observe_repeat" => {
+            if result.ui_refresh_clicked
+                || result.ui_refresh_transition_observed
+                || result.ui_recovery_dom_projection_sha256.is_some()
+                || result.ui_recovery_screenshot_projection_sha256.is_some()
+                || result.open_loop_status.as_deref() != Some("OPEN")
                 || result.reminder_status.as_deref() != Some("FIRED")
                 || result.write_commands_invoked != 0
                 || !result
@@ -741,6 +1336,71 @@ fn validate_result(
             }
         }
         _ => return Err("m4r03_ordinary_clock_operation_invalid".to_string()),
+    }
+    Ok(())
+}
+
+fn validate_r07_post_tick_renderer_diagnostic_result(
+    nonce: &str,
+    result: &R07PostTickRendererDiagnosticIpcResult,
+) -> Result<(), String> {
+    let checkpoint = &result.diagnostic_checkpoint;
+    let common_valid = result.schema_version
+        == R07_POST_TICK_RENDERER_DIAGNOSTIC_IPC_SCHEMA_VERSION
+        && result.phase == DriverPhase::RecoveryTimer.as_str()
+        && result.operation == "observe_timer_tick"
+        && result.nonce == nonce
+        && matches!(result.outcome.as_str(), "PASS" | "REJECTED")
+        && checkpoint.monotonic();
+    let outcome_valid = if result.outcome == "PASS" {
+        result.diagnostic_code.is_none()
+            && result.error_family.is_none()
+            && checkpoint.complete()
+            && result
+                .startup_due_marker_utc
+                .as_deref()
+                .is_some_and(is_utc_timestamp)
+            && result
+                .timer_due_marker_utc
+                .as_deref()
+                .is_some_and(is_utc_timestamp)
+            && result.open_loop_id.as_deref().is_some_and(is_bounded_ref)
+            && result.reminder_id.as_deref().is_some_and(is_bounded_ref)
+            && result
+                .open_loop_revision
+                .as_deref()
+                .is_some_and(is_canonical_revision)
+            && result
+                .reminder_revision
+                .as_deref()
+                .is_some_and(is_canonical_revision)
+            && result.open_loop_status.as_deref() == Some("OPEN")
+            && result.reminder_status.as_deref() == Some("FIRED")
+            && result
+                .reminder_last_fired_at_utc
+                .as_deref()
+                .is_some_and(is_utc_timestamp)
+            && result.open_loop_command_receipt_ref.is_none()
+            && result.reminder_command_receipt_ref.is_none()
+            && result.write_commands_invoked == 0
+            && result.ui_refresh_clicked
+            && result.ui_refresh_transition_observed
+            && result
+                .ui_recovery_dom_projection_sha256
+                .as_deref()
+                .is_some_and(is_lower_hex_sha256)
+            && result
+                .ui_recovery_screenshot_projection_sha256
+                .as_deref()
+                .is_some_and(is_lower_hex_sha256)
+    } else {
+        result.diagnostic_code.as_deref().is_some_and(|code| {
+            is_r07_post_tick_renderer_diagnostic_code(code)
+                && r07_diagnostic_code_matches_checkpoint(code, &result.diagnostic_checkpoint)
+        }) && result.error_family.as_deref().is_some_and(is_bounded_code)
+    };
+    if !common_valid || !outcome_valid {
+        return Err("m4r07_post_tick_renderer_diagnostic_result_invalid".to_string());
     }
     Ok(())
 }
@@ -1157,6 +1817,428 @@ fn driver_nonce() -> Result<String, String> {
     Ok(value)
 }
 
+fn r07_recovery_ui_capture_requested(phase: DriverPhase) -> Result<bool, String> {
+    let value = std::env::var_os(M4R07_RECOVERY_UI_CAPTURE_ENV);
+    parse_r07_recovery_ui_capture_requested(value.as_deref(), phase)
+}
+
+fn r07_post_tick_renderer_diagnostic_requested(phase: DriverPhase) -> Result<bool, String> {
+    match std::env::var_os(M4R07_POST_TICK_RENDERER_DIAGNOSTIC_ENV) {
+        None => Ok(false),
+        Some(value)
+            if value == "1"
+                && phase == DriverPhase::RecoveryTimer
+                && std::env::var_os(M4R07_RECOVERY_UI_CAPTURE_ENV).is_none() =>
+        {
+            Ok(true)
+        }
+        Some(value) if value == "1" && phase != DriverPhase::RecoveryTimer => {
+            Err("m4r07_post_tick_renderer_diagnostic_phase_invalid".to_string())
+        }
+        Some(value) if value == "1" => {
+            Err("m4r07_post_tick_renderer_diagnostic_mode_conflict".to_string())
+        }
+        Some(_) => Err("m4r07_post_tick_renderer_diagnostic_value_invalid".to_string()),
+    }
+}
+
+fn deactivate_early_lifecycle() {
+    if let Some(lifecycle) = EARLY_LIFECYCLE.get() {
+        *lifecycle.lock() = false;
+    }
+}
+
+fn r07_post_tick_renderer_diagnostic_path(paths: &OrdinaryClockPaths) -> PathBuf {
+    paths
+        .receipt_root
+        .join(R07_POST_TICK_RENDERER_DIAGNOSTIC_FILE)
+}
+
+fn publish_r07_post_tick_renderer_diagnostic(
+    paths: &OrdinaryClockPaths,
+    nonce: &str,
+    outcome: &str,
+    diagnostic_code: Option<&str>,
+    diagnostic_checkpoint: R07PostTickRendererDiagnosticCheckpoint,
+) -> Result<(), String> {
+    if !matches!(outcome, "PASS" | "REJECTED")
+        || !diagnostic_checkpoint.monotonic()
+        || (outcome == "PASS" && (diagnostic_code.is_some() || !diagnostic_checkpoint.complete()))
+        || (outcome == "REJECTED"
+            && !diagnostic_code.is_some_and(|code| {
+                is_r07_post_tick_renderer_diagnostic_code(code)
+                    && r07_diagnostic_code_matches_checkpoint(code, &diagnostic_checkpoint)
+            }))
+    {
+        return Err("m4r07_post_tick_renderer_diagnostic_contract_invalid".to_string());
+    }
+    let value = R07PostTickRendererDiagnostic {
+        schema_version: R07_POST_TICK_RENDERER_DIAGNOSTIC_SCHEMA_VERSION,
+        phase: DriverPhase::RecoveryTimer.as_str(),
+        outcome: outcome.to_string(),
+        diagnostic_code: diagnostic_code.map(str::to_string),
+        diagnostic_checkpoint,
+        nonce_sha256: crate::utils::hash::sha256_hex(nonce),
+        process_id_sha256: crate::utils::hash::sha256_hex(&std::process::id().to_string()),
+        observed_at_ms: r07_epoch_ms()?,
+    };
+    let bytes = serde_json::to_vec(&value)
+        .map_err(|_| "m4r07_post_tick_renderer_diagnostic_serialize_failed".to_string())?;
+    r07_write_private_no_clobber(
+        &paths.receipt_root,
+        &r07_post_tick_renderer_diagnostic_path(paths),
+        &bytes,
+        "renderer-diagnostic",
+    )?;
+    let (readback, _) = r07_stable_private_file(
+        &r07_post_tick_renderer_diagnostic_path(paths),
+        "renderer_diagnostic",
+        16 * 1024,
+    )?;
+    if readback != bytes {
+        return Err("m4r07_post_tick_renderer_diagnostic_readback_changed".to_string());
+    }
+    Ok(())
+}
+
+fn parse_r07_recovery_ui_capture_requested(
+    value: Option<&std::ffi::OsStr>,
+    phase: DriverPhase,
+) -> Result<bool, String> {
+    match value {
+        None => Ok(false),
+        Some(value) if value == "1" && phase == DriverPhase::RecoveryTimer => Ok(true),
+        Some(value) if value == "1" => Err("m4r07_recovery_ui_capture_phase_invalid".to_string()),
+        Some(_) => Err("m4r07_recovery_ui_capture_value_invalid".to_string()),
+    }
+}
+
+fn r07_epoch_ms() -> Result<u64, String> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .map_err(|_| "m4r07_recovery_ui_capture_system_time_invalid".to_string())
+}
+
+fn r07_ready_path(paths: &OrdinaryClockPaths) -> PathBuf {
+    paths.receipt_root.join(R07_RECOVERY_UI_CAPTURE_READY_FILE)
+}
+
+fn r07_ack_path(paths: &OrdinaryClockPaths) -> PathBuf {
+    paths.receipt_root.join(R07_RECOVERY_UI_CAPTURE_ACK_FILE)
+}
+
+fn r07_stable_private_file(
+    path: &Path,
+    label: &str,
+    max_bytes: u64,
+) -> Result<(Vec<u8>, R07StablePrivateFileFingerprint), String> {
+    let before = fs::symlink_metadata(path)
+        .map_err(|_| format!("m4r07_recovery_ui_capture_{label}_metadata_failed"))?;
+    if before.file_type().is_symlink()
+        || !before.is_file()
+        || before.nlink() != 1
+        || before.permissions().mode() & 0o777 != 0o600
+        || before.len() < 2
+        || before.len() > max_bytes
+        || fs::canonicalize(path).ok().as_deref() != Some(path)
+    {
+        return Err(format!("m4r07_recovery_ui_capture_{label}_file_invalid"));
+    }
+    let bytes =
+        fs::read(path).map_err(|_| format!("m4r07_recovery_ui_capture_{label}_read_failed"))?;
+    let after = fs::symlink_metadata(path)
+        .map_err(|_| format!("m4r07_recovery_ui_capture_{label}_post_metadata_failed"))?;
+    let fingerprint = |metadata: &fs::Metadata| R07StablePrivateFileFingerprint {
+        dev: metadata.dev(),
+        ino: metadata.ino(),
+        mode: metadata.permissions().mode() & 0o777,
+        nlink: metadata.nlink(),
+        len: metadata.len(),
+        mtime: metadata.mtime(),
+        mtime_nsec: metadata.mtime_nsec(),
+        sha256: crate::utils::hash::sha256_hex_bytes(&bytes),
+    };
+    let before_fingerprint = fingerprint(&before);
+    let after_fingerprint = fingerprint(&after);
+    if before_fingerprint != after_fingerprint || bytes.len() as u64 != after.len() {
+        return Err(format!("m4r07_recovery_ui_capture_{label}_changed"));
+    }
+    Ok((bytes, after_fingerprint))
+}
+
+fn r07_write_private_no_clobber(
+    directory: &Path,
+    output_path: &Path,
+    bytes: &[u8],
+    label: &str,
+) -> Result<(), String> {
+    let temporary_path = directory.join(format!(
+        ".m4r07-{label}-{}-{}.tmp",
+        std::process::id(),
+        r07_epoch_ms()?
+    ));
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options
+        .open(&temporary_path)
+        .map_err(|_| format!("m4r07_recovery_ui_capture_{label}_temp_create_failed"))?;
+    if file
+        .write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .is_err()
+    {
+        drop(file);
+        let _ = fs::remove_file(&temporary_path);
+        return Err(format!(
+            "m4r07_recovery_ui_capture_{label}_temp_sync_failed"
+        ));
+    }
+    drop(file);
+    let temporary_metadata = fs::symlink_metadata(&temporary_path)
+        .map_err(|_| format!("m4r07_recovery_ui_capture_{label}_temp_metadata_failed"))?;
+    let published_dev = temporary_metadata.dev();
+    let published_ino = temporary_metadata.ino();
+    if fs::hard_link(&temporary_path, output_path).is_err() {
+        let _ = fs::remove_file(&temporary_path);
+        return Err(format!("m4r07_recovery_ui_capture_{label}_publish_failed"));
+    }
+    let settle = fs::remove_file(&temporary_path)
+        .map_err(|_| format!("m4r07_recovery_ui_capture_{label}_temp_cleanup_failed"))
+        .and_then(|()| {
+            OpenOptions::new()
+                .read(true)
+                .open(directory)
+                .and_then(|entry| entry.sync_all())
+                .map_err(|_| format!("m4r07_recovery_ui_capture_{label}_directory_sync_failed"))
+        });
+    if let Err(error) = settle {
+        if fs::symlink_metadata(output_path)
+            .ok()
+            .is_some_and(|metadata| {
+                metadata.dev() == published_dev && metadata.ino() == published_ino
+            })
+        {
+            let _ = fs::remove_file(output_path);
+        }
+        let _ = fs::remove_file(&temporary_path);
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn publish_r07_recovery_ui_capture_ready(
+    paths: &OrdinaryClockPaths,
+    nonce: &str,
+    startup_evidence: &DueEvidence,
+    timer_evidence: &DueEvidence,
+    advanced: &TauriIpcResult,
+) -> Result<R07RecoveryUiCaptureReady, String> {
+    let open_loop_id = required_ref(advanced.open_loop_id.as_deref(), "open_loop")?;
+    let reminder_id = required_ref(advanced.reminder_id.as_deref(), "reminder")?;
+    let startup_due_marker = advanced
+        .startup_due_marker_utc
+        .as_deref()
+        .ok_or_else(|| "m4r07_recovery_ui_startup_marker_missing".to_string())?;
+    let startup_due_marker_sha256 = crate::utils::hash::sha256_hex(startup_due_marker);
+    let dom_projection = R07RecoveryUiRawDomProjection {
+        visible_markers: [
+            "现在要看住什么",
+            "已继续同一情境",
+            "持续关注",
+            "OPEN",
+            "FIRED",
+        ],
+        startup_due_marker_sha256: startup_due_marker_sha256.clone(),
+        open_loop_status: "OPEN",
+        reminder_status: "FIRED",
+        refresh_clicked: true,
+        refresh_transition_observed: true,
+        scroll_performed: true,
+        scroll_settled: true,
+    };
+    let dom_projection_bytes = serde_json::to_vec(&dom_projection)
+        .map_err(|_| "m4r07_recovery_ui_dom_projection_serialize_failed".to_string())?;
+    let dom_projection_sha256 = crate::utils::hash::sha256_hex_bytes(&dom_projection_bytes);
+    if !advanced.ui_refresh_clicked
+        || !advanced.ui_refresh_transition_observed
+        || advanced.ui_recovery_dom_projection_sha256.as_deref()
+            != Some(dom_projection_sha256.as_str())
+        || crate::utils::hash::sha256_hex(open_loop_id) != timer_evidence.open_loop_id_sha256
+        || crate::utils::hash::sha256_hex(reminder_id) != timer_evidence.reminder_id_sha256
+    {
+        return Err("m4r07_recovery_ui_dom_projection_binding_invalid".to_string());
+    }
+    let visible_markers_bytes = serde_json::to_vec(&dom_projection.visible_markers)
+        .map_err(|_| "m4r07_recovery_ui_markers_serialize_failed".to_string())?;
+    let visible_markers_sha256 = crate::utils::hash::sha256_hex_bytes(&visible_markers_bytes);
+    let screenshot_visible_markers_sha256 =
+        crate::utils::hash::sha256_hex_bytes(r#"{"visible_markers":["提醒","FIRED"]}"#.as_bytes());
+    if advanced.ui_recovery_screenshot_projection_sha256.as_deref()
+        != Some(screenshot_visible_markers_sha256.as_str())
+    {
+        return Err("m4r07_recovery_ui_screenshot_projection_binding_invalid".to_string());
+    }
+    let state = R07RecoveryUiCaptureState {
+        phase: DriverPhase::RecoveryTimer.as_str(),
+        startup_evidence: startup_evidence.into(),
+        timer_evidence: timer_evidence.into(),
+        ui_recovery_projection: R07RecoveryUiProjection {
+            dom_recovery_markers_sha256: dom_projection_sha256.clone(),
+            dom_marker_list_sha256: visible_markers_sha256,
+            screenshot_visible_markers_sha256: screenshot_visible_markers_sha256.clone(),
+            startup_due_marker_sha256,
+            open_loop_id_sha256: timer_evidence.open_loop_id_sha256.clone(),
+            open_loop_status: "OPEN",
+            reminder_id_sha256: timer_evidence.reminder_id_sha256.clone(),
+            reminder_status: "FIRED",
+            refresh_clicked: true,
+            refresh_transition_observed: true,
+            scroll_performed: true,
+            scroll_settled: true,
+            dom_projection_sha256: dom_projection_sha256.clone(),
+        },
+    };
+    let state_bytes = serde_json::to_vec(&state)
+        .map_err(|_| "m4r07_recovery_ui_capture_state_serialize_failed".to_string())?;
+    let ready_published_at_ms = r07_epoch_ms()?;
+    let ready = R07RecoveryUiCaptureReady {
+        schema_version: R07_RECOVERY_UI_CAPTURE_READY_SCHEMA_VERSION.to_string(),
+        phase: DriverPhase::RecoveryTimer.as_str().to_string(),
+        nonce_sha256: crate::utils::hash::sha256_hex(nonce),
+        process_id_sha256: crate::utils::hash::sha256_hex(&std::process::id().to_string()),
+        state_sha256: crate::utils::hash::sha256_hex_bytes(&state_bytes),
+        dom_recovery_markers_sha256: dom_projection_sha256,
+        screenshot_visible_markers_sha256,
+        ready_published_at_ms,
+        capture_deadline_at_ms: ready_published_at_ms
+            + R07_RECOVERY_UI_CAPTURE_ACK_TIMEOUT.as_millis() as u64
+            - 5_000,
+        ack_deadline_at_ms: ready_published_at_ms
+            + R07_RECOVERY_UI_CAPTURE_ACK_TIMEOUT.as_millis() as u64,
+    };
+    let profile_metadata = fs::symlink_metadata(&paths.profile_root)
+        .map_err(|_| "m4r07_recovery_ui_capture_profile_root_missing".to_string())?;
+    let receipt_root_metadata = fs::symlink_metadata(&paths.receipt_root)
+        .map_err(|_| "m4r07_recovery_ui_capture_receipt_root_missing".to_string())?;
+    if profile_metadata.file_type().is_symlink()
+        || !profile_metadata.is_dir()
+        || profile_metadata.permissions().mode() & 0o777 != 0o700
+        || receipt_root_metadata.file_type().is_symlink()
+        || !receipt_root_metadata.is_dir()
+        || receipt_root_metadata.permissions().mode() & 0o777 != 0o700
+        || r07_ready_path(paths).exists()
+        || r07_ack_path(paths).exists()
+    {
+        return Err("m4r07_recovery_ui_capture_private_root_invalid".to_string());
+    }
+    let ready_bytes = serde_json::to_vec(&ready)
+        .map_err(|_| "m4r07_recovery_ui_capture_ready_serialize_failed".to_string())?;
+    r07_write_private_no_clobber(
+        &paths.receipt_root,
+        &r07_ready_path(paths),
+        &ready_bytes,
+        "ready",
+    )?;
+
+    // Stdout is diagnostic only. The launcher never consumes it as a
+    // readiness or acknowledgement channel.
+    let ready_json = String::from_utf8(ready_bytes)
+        .map_err(|_| "m4r07_recovery_ui_capture_ready_encoding_invalid".to_string())?;
+    let mut stdout = std::io::stdout().lock();
+    let _ = stdout
+        .write_all(format!("{R07_RECOVERY_UI_CAPTURE_READY_PREFIX}{ready_json}\n").as_bytes())
+        .and_then(|()| stdout.flush());
+    Ok(ready)
+}
+
+fn wait_for_r07_recovery_ui_capture_ack(
+    paths: &OrdinaryClockPaths,
+    ready: &R07RecoveryUiCaptureReady,
+) -> Result<(), String> {
+    let ready_path = r07_ready_path(paths);
+    let (ready_bytes, ready_fingerprint) =
+        r07_stable_private_file(&ready_path, "ready", 16 * 1024)?;
+    let ready_file_sha256 = ready_fingerprint.sha256.clone();
+    let deadline = Instant::now() + R07_RECOVERY_UI_CAPTURE_ACK_TIMEOUT;
+    let mut nlink_two_since: Option<Instant> = None;
+    loop {
+        if Instant::now() >= deadline {
+            return Err("m4r07_recovery_ui_capture_ack_timeout".to_string());
+        }
+        let ack_path = r07_ack_path(paths);
+        let metadata = match fs::symlink_metadata(&ack_path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                std::thread::sleep(Duration::from_millis(50));
+                continue;
+            }
+            Err(_) => return Err("m4r07_recovery_ui_capture_ack_metadata_failed".to_string()),
+        };
+        #[cfg(unix)]
+        if metadata.nlink() == 2 {
+            let first_observed = *nlink_two_since.get_or_insert_with(Instant::now);
+            if first_observed.elapsed() > Duration::from_millis(500) {
+                return Err("m4r07_recovery_ui_capture_ack_publish_not_settled".to_string());
+            }
+            std::thread::sleep(Duration::from_millis(10));
+            continue;
+        }
+        nlink_two_since = None;
+        #[cfg(unix)]
+        let nlink_invalid = metadata.nlink() != 1;
+        #[cfg(not(unix))]
+        let nlink_invalid = false;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || nlink_invalid
+            || metadata.permissions().mode() & 0o777 != 0o600
+            || metadata.len() < 2
+            || metadata.len() > 16 * 1024
+            || fs::canonicalize(&ack_path).ok().as_deref() != Some(ack_path.as_path())
+        {
+            return Err("m4r07_recovery_ui_capture_ack_file_invalid".to_string());
+        }
+        let (ack_bytes, ack_fingerprint) = r07_stable_private_file(&ack_path, "ack", 16 * 1024)?;
+        let (ready_rechecked_bytes, ready_rechecked_fingerprint) =
+            r07_stable_private_file(&ready_path, "ready_recheck", 16 * 1024)?;
+        if ready_rechecked_bytes != ready_bytes
+            || ready_rechecked_fingerprint != ready_fingerprint
+            || ack_fingerprint.mtime < ready_fingerprint.mtime
+            || (ack_fingerprint.mtime == ready_fingerprint.mtime
+                && ack_fingerprint.mtime_nsec < ready_fingerprint.mtime_nsec)
+        {
+            return Err("m4r07_recovery_ui_capture_handshake_file_changed".to_string());
+        }
+        let ack: R07RecoveryUiCaptureAck = serde_json::from_slice(&ack_bytes)
+            .map_err(|_| "m4r07_recovery_ui_capture_ack_parse_failed".to_string())?;
+        let now_ms = r07_epoch_ms()?;
+        if ack.schema_version != R07_RECOVERY_UI_CAPTURE_ACK_SCHEMA_VERSION
+            || ack.phase != DriverPhase::RecoveryTimer.as_str()
+            || ack.nonce_sha256 != ready.nonce_sha256
+            || ack.process_id_sha256 != ready.process_id_sha256
+            || ack.state_sha256 != ready.state_sha256
+            || ack.dom_recovery_markers_sha256 != ready.dom_recovery_markers_sha256
+            || ack.screenshot_visible_markers_sha256 != ready.screenshot_visible_markers_sha256
+            || ack.ready_file_sha256 != ready_file_sha256
+            || !is_lower_hex_sha256(&ack.public_signal_sha256)
+            || !is_lower_hex_sha256(&ack.screenshot_sha256)
+            || ack.screenshot_bytes < 24
+            || !is_lower_hex_sha256(&ack.attestation_sha256)
+            || !is_lower_hex_sha256(&ack.accessibility_tree_sha256)
+            || !is_lower_hex_sha256(&ack.capture_evidence_sha256)
+            || ack.acknowledged_at_ms < ready.ready_published_at_ms
+            || ack.acknowledged_at_ms > ready.ack_deadline_at_ms
+            || now_ms > ready.ack_deadline_at_ms
+        {
+            return Err("m4r07_recovery_ui_capture_ack_binding_invalid".to_string());
+        }
+        return Ok(());
+    }
+}
+
 fn receipt_path(paths: &OrdinaryClockPaths, phase: DriverPhase) -> PathBuf {
     paths.receipt_root.join(format!(
         "{RECEIPT_PREFIX}{}{RECEIPT_SUFFIX}",
@@ -1412,6 +2494,17 @@ fn write_early_failure_receipt(family: &str, ordinary_constructor: bool) -> Resu
     let paths = early_ordinary_paths()?;
     let phase = driver_phase()?;
     let nonce = driver_nonce()?;
+    if r07_post_tick_renderer_diagnostic_requested(phase)? {
+        let _ = family;
+        let _ = ordinary_constructor;
+        return publish_r07_post_tick_renderer_diagnostic(
+            &paths,
+            &nonce,
+            "REJECTED",
+            Some("m4r07_post_tick_renderer_unclassified"),
+            R07PostTickRendererDiagnosticCheckpoint::empty(),
+        );
+    }
     let receipt = failure_receipt(&paths, phase, &nonce, family, ordinary_constructor);
     write_driver_receipt(&paths, phase, &receipt)
 }
@@ -1535,5 +2628,207 @@ fn error_family(error: &str) -> &str {
         "command"
     } else {
         "setup"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    fn sample_due_evidence() -> DueEvidence {
+        DueEvidence {
+            open_loop_id_sha256: "a".repeat(64),
+            open_loop_status: "OPEN".to_string(),
+            open_loop_revision: "7".to_string(),
+            open_loop_snoozed_until_utc: None,
+            reminder_id_sha256: "b".repeat(64),
+            reminder_status: "FIRED".to_string(),
+            reminder_revision: "8".to_string(),
+            reminder_scheduled_for_utc: "2026-08-11T00:00:00Z".to_string(),
+            reminder_snoozed_until_utc: None,
+            reminder_last_fired_at_utc: Some("2026-08-11T00:01:00Z".to_string()),
+            server_clock_audit_rows: 2,
+            deterministic_due_receipt_rows: 2,
+            deterministic_due_event_rows: 2,
+            distinct_due_idempotency_keys: 2,
+            distinct_due_batch_timestamps: 1,
+            timer_tick_bound_due_receipt_rows: 0,
+            captured_server_now_utc: Some("2026-08-11T00:01:00Z".to_string()),
+            receipt_audit_time_mismatch_rows: 0,
+            timer_fired_event_rows: 1,
+            model_invocation_rows: 0,
+            source_owner_writeback_rows: 0,
+            sqlite_integrity_check: "ok".to_string(),
+            foreign_key_violation_rows: 0,
+        }
+    }
+
+    fn legacy_r03_receipt() -> DriverReceipt {
+        DriverReceipt {
+            schema_version: DRIVER_RECEIPT_SCHEMA_VERSION.to_string(),
+            phase: "arm".to_string(),
+            launch_ordinal: 1,
+            process_id_sha256: "c".repeat(64),
+            outcome: "PASS".to_string(),
+            profile_fingerprint: "d".repeat(64),
+            nonce_sha256: "e".repeat(64),
+            previous_phase_receipt_sha256: None,
+            ordinary_constructor: true,
+            ordinary_composition: true,
+            command_registry_surface: COMMAND_REGISTRY_SURFACE.to_string(),
+            production_scheduler: true,
+            renderer_due_transition_calls: 0,
+            renderer_fire_calls: 0,
+            renderer_user_schedule_marker_calls: 1,
+            acceptance_wrapper_calls: 0,
+            direct_repository_seed_calls: 0,
+            direct_transition_calls: 0,
+            external_capability_attempts: 0,
+            startup_due_marker_utc: Some("2026-08-11T00:00:00Z".to_string()),
+            timer_due_marker_utc: None,
+            write_commands_invoked: Some(2),
+            open_loop_command_receipt_sha256: Some("f".repeat(64)),
+            reminder_command_receipt_sha256: Some("0".repeat(64)),
+            startup_evidence: None,
+            timer_armed_evidence: None,
+            timer_evidence: None,
+            repeat_zero_delta: None,
+            pre_due_sigkill_required: true,
+            real_timer_wait_seconds: 0,
+            error_family: None,
+        }
+    }
+
+    #[test]
+    fn r07_recovery_ui_capture_is_opt_in_and_recovery_timer_only() {
+        assert_eq!(
+            parse_r07_recovery_ui_capture_requested(None, DriverPhase::RecoveryTimer),
+            Ok(false)
+        );
+        assert_eq!(
+            parse_r07_recovery_ui_capture_requested(
+                Some(std::ffi::OsStr::new("1")),
+                DriverPhase::RecoveryTimer,
+            ),
+            Ok(true)
+        );
+        assert_eq!(
+            parse_r07_recovery_ui_capture_requested(
+                Some(std::ffi::OsStr::new("1")),
+                DriverPhase::Arm,
+            ),
+            Err("m4r07_recovery_ui_capture_phase_invalid".to_string())
+        );
+        assert_eq!(
+            parse_r07_recovery_ui_capture_requested(
+                Some(std::ffi::OsStr::new("0")),
+                DriverPhase::RecoveryTimer,
+            ),
+            Err("m4r07_recovery_ui_capture_value_invalid".to_string())
+        );
+    }
+
+    #[test]
+    fn r07_post_tick_ready_has_the_frozen_bounded_keyset() {
+        let ready = R07RecoveryUiCaptureReady {
+            schema_version: R07_RECOVERY_UI_CAPTURE_READY_SCHEMA_VERSION.to_string(),
+            phase: "recovery_timer".to_string(),
+            nonce_sha256: "a".repeat(64),
+            process_id_sha256: "b".repeat(64),
+            state_sha256: "c".repeat(64),
+            dom_recovery_markers_sha256: "d".repeat(64),
+            screenshot_visible_markers_sha256: "e".repeat(64),
+            ready_published_at_ms: 1_000,
+            capture_deadline_at_ms: 116_000,
+            ack_deadline_at_ms: 121_000,
+        };
+        let value = serde_json::to_value(ready).expect("ready JSON");
+        let object = value.as_object().expect("ready object");
+        let keys: BTreeSet<_> = object.keys().map(String::as_str).collect();
+        assert_eq!(
+            keys,
+            BTreeSet::from([
+                "schema_version",
+                "phase",
+                "nonce_sha256",
+                "process_id_sha256",
+                "state_sha256",
+                "dom_recovery_markers_sha256",
+                "screenshot_visible_markers_sha256",
+                "ready_published_at_ms",
+                "capture_deadline_at_ms",
+                "ack_deadline_at_ms",
+            ])
+        );
+        assert_eq!(
+            object.get("schema_version").and_then(Value::as_str),
+            Some(R07_RECOVERY_UI_CAPTURE_READY_SCHEMA_VERSION)
+        );
+        assert_eq!(
+            object.get("phase").and_then(Value::as_str),
+            Some("recovery_timer")
+        );
+        for key in [
+            "nonce_sha256",
+            "process_id_sha256",
+            "state_sha256",
+            "dom_recovery_markers_sha256",
+            "screenshot_visible_markers_sha256",
+        ] {
+            assert!(
+                object
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .is_some_and(is_lower_hex_sha256),
+                "{key} is a lowercase SHA-256"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_r03_receipt_keyset_has_no_r07_capture_fields() {
+        let value = serde_json::to_value(legacy_r03_receipt()).expect("receipt serializes");
+        assert!(
+            value
+                .as_object()
+                .expect("receipt object")
+                .keys()
+                .all(|key| !key.starts_with("r07_")),
+            "the R07 handshake leaves archived R03 receipts unchanged"
+        );
+    }
+
+    #[test]
+    fn r07_post_tick_ready_and_ack_are_after_live_wait_and_before_receipt() {
+        let source = include_str!("m4r03_ordinary_clock_driver.rs");
+        let recovery_start = source
+            .find("DriverPhase::RecoveryTimer =>")
+            .expect("recovery timer arm exists");
+        let recovery_source = &source[recovery_start..];
+        let startup_validation = recovery_source
+            .find("m4r03_ordinary_clock_startup_evidence_invalid")
+            .expect("startup validation exists");
+        let live_wait = recovery_source
+            .find("std::thread::sleep(TIMER_OBSERVATION_DELAY)")
+            .expect("ordinary live wait exists");
+        let timer_validation = recovery_source
+            .find("m4r03_ordinary_clock_timer_evidence_invalid")
+            .expect("post-tick timer validation exists");
+        let ready = recovery_source
+            .find("publish_r07_recovery_ui_capture_ready(")
+            .expect("post-tick ready publish exists");
+        let ack = recovery_source
+            .find("wait_for_r07_recovery_ui_capture_ack(")
+            .expect("ack hold exists");
+        let receipt = recovery_source
+            .find("let receipt = success_receipt(")
+            .expect("terminal receipt exists");
+        assert!(startup_validation < live_wait);
+        assert!(live_wait < timer_validation);
+        assert!(timer_validation < ready);
+        assert!(ready < ack);
+        assert!(ack < receipt);
+        assert!(source.contains("let _ = stdout"));
     }
 }

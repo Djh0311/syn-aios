@@ -74,4 +74,4 @@
 - [x] M4R04 注册 owner 的精确回源
 - [x] M4R05 持续 Secretary 对话
 - [x] M4R06 五类旧读面的实际 shadow/parity/fallback
-- [ ] M4R07 普通产品隔离验收、全量回归与收口
+- [x] M4R07 普通产品隔离验收、全量回归与收口

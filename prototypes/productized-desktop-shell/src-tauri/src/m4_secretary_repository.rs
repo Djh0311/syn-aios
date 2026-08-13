@@ -12206,6 +12206,105 @@ mod tests {
     }
 
     #[test]
+    fn m4r07_explicit_daily_double_read_only_advances_checkpoint() {
+        let fixture = RepositoryFixture::new("m4r07-daily-double-read");
+        set_test_timezone(&fixture, "Asia/Shanghai");
+        fixture
+            .repository
+            .set_test_server_utc_now("2026-08-10T16:10:00.000Z")
+            .expect("set initial close time");
+        fixture
+            .repository
+            .run_daily_scheduler_cycle(M4SchedulerTrigger::StartupRecovery)
+            .expect("materialize closed daily window");
+
+        let business_snapshot = |fixture: &RepositoryFixture| {
+            let connection = fixture
+                .repository
+                .open_read_connection()
+                .expect("open daily business snapshot");
+            let counts = [
+                "m4_scheduler_configurations",
+                "m4_catch_up_truncation_receipts",
+                "m4_daily_windows",
+                "m4_daily_briefs",
+                "m4_daily_brief_item_refs",
+                "m4_daily_reports",
+                "m4_daily_report_item_refs",
+                "m4_daily_events",
+                "m4_scheduler_runs",
+                "m4_model_budget_ledgers",
+                "m4_model_invocations",
+            ]
+            .into_iter()
+            .map(|table| {
+                let count: i64 = connection
+                    .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                        row.get(0)
+                    })
+                    .expect("read daily business count");
+                (table.to_string(), count)
+            })
+            .collect::<Vec<_>>();
+            let brief: Option<(String, i64, String, String)> = connection
+                .query_row(
+                    "SELECT daily_window_id, revision, scope_source_watermark, ordered_item_refs
+                     FROM m4_daily_briefs WHERE scope_ref = ?1",
+                    [m4_primary_scope_ref()],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .optional()
+                .expect("read optional current daily brief");
+            let checkpoint_revision: i64 = connection
+                .query_row(
+                    "SELECT revision FROM m4_scheduler_checkpoints WHERE scope_ref = ?1",
+                    [m4_primary_scope_ref()],
+                    |row| row.get(0),
+                )
+                .expect("read checkpoint revision");
+            (counts, brief, checkpoint_revision)
+        };
+
+        let before = business_snapshot(&fixture);
+        let first = fixture
+            .repository
+            .refresh_and_read_daily_report()
+            .expect("first explicit daily read");
+        let M4SecretaryDailyReportEnvelope::Ready {
+            daily_report,
+            last_run,
+            ..
+        } = &first
+        else {
+            panic!("the ordinary closeout fixture must expose a generated ready report")
+        };
+        assert_eq!(daily_report.status, "GENERATED");
+        assert_eq!(last_run.outcome_code, "WINDOWS_PLANNED");
+        assert_eq!(last_run.admitted_material_event_count, 0);
+        assert_eq!(last_run.agent_turn_count, 0);
+        assert_eq!(last_run.model_invocation_count, 0);
+        assert_eq!(fixture.count("m4_model_invocations"), 0);
+        let after_first = business_snapshot(&fixture);
+        let replay = fixture
+            .repository
+            .refresh_and_read_daily_report()
+            .expect("second explicit daily read");
+        let after_replay = business_snapshot(&fixture);
+
+        assert_eq!(first, replay, "ready envelope must replay exactly");
+        assert_eq!(
+            after_first.0, after_replay.0,
+            "the second read must not alter M4C07 business row counts"
+        );
+        assert_eq!(
+            after_first.1, after_replay.1,
+            "the second read must not reproject an unchanged current brief"
+        );
+        assert_eq!(after_first.2, before.2 + 1);
+        assert_eq!(after_replay.2, after_first.2 + 1);
+    }
+
+    #[test]
     fn m4c07_truncated_startup_range_is_durable_and_explicitly_recovers_oldest_first() {
         let fixture = RepositoryFixture::new("scheduler-catch-up-recovery");
         set_test_timezone(&fixture, "Asia/Shanghai");

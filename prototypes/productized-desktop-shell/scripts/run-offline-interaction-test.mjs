@@ -59,6 +59,7 @@ const testEntries = [
   "tests/m4r05-isolated-app-preflight-runner.test.mjs",
   "tests/m4r06-ordinary-legacy-read-driver.test.ts",
   "tests/m4r06-isolated-app-preflight-runner.test.mjs",
+  "tests/m4r07-isolated-product-reacceptance-runner.test.mjs",
 ];
 
 try {

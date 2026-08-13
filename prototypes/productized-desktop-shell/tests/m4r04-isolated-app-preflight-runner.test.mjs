@@ -204,7 +204,8 @@ assert.ok(
   "M4R04 必须直接 spawn bundle executable 并只注入冻结 driver markers",
 );
 assert.ok(
-  closeSlice.includes('process.child.kill("SIGKILL")')
+  closeSlice.includes('typeof process.child.pid === "number"')
+    && closeSlice.includes('signalProcess(process.child.pid, "SIGKILL")')
     && closeSlice.includes("await Promise.race([")
     && closeSlice.includes("M4R04_ORDINARY_ROUTE_CHILD_CLOSE_GRACE_MS")
     && closeSlice.includes('signal: "SIGKILL_UNCONFIRMED"')

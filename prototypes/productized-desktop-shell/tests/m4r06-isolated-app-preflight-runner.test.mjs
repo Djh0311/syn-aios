@@ -40,15 +40,18 @@ const spawnStart = launcher.indexOf("function spawnM4R06OrdinaryLegacyReadApp(",
 const closeStart = launcher.indexOf("async function closeM4R06AppAtDeadline(", spawnStart);
 const phaseStart = launcher.indexOf("async function runM4R06OrdinaryLegacyReadPhase(", closeStart);
 const suiteStart = launcher.indexOf("async function runM4R06OrdinaryLegacyReadSuite(", phaseStart);
-const policyStart = launcher.indexOf("function normalizeInheritedMarkerNames(", suiteStart);
+const nextSuiteBoundary = launcher.indexOf(
+  "async function m4r07FingerprintRegularFile(",
+  suiteStart,
+);
 assert.ok(
   readerStart >= 0
     && spawnStart > readerStart
     && closeStart > spawnStart
     && phaseStart > closeStart
     && suiteStart > phaseStart
-    && policyStart > suiteStart,
-  "M4R06 receipt/spawn/phase/suite/CLI policy 不能只是 constants-only",
+    && nextSuiteBoundary > suiteStart,
+  "M4R06 receipt/spawn/phase/suite source slices are incomplete",
 );
 
 const reader = launcher.slice(readerStart, spawnStart);
@@ -85,17 +88,22 @@ assert.ok(
   "R06 child PID/nonce/exit 必须由本次第四 launch 精确绑定",
 );
 
-const suite = launcher.slice(suiteStart, policyStart);
+// Keep the historical R06 suite bounded to its own implementation. R07's
+// injected shared preparation follows this boundary and must not be mistaken
+// for a second R06 preparation/retry in the standalone four-launch contract.
+const suite = launcher.slice(suiteStart, nextSuiteBoundary);
 assert.ok(
-  suite.includes("await runM4R02OrdinaryCompositionSuite({")
-    && suite.includes("r02Preparation.launches.length === 3")
-    && suite.includes('entry.phase === "readback"')
+  suite.includes("const ordinaryPreparation = r02Preparation ?? await runM4R02OrdinaryCompositionSuite({")
+    && suite.includes("ordinaryPreparation.launches.length === 3")
+    && suite.includes("const r02Readback = sharedPreparation.readback")
     && suite.includes("expectedR02ReadbackReceiptSha256: r02Readback.receipt_sha256")
     && suite.includes('r02Readback?.receipt?.subject?.work_item_state === "ready_to_dispatch"')
-    && suite.includes("allLaunches.length === 4")
+    && suite.includes("const allLaunches = r02Preparation === null")
+    && suite.includes("const expectedAppLaunches = r02Preparation === null ? 4 : 1")
+    && suite.includes("shared_r02_preparation: r02Preparation !== null")
     && suite.includes("new Set(allLaunches.map((entry) => entry.receipt.process_id_sha256)).size")
     && suite.includes("m4r06RawEvidenceLeak(composite)"),
-  "R02 三 launch prep → 本次 readback SHA → 同 profile R06 第四 launch 的绑定链缺失",
+  "standalone R06 must retain its own R02 three-launch preparation and fourth App binding, while accepting one injected R07 read-only App",
 );
 assert.ok(
   launcher.includes("M4R06_ORDINARY_LEGACY_READ_READER_SPECS")

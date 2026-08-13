@@ -2,11 +2,11 @@
 
 日期：2026-08-01<br>
 阶段：`M4`<br>
-状态：**STAGE-06 PROCEDURALLY CLOSED / CORRECTIVE CLOSURE REQUIRED / NOT_ACTIVE。**<br>
+状态：**M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSEOUT PENDING。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M4。<br>
 硬前置：M1 identity / scope / policy 冻结合同、M2 bounded reference slice（有边界参考切片）、M3 已完成的通用 RoleSession 合同与隔离实现；普通产品 Secretary RoleSession 运行时桥接已由 M4C02 完成。项目摘要仍等待 M5 owner 提供。<br>
 已关闭阶段：`stage-06`；M4C01–M4C10 已归档。本阶段历史授权记录为 `USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810`，不延续到新的工程任务。真实个人资料、真实模型 / provider、真实消息、外部连接器、远端和发布均未进入。
-当前修正入口：`2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。2026-08-11 独立总线复核未接受 M4 产品退出；修正计划未激活，不产生新的施工权限。
+当前修正与收口入口：`2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。M4R01–M4R06 已归档，M4R07 v2 产品链合同为 PASS；`stage-07` 尚未关闭，只能写 closeout / lifecycle pending。
 
 三条权威链分开读取，不能把 current-state（当前事实）排在产品正本之前：
 
@@ -18,7 +18,7 @@ M5 项目摘要和 M6 咨询未完成时按 unavailable source（来源暂不可
 
 ## 0. 当前事实与未知
 
-### 已完成主线能力
+### stage-06 已完成主线能力与 2026-08-11 修正前基线
 
 - M4C01 冻结了普通产品 M3 bridge、Secretary/PersonalScope、M4 单写 store、source/dedupe/priority、时区/日报、OpenLoop/Todo、M4/M7、迁移回切与证据分层合同。
 - M4C02 把后端固定的 Secretary RoleSession 与 PersonalScope 接入普通产品 `AppState`；M4C03 建立 M4 自有 schema/repository/UoW 与 source-first Inbox/OpenLoop/Decision projection。
@@ -28,7 +28,7 @@ M5 项目摘要和 M6 咨询未完成时按 unavailable source（来源暂不可
 - M4C08 完成五类旧读面的 inventory、comparator、compatibility read-only 边界和 quarantine；普通产品尚无 legacy tuple adapter，当前全部 fail closed，实际 shadow/parity/fallback 尚未成立。
 - M4C09 使用 synthetic fixture、两个 source owner、fake model 与隔离 profile 完成 debug App 首启、强退、同 profile 重启、生命周期、日报、deep link 和模型故障验收；C10 完成全量离线回归与 launcher 静态契约消歧。
 
-### 尚未成立或下游 HOLD
+### 2026-08-11 尚未成立项（M4R01–M4R06 的历史修正输入）与下游 HOLD
 
 - 普通产品 composition 尚无 M4 source ingress 的生产调用者；C09 通过验收代码直接注入 synthetic source，不能证明正常产品会自然接收内部事项。
 - snoozed OpenLoop 与 Reminder 的到期推进没有接入生产 scheduler；单元测试手工调用 transition 不能替代产品时钟。
@@ -39,6 +39,14 @@ M5 项目摘要和 M6 咨询未完成时按 unavailable source（来源暂不可
 - M6 Global Supervisor 成功 consult 尚未实现；普通产品 M4 只保留 M3 Handoff 请求/回执边界并显式 unavailable。
 - M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M8 真实 connector/credential/external source 也未进入。
 - M9 command unregister 与旧路物理退役、M10 真实全日试点和发布硬化未进入。C09 synthetic isolated App 不等于真实日常使用、发布包或生产验收。
+
+### 2026-08-13 M4R07 当前结论
+
+- 前五项普通产品缺口已分别由 M4R02 来源与个人对象组合、M4R03 服务端到期时钟、M4R04 注册 owner 精确回源、M4R05 持续 Secretary 对话、M4R06 实际 legacy shadow/parity/fallback 修正；M4R01 冻结其生产调用图和旁路禁令。
+- `../harness/reports/M4R07-isolated-product-reacceptance-closeout-behavior-receipt.json` 是 v2 portable PASS：固定 12 次、实际 12 次；第 8 次真实等待 98 秒并保留后端 OPEN/FIRED 恢复验证。
+- 第 8 次 UI / Computer Use / PNG / attestation 按当前范围为 `NOT_EXECUTED / NOT_APPLICABLE`，Computer Use 次数为 0，未写截图、attestation 或 capture signal。它既不是视觉失败，也不提供视觉、Accessibility 或截图 PASS。
+- v2 manifest 只绑定 portable receipt SHA 与 `launch_8_ui_validation` canonical SHA。真实个人数据、真实模型/provider/connector、远端、部署和发布仍未验；M5–M10 继续 HOLD / NOT_ACTIVE。
+- M4R07 产品链完成标记已经成立，但 `stage-07` 文档、独立复核与 Harness 生命周期收口尚未完成，当前只记录 closeout / lifecycle pending。
 
 ### 已冻结边界与验收结论
 
@@ -157,7 +165,7 @@ SEC-001 → SEC-002 → SEC-003 → SEC-004
 | Unit / property | coordination 不反写 owner、同窗幂等、时区/catch-up、零事件 gating | App 可用 |
 | Temp integration | 跨重启、投影重建、模型失败、source deep link | 真实个人数据通过 |
 | Non-test build | production path 可构建 | UI 行为正确 |
-| Isolated Tauri | attention 生命周期、日报、对话入口和回源可见，并保留真实桌面窗口截图 / 可见交互 / deep-link 点击证据 | 真实模型 / connector 通过 |
+| Isolated product chain | 普通产品入口、持久状态、强退/重启、后端到期、对话、回源和 legacy reader receipt | UI 可见、截图质量、Computer Use、真实模型 / connector 通过 |
 | 经授权真实使用 | 指定数据源 / 模型 / profile 的日常场景 | 发布或所有来源通过 |
 
 关键验收：App 重启不丢关注；“已知晓 / 关闭”不改项目 / task / memory；同窗口日报幂等；每项可回源；模型不可用仍有 deterministic report；空事件窗口 invocation count 为 0。
@@ -183,4 +191,4 @@ stage-06 历史授权曾允许各 leaf 写域内的 local schema/store、离线�
 - 把 source event / DailyReport ref 合同交 M7，把咨询合同交 M6；
 - `../current-state.md` 回写实际完成、证据上限和暂缓项；M4C10 全量回归、文档同步与 stage-06 收口已经完成，当时停止等待总线主管复核。当前结论与下一入口见本节末尾及独立修正计划。
 
-M4C01–M4C10 和 `stage-06` 的程序性归档已经完成，`../harness/reports/M4C10-mainline-integration-and-acceptance.md` 保留为当时的机械与隔离证据；但 2026-08-11 独立总线复核确认上述退出项并未全部满足。M4 进入 `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`，当前为 `NOT_ACTIVE`，不自动进入 M5–M10。
+M4C01–M4C10 和 `stage-06` 的程序性归档已经完成，`../harness/reports/M4C10-mainline-integration-and-acceptance.md` 保留为当时的机械与隔离证据。2026-08-11 独立总线复核指出的五项缺口已经进入 M4R01–M4R07 修正链；M4R07 v2 在当前后端/普通产品链合同范围内 PASS，但第 8 次 UI / Computer Use / PNG / attestation 未执行，真实数据/provider/connector/远端/发布未验。`stage-07` closeout / lifecycle 仍 pending，不自动进入 M5–M10。

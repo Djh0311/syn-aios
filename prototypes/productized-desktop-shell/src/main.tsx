@@ -8,6 +8,7 @@ import {
   createTaskDraft,
   initializeWorkflowState,
   loadSecretaryConversation,
+  loadSecretaryDailyReport,
   loadSecretaryHomeContext,
   loadSecretaryLegacyReadCompatibilityReport,
   loadWorkflowStateSnapshot,
@@ -610,6 +611,10 @@ const M4R03_IPC_READY_EVENT = "syn-m4r03-ordinary-clock-ui-ready";
 const M4R03_IPC_INVOKE_EVENT = "syn-m4r03-ordinary-clock-invoke";
 const M4R03_IPC_RESULT_EVENT = "syn-m4r03-ordinary-clock-result";
 const M4R03_IPC_SCHEMA_VERSION = "syn_m4r03_ordinary_clock_ipc.v1";
+const M4R07_POST_TICK_RENDERER_IPC_SCHEMA_VERSION =
+  "syn_m4r07_post_tick_renderer_ipc.v1";
+const M4R07_POST_TICK_RENDERER_DIAGNOSTIC_IPC_SCHEMA_VERSION =
+  "syn_m4r07_post_tick_renderer_diagnostic_ipc.v1";
 // Leave the launcher enough room to observe the arm receipt and SIGKILL the
 // exact bundled process while both user-scheduled objects are still pre-due.
 const M4R03_STARTUP_DUE_DELAY_MS = 45_000;
@@ -617,6 +622,18 @@ const M4R03_STARTUP_DUE_DELAY_MS = 45_000;
 // beyond the complete operation window so a production tick cannot split them.
 const M4R03_TIMER_DUE_DELAY_MS = 30_000;
 const M4R03_HOME_READ_TIMEOUT_MS = 15_000;
+const M4R03_RECOVERY_VISIBLE_MARKERS = [
+  "现在要看住什么",
+  "已继续同一情境",
+  "持续关注",
+  "OPEN",
+  "FIRED",
+] as const;
+
+async function m4r03Sha256(value: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 type M4R03Phase = "arm" | "recovery_timer" | "repeat";
 type M4R03Operation =
@@ -627,13 +644,129 @@ type M4R03Operation =
   | "observe_repeat";
 
 type M4R03OrdinaryClockInvocation = {
-  schema_version: typeof M4R03_IPC_SCHEMA_VERSION;
+  schema_version:
+    | typeof M4R03_IPC_SCHEMA_VERSION
+    | typeof M4R07_POST_TICK_RENDERER_IPC_SCHEMA_VERSION
+    | typeof M4R07_POST_TICK_RENDERER_DIAGNOSTIC_IPC_SCHEMA_VERSION;
   phase: M4R03Phase;
   operation: M4R03Operation;
   nonce: string;
   startup_due_marker_utc: string | null;
   timer_due_marker_utc: string | null;
 };
+
+const M4R07_POST_TICK_RENDERER_DIAGNOSTIC_CODES = [
+  "m4r03_state_read_timeout",
+  "m4r03_home_context_not_ready",
+  "m4r03_open_loop_cardinality_invalid",
+  "m4r03_reminder_cardinality_invalid",
+  "m4r03_prepared_binding_invalid",
+  "m4r03_home_visible_prior_state_invalid",
+  "m4r03_home_refresh_cardinality_invalid",
+  "m4r03_home_visible_terminal_state",
+  "m4r07_post_tick_refresh_transition_not_observed",
+  "m4r07_post_tick_fresh_ready_not_observed",
+  "m4r07_post_tick_old_ready_reused",
+  "m4r07_post_tick_dom_recovery_markers_not_observed",
+  "m4r07_post_tick_screenshot_markers_not_visible",
+  "m4r07_post_tick_backend_binding_invalid",
+] as const;
+
+type M4R07PostTickRendererDiagnosticCode =
+  | (typeof M4R07_POST_TICK_RENDERER_DIAGNOSTIC_CODES)[number]
+  | "m4r07_post_tick_renderer_unclassified";
+
+type M4R07PostTickRendererDiagnosticCheckpoint = {
+  prior_ready: boolean;
+  refresh_clicked: boolean;
+  transition_seen: boolean;
+  new_ready_seen: boolean;
+  dom5_seen: boolean;
+  screenshot_pair_seen: boolean;
+  old_ready_reused_after_transition: boolean;
+};
+
+const M4R07_POST_TICK_RENDERER_DIAGNOSTIC_CHECKPOINT_ORDER = [
+  "prior_ready",
+  "refresh_clicked",
+  "transition_seen",
+  "new_ready_seen",
+  "dom5_seen",
+  "screenshot_pair_seen",
+] as const satisfies readonly (keyof M4R07PostTickRendererDiagnosticCheckpoint)[];
+
+type M4R07PostTickRendererDiagnosticCheckpointKey =
+  (typeof M4R07_POST_TICK_RENDERER_DIAGNOSTIC_CHECKPOINT_ORDER)[number];
+
+function newM4R07PostTickRendererDiagnosticCheckpoint():
+M4R07PostTickRendererDiagnosticCheckpoint {
+  return {
+    prior_ready: false,
+    refresh_clicked: false,
+    transition_seen: false,
+    new_ready_seen: false,
+    dom5_seen: false,
+    screenshot_pair_seen: false,
+    old_ready_reused_after_transition: false,
+  };
+}
+
+function advanceM4R07PostTickRendererDiagnosticCheckpoint(
+  checkpoint: M4R07PostTickRendererDiagnosticCheckpoint | null,
+  key: M4R07PostTickRendererDiagnosticCheckpointKey,
+) {
+  if (!checkpoint || checkpoint[key]) return;
+  const index = M4R07_POST_TICK_RENDERER_DIAGNOSTIC_CHECKPOINT_ORDER.indexOf(key);
+  if (
+    index < 0
+    || M4R07_POST_TICK_RENDERER_DIAGNOSTIC_CHECKPOINT_ORDER
+      .slice(0, index)
+      .some((prior) => !checkpoint[prior])
+  ) throw new Error("m4r07_post_tick_diagnostic_checkpoint_order_invalid");
+  checkpoint[key] = true;
+}
+
+function m4r07PostTickRendererDiagnosticCode(
+  error: unknown,
+  checkpoint: M4R07PostTickRendererDiagnosticCheckpoint | null,
+): M4R07PostTickRendererDiagnosticCode {
+  const message = error instanceof Error ? error.message : "";
+  if ((M4R07_POST_TICK_RENDERER_DIAGNOSTIC_CODES as readonly string[])
+    .includes(message)
+  ) return message as M4R07PostTickRendererDiagnosticCode;
+  if (checkpoint?.old_ready_reused_after_transition) {
+    return "m4r07_post_tick_old_ready_reused";
+  }
+  if (checkpoint?.refresh_clicked && !checkpoint.transition_seen) {
+    return "m4r07_post_tick_refresh_transition_not_observed";
+  }
+  if (checkpoint?.transition_seen && !checkpoint.new_ready_seen) {
+    return "m4r07_post_tick_fresh_ready_not_observed";
+  }
+  if (checkpoint?.new_ready_seen && !checkpoint.dom5_seen) {
+    return "m4r07_post_tick_dom_recovery_markers_not_observed";
+  }
+  if (checkpoint?.dom5_seen && !checkpoint.screenshot_pair_seen) {
+    return "m4r07_post_tick_screenshot_markers_not_visible";
+  }
+  return "m4r07_post_tick_renderer_unclassified";
+}
+
+function isM4R07PostTickRendererDiagnosticInvocation(
+  invocation: M4R03OrdinaryClockInvocation,
+) {
+  return invocation.schema_version
+      === M4R07_POST_TICK_RENDERER_DIAGNOSTIC_IPC_SCHEMA_VERSION
+    && invocation.phase === "recovery_timer"
+    && invocation.operation === "observe_timer_tick";
+}
+
+function isM4R07PostTickRendererInvocation(
+  invocation: M4R03OrdinaryClockInvocation,
+) {
+  return invocation.schema_version === M4R07_POST_TICK_RENDERER_IPC_SCHEMA_VERSION
+    || isM4R07PostTickRendererDiagnosticInvocation(invocation);
+}
 
 type M4R03PreparedObjects = {
   openLoopId: string;
@@ -645,6 +778,8 @@ type M4R03PreparedObjects = {
 let m4r03PreparedObjects: M4R03PreparedObjects | null = null;
 let m4r03OperationQueue: Promise<void> = Promise.resolve();
 let m4r03WriteCommandsInvoked = 0;
+let m4r07PostTickRendererDiagnosticCheckpoint:
+M4R07PostTickRendererDiagnosticCheckpoint | null = null;
 
 function isM4R03Utc(value: unknown): value is string {
   return typeof value === "string"
@@ -664,10 +799,18 @@ function isM4R03Invocation(value: unknown): value is M4R03OrdinaryClockInvocatio
   ])) return false;
   const candidate = value as Partial<M4R03OrdinaryClockInvocation>;
   if (
-    candidate.schema_version !== M4R03_IPC_SCHEMA_VERSION
-    || typeof candidate.nonce !== "string"
+    typeof candidate.nonce !== "string"
     || !/^[a-f0-9]{32}$/.test(candidate.nonce)
   ) return false;
+  if (candidate.schema_version === M4R07_POST_TICK_RENDERER_IPC_SCHEMA_VERSION
+    || candidate.schema_version
+      === M4R07_POST_TICK_RENDERER_DIAGNOSTIC_IPC_SCHEMA_VERSION) {
+    return candidate.phase === "recovery_timer"
+      && candidate.operation === "observe_timer_tick"
+      && isM4R03Utc(candidate.startup_due_marker_utc)
+      && isM4R03Utc(candidate.timer_due_marker_utc);
+  }
+  if (candidate.schema_version !== M4R03_IPC_SCHEMA_VERSION) return false;
   if (candidate.phase === "arm" && candidate.operation === "arm_startup_recovery") {
     return candidate.startup_due_marker_utc === null
       && candidate.timer_due_marker_utc === null;
@@ -738,9 +881,186 @@ async function waitForM4R03State(
   throw new Error("m4r03_state_read_timeout");
 }
 
+async function waitForM4R03VisibleRecovery(
+  startupDueMarkerUtc: string,
+  diagnosticCheckpoint: M4R07PostTickRendererDiagnosticCheckpoint | null = null,
+) {
+  const priorReadyHomes = document.querySelectorAll<HTMLElement>(
+    'main.secretary-home[data-secretary-home-state="ready"]',
+  );
+  if (priorReadyHomes.length !== 1) throw new Error("m4r03_home_visible_prior_state_invalid");
+  const priorReadyHome = priorReadyHomes[0];
+  advanceM4R07PostTickRendererDiagnosticCheckpoint(
+    diagnosticCheckpoint,
+    "prior_ready",
+  );
+  const refreshButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('[data-workbench-refresh="true"]'),
+  ).filter((button) => (
+    !button.disabled
+    && button.getClientRects().length > 0
+    && getComputedStyle(button).visibility !== "hidden"
+    && getComputedStyle(button).display !== "none"
+  ));
+  if (refreshButtons.length !== 1) throw new Error("m4r03_home_refresh_cardinality_invalid");
+
+  const deadline = Date.now() + M4R03_HOME_READ_TIMEOUT_MS;
+  let transitionObserved = false;
+  const observer = new MutationObserver(() => {
+    transitionObserved ||= !priorReadyHome.isConnected
+      || priorReadyHome.dataset.secretaryHomeState !== "ready"
+      || Boolean(document.querySelector(
+        'main.secretary-home[data-secretary-home-state="loading"]',
+      ));
+  });
+  observer.observe(document.body, {
+    attributes: true,
+    attributeFilter: ["data-secretary-home-state"],
+    childList: true,
+    subtree: true,
+  });
+  refreshButtons[0].click();
+  advanceM4R07PostTickRendererDiagnosticCheckpoint(
+    diagnosticCheckpoint,
+    "refresh_clicked",
+  );
+  try {
+    while (Date.now() < deadline) {
+      transitionObserved ||= !priorReadyHome.isConnected
+        || priorReadyHome.dataset.secretaryHomeState !== "ready";
+      if (transitionObserved) {
+        advanceM4R07PostTickRendererDiagnosticCheckpoint(
+          diagnosticCheckpoint,
+          "transition_seen",
+        );
+      }
+      const readyHomes = document.querySelectorAll<HTMLElement>(
+        'main.secretary-home[data-secretary-home-state="ready"]',
+      );
+      if (transitionObserved && readyHomes.length === 1) {
+        if (readyHomes[0] === priorReadyHome) {
+          if (diagnosticCheckpoint) {
+            diagnosticCheckpoint.old_ready_reused_after_transition = true;
+            throw new Error("m4r07_post_tick_old_ready_reused");
+          }
+          await delayM4R02(100);
+          continue;
+        }
+        advanceM4R07PostTickRendererDiagnosticCheckpoint(
+          diagnosticCheckpoint,
+          "new_ready_seen",
+        );
+        const openLoops = Array.from(
+          readyHomes[0].querySelectorAll<HTMLElement>('[data-item-kind="OPEN_LOOP"]'),
+        );
+        const expectedReminderMarker = startupDueMarkerUtc.replace("T", " ").replace("Z", " UTC");
+        const reminders = Array.from(
+          readyHomes[0].querySelectorAll<HTMLElement>(
+            '.secretary-personal-actions[aria-labelledby="secretary-reminders-title"] > ul > li',
+          ),
+        ).filter((element) => (
+          element.querySelector<HTMLElement>(":scope > strong")?.textContent?.trim()
+            === expectedReminderMarker
+        ));
+        const rendered = (element: HTMLElement) => (
+          (() => {
+            const style = getComputedStyle(element);
+            return element.getClientRects().length > 0
+              && (typeof element.checkVisibility !== "function" || element.checkVisibility())
+              && style.visibility !== "hidden"
+              && style.display !== "none"
+              && style.opacity !== "0";
+          })()
+        );
+        const exactRenderedText = (element: HTMLElement | null, expected: string) => (
+          Boolean(element)
+          && element?.textContent?.trim() === expected
+          && rendered(element)
+        );
+        const exactMarkerNodes = [
+          [readyHomes[0].querySelector<HTMLElement>("#secretary-home-title"), "现在要看住什么"],
+          [readyHomes[0].querySelector<HTMLElement>(".secretary-context-status"), "已继续同一情境"],
+          [readyHomes[0].querySelector<HTMLElement>("#secretary-attention-title"), "持续关注"],
+          [openLoops[0]?.querySelector<HTMLElement>(".secretary-spine-status > code:first-of-type") ?? null, "OPEN"],
+          [reminders[0]?.querySelector<HTMLElement>("span > code") ?? null, "FIRED"],
+        ] as const;
+        if (
+          openLoops.length === 1
+          && reminders.length === 1
+          && exactMarkerNodes.every(([element, expected]) => exactRenderedText(element, expected))
+        ) {
+          advanceM4R07PostTickRendererDiagnosticCheckpoint(
+            diagnosticCheckpoint,
+            "dom5_seen",
+          );
+          const reminderHeading = readyHomes[0].querySelector<HTMLElement>(
+            "#secretary-reminders-title",
+          );
+          const reminderStatus = exactMarkerNodes[4][0];
+          reminderStatus?.scrollIntoView({ block: "center", inline: "nearest" });
+          await new Promise<void>((resolveFrame) => requestAnimationFrame(() => {
+            requestAnimationFrame(() => resolveFrame());
+          }));
+          const fullyVisibleInHome = (element: HTMLElement | null) => {
+            if (!element || !rendered(element)) return false;
+            const rect = element.getBoundingClientRect();
+            const homeRect = readyHomes[0].getBoundingClientRect();
+            return rect.left >= Math.max(0, homeRect.left)
+              && rect.top >= Math.max(0, homeRect.top)
+              && rect.right <= Math.min(window.innerWidth, homeRect.right)
+              && rect.bottom <= Math.min(window.innerHeight, homeRect.bottom);
+          };
+          if (
+            !exactRenderedText(reminderHeading, "提醒")
+            || !exactRenderedText(reminderStatus, "FIRED")
+            || !fullyVisibleInHome(reminderHeading)
+            || !fullyVisibleInHome(reminderStatus)
+          ) {
+            await delayM4R02(100);
+            continue;
+          }
+          advanceM4R07PostTickRendererDiagnosticCheckpoint(
+            diagnosticCheckpoint,
+            "screenshot_pair_seen",
+          );
+          const domProjection = JSON.stringify({
+            visible_markers: [...M4R03_RECOVERY_VISIBLE_MARKERS],
+            startup_due_marker_sha256: await m4r03Sha256(startupDueMarkerUtc),
+            open_loop_status: "OPEN",
+            reminder_status: "FIRED",
+            refresh_clicked: true,
+            refresh_transition_observed: true,
+            scroll_performed: true,
+            scroll_settled: true,
+          });
+          const screenshotProjection = JSON.stringify({
+            visible_markers: ["提醒", "FIRED"],
+          });
+          return {
+            domRecoveryMarkersSha256: await m4r03Sha256(domProjection),
+            screenshotVisibleMarkersSha256: await m4r03Sha256(screenshotProjection),
+          };
+        }
+      }
+      const terminalHome = document.querySelector<HTMLElement>(
+        'main.secretary-home[data-secretary-home-state="error"],'
+        + 'main.secretary-home[data-secretary-home-state="degraded"],'
+        + 'main.secretary-home[data-secretary-home-state="empty"]',
+      );
+      if (terminalHome) throw new Error("m4r03_home_visible_terminal_state");
+      await delayM4R02(100);
+    }
+  } finally {
+    observer.disconnect();
+  }
+  throw new Error("m4r03_home_visible_recovery_timeout");
+}
+
 function m4r03ErrorFamily(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes("state_read_timeout")) return "state_read_timeout";
+  if (message.includes("home_visible")) return "home_visible_contract";
+  if (message.includes("home_refresh")) return "home_visible_contract";
   if (message.includes("home_context")) return "home_read_contract";
   if (message.includes("cardinality")) return "object_cardinality";
   if (message.includes("prepared")) return "prepared_binding";
@@ -752,10 +1072,14 @@ async function emitM4R03Result(
   result: Record<string, unknown>,
 ) {
   await emit(M4R03_IPC_RESULT_EVENT, {
-    schema_version: M4R03_IPC_SCHEMA_VERSION,
+    schema_version: invocation.schema_version,
     phase: invocation.phase,
     operation: invocation.operation,
     nonce: invocation.nonce,
+    ui_refresh_clicked: false,
+    ui_refresh_transition_observed: false,
+    ui_recovery_dom_projection_sha256: null,
+    ui_recovery_screenshot_projection_sha256: null,
     ...result,
   });
 }
@@ -764,6 +1088,10 @@ async function runM4R03OrdinaryClockOperation(
   invocation: M4R03OrdinaryClockInvocation,
 ) {
   m4r03WriteCommandsInvoked = 0;
+  m4r07PostTickRendererDiagnosticCheckpoint =
+    isM4R07PostTickRendererDiagnosticInvocation(invocation)
+      ? newM4R07PostTickRendererDiagnosticCheckpoint()
+      : null;
   switch (invocation.operation) {
     case "arm_startup_recovery": {
       const home = await loadM4R03ReadyHome();
@@ -930,6 +1258,17 @@ async function runM4R03OrdinaryClockOperation(
         "OPEN",
         "FIRED",
       );
+      if (
+        advanced.openLoop.item_ref !== prepared.openLoopId
+        || advanced.reminder.reminder_id !== prepared.reminderId
+      ) throw new Error("m4r03_prepared_binding_invalid");
+      const postTickRendererInvocation = isM4R07PostTickRendererInvocation(invocation);
+      const uiRecoveryProjection = postTickRendererInvocation
+        ? await waitForM4R03VisibleRecovery(
+            prepared.startupDueMarkerUtc,
+            m4r07PostTickRendererDiagnosticCheckpoint,
+          )
+        : null;
       await emitM4R03Result(invocation, {
         outcome: "PASS",
         startup_due_marker_utc: prepared.startupDueMarkerUtc,
@@ -944,6 +1283,18 @@ async function runM4R03OrdinaryClockOperation(
         open_loop_command_receipt_ref: null,
         reminder_command_receipt_ref: null,
         write_commands_invoked: 0,
+        ui_refresh_clicked: postTickRendererInvocation,
+        ui_refresh_transition_observed: postTickRendererInvocation,
+        ui_recovery_dom_projection_sha256:
+          uiRecoveryProjection?.domRecoveryMarkersSha256 ?? null,
+        ui_recovery_screenshot_projection_sha256:
+          uiRecoveryProjection?.screenshotVisibleMarkersSha256 ?? null,
+        ...(isM4R07PostTickRendererDiagnosticInvocation(invocation)
+          ? {
+              diagnostic_code: null,
+              diagnostic_checkpoint: m4r07PostTickRendererDiagnosticCheckpoint,
+            }
+          : {}),
       });
       return;
     }
@@ -979,6 +1330,8 @@ async function installM4R03OrdinaryClockTauriIpcBridge() {
         try {
           await runM4R03OrdinaryClockOperation(payload);
         } catch (error) {
+          const diagnosticInvocation =
+            isM4R07PostTickRendererDiagnosticInvocation(payload);
           await emitM4R03Result(payload, {
             outcome: "REJECTED",
             startup_due_marker_utc: payload.startup_due_marker_utc,
@@ -994,6 +1347,16 @@ async function installM4R03OrdinaryClockTauriIpcBridge() {
             reminder_command_receipt_ref: null,
             write_commands_invoked: m4r03WriteCommandsInvoked,
             error_family: m4r03ErrorFamily(error),
+            ...(diagnosticInvocation
+              ? {
+                  diagnostic_code: m4r07PostTickRendererDiagnosticCode(
+                    error,
+                    m4r07PostTickRendererDiagnosticCheckpoint,
+                  ),
+                  diagnostic_checkpoint:
+                    m4r07PostTickRendererDiagnosticCheckpoint,
+                }
+              : {}),
           });
         }
       });
@@ -2181,6 +2544,9 @@ type M4R06OrdinaryLegacyReadInvocation = {
   phase: "read_and_replay";
   operation: "ui_fallback" | "first_read" | "exact_replay";
   nonce: string;
+  // This is an upper-level R07 observer flag only. It is emitted by the
+  // existing R06 driver and never crosses a product command boundary.
+  r07_closeout_mode?: true;
 };
 
 type M4R06UiFallbackEvidence = {
@@ -2199,6 +2565,13 @@ type M4R06UiFallbackEvidence = {
   source_owner_ref: string;
   source_object_type: string;
   canonical_source_object_id: string;
+  // R07-only route consumption observations. They remain ephemeral IPC data;
+  // Rust joins them to server-owned records and stores only scrubbed evidence.
+  consumed_marker_count?: number;
+  success_notice_count?: number;
+  active_view?: string;
+  route_phase?: string;
+  consumed_source_revision?: string;
 };
 
 function isM4R06Invocation(value: unknown): value is M4R06OrdinaryLegacyReadInvocation {
@@ -2210,12 +2583,14 @@ function isM4R06Invocation(value: unknown): value is M4R06OrdinaryLegacyReadInvo
       || candidate.operation === "first_read"
       || candidate.operation === "exact_replay")
     && typeof candidate.nonce === "string"
+    && (candidate.r07_closeout_mode === undefined || candidate.r07_closeout_mode === true)
     && /^[a-f0-9]{32}$/.test(candidate.nonce);
 }
 
 function m4r06ErrorFamily(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes("ui_fallback")) return "ui_fallback_rejected";
+  if (message.includes("daily")) return "daily_report_rejected";
   if (message.includes("legacy_read")) return "legacy_read_rejected";
   if (message.includes("report_not_ready") || message.includes("READY")) return "report_not_ready";
   return "renderer_rejected";
@@ -2255,7 +2630,9 @@ async function m4r06WaitForUniqueVisibleElement(
   throw new Error(`${family}_not_visible_or_not_ready`);
 }
 
-async function m4r06ObserveActualUiFallback(): Promise<M4R06UiFallbackEvidence> {
+async function m4r06ObserveActualUiFallback(
+  r07CloseoutMode: boolean,
+): Promise<M4R06UiFallbackEvidence> {
   // This is one shared deadline: first perform the real navigation click,
   // then wait for the already-triggered guarded read to render the Board.
   const deadline = Date.now() + M4R06_DOM_WAIT_MS;
@@ -2303,10 +2680,50 @@ async function m4r06ObserveActualUiFallback(): Promise<M4R06UiFallbackEvidence> 
   let sourceRouteClicks = 0;
   const observeRouteClick = () => { sourceRouteClicks += 1; };
   routeControl.addEventListener("click", observeRouteClick);
+  let r07CloseoutEvidence: Pick<
+    M4R06UiFallbackEvidence,
+    "consumed_marker_count"
+    | "success_notice_count"
+    | "active_view"
+    | "route_phase"
+    | "consumed_source_revision"
+  > | null = null;
   try {
-    // Do not dispatch the source route: R06 proves it is visible and bound,
-    // while keeping the guarded board read-only.
-    await m4r06Delay(0);
+    if (!r07CloseoutMode) {
+      // Do not dispatch the source route: archived R06 proves it is visible
+      // and bound while keeping the guarded board read-only.
+      await m4r06Delay(0);
+    } else {
+      if (sourceObjectType !== M4R04_WORK_ITEM_NATIVE_TYPE) {
+        throw new Error("m4r06_closeout_source_type_invalid");
+      }
+      const consumed = await m4r04ClickAndObserveRoute({
+        action: {
+          source_owner_ref: sourceOwnerRef,
+          source_object_type: sourceObjectType,
+          canonical_source_object_id: canonicalSourceObjectId,
+          source_route_ref: sourceRouteRef,
+          source_action_dom_count: 1,
+        },
+        button: routeControl,
+      }, M4R04_WORK_ITEM_NATIVE_TYPE);
+      if (
+        consumed.source_owner_ref !== sourceOwnerRef
+        || consumed.source_object_type !== sourceObjectType
+        || consumed.canonical_source_object_id !== canonicalSourceObjectId
+        || consumed.source_route_ref !== sourceRouteRef
+        || consumed.source_revision === null
+      ) {
+        throw new Error("m4r06_closeout_consumed_tuple_changed");
+      }
+      r07CloseoutEvidence = {
+        consumed_marker_count: consumed.consumed_marker_count,
+        success_notice_count: consumed.success_notice_count,
+        active_view: consumed.active_view,
+        route_phase: consumed.route_phase,
+        consumed_source_revision: consumed.source_revision,
+      };
+    }
   } finally {
     routeControl.removeEventListener("click", observeRouteClick);
   }
@@ -2340,6 +2757,7 @@ async function m4r06ObserveActualUiFallback(): Promise<M4R06UiFallbackEvidence> 
     source_owner_ref: sourceOwnerRef,
     source_object_type: sourceObjectType,
     canonical_source_object_id: canonicalSourceObjectId,
+    ...(r07CloseoutEvidence ?? {}),
   };
 }
 
@@ -2349,9 +2767,11 @@ async function installM4R06OrdinaryLegacyReadTauriIpcBridge() {
     await listen<M4R06OrdinaryLegacyReadInvocation>(M4R06_IPC_INVOKE_EVENT, async ({ payload }) => {
       if (!isM4R06Invocation(payload)) return;
       let zeroArgLoadCalls = 0;
+      let dailyReportLoadCalls = 0;
+      const r07CloseoutMode = payload.r07_closeout_mode === true;
       try {
         if (payload.operation === "ui_fallback") {
-          const uiFallbackEvidence = await m4r06ObserveActualUiFallback();
+          const uiFallbackEvidence = await m4r06ObserveActualUiFallback(r07CloseoutMode);
           await emit(M4R06_IPC_RESULT_EVENT, {
             schema_version: M4R06_IPC_SCHEMA_VERSION,
             phase: payload.phase,
@@ -2362,6 +2782,25 @@ async function installM4R06OrdinaryLegacyReadTauriIpcBridge() {
             report: null,
             ui_fallback_evidence: uiFallbackEvidence,
             error_family: null,
+          });
+          return;
+        }
+        if (r07CloseoutMode) {
+          dailyReportLoadCalls += 1;
+          const envelope = await loadSecretaryDailyReport();
+          if (envelope.status !== "READY") throw new Error("m4r06_daily_report_not_ready");
+          await emit(M4R06_IPC_RESULT_EVENT, {
+            schema_version: M4R06_IPC_SCHEMA_VERSION,
+            phase: payload.phase,
+            operation: payload.operation,
+            nonce: payload.nonce,
+            outcome: "PASS",
+            zero_arg_load_calls: zeroArgLoadCalls,
+            report: null,
+            ui_fallback_evidence: null,
+            error_family: null,
+            daily_report_load_calls: dailyReportLoadCalls,
+            daily_report: envelope,
           });
           return;
         }
@@ -2390,6 +2829,12 @@ async function installM4R06OrdinaryLegacyReadTauriIpcBridge() {
           report: null,
           ui_fallback_evidence: null,
           error_family: m4r06ErrorFamily(error),
+          ...(r07CloseoutMode
+            ? {
+              daily_report_load_calls: dailyReportLoadCalls,
+              daily_report: null,
+            }
+            : {}),
         });
       }
     });
