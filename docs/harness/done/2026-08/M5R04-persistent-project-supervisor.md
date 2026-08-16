@@ -27,3 +27,9 @@
 
 - M1–M4 冻结合同；m6_*.rs；stage-12 / D0C04 / D0C05
 - 绕过 Grant 的 start/dispatch；真实资料/provider/push/reset
+
+## 执行记录与完成回执（2026-08-16）
+
+- 结果：`M5R04_PERSISTENT_PROJECT_SUPERVISOR=PASS`（服务层）；
+- 内容提交 `177399da7f0e008bd72544680cefb9158574e482`；
+- 路由下一叶 M5R05。
