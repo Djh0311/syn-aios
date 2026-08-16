@@ -56,6 +56,15 @@ mod m2_domain_cutover;
 pub mod m2_dto;
 mod m2_isolated_app_acceptance;
 mod m2_legacy_adapter;
+mod m5_orchestration_identity;
+mod m5_prepared_attempt;
+mod m5_execution_grant;
+mod m5_orchestration_schema;
+mod m5_orchestration_store;
+mod m5_orchestration_service;
+mod m5_gateway_traits;
+mod m5_side_effect_entry;
+mod m5_runner_entry_registry;
 mod m2_outbox;
 // Historical generic candidate traits are deliberately crate-private.  The
 // one M2 authority surface is the concrete

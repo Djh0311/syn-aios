@@ -5,8 +5,8 @@
 ## 2026-08-16 M5 事实重整启动（当前状态）
 
 - M5 与 M6 现有实现统一定级为 `M5/M6 CANDIDATE WIP / UNIT-LEVEL PROTOTYPE / NOT_ACCEPTED / NOT_MAINLINE`；57（M5 定向）/ 33（M6 定向）单测只作为候选原型单测基线，不绑定阶段退出。此前 `docs/harness/plan.md` 手工勾选的 stage-14/15 完成标记已撤销，不构成阶段历史。
-- 用户 2026-08-16 明确“按计划开始 M5”；`docs/plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` 成为 M5 现行实施计划。真实 `stage-14` 已建立，唯一 current leaf 为 REC-00（事实恢复门），`authorization.json` 为精确 closed 两字段。
-- M5 候选 WIP 与迁移/Harness Lite 0.8/架构文档混合仍在本机 uncommitted 工作树（HEAD 仍为 main@9103c3b，index 相对 HEAD 无 staged delta）；R0 恢复载体（tar + SHA-256 manifest + 分层归责）在 REC-00 中形成。
+- 用户 2026-08-16 明确按实际继续完成剩余 M5；`docs/plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` 为现行实施计划。真实 `stage-14` 已建立，REC-00 / M5R01 已归档，`M5R00=NOT_NEEDED`，唯一 current leaf 为 M5R02，`authorization.json` 为精确 closed 两字段。
+- 本地 `main` 已从 `9103c3b` 推进到 M5R01 内容提交 `7cb8ac0` 及后续 M5R02 工作树；R0 恢复载体仍在。M5/M6 仍为 `CANDIDATE WIP / NOT_ACCEPTED / NOT_MAINLINE`。
 - M6 保持未激活：须在 M5 独立验收后才另建真实 stage-15。M7–M11、Headless Core、Primary/epoch 继续 `PLANNED / NOT_ACTIVE`。
 
 当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。D0D01 只证明 `main@9103c3b26b060e854be119a8cedaa856a2a900ce` 与冻结 WIP 的 `SOURCE_BYTES_MATCH`；它不证明依赖安装、产品运行、Headless Core、Primary / Edge、部署或发布。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；本轮文档校准 `stage-13` 已完成并归档，当前无 current leaf，`authorization.json` 保持 closed。

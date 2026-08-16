@@ -55,9 +55,9 @@
 ## 叶子
 
 - [x] REC-00 事实恢复门：R0 恢复载体、分层归责、Harness 重建、前置矩阵与路由
-- [ ] M5R00 前置实现与 adapter 修正（仅矩阵 GAP 时进入，PASS 记 NOT_NEEDED）
-- [ ] M5R01 执行合同矫正与旧数据映射
-- [ ] M5R02 持久编排核心与 ExecutionGrant
+- [x] M5R00 前置实现与 adapter 修正（NOT_NEEDED，前置矩阵无 GAP）
+- [x] M5R01 执行合同矫正与旧数据映射
+- [x] M5R02 持久编排核心与 ExecutionGrant
 - [ ] M5R03 WorkerReport、独立审查与事实提升
 - [ ] M5R04 普通项目的持久 Project Supervisor
 - [ ] M5R05 受控执行、恢复与 runtime conformance

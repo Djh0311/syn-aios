@@ -211,6 +211,26 @@ impl NodeId {
     }
 }
 
+/// Grant ID - attempt-scoped，不可复用/跨项目
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub(crate) struct GrantId(pub(crate) String);
+
+impl GrantId {
+    pub(crate) fn new(id: String) -> Self {
+        Self(id)
+    }
+
+    pub(crate) fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for GrantId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "grant:{}", self.0)
+    }
+}
+
 /// 派发 ID - 一次 Grant 派发
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub(crate) struct DispatchId(pub(crate) String);
@@ -279,6 +299,12 @@ mod tests {
     fn attempt_id_display() {
         let id = AttemptId::new("att-012".to_string());
         assert_eq!(id.to_string(), "attempt:att-012");
+    }
+
+    #[test]
+    fn grant_id_display() {
+        let id = GrantId::new("g-1".to_string());
+        assert_eq!(id.to_string(), "grant:g-1");
     }
 
     #[test]
