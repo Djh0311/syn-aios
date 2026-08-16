@@ -1,0 +1,30 @@
+{
+  "schema": "syn.m5r07.isolated-acceptance.behavior-receipt.v1",
+  "candidate_sha": "20740a8654ddddea08717800d9be0536d4b0021d",
+  "disposable_checkout": "/tmp/m5r07-disposable-20740a8",
+  "verified_at": "2026-08-16T15:41:52Z",
+  "authorization": {
+    "schemaVersion": 1,
+    "authorized": false
+  },
+  "results": {
+    "cargo_check_lib_offline": "PASS",
+    "cargo_test_lib_offline_m5_filter": {
+      "result": "PASS",
+      "passed": 80,
+      "failed": 0
+    },
+    "cargo_test_lib_offline_full": {
+      "result": "NOT_CLAIMED_PASS",
+      "note": "disposable full --lib run observed failures in pre-existing non-M5 tests (conversation_transport_command_tests, exec_process_registry reaper, fix9_tests); not treated as M5 evidence"
+    },
+    "typescript_typecheck": "NOT_EXECUTED",
+    "production_build": "NOT_EXECUTED",
+    "isolated_scratch_scenes": "PASS",
+    "window_capture": "NOT_EXECUTED",
+    "computer_use": "NOT_EXECUTED"
+  },
+  "stage": "stage-14",
+  "leaf": "M5R07",
+  "status": "AWAITING_INDEPENDENT_ACCEPTANCE"
+}
