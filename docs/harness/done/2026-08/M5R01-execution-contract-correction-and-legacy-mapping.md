@@ -44,3 +44,11 @@
 - push/merge/rebase/deploy/release；reset/stash/clean；git add -A 吞入混合 WIP
 - 伪造 Hook receipt、authorization、stage/leaf、测试或 App 证据
 - 默认沿用原型完成状态（必须逐项裁决 KEEP/REWRITE/QUARANTINE）
+## 执行记录与完成回执（2026-08-16）
+
+- 结果：`M5R01_EXECUTION_CONTRACT_CORRECTION=PASS`；
+- 合同 `docs/contracts/m5-execution-identity-and-worker-report-v1.md` 冻结（继承 M1，未改 M1–M4 正文与 hash）；
+- m5_orchestration_identity.rs 补齐 WorkItemId/NodeId/DispatchId/RuntimeReceiptId/ReportId；
+- worker_report.rs M5 扩展按合同 REWRITE：executed 完整 exact-join、manual/offline 禁止执行 join、缺省 kind 改 Manual、actor 自报拒绝；
+- 验证：`cargo check --lib --offline` PASS；`cargo test --lib --offline -- m5_` 69 passed；`worker_report` 54 passed（含 23 个 M5 分型/red-probe 测试）；
+- 原型裁决与 legacy 隔离见任务包与报告；路由下一叶 M5R02 持久编排核心与 ExecutionGrant。

@@ -1920,3 +1920,498 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+// SYN-PRJ-001 / M5R01: M5 WorkerReport 分型与精确执行 join
+//
+// 本合同（docs/contracts/m5-execution-identity-and-worker-report-v1.md）冻结：
+// executed report 必须完整核对 ProjectId + CorrelationId/OrchestrationId +
+// WorkflowRunId + WorkItemId + NodeId + DispatchId + AttemptId + GrantId +
+// worker RoleSessionId + authoritative receipt + trusted actor + hash；
+// executed/manual/offline 彻底分型；缺省 ReportKind 不得自动成为执行报告。
+
+/// 报告类型枚举
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub(crate) enum ReportKind {
+    /// 真实执行后的回程报告
+    Execution,
+    /// 手动粘贴的离线报告
+    Manual,
+    /// 完全离线的手动输入
+    Offline,
+}
+
+impl Default for ReportKind {
+    fn default() -> Self {
+        // M5R01: 缺省必须是不可执行的 Manual；禁止缺省 ReportKind 自动成为 Execution
+        Self::Manual
+    }
+}
+
+impl std::fmt::Display for ReportKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReportKind::Execution => write!(f, "executed"),
+            ReportKind::Manual => write!(f, "manual"),
+            ReportKind::Offline => write!(f, "offline"),
+        }
+    }
+}
+
+impl ReportKind {
+    /// 从字符串解析（合同规定值：executed / manual / offline）
+    pub(crate) fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "executed" | "execution" => Some(Self::Execution),
+            "manual" => Some(Self::Manual),
+            "offline" => Some(Self::Offline),
+            _ => None,
+        }
+    }
+
+    /// 是否为真实执行报告
+    pub(crate) fn is_execution(&self) -> bool {
+        matches!(self, Self::Execution)
+    }
+
+    /// 是否为手动/离线报告（不冒充真实执行）
+    pub(crate) fn is_manual_or_offline(&self) -> bool {
+        matches!(self, Self::Manual | Self::Offline)
+    }
+}
+
+/// 执行回执 - 真实执行的机器可核实证
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct ExecutionReceipt {
+    /// 执行 ID
+    pub execution_id: String,
+    /// 执行开始时间戳 (ms)
+    pub started_at_ms: i64,
+    /// 执行结束时间戳 (ms)
+    pub completed_at_ms: Option<i64>,
+    /// 执行状态
+    pub status: String,
+    /// 退出码
+    pub exit_code: Option<i32>,
+    /// 输出哈希
+    pub output_hash: Option<String>,
+    /// 成本 (tokens)
+    pub cost_tokens: Option<u64>,
+}
+
+/// 可信执行者 - actor 只来自可信 session/binding，不来自 report 自报
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct TrustedActor {
+    /// 执行者 ID
+    pub actor_id: String,
+    /// 执行者角色
+    pub role: String,
+    /// 执行者类型 (e.g., codex, human, system)
+    pub actor_type: String,
+    /// 认证方式（执行报告必须非空）
+    pub authentication_method: String,
+}
+
+/// M5 扩展的 WorkerReport（M5R01 精确执行 join 分型）
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+pub(crate) struct M5WorkerReport {
+    /// 基础报告内容
+    pub base: WorkerReport,
+    /// 报告类型 (M5 分型；缺省 Manual，永不自动成为 Execution)
+    pub kind: ReportKind,
+    /// 执行回执 (仅 Execution 类型有)
+    pub execution_receipt: Option<ExecutionReceipt>,
+    /// 可信执行者
+    pub actor: Option<TrustedActor>,
+    /// 项目 ID
+    pub project_id: Option<String>,
+    /// 编排 ID
+    pub orchestration_id: Option<String>,
+    /// 工作流运行 ID（executed 必需；manual/offline 禁止）
+    pub workflow_run_id: Option<String>,
+    /// 工作项 ID（executed 必需；manual/offline 禁止）
+    pub work_item_id: Option<String>,
+    /// 节点 ID（executed 必需；manual/offline 禁止）
+    pub node_id: Option<String>,
+    /// 派发 ID（executed 必需；manual/offline 禁止）
+    pub dispatch_id: Option<String>,
+    /// 尝试 ID（executed 必需；manual/offline 禁止）
+    pub attempt_id: Option<String>,
+    /// Grant ID（executed 必需；manual/offline 禁止）
+    pub grant_id: Option<String>,
+    /// worker RoleSession ID（executed 必需；manual/offline 禁止）
+    pub worker_role_session_id: Option<String>,
+    /// authoritative receipt ref（executed 必需；manual/offline 禁止）
+    pub authoritative_receipt_ref: Option<String>,
+    /// 报告 hash（executed 必需）
+    pub report_hash: Option<String>,
+}
+
+impl M5WorkerReport {
+    /// 从基础 WorkerReport 创建；缺省分型为 Manual，不可自动成为执行报告
+    pub(crate) fn from_base(base: WorkerReport) -> Self {
+        Self {
+            base,
+            kind: ReportKind::Manual,
+            execution_receipt: None,
+            actor: None,
+            project_id: None,
+            orchestration_id: None,
+            workflow_run_id: None,
+            work_item_id: None,
+            node_id: None,
+            dispatch_id: None,
+            attempt_id: None,
+            grant_id: None,
+            worker_role_session_id: None,
+            authoritative_receipt_ref: None,
+            report_hash: None,
+        }
+    }
+
+    /// 设置为执行报告（必须显式输入回执与可信 actor）
+    pub(crate) fn as_execution(mut self, receipt: ExecutionReceipt, actor: TrustedActor) -> Self {
+        self.kind = ReportKind::Execution;
+        self.execution_receipt = Some(receipt);
+        self.actor = Some(actor);
+        self
+    }
+
+    /// 设置为手动报告
+    pub(crate) fn as_manual(mut self) -> Self {
+        self.kind = ReportKind::Manual;
+        self
+    }
+
+    /// 设置为离线报告
+    pub(crate) fn as_offline(mut self) -> Self {
+        self.kind = ReportKind::Offline;
+        self
+    }
+
+    /// 绑定项目级上下文（manual/offline 允许；executed 也必需）
+    pub(crate) fn bind_project(mut self, project_id: &str, orchestration_id: &str) -> Self {
+        self.project_id = Some(project_id.to_string());
+        self.orchestration_id = Some(orchestration_id.to_string());
+        self
+    }
+
+    /// 绑定完整执行 join（仅 executed 使用）
+    pub(crate) fn bind_execution_join(
+        mut self,
+        workflow_run_id: &str,
+        work_item_id: &str,
+        node_id: &str,
+        dispatch_id: &str,
+        attempt_id: &str,
+        grant_id: &str,
+        worker_role_session_id: &str,
+        authoritative_receipt_ref: &str,
+        report_hash: &str,
+    ) -> Self {
+        self.workflow_run_id = Some(workflow_run_id.to_string());
+        self.work_item_id = Some(work_item_id.to_string());
+        self.node_id = Some(node_id.to_string());
+        self.dispatch_id = Some(dispatch_id.to_string());
+        self.attempt_id = Some(attempt_id.to_string());
+        self.grant_id = Some(grant_id.to_string());
+        self.worker_role_session_id = Some(worker_role_session_id.to_string());
+        self.authoritative_receipt_ref = Some(authoritative_receipt_ref.to_string());
+        self.report_hash = Some(report_hash.to_string());
+        self
+    }
+
+    /// 精确完整性核对（M5R01 合同 §2）：任何 ID 错配、缺 join、actor 自报或
+    /// Grant 缺失都在业务写前 fail closed。
+    pub(crate) fn verify_integrity(&self) -> Result<(), String> {
+        match self.kind {
+            ReportKind::Execution => {
+                if self.execution_receipt.is_none() {
+                    return Err("execution report missing receipt".to_string());
+                }
+                let Some(actor) = &self.actor else {
+                    return Err("execution report missing trusted actor".to_string());
+                };
+                if actor.actor_id.trim().is_empty() || actor.authentication_method.trim().is_empty() {
+                    return Err("execution report actor has no trusted authentication".to_string());
+                }
+                // actor 自报拒绝：执行者必须绑定 worker RoleSession
+                if self.worker_role_session_id.is_none() {
+                    return Err("execution report actor is not bound to a worker RoleSession".to_string());
+                }
+                let required = [
+                    ("project_id", &self.project_id),
+                    ("orchestration_id", &self.orchestration_id),
+                    ("workflow_run_id", &self.workflow_run_id),
+                    ("work_item_id", &self.work_item_id),
+                    ("node_id", &self.node_id),
+                    ("dispatch_id", &self.dispatch_id),
+                    ("attempt_id", &self.attempt_id),
+                    ("grant_id", &self.grant_id),
+                    ("worker_role_session_id", &self.worker_role_session_id),
+                    ("authoritative_receipt_ref", &self.authoritative_receipt_ref),
+                    ("report_hash", &self.report_hash),
+                ];
+                for (name, value) in required {
+                    if value.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true) {
+                        return Err(format!("execution report missing exact join field: {}", name));
+                    }
+                }
+            }
+            ReportKind::Manual | ReportKind::Offline => {
+                // manual/offline：执行 join 字段必须缺席（M1 ManualOfflineClaim forbidden fields）
+                let forbidden: [(&str, &Option<String>); 6] = [
+                    ("dispatch_id", &self.dispatch_id),
+                    ("attempt_id", &self.attempt_id),
+                    ("grant_id", &self.grant_id),
+                    ("worker_role_session_id", &self.worker_role_session_id),
+                    ("authoritative_receipt_ref", &self.authoritative_receipt_ref),
+                    ("workflow_run_id", &self.workflow_run_id),
+                ];
+                for (name, value) in forbidden {
+                    if value.is_some() {
+                        return Err(format!(
+                            "manual/offline report must not carry execution join field: {}",
+                            name
+                        ));
+                    }
+                }
+                if self.execution_receipt.is_some() {
+                    return Err("manual/offline report must not carry execution receipt".to_string());
+                }
+                if self.project_id.is_none() || self.orchestration_id.is_none() {
+                    return Err("manual/offline report missing project or orchestration context".to_string());
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod m5_report_tests {
+    use super::*;
+
+    fn create_test_receipt() -> ExecutionReceipt {
+        ExecutionReceipt {
+            execution_id: "exec-1".to_string(),
+            started_at_ms: 1000,
+            completed_at_ms: Some(2000),
+            status: "completed".to_string(),
+            exit_code: Some(0),
+            output_hash: Some("hash-123".to_string()),
+            cost_tokens: Some(100),
+        }
+    }
+
+    fn create_test_actor() -> TrustedActor {
+        TrustedActor {
+            actor_id: "codex-1".to_string(),
+            role: "worker".to_string(),
+            actor_type: "codex".to_string(),
+            authentication_method: "m3_session_binding".to_string(),
+        }
+    }
+
+    fn create_full_execution() -> M5WorkerReport {
+        M5WorkerReport::from_base(WorkerReport::default())
+            .as_execution(create_test_receipt(), create_test_actor())
+            .bind_project("project-1", "orch-1")
+            .bind_execution_join(
+                "run-1", "item-1", "node-1", "dispatch-1", "attempt-1",
+                "grant-1", "session-1", "receipt-ref-1", "hash-1",
+            )
+    }
+
+    #[test]
+    fn report_kind_display() {
+        assert_eq!(ReportKind::Execution.to_string(), "executed");
+        assert_eq!(ReportKind::Manual.to_string(), "manual");
+        assert_eq!(ReportKind::Offline.to_string(), "offline");
+    }
+
+    #[test]
+    fn report_kind_from_str() {
+        assert_eq!(ReportKind::from_str("executed"), Some(ReportKind::Execution));
+        assert_eq!(ReportKind::from_str("execution"), Some(ReportKind::Execution));
+        assert_eq!(ReportKind::from_str("manual"), Some(ReportKind::Manual));
+        assert_eq!(ReportKind::from_str("offline"), Some(ReportKind::Offline));
+        assert_eq!(ReportKind::from_str("invalid"), None);
+    }
+
+    #[test]
+    fn report_kind_checks() {
+        assert!(ReportKind::Execution.is_execution());
+        assert!(!ReportKind::Manual.is_execution());
+        assert!(!ReportKind::Offline.is_execution());
+        assert!(!ReportKind::Execution.is_manual_or_offline());
+        assert!(ReportKind::Manual.is_manual_or_offline());
+        assert!(ReportKind::Offline.is_manual_or_offline());
+    }
+
+    // RED PROBE: 缺省 ReportKind 不得自动成为执行报告（原候选缺口）
+    #[test]
+    fn default_report_kind_is_never_execution() {
+        let m5_report = M5WorkerReport::from_base(WorkerReport::default());
+        assert!(!m5_report.kind.is_execution());
+        assert_eq!(m5_report.kind, ReportKind::Manual);
+        // 未显式 as_execution 的输入缺字段必须失败
+        assert!(m5_report.verify_integrity().is_err());
+    }
+
+    // RED PROBE: 执行报告缺少任一精确 join 字段即 fail closed
+    #[test]
+    fn execution_missing_workflow_run_id_fails() {
+        let mut r = create_full_execution();
+        r.workflow_run_id = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn execution_missing_work_item_id_fails() {
+        let mut r = create_full_execution();
+        r.work_item_id = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn execution_missing_node_id_fails() {
+        let mut r = create_full_execution();
+        r.node_id = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn execution_missing_dispatch_id_fails() {
+        let mut r = create_full_execution();
+        r.dispatch_id = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    // RED PROBE: Grant 缺失必须拒绝（原候选任意字符串 Grant 放行缺口）
+    #[test]
+    fn execution_missing_grant_id_fails() {
+        let mut r = create_full_execution();
+        r.grant_id = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn execution_missing_role_session_fails() {
+        let mut r = create_full_execution();
+        r.worker_role_session_id = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn execution_missing_receipt_ref_fails() {
+        let mut r = create_full_execution();
+        r.authoritative_receipt_ref = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn execution_missing_report_hash_fails() {
+        let mut r = create_full_execution();
+        r.report_hash = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn execution_missing_receipt_fails() {
+        let mut r = create_full_execution();
+        r.execution_receipt = None;
+        assert!(r.verify_integrity().is_err());
+    }
+
+    // RED PROBE: actor 自报（有 actor 但无 worker RoleSession 绑定）拒绝
+    #[test]
+    fn execution_actor_without_role_session_fails() {
+        let mut r = create_full_execution();
+        r.worker_role_session_id = None;
+        r.actor = Some(TrustedActor {
+            actor_id: "self-reported".to_string(),
+            role: "worker".to_string(),
+            actor_type: "codex".to_string(),
+            authentication_method: "self".to_string(),
+        });
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn execution_actor_without_authentication_fails() {
+        let mut r = create_full_execution();
+        r.actor = Some(TrustedActor::default());
+        assert!(r.verify_integrity().is_err());
+    }
+
+    // RED PROBE: manual/offline 携带执行 join 字段即拒绝
+    #[test]
+    fn manual_with_dispatch_join_fails() {
+        let mut r = M5WorkerReport::from_base(WorkerReport::default())
+            .as_manual()
+            .bind_project("project-1", "orch-1");
+        r.dispatch_id = Some("dispatch-1".to_string());
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn manual_with_grant_join_fails() {
+        let mut r = M5WorkerReport::from_base(WorkerReport::default())
+            .as_manual()
+            .bind_project("project-1", "orch-1");
+        r.grant_id = Some("grant-1".to_string());
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn manual_with_attempt_join_fails() {
+        let mut r = M5WorkerReport::from_base(WorkerReport::default())
+            .as_manual()
+            .bind_project("project-1", "orch-1");
+        r.attempt_id = Some("attempt-1".to_string());
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn offline_with_role_session_join_fails() {
+        let mut r = M5WorkerReport::from_base(WorkerReport::default())
+            .as_offline()
+            .bind_project("project-1", "orch-1");
+        r.worker_role_session_id = Some("session-1".to_string());
+        assert!(r.verify_integrity().is_err());
+    }
+
+    #[test]
+    fn manual_with_execution_receipt_fails() {
+        let mut r = M5WorkerReport::from_base(WorkerReport::default())
+            .as_manual()
+            .bind_project("project-1", "orch-1");
+        r.execution_receipt = Some(create_test_receipt());
+        assert!(r.verify_integrity().is_err());
+    }
+
+    // POS: 完整精确 join 的执行报告通过
+    #[test]
+    fn execution_full_join_passes() {
+        let r = create_full_execution();
+        assert!(r.verify_integrity().is_ok());
+    }
+
+    // POS: manual/offline 只带项目上下文通过，永不冒充执行
+    #[test]
+    fn manual_project_only_passes() {
+        let r = M5WorkerReport::from_base(WorkerReport::default())
+            .as_manual()
+            .bind_project("project-1", "orch-1");
+        assert!(r.verify_integrity().is_ok());
+        assert!(!r.kind.is_execution());
+    }
+
+    #[test]
+    fn offline_project_only_passes() {
+        let r = M5WorkerReport::from_base(WorkerReport::default())
+            .as_offline()
+            .bind_project("project-1", "orch-1");
+        assert!(r.verify_integrity().is_ok());
+    }
+}
