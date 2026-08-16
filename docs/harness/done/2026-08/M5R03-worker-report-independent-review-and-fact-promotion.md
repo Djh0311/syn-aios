@@ -41,3 +41,10 @@
 - 真实资料/provider/connector、push/merge/rebase、reset/stash/clean
 - 把未验证 claim 或 manual/offline 提升为执行成功事实
 - 伪造 Hook receipt、authorization、stage/leaf、测试或 App 证据
+
+## 执行记录与完成回执（2026-08-16）
+
+- 结果：`M5R03_WORKER_REPORT_INDEPENDENT_REVIEW_AND_FACT_PROMOTION=PASS`；
+- 内容提交 `6b252a39eead82b2f1e91fed60e1740f2302d90a`；
+- `cargo test --lib --offline -- m5_` 66 passed；
+- 路由下一叶 M5R04 普通项目的持久 Project Supervisor。

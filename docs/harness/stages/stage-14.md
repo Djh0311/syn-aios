@@ -59,7 +59,7 @@
 - [x] M5R01 执行合同矫正与旧数据映射
 - [x] M5R02 持久编排核心与 ExecutionGrant
 - [x] M5R03 WorkerReport、独立审查与事实提升
-- [ ] M5R04 普通项目的持久 Project Supervisor
+- [x] M5R04 普通项目的持久 Project Supervisor
 - [ ] M5R05 受控执行、恢复与 runtime conformance
 - [ ] M5R06 ProjectSummary 正式投影
 - [ ] M5R07 项目 UI、隔离 App 与阶段候选

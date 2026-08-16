@@ -67,6 +67,7 @@ mod m5_side_effect_entry;
 mod m5_runner_entry_registry;
 mod m5_runtime_receipt;
 mod m5_claim_ledger;
+mod m5_project_supervisor;
 mod m2_outbox;
 // Historical generic candidate traits are deliberately crate-private.  The
 // one M2 authority surface is the concrete
