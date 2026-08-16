@@ -62,5 +62,5 @@
 - [x] M5R04 普通项目的持久 Project Supervisor
 - [x] M5R05 受控执行、恢复与 runtime conformance
 - [x] M5R06 ProjectSummary 正式投影
-- [ ] M5R07 项目 UI、隔离 App 与阶段候选
+- [ ] M5R07 项目 UI、隔离 App 与阶段候选（AWAITING_INDEPENDENT_ACCEPTANCE）
 - [ ] M5 独立验收与 closeout

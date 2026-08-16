@@ -71,6 +71,9 @@ mod m5_project_supervisor;
 mod m5_agent_runtime;
 mod m5_controlled_execution;
 mod m5_project_summary;
+mod m5_dto;
+mod m5_product_commands;
+mod m5_isolated_acceptance;
 mod m2_outbox;
 // Historical generic candidate traits are deliberately crate-private.  The
 // one M2 authority surface is the concrete

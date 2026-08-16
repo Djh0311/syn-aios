@@ -1,0 +1,5 @@
+# SYN-M5R07: 项目 UI、隔离 App 与阶段候选
+
+日期: 2026-08-16
+阶段: M5 (Stage-14) / leaf M5R07
+状态: AWAITING_INDEPENDENT_ACCEPTANCE

@@ -28,3 +28,9 @@
 - M1–M4 冻结合同；m6_*.rs；stage-12 / D0C04 / D0C05
 - 让 consumer 直接读项目 store / 文件 root / 完整 snapshot
 - 真实资料/provider/push/reset
+
+## 执行记录与完成回执（2026-08-16）
+
+- 结果：`M5R06_PROJECT_SUMMARY_OFFICIAL_PROJECTION=PASS`；
+- 内容提交 `867fd20dec4d6f2ac401e0f7d64416f4499cfcc6`；
+- 路由下一叶 M5R07。

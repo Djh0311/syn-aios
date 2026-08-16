@@ -20,7 +20,7 @@
 - [ ] 阶段14 M5 项目主管与执行闭环（候选原型 WIP / NOT_ACCEPTED / NOT_MAINLINE）
 - [ ] 阶段15 M6 全局主管与内部组织（候选原型 WIP / NOT_ACCEPTED / NOT_MAINLINE，M5 验收前不激活）
 
-当前优先级（2026-08-16 修正）：M5 和 M6 当前为 `M5/M6 CANDIDATE WIP / UNIT-LEVEL PROTOTYPE / NOT_ACCEPTED / NOT_MAINLINE`。现有 57（M5 定向）/ 33（M6 定向）单测只是候选原型单测基线，未绑定任何阶段退出。`stage-14`（M5）已建立为真实活动阶段，REC-00 / M5R00=NOT_NEEDED / M5R01 已归档，唯一 current leaf 为 M5R06（ProjectSummary 正式投影）；`stage-15`（M6）仍为 PLANNED，须在 M5 独立验收后另建。stage-12 仍开着，D0C04 / D0C05 保持 unfinished 且本轮不执行；M7–M11、Headless Core、Primary 与 authority epoch 均未激活，后续仍须用户以自然语言明确开始。
+当前优先级（2026-08-16 修正）：M5 和 M6 当前为 `M5/M6 CANDIDATE WIP / UNIT-LEVEL PROTOTYPE / NOT_ACCEPTED / NOT_MAINLINE`。现有 57（M5 定向）/ 33（M6 定向）单测只是候选原型单测基线，未绑定任何阶段退出。`stage-14`（M5）已建立为真实活动阶段，REC-00 / M5R00=NOT_NEEDED / M5R01 已归档，唯一 current leaf 为 M5R07（项目 UI、隔离 App 与阶段候选，AWAITING_INDEPENDENT_ACCEPTANCE）；`stage-15`（M6）仍为 PLANNED，须在 M5 独立验收后另建。stage-12 仍开着，D0C04 / D0C05 保持 unfinished 且本轮不执行；M7–M11、Headless Core、Primary 与 authority epoch 均未激活，后续仍须用户以自然语言明确开始。
 
 ## M5 + M6 当前状态（2026-08-16 修正，非完成声明）
 
