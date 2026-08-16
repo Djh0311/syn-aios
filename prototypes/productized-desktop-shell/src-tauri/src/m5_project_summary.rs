@@ -204,6 +204,15 @@ impl<'a> PersistentProjectSummaryPort<'a> {
     }
 }
 
+impl PersistentProjectSummaryPort<'_> {
+    pub(crate) fn get_summary_unchecked(
+        &self,
+        project_id: &str,
+    ) -> Result<Option<ProjectSummary>, String> {
+        load_summary_row(self.store, project_id)
+    }
+}
+
 impl ProjectSummaryQueryPort for PersistentProjectSummaryPort<'_> {
     fn get_summary(
         &self,

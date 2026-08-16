@@ -153,6 +153,7 @@ struct AppState {
     #[cfg(not(test))]
     m4_source_route_registry:
         Option<m4_source_route_resolver::M4RegisteredSourceOwnerRouteRegistry>,
+    m5_store_path: Option<PathBuf>,
 }
 include!("types.rs");
 trait CodexResumeRunner {
@@ -190,6 +191,7 @@ impl AppState {
                     m4_secretary_conversation_runtime: Default::default(),
                     #[cfg(not(test))]
                     m4_source_route_registry: None,
+                    m5_store_path: install_m5_store_path(&paths.app_data_root.join("local.codex.governance.workbench")).ok(),
                 });
             }
             let m3_role_session_read_runtime =
@@ -207,6 +209,7 @@ impl AppState {
                 m4_secretary_conversation_runtime: Default::default(),
                 #[cfg(not(test))]
                 m4_source_route_registry: None,
+                m5_store_path: install_m5_store_path(&paths.app_data_root.join("local.codex.governance.workbench")).ok(),
             });
         }
         // Non-Tauri internal hosts still use this legacy composition for the
@@ -227,6 +230,7 @@ impl AppState {
             m4_secretary_conversation_runtime: Default::default(),
             #[cfg(not(test))]
             m4_source_route_registry: None,
+            m5_store_path: None,
         })
     }
 
@@ -338,8 +342,26 @@ impl AppState {
             m4_secretary_conversation_runtime,
             #[cfg(not(test))]
             m4_source_route_registry: Some(m4_source_route_registry),
+            m5_store_path: Some(install_m5_store_path(app_data_root)?),
         })
     }
+
+    pub(crate) fn open_m5_store(&self) -> Result<m5_orchestration_store::M5OrchestrationStore, String> {
+        let path = self
+            .m5_store_path
+            .as_ref()
+            .ok_or_else(|| "m5_runtime_unavailable".to_string())?;
+        m5_orchestration_store::M5OrchestrationStore::open(path)
+    }
+}
+
+fn install_m5_store_path(app_data_root: &Path) -> Result<PathBuf, String> {
+    let dir = app_data_root.join("m5");
+    fs::create_dir_all(&dir).map_err(|e| format!("m5_store_dir:{e}"))?;
+    let path = dir.join("orchestration.sqlite");
+    let store = m5_orchestration_store::M5OrchestrationStore::open(&path)?;
+    drop(store);
+    Ok(path)
 }
 
 /// The ordinary product owns one local mechanical timer.  Each wake-up only

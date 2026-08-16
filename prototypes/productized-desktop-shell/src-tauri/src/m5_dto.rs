@@ -34,6 +34,14 @@ pub(crate) struct M5SupervisorTurnResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub(crate) struct M5SourceRefRead {
+    pub source_type: String,
+    pub source_id: String,
+    pub deep_link: String,
+    pub last_updated_ms: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub(crate) struct M5ProjectSummaryRead {
     pub project_id: String,
     pub version: u64,
@@ -42,6 +50,7 @@ pub(crate) struct M5ProjectSummaryRead {
     pub unverified_claim_count: u32,
     pub open_run_count: u32,
     pub stale: bool,
+    pub source_refs: Vec<M5SourceRefRead>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

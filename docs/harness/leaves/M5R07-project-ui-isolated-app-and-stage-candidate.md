@@ -12,14 +12,24 @@
 
 载体：candidate commit series tip（本叶提交后的 exact SHA）
 
-允许动：
+允许动（M5R07 最窄修正，2026-08-16 用户明确验收缺口）：
 
-- docs/contracts/（仅新增 M5 UI/DTO 补充合同）
-- prototypes/productized-desktop-shell/src-tauri/src/m5_dto.rs [新增]
-- prototypes/productized-desktop-shell/src-tauri/src/m5_product_commands.rs [新增]
-- prototypes/productized-desktop-shell/src-tauri/src/m5_isolated_acceptance.rs [新增]
-- prototypes/productized-desktop-shell/src-tauri/src/lib.rs（仅本包最小声明/command 接线）
-- tasks/2026-08-16-syn-m5r07-project-ui-isolated-app-and-stage-candidate-v1.md [新增]
+- docs/contracts/（仅新增/修正 M5 UI/DTO 补充合同）
+- prototypes/productized-desktop-shell/src-tauri/src/m5_dto.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m5_product_commands.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m5_isolated_acceptance.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m5_project_supervisor.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m5_project_summary.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m5_orchestration_service.rs（仅正式授权入口接线）
+- prototypes/productized-desktop-shell/src-tauri/src/lib.rs（AppState 最小安装 + command 声明）
+- prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs（仅登记 M5 command）
+- prototypes/productized-desktop-shell/src/lib/tauri.ts、src/lib/m5ProjectSupervisor.ts [新增]
+- prototypes/productized-desktop-shell/src/views/projects/ProjectSupervisorPanel.tsx [新增]
+- prototypes/productized-desktop-shell/src/views/projects/ProjectWorkspaceShell.tsx（仅接入主管面板）
+- prototypes/productized-desktop-shell/src/main.tsx（仅新增 M5 隔离 DOM 驱动，不改其它验收桥）
+- prototypes/productized-desktop-shell/scripts/run-m5-isolated-app-acceptance.mjs [新增]
+- prototypes/productized-desktop-shell/scripts/m5-x11-screenshot.py [新增]
+- tasks/2026-08-16-syn-m5r07-narrow-acceptance-fix-v1.md [新增]
 - docs/harness/plan.md、docs/current-state.md、docs/harness/audit/2026-08.jsonl、docs/harness/stages/stage-14.md
 - docs/harness/reports/M5R07-*
 - docs/harness/leaves/M5R07-project-ui-isolated-app-and-stage-candidate.md

@@ -20,6 +20,11 @@ import {
 } from "./lib/tauri";
 import { mintSecretaryCoordinationIdempotencyKey } from "./lib/secretaryReadModel";
 import { setTauriWindowTitle } from "./lib/tauriWindow";
+import {
+  loadM5IsolatedAcceptanceStatus,
+  runM5IsolatedAuthorizedFollowthrough,
+  writeM5IsolatedUiReceipt,
+} from "./lib/m5ProjectSupervisor";
 import type { WorkItemStateUpdateRequest } from "./lib/types/workflow";
 import type {
   M4SecretaryConversation,
@@ -2880,6 +2885,185 @@ class BootErrorBoundary extends React.Component<BootErrorBoundaryProps, BootErro
   }
 }
 
+function m5r07Delay(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function m5r07WaitFor<T>(label: string, pick: () => T | null | undefined, timeoutMs = 30_000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = pick();
+    if (value) return value;
+    await m5r07Delay(150);
+  }
+  throw new Error(`m5r07_${label}_timeout`);
+}
+
+function m5r07Panel() {
+  return document.querySelector<HTMLElement>("[data-m5-supervisor-panel]");
+}
+
+async function m5r07Click(selector: string) {
+  const button = await m5r07WaitFor(selector, () => {
+    const found = document.querySelector<HTMLButtonElement>(selector);
+    return found && !found.disabled ? found : null;
+  });
+  button.click();
+  await m5r07Delay(200);
+}
+
+async function m5r07OpenSupervisorPanel() {
+  const projectNav = await m5r07WaitFor("projects_nav", () => {
+    return Array.from(document.querySelectorAll<HTMLButtonElement>(".nav-item")).find(
+      (button) => button.title === "项目" || button.textContent?.includes("项目"),
+    ) ?? null;
+  });
+  projectNav.click();
+  await m5r07Delay(400);
+  const tile = await m5r07WaitFor("project_tile", () => document.querySelector<HTMLButtonElement>(".project-tile"));
+  tile.click();
+  await m5r07Delay(400);
+  const overview = await m5r07WaitFor("overview_tab", () => {
+    return Array.from(document.querySelectorAll<HTMLButtonElement>(".project-tool-tabs button")).find(
+      (button) => button.textContent?.includes("总览") || button.title?.includes("项目总览"),
+    ) ?? null;
+  });
+  overview.click();
+  await m5r07WaitFor("supervisor_open", () => {
+    const panel = m5r07Panel();
+    return panel?.dataset.m5SessionStatus === "open" ? panel : null;
+  });
+}
+
+async function m5r07FillChat(text: string) {
+  const input = await m5r07WaitFor(
+    "supervisor_input",
+    () => document.querySelector<HTMLTextAreaElement>("[data-m5-supervisor-input]"),
+  );
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+  setter?.call(input, text);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  await m5r07Delay(100);
+}
+
+async function installM5R07IsolatedAcceptanceDriver() {
+  try {
+    const status = await loadM5IsolatedAcceptanceStatus();
+    if (!status.isolated) return;
+    document.documentElement.dataset.m5r07Isolated = "1";
+    document.documentElement.dataset.m5r07Scene = status.scene;
+    await m5r07WaitFor("app_shell", () => document.querySelector(".app-shell"));
+    await m5r07OpenSupervisorPanel();
+    const panel = m5r07Panel();
+    if (!panel) throw new Error("m5r07_panel_missing");
+    const bindingId = panel.dataset.m5BindingId ?? "";
+    const roleSessionId = panel.dataset.m5RoleSessionId ?? "";
+    const projectId = panel.dataset.m5ProjectId ?? status.project_id;
+    if (!bindingId || !roleSessionId) throw new Error("m5r07_binding_missing");
+
+    if (status.scene === "resume") {
+      await writeM5IsolatedUiReceipt({
+        phase: "resume",
+        binding_id: bindingId,
+        role_session_id: roleSessionId,
+        project_id: projectId,
+        dispatched: false,
+        spawned: false,
+        notes: ["same_profile_supervisor_resumed"],
+      });
+      return;
+    }
+
+    await m5r07FillChat("what is open?");
+    await m5r07Click('[data-m5-action="chat"]');
+    await m5r07FillChat("do not run");
+    await m5r07Click('[data-m5-action="propose"]');
+    await m5r07WaitFor("proposal", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5ProposalId ? next : null;
+    });
+    await m5r07Click('[data-m5-action="reject"]');
+    await writeM5IsolatedUiReceipt({
+      phase: "scene-a",
+      binding_id: bindingId,
+      role_session_id: roleSessionId,
+      project_id: projectId,
+      proposal_id: m5r07Panel()?.dataset.m5ProposalId ?? null,
+      dispatched: false,
+      spawned: false,
+      notes: ["readonly_chat", "user_rejected_zero_grant"],
+    });
+
+    if (status.scene === "a") return;
+
+    await m5r07FillChat("echo hello");
+    await m5r07Click('[data-m5-action="propose"]');
+    await m5r07WaitFor("scene_b_proposal", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5ProposalId ? next : null;
+    });
+    await m5r07Click('[data-m5-action="approve"]');
+    const approved = await m5r07WaitFor("approved_grant", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5GrantId && next.dataset.m5DispatchId ? next : null;
+    });
+    const follow = await runM5IsolatedAuthorizedFollowthrough({
+      binding_id: bindingId,
+      project_id: projectId,
+      grant_id: approved.dataset.m5GrantId ?? "",
+      dispatch_id: approved.dataset.m5DispatchId ?? "",
+    });
+    await m5r07Click('[data-m5-action="summary"]');
+    await m5r07WaitFor("summary", () => document.querySelector("[data-m5-summary-stale]"));
+    await m5r07Click('[data-m5-action="advice"]');
+    await m5r07WaitFor("advice", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5AdviceWritable === "false" ? next : null;
+    });
+    const deepLinkButton = document.querySelector<HTMLButtonElement>("[data-m5-deep-link-source]");
+    deepLinkButton?.click();
+    await m5r07WaitFor("deep_link", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5DeepLink?.startsWith("syn://") ? next : null;
+    });
+    await writeM5IsolatedUiReceipt({
+      phase: "scene-b",
+      binding_id: bindingId,
+      role_session_id: roleSessionId,
+      project_id: projectId,
+      proposal_id: m5r07Panel()?.dataset.m5ProposalId ?? null,
+      grant_id: approved.dataset.m5GrantId ?? null,
+      dispatched: true,
+      spawned: true,
+      deep_link: m5r07Panel()?.dataset.m5DeepLink ?? null,
+      stale: document.querySelector("[data-m5-summary-stale]")?.getAttribute("data-m5-summary-stale") === "true",
+      notes: [
+        "authorization_then_grant",
+        "timeout_retry_followthrough",
+        `duplicate_claim=${follow.duplicate_claim_id === follow.claim_id}`,
+        "readonly_advice",
+        "deep_link_clicked",
+      ],
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    document.documentElement.dataset.m5r07Error = message;
+    try {
+      await writeM5IsolatedUiReceipt({
+        phase: "failed",
+        binding_id: m5r07Panel()?.dataset.m5BindingId ?? "",
+        role_session_id: m5r07Panel()?.dataset.m5RoleSessionId ?? "",
+        project_id: m5r07Panel()?.dataset.m5ProjectId ?? "",
+        dispatched: false,
+        spawned: false,
+        notes: [message],
+      });
+    } catch {
+      // Isolated receipt write is best-effort after a driver failure.
+    }
+  }
+}
+
 function renderBootFailure(message: string) {
   document.body.innerHTML = `<div class="boot-diagnostic-shell" role="alert"><strong>工作台启动失败</strong><span>${message}</span></div>`;
 }
@@ -2913,6 +3097,7 @@ void installM4R03OrdinaryClockTauriIpcBridge();
 void installM4R04OrdinaryRouteTauriIpcBridge();
 void installM4R05OrdinaryConversationTauriIpcBridge();
 void installM4R06OrdinaryLegacyReadTauriIpcBridge();
+void installM5R07IsolatedAcceptanceDriver();
 
 window.addEventListener("error", (event) => {
   const root = document.getElementById("root");

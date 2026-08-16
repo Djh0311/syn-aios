@@ -78,10 +78,91 @@ pub(crate) fn ensure_supervisor_schema(store: &M5OrchestrationStore) -> Result<(
                 status TEXT NOT NULL,
                 created_at_ms INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS m5_role_sessions (
+                role_session_id TEXT PRIMARY KEY,
+                actor_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                project_id TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL
+            );
             "#,
         )
         .map_err(|e| format!("supervisor_schema:{e}"))?;
     Ok(())
+}
+
+pub(crate) fn persist_formal_role_session(
+    store: &M5OrchestrationStore,
+    session: &SupervisorSessionRef,
+    now_ms: i64,
+) -> Result<(), String> {
+    ensure_supervisor_schema(store)?;
+    if session.role_session_id.trim().is_empty()
+        || session.actor_id.trim().is_empty()
+        || session.project_id.trim().is_empty()
+    {
+        return Err("empty_role_session_identity_rejected".to_string());
+    }
+    store
+        .connection()
+        .execute(
+            "INSERT OR REPLACE INTO m5_role_sessions (
+                role_session_id, actor_id, role, project_id, status, created_at_ms
+            ) VALUES (?1,?2,?3,?4,?5,?6)",
+            params![
+                session.role_session_id,
+                session.actor_id,
+                session.role,
+                session.project_id,
+                session.status,
+                now_ms
+            ],
+        )
+        .map_err(|e| format!("persist_role_session:{e}"))?;
+    Ok(())
+}
+
+pub(crate) fn load_formal_role_session(
+    store: &M5OrchestrationStore,
+    role_session_id: &str,
+) -> Result<Option<SupervisorSessionRef>, String> {
+    ensure_supervisor_schema(store)?;
+    store
+        .connection()
+        .query_row(
+            "SELECT role_session_id, actor_id, role, project_id, status
+             FROM m5_role_sessions WHERE role_session_id=?1",
+            [role_session_id],
+            |row| {
+                Ok(SupervisorSessionRef {
+                    role_session_id: row.get(0)?,
+                    actor_id: row.get(1)?,
+                    role: row.get(2)?,
+                    project_id: row.get(3)?,
+                    status: row.get(4)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| format!("load_role_session:{e}"))
+}
+
+pub(crate) struct PersistentRoleSessionPort<'a> {
+    store: &'a M5OrchestrationStore,
+}
+
+impl<'a> PersistentRoleSessionPort<'a> {
+    pub(crate) fn new(store: &'a M5OrchestrationStore) -> Self {
+        Self { store }
+    }
+}
+
+impl ProjectSupervisorRoleSessionPort for PersistentRoleSessionPort<'_> {
+    fn load(&self, role_session_id: &str) -> Result<SupervisorSessionRef, String> {
+        load_formal_role_session(self.store, role_session_id)?
+            .ok_or_else(|| "role_session_not_found".to_string())
+    }
 }
 
 pub(crate) fn open_or_resume_supervisor(
@@ -92,6 +173,9 @@ pub(crate) fn open_or_resume_supervisor(
     now_ms: i64,
 ) -> Result<SupervisorBinding, String> {
     ensure_supervisor_schema(store)?;
+    if role_session_id.trim().is_empty() || expected_project_id.trim().is_empty() {
+        return Err("empty_role_session_identity_rejected".to_string());
+    }
     let session = sessions.load(role_session_id)?;
     if session.role != "project_supervisor" {
         return Err("role_is_not_project_supervisor".to_string());
@@ -99,6 +183,7 @@ pub(crate) fn open_or_resume_supervisor(
     if session.project_id != expected_project_id {
         return Err("role_session_project_mismatch".to_string());
     }
+    persist_formal_role_session(store, &session, now_ms)?;
     if let Some(existing) = load_binding(store, expected_project_id, role_session_id)? {
         if existing.actor_id != session.actor_id {
             return Err("role_session_actor_mismatch".to_string());
@@ -129,6 +214,54 @@ pub(crate) fn open_or_resume_supervisor(
     Ok(binding)
 }
 
+pub(crate) fn require_complete_binding(binding: &SupervisorBinding) -> Result<(), String> {
+    if binding.binding_id.trim().is_empty()
+        || binding.project_id.trim().is_empty()
+        || binding.role_session_id.trim().is_empty()
+        || binding.actor_id.trim().is_empty()
+    {
+        return Err("empty_binding_rejected".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn load_binding_by_id(
+    store: &M5OrchestrationStore,
+    binding_id: &str,
+    project_id: &str,
+) -> Result<SupervisorBinding, String> {
+    ensure_supervisor_schema(store)?;
+    let binding = store
+        .connection()
+        .query_row(
+            "SELECT binding_id, project_id, role_session_id, actor_id
+             FROM m5_supervisor_bindings
+             WHERE binding_id=?1 AND project_id=?2",
+            params![binding_id, project_id],
+            |row| {
+                Ok(SupervisorBinding {
+                    binding_id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    role_session_id: row.get(2)?,
+                    actor_id: row.get(3)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| format!("load_binding_by_id:{e}"))?
+        .ok_or_else(|| "supervisor_binding_not_found".to_string())?;
+    require_complete_binding(&binding)?;
+    let session = load_formal_role_session(store, &binding.role_session_id)?
+        .ok_or_else(|| "role_session_not_found".to_string())?;
+    if session.project_id != binding.project_id
+        || session.actor_id != binding.actor_id
+        || session.role != "project_supervisor"
+    {
+        return Err("binding_role_session_exact_join_failed".to_string());
+    }
+    Ok(binding)
+}
+
 pub(crate) fn handle_supervisor_action(
     store: &M5OrchestrationStore,
     binding: &SupervisorBinding,
@@ -136,6 +269,8 @@ pub(crate) fn handle_supervisor_action(
     now_ms: i64,
 ) -> Result<SupervisorTurn, String> {
     ensure_supervisor_schema(store)?;
+    require_complete_binding(binding)?;
+    let _ = load_binding_by_id(store, &binding.binding_id, &binding.project_id)?;
     let turn = match action {
         SupervisorAction::Chat { text } | SupervisorAction::Read { query: text } => {
             SupervisorTurn {
@@ -176,30 +311,57 @@ pub(crate) fn handle_supervisor_action(
     Ok(turn)
 }
 
-/// Production caller into the M5R02 grant chain. Supervisor cannot jump to
-/// start/dispatch; it must pass an approved authorization context.
+/// Formal user AuthorizationDecision entry. Isolated scenes and the UI must
+/// call this; they must not call prepare_and_dispatch themselves.
+pub(crate) fn record_user_authorization_decision(
+    store: &M5OrchestrationStore,
+    binding: &SupervisorBinding,
+    proposal_id: &str,
+    decision: &str,
+    request: Option<AuthorizedExecutionRequest>,
+) -> Result<Option<AuthorizedExecutionResult>, String> {
+    require_complete_binding(binding)?;
+    let live = load_binding_by_id(store, &binding.binding_id, &binding.project_id)?;
+    match decision {
+        "REJECTED" => {
+            store
+                .connection()
+                .execute(
+                    "UPDATE m5_supervisor_proposals SET status='REJECTED'
+                     WHERE proposal_id=?1 AND project_id=?2 AND binding_id=?3 AND status='DRAFT'",
+                    params![proposal_id, live.project_id, live.binding_id],
+                )
+                .map_err(|e| format!("reject_proposal:{e}"))?;
+            Ok(None)
+        }
+        "APPROVED" => {
+            let request =
+                request.ok_or_else(|| "approved_decision_missing_execution_request".to_string())?;
+            if request.project_id != live.project_id || request.principal_actor_id != live.actor_id
+            {
+                return Err("authorization_actor_or_project_mismatch".to_string());
+            }
+            approve_supervisor_proposal(store, &live, proposal_id)?;
+            Ok(Some(prepare_and_dispatch(
+                store,
+                request,
+                ChainFault::None,
+            )?))
+        }
+        other => Err(format!("illegal_authorization_decision:{other}")),
+    }
+}
+
+/// Kept as an internal alias after an AuthorizationDecision has already been
+/// recorded. New callers must use record_user_authorization_decision.
 pub(crate) fn authorize_and_dispatch_from_supervisor(
     store: &M5OrchestrationStore,
     binding: &SupervisorBinding,
     proposal_id: &str,
     request: AuthorizedExecutionRequest,
 ) -> Result<AuthorizedExecutionResult, String> {
-    if request.project_id != binding.project_id {
-        return Err("supervisor_cannot_dispatch_other_project".to_string());
-    }
-    let status: String = store
-        .connection()
-        .query_row(
-            "SELECT status FROM m5_supervisor_proposals
-             WHERE proposal_id=?1 AND project_id=?2",
-            params![proposal_id, binding.project_id],
-            |row| row.get(0),
-        )
-        .map_err(|_| "supervisor_proposal_missing".to_string())?;
-    if status != "APPROVED" {
-        return Err("supervisor_proposal_not_approved".to_string());
-    }
-    prepare_and_dispatch(store, request, ChainFault::None)
+    record_user_authorization_decision(store, binding, proposal_id, "APPROVED", Some(request))?
+        .ok_or_else(|| "authorization_did_not_dispatch".to_string())
 }
 
 pub(crate) fn approve_supervisor_proposal(
@@ -390,6 +552,22 @@ mod tests {
         .unwrap();
         assert!(turn.created_proposal);
         assert!(!turn.created_grant);
+        let rejected = record_user_authorization_decision(
+            &store,
+            &binding,
+            &turn.text,
+            "REJECTED",
+            None,
+        )
+        .unwrap();
+        assert!(rejected.is_none());
+        let grants: i64 = store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_execution_grants", [], |row| {
+                row.get(0)
+            })
+            .unwrap_or(0);
+        assert_eq!(grants, 0);
         let err = authorize_and_dispatch_from_supervisor(
             &store,
             &binding,
@@ -413,6 +591,6 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert_eq!(err, "supervisor_proposal_not_approved");
+        assert_eq!(err, "supervisor_proposal_not_draft");
     }
 }

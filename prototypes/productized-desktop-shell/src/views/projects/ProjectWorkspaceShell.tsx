@@ -37,6 +37,7 @@ import {
   ProjectOverview,
   ProjectToolPlaceholder,
 } from "./ProjectOverviewPanels";
+import { ProjectSupervisorPanel } from "./ProjectSupervisorPanel";
 import { ProjectHandoffEvidencePanel, ProjectResourcesPanel } from "./ProjectReferencePanels";
 import { ProjectWorkflowDraftPanel, selectedTaskDraftFor } from "./ProjectTaskDraftPanels";
 import {
@@ -235,12 +236,15 @@ export function ProjectWorkspaceShell({
             )}
           />
         ) : selectedTool === "overview" ? (
-          <ProjectOverview
-            project={project}
-            workflowState={workflowState}
-            planAuthorizationStore={planAuthorizationStore}
-            onSelectTool={onSelectTool}
-          />
+          <>
+            <ProjectOverview
+              project={project}
+              workflowState={workflowState}
+              planAuthorizationStore={planAuthorizationStore}
+              onSelectTool={onSelectTool}
+            />
+            <ProjectSupervisorPanel projectId={project.project_root} />
+          </>
         ) : selectedTool === "workflow" ? (
           workflowPanel
         ) : selectedTool === "agent-sessions" ? (

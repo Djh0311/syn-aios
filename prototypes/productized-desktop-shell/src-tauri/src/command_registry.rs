@@ -248,7 +248,17 @@ macro_rules! workbench_command_handler {
             mcp::commands::list_workflow_templates,
             mcp::commands::load_workflow_template,
             mcp::commands::delete_workflow_template,
-            store_hygiene::sweep_canvas_run_residue
+            store_hygiene::sweep_canvas_run_residue,
+            crate::m5_product_commands::open_m5_project_supervisor,
+            crate::m5_product_commands::submit_m5_project_supervisor_turn,
+            crate::m5_product_commands::record_m5_authorization_decision,
+            crate::m5_product_commands::load_m5_project_summary,
+            crate::m5_product_commands::rebuild_m5_project_summary,
+            crate::m5_product_commands::open_m5_source_deep_link,
+            crate::m5_product_commands::load_m5_isolated_acceptance_status,
+            crate::m5_product_commands::write_m5_isolated_ui_receipt,
+            crate::m5_product_commands::run_m5_isolated_authorized_followthrough,
+            crate::m5_product_commands::load_m5_global_advice_fixture
         ];
         move |invoke| {
             let command = invoke.message.command().to_owned();

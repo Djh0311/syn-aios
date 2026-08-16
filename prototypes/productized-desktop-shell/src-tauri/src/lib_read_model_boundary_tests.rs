@@ -30,6 +30,7 @@
             tasks_path: dir.join("tasks.md"),
             workflow_state_path: dir.join("workflow-state.v0.json"),
             m3_role_session_read_runtime: Default::default(),
+            m5_store_path: None,
         };
         let index = json!({
           "generated_at": "2026-05-27T10:23:52Z",
@@ -114,6 +115,7 @@
             tasks_path: dir.join("tasks.md"),
             workflow_state_path,
             m3_role_session_read_runtime: Default::default(),
+            m5_store_path: None,
         };
         fs::write(&state.tasks_path, "- `g2.md`：G2\n").expect("write tasks");
         let index = json!({
@@ -236,6 +238,7 @@
             tasks_path: dir.join("tasks.md"),
             workflow_state_path,
             m3_role_session_read_runtime: Default::default(),
+            m5_store_path: None,
         };
         let index = json!({
           "generated_at": "2026-06-03T00:00:00Z",
@@ -331,6 +334,7 @@
             tasks_path: dir.join("tasks.md"),
             workflow_state_path: dir.join("missing-workflow-state.v0.json"),
             m3_role_session_read_runtime: Default::default(),
+            m5_store_path: None,
         };
         let snapshot = build_snapshot_with_session_source(
             &state,
@@ -764,6 +768,7 @@ fn unavailable_state() -> AppState {
         tasks_path: PathBuf::from("/m3c06/fixture/tasks.md"),
         workflow_state_path: PathBuf::from("/m3c06/fixture/workflow-state.json"),
         m3_role_session_read_runtime: Default::default(),
+        m5_store_path: None,
     }
 }
 
