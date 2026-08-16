@@ -56,25 +56,26 @@ mod m2_domain_cutover;
 pub mod m2_dto;
 mod m2_isolated_app_acceptance;
 mod m2_legacy_adapter;
-mod m5_orchestration_identity;
-mod m5_prepared_attempt;
+mod m2_outbox;
+mod m5_agent_runtime;
+mod m5_claim_ledger;
+mod m5_controlled_execution;
+mod m5_dto;
 mod m5_execution_grant;
-mod m5_orchestration_schema;
-mod m5_orchestration_store;
-mod m5_orchestration_service;
 mod m5_gateway_traits;
-mod m5_side_effect_entry;
+mod m5_isolated_acceptance;
+mod m5_m3_identity;
+mod m5_orchestration_identity;
+mod m5_orchestration_schema;
+mod m5_orchestration_service;
+mod m5_orchestration_store;
+mod m5_prepared_attempt;
+mod m5_product_commands;
+mod m5_project_summary;
+mod m5_project_supervisor;
 mod m5_runner_entry_registry;
 mod m5_runtime_receipt;
-mod m5_claim_ledger;
-mod m5_project_supervisor;
-mod m5_agent_runtime;
-mod m5_controlled_execution;
-mod m5_project_summary;
-mod m5_dto;
-mod m5_product_commands;
-mod m5_isolated_acceptance;
-mod m2_outbox;
+mod m5_side_effect_entry;
 // Historical generic candidate traits are deliberately crate-private.  The
 // one M2 authority surface is the concrete
 // `workflow-state-sidecar.repository.m2.v1` adapter in
@@ -191,7 +192,10 @@ impl AppState {
                     m4_secretary_conversation_runtime: Default::default(),
                     #[cfg(not(test))]
                     m4_source_route_registry: None,
-                    m5_store_path: install_m5_store_path(&paths.app_data_root.join("local.codex.governance.workbench")).ok(),
+                    m5_store_path: install_m5_store_path(
+                        &paths.app_data_root.join("local.codex.governance.workbench"),
+                    )
+                    .ok(),
                 });
             }
             let m3_role_session_read_runtime =
@@ -209,7 +213,10 @@ impl AppState {
                 m4_secretary_conversation_runtime: Default::default(),
                 #[cfg(not(test))]
                 m4_source_route_registry: None,
-                m5_store_path: install_m5_store_path(&paths.app_data_root.join("local.codex.governance.workbench")).ok(),
+                m5_store_path: install_m5_store_path(
+                    &paths.app_data_root.join("local.codex.governance.workbench"),
+                )
+                .ok(),
             });
         }
         // Non-Tauri internal hosts still use this legacy composition for the
@@ -346,12 +353,22 @@ impl AppState {
         })
     }
 
-    pub(crate) fn open_m5_store(&self) -> Result<m5_orchestration_store::M5OrchestrationStore, String> {
+    pub(crate) fn open_m5_store(
+        &self,
+    ) -> Result<m5_orchestration_store::M5OrchestrationStore, String> {
         let path = self
             .m5_store_path
             .as_ref()
             .ok_or_else(|| "m5_runtime_unavailable".to_string())?;
         m5_orchestration_store::M5OrchestrationStore::open(path)
+    }
+
+    pub(crate) fn m5_store_path(&self) -> Option<&Path> {
+        self.m5_store_path.as_deref()
+    }
+
+    pub(crate) fn product_index_path(&self) -> &Path {
+        &self.index_path
     }
 }
 

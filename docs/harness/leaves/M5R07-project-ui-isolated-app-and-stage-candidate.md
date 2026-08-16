@@ -12,17 +12,20 @@
 
 载体：candidate commit series tip（本叶提交后的 exact SHA）
 
-允许动（M5R07 最窄修正，2026-08-16 用户明确验收缺口）：
+允许动（M5R07 最窄修正，2026-08-17 独立验收返修）：
 
 - docs/contracts/（仅新增/修正 M5 UI/DTO 补充合同）
 - prototypes/productized-desktop-shell/src-tauri/src/m5_dto.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m5_product_commands.rs
+- prototypes/productized-desktop-shell/src-tauri/src/m5_m3_identity.rs [新增：只消费 M3 RoleSession]
 - prototypes/productized-desktop-shell/src-tauri/src/m5_isolated_acceptance.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m5_project_supervisor.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m5_project_summary.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m5_orchestration_service.rs（仅正式授权入口接线）
 - prototypes/productized-desktop-shell/src-tauri/src/lib.rs（AppState 最小安装 + command 声明）
 - prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs（仅登记 M5 command）
+- prototypes/productized-desktop-shell/src-tauri/src/commands.rs（**仅因** `AppState` 新增 `m5_store_path` 后测试字面量 E0063；只补该字段，不改其它 command 语义）
+- prototypes/productized-desktop-shell/src-tauri/src/lib_read_model_boundary_tests.rs（同上：只补 `m5_store_path: None`，不改读模型边界）
 - prototypes/productized-desktop-shell/src/lib/tauri.ts、src/lib/m5ProjectSupervisor.ts [新增]
 - prototypes/productized-desktop-shell/src/views/projects/ProjectSupervisorPanel.tsx [新增]
 - prototypes/productized-desktop-shell/src/views/projects/ProjectWorkspaceShell.tsx（仅接入主管面板）

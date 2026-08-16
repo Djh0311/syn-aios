@@ -1,27 +1,24 @@
 // Non-test product callers for the existing project shell. UI must not
-// invent Grant or RoleSession identity.
+// invent Grant, RoleSession, allowed command, or consumer identity.
 
 use crate::m5_dto::{
     M5ProjectSummaryRead, M5SupervisorOpenRequest, M5SupervisorOpenResponse,
     M5SupervisorTurnRequest, M5SupervisorTurnResponse,
+};
+use crate::m5_m3_identity::{
+    app_data_root_from_m5_store, open_ordinary_m3_repository, resolve_project_id_from_index,
+    M3OwnedSupervisorSessionPort, WHITELISTED_COMMAND,
 };
 use crate::m5_orchestration_store::M5OrchestrationStore;
 use crate::m5_project_summary::{
     PersistentProjectSummaryPort, ProjectSummaryQueryPort, SummaryConsumer,
 };
 use crate::m5_project_supervisor::{
-    handle_supervisor_action, load_formal_role_session, open_or_resume_supervisor,
-    persist_formal_role_session, PersistentRoleSessionPort, ProjectSupervisorRoleSessionPort,
+    handle_supervisor_action, load_binding_by_id, load_supervisor_proposal,
+    open_or_resume_supervisor, verify_binding_against_session, ProjectSupervisorRoleSessionPort,
     SupervisorAction, SupervisorSessionRef,
 };
-
-pub(crate) fn derived_supervisor_session_id(project_id: &str) -> String {
-    format!("m5:project-supervisor:{project_id}")
-}
-
-pub(crate) fn derived_local_actor_id() -> String {
-    "m5:actor:local-owner".to_string()
-}
+use rusqlite::OptionalExtension;
 
 pub(crate) fn open_project_supervisor_command(
     store: &M5OrchestrationStore,
@@ -29,25 +26,21 @@ pub(crate) fn open_project_supervisor_command(
     request: M5SupervisorOpenRequest,
     now_ms: i64,
 ) -> Result<M5SupervisorOpenResponse, String> {
-    let expected_session = derived_supervisor_session_id(&request.project_id);
-    if !request.role_session_id.is_empty() && request.role_session_id != expected_session {
+    let session = sessions.load(&request.role_session_id)?;
+    if !request.role_session_id.is_empty() && request.role_session_id != session.role_session_id {
         return Err("caller_invented_role_session_rejected".to_string());
     }
-    if load_formal_role_session(store, &expected_session)?.is_none() {
-        persist_formal_role_session(
-            store,
-            &static_supervisor_session(
-                &expected_session,
-                &request.project_id,
-                &derived_local_actor_id(),
-            ),
-            now_ms,
-        )?;
+    if session.project_id != request.project_id {
+        return Err("role_session_project_mismatch".to_string());
     }
-    let port = PersistentRoleSessionPort::new(store);
-    let binding =
-        open_or_resume_supervisor(store, &port, &expected_session, &request.project_id, now_ms)?;
-    let _ = sessions;
+    let binding = open_or_resume_supervisor(
+        store,
+        sessions,
+        &session.role_session_id,
+        &session.project_id,
+        now_ms,
+    )?;
+    verify_binding_against_session(&binding, &session)?;
     Ok(M5SupervisorOpenResponse {
         binding_id: binding.binding_id,
         project_id: binding.project_id,
@@ -57,16 +50,13 @@ pub(crate) fn open_project_supervisor_command(
 
 pub(crate) fn supervisor_turn_command(
     store: &M5OrchestrationStore,
-    binding_project_id: &str,
-    binding_id: &str,
+    sessions: &dyn ProjectSupervisorRoleSessionPort,
     request: M5SupervisorTurnRequest,
     now_ms: i64,
 ) -> Result<M5SupervisorTurnResponse, String> {
-    if request.project_id != binding_project_id || request.binding_id != binding_id {
-        return Err("command_project_mismatch".to_string());
-    }
-    let binding =
-        crate::m5_project_supervisor::load_binding_by_id(store, binding_id, binding_project_id)?;
+    let binding = load_binding_by_id(store, &request.binding_id, &request.project_id)?;
+    let session = sessions.load(&binding.role_session_id)?;
+    verify_binding_against_session(&binding, &session)?;
     let action = match request.kind.as_str() {
         "chat" => SupervisorAction::Chat { text: request.text },
         "read" => SupervisorAction::Read {
@@ -126,37 +116,20 @@ fn to_summary_read(
             .map(|r| crate::m5_dto::M5SourceRefRead {
                 source_type: r.source_type.clone(),
                 source_id: r.source_id.clone(),
-                deep_link: format!("syn://project/{}/{}", summary.project_id, r.source_id),
+                deep_link: crate::m5_project_summary::source_deep_link(r),
                 last_updated_ms: r.last_updated_ms,
             })
             .collect(),
     }
 }
 
-pub(crate) fn static_supervisor_session(
-    role_session_id: &str,
-    project_id: &str,
-    actor_id: &str,
-) -> SupervisorSessionRef {
-    SupervisorSessionRef {
-        role_session_id: role_session_id.to_string(),
-        project_id: project_id.to_string(),
-        actor_id: actor_id.to_string(),
-        role: "project_supervisor".into(),
-        status: "ACTIVE".into(),
+fn consumer_from_session(session: &SupervisorSessionRef) -> SummaryConsumer {
+    SummaryConsumer {
+        role_session_id: session.role_session_id.clone(),
+        role: session.role.clone(),
+        scope_project_id: session.project_id.clone(),
+        expires_at_ms: m5_now_ms() + 3_600_000,
     }
-}
-
-pub(crate) fn seed_formal_supervisor_session(
-    store: &M5OrchestrationStore,
-    role_session_id: &str,
-    project_id: &str,
-    actor_id: &str,
-    now_ms: i64,
-) -> Result<SupervisorSessionRef, String> {
-    let session = static_supervisor_session(role_session_id, project_id, actor_id);
-    crate::m5_project_supervisor::persist_formal_role_session(store, &session, now_ms)?;
-    Ok(session)
 }
 
 pub(crate) fn record_authorization_decision_command(
@@ -167,7 +140,7 @@ pub(crate) fn record_authorization_decision_command(
     decision: &str,
     request: Option<crate::m5_orchestration_service::AuthorizedExecutionRequest>,
 ) -> Result<Option<crate::m5_orchestration_service::AuthorizedExecutionResult>, String> {
-    let binding = crate::m5_project_supervisor::load_binding_by_id(store, binding_id, project_id)?;
+    let binding = load_binding_by_id(store, binding_id, project_id)?;
     crate::m5_project_supervisor::record_user_authorization_decision(
         store,
         &binding,
@@ -179,17 +152,11 @@ pub(crate) fn record_authorization_decision_command(
 
 pub(crate) fn open_source_deep_link_command(
     store: &M5OrchestrationStore,
-    consumer: &SummaryConsumer,
+    project_id: &str,
     source_id: &str,
-    now_ms: i64,
 ) -> Result<String, String> {
-    let summary = read_project_summary_command(store, consumer, now_ms)?;
-    let found = summary
-        .source_refs
-        .iter()
-        .find(|r| r.source_id == source_id)
-        .ok_or_else(|| "deep_link_source_not_found".to_string())?;
-    Ok(found.deep_link.clone())
+    let resolved = crate::m5_project_summary::resolve_source_ref(store, project_id, source_id)?;
+    Ok(crate::m5_project_summary::source_deep_link(&resolved))
 }
 
 pub(crate) fn m5_now_ms() -> i64 {
@@ -208,13 +175,184 @@ fn store_from_state(state: &crate::AppState) -> Result<M5OrchestrationStore, Str
     state.open_m5_store()
 }
 
+fn resolve_product_project_id(state: &crate::AppState, locator: &str) -> Result<String, String> {
+    resolve_project_id_from_index(state.product_index_path(), locator).or_else(|error| {
+        if locator.starts_with("scratch-") || locator.starts_with("project:") {
+            Ok(locator.to_string())
+        } else if error == "m5_index_unreadable" || error.starts_with("m5_index_") {
+            Ok(crate::m5_m3_identity::official_project_id(locator))
+        } else {
+            Err(error)
+        }
+    })
+}
+
+fn m3_context(
+    state: &crate::AppState,
+    locator: &str,
+) -> Result<
+    (
+        crate::m3_role_session_repository::M3RoleSessionSqliteRepository,
+        String,
+    ),
+    String,
+> {
+    let store_path = state
+        .m5_store_path()
+        .ok_or_else(|| "m5_runtime_unavailable".to_string())?;
+    let app_data = app_data_root_from_m5_store(store_path)?;
+    let project_id = resolve_product_project_id(state, locator)?;
+    Ok((open_ordinary_m3_repository(&app_data)?, project_id))
+}
+
+fn persist_formal_progress(
+    store: &M5OrchestrationStore,
+    project_id: &str,
+    grant_id: Option<&str>,
+    dispatch_id: Option<&str>,
+    receipt_json: Option<&str>,
+    claim_id: Option<&str>,
+    review_id: Option<&str>,
+) -> Result<(), String> {
+    store
+        .connection()
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS m5_formal_progress (
+                project_id TEXT PRIMARY KEY,
+                grant_id TEXT,
+                dispatch_id TEXT,
+                receipt_json TEXT,
+                claim_id TEXT,
+                review_id TEXT,
+                updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .map_err(|e| format!("formal_progress_schema:{e}"))?;
+    let existing: Option<(
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    )> = store
+        .connection()
+        .query_row(
+            "SELECT grant_id, dispatch_id, receipt_json, claim_id, review_id
+             FROM m5_formal_progress WHERE project_id=?1",
+            [project_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|e| format!("load_formal_progress:{e}"))?;
+    let (g, d, r, c, v) = existing.unwrap_or((None, None, None, None, None));
+    store
+        .connection()
+        .execute(
+            "INSERT OR REPLACE INTO m5_formal_progress (
+                project_id, grant_id, dispatch_id, receipt_json, claim_id, review_id, updated_at_ms
+            ) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            rusqlite::params![
+                project_id,
+                grant_id.map(str::to_string).or(g),
+                dispatch_id.map(str::to_string).or(d),
+                receipt_json.map(str::to_string).or(r),
+                claim_id.map(str::to_string).or(c),
+                review_id.map(str::to_string).or(v),
+                m5_now_ms()
+            ],
+        )
+        .map_err(|e| format!("persist_formal_progress:{e}"))?;
+    Ok(())
+}
+
+fn load_formal_progress(
+    store: &M5OrchestrationStore,
+    project_id: &str,
+) -> Result<
+    (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ),
+    String,
+> {
+    store
+        .connection()
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS m5_formal_progress (
+                project_id TEXT PRIMARY KEY,
+                grant_id TEXT,
+                dispatch_id TEXT,
+                receipt_json TEXT,
+                claim_id TEXT,
+                review_id TEXT,
+                updated_at_ms INTEGER NOT NULL
+            );",
+        )
+        .map_err(|e| format!("formal_progress_schema:{e}"))?;
+    store
+        .connection()
+        .query_row(
+            "SELECT grant_id, dispatch_id, receipt_json, claim_id, review_id
+             FROM m5_formal_progress WHERE project_id=?1",
+            [project_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|e| format!("load_formal_progress:{e}"))
+        .map(|row| row.unwrap_or((None, None, None, None, None)))
+}
+
+fn require_binding(
+    state: &crate::AppState,
+    binding_id: &str,
+    locator: &str,
+) -> Result<
+    (
+        M5OrchestrationStore,
+        crate::m5_project_supervisor::SupervisorBinding,
+        SupervisorSessionRef,
+        crate::m3_role_session_repository::M3RoleSessionSqliteRepository,
+    ),
+    String,
+> {
+    let store = store_from_state(state)?;
+    let (repository, project_id) = m3_context(state, locator)?;
+    let (_, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
+    let binding = load_binding_by_id(&store, binding_id, &session.project_id)
+        .or_else(|_| load_binding_by_id(&store, binding_id, locator))?;
+    verify_binding_against_session(&binding, &session)?;
+    Ok((store, binding, session, repository))
+}
+
 #[tauri::command]
 pub(crate) fn open_m5_project_supervisor(
     state: tauri::State<'_, crate::AppState>,
     request: M5SupervisorOpenRequest,
 ) -> Result<M5SupervisorOpenResponse, String> {
     let store = store_from_state(&state)?;
-    let port = PersistentRoleSessionPort::new(&store);
+    let (repository, project_id) = m3_context(&state, &request.project_id)?;
+    let (port, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
+    let mut request = request;
+    request.project_id = session.project_id.clone();
     open_project_supervisor_command(&store, &port, request, m5_now_ms())
 }
 
@@ -224,13 +362,16 @@ pub(crate) fn submit_m5_project_supervisor_turn(
     request: M5SupervisorTurnRequest,
 ) -> Result<M5SupervisorTurnResponse, String> {
     let store = store_from_state(&state)?;
-    supervisor_turn_command(
-        &store,
-        &request.project_id,
-        &request.binding_id,
-        request.clone(),
-        m5_now_ms(),
-    )
+    let (repository, project_id) = m3_context(&state, &request.project_id)?;
+    if project_id != request.project_id && request.project_id != project_id {
+        let binding = load_binding_by_id(&store, &request.binding_id, &request.project_id);
+        if binding.is_err() {
+            return Err("command_project_mismatch".to_string());
+        }
+    }
+    let (port, _) =
+        M3OwnedSupervisorSessionPort::open_for_project(&repository, &request.project_id)?;
+    supervisor_turn_command(&store, &port, request, m5_now_ms())
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -239,7 +380,6 @@ pub(crate) struct M5AuthorizationDecisionRequest {
     pub project_id: String,
     pub proposal_id: String,
     pub decision: String,
-    pub allowed_command: Option<String>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -256,34 +396,27 @@ pub(crate) fn record_m5_authorization_decision(
     request: M5AuthorizationDecisionRequest,
 ) -> Result<M5AuthorizationDecisionResponse, String> {
     let store = store_from_state(&state)?;
-    let binding = crate::m5_project_supervisor::load_binding_by_id(
-        &store,
-        &request.binding_id,
-        &request.project_id,
-    )?;
+    let (repository, _) = m3_context(&state, &request.project_id)?;
+    let (port, session) =
+        M3OwnedSupervisorSessionPort::open_for_project(&repository, &request.project_id)?;
+    let binding = load_binding_by_id(&store, &request.binding_id, &request.project_id)?;
+    verify_binding_against_session(&binding, &session)?;
+    let _ = port;
     let exec = if request.decision == "APPROVED" {
-        let command = request
-            .allowed_command
-            .clone()
-            .unwrap_or_else(|| "echo".to_string());
+        let proposal = load_supervisor_proposal(
+            &store,
+            &request.proposal_id,
+            &binding.project_id,
+            &request.binding_id,
+        )?;
+        let worker = port.worker_session()?;
         Some(
-            crate::m5_orchestration_service::AuthorizedExecutionRequest {
-                project_id: binding.project_id.clone(),
-                proposal_id: request.proposal_id.clone(),
-                deciding_actor_id: binding.actor_id.clone(),
-                worker_role_session_id: format!("m5:worker:{}", binding.project_id),
-                principal_actor_id: binding.actor_id.clone(),
-                workflow_ref: format!("m5:workflow:{}", binding.project_id),
-                source_object_ref: format!("obj:{}", binding.project_id),
-                allowed_commands: vec![command],
-                cwd_ref: format!("/tmp/{}", binding.project_id),
-                write_root_refs: vec![format!("/tmp/{}", binding.project_id)],
-                object_refs: vec![format!("obj:{}", binding.project_id)],
-                scope_fingerprint: format!("scope:{}", binding.project_id),
-                policy_decision_ref: "pol:m5r07".into(),
-                now_ms: m5_now_ms(),
-                ttl_ms: 60_000,
-            },
+            crate::m5_m3_identity::authorized_request_from_stored_proposal(
+                &binding,
+                &proposal,
+                &worker.role_session_id,
+                m5_now_ms(),
+            )?,
         )
     } else {
         None
@@ -291,11 +424,22 @@ pub(crate) fn record_m5_authorization_decision(
     let result = record_authorization_decision_command(
         &store,
         &request.binding_id,
-        &request.project_id,
+        &binding.project_id,
         &request.proposal_id,
         &request.decision,
         exec,
     )?;
+    if let Some(dispatched) = result.as_ref() {
+        persist_formal_progress(
+            &store,
+            &binding.project_id,
+            dispatched.grant_id.as_ref().map(|g| g.as_str()),
+            dispatched.dispatch_id.as_ref().map(|d| d.as_str()),
+            None,
+            None,
+            None,
+        )?;
+    }
     Ok(M5AuthorizationDecisionResponse {
         dispatched: result.is_some(),
         grant_id: result
@@ -311,54 +455,37 @@ pub(crate) fn record_m5_authorization_decision(
 #[tauri::command]
 pub(crate) fn load_m5_project_summary(
     state: tauri::State<'_, crate::AppState>,
+    binding_id: String,
     project_id: String,
 ) -> Result<M5ProjectSummaryRead, String> {
     let store = store_from_state(&state)?;
-    read_project_summary_command(
-        &store,
-        &SummaryConsumer {
-            role_session_id: derived_supervisor_session_id(&project_id),
-            role: "project_supervisor".into(),
-            scope_project_id: project_id,
-            expires_at_ms: m5_now_ms() + 3_600_000,
-        },
-        m5_now_ms(),
-    )
-}
-
-#[tauri::command]
-pub(crate) fn rebuild_m5_project_summary(
-    state: tauri::State<'_, crate::AppState>,
-    project_id: String,
-) -> Result<M5ProjectSummaryRead, String> {
-    let store = store_from_state(&state)?;
-    crate::m5_project_summary::rebuild_project_summary(&store, &project_id, m5_now_ms())?;
-    load_m5_project_summary(state, project_id)
+    let (repository, _) = m3_context(&state, &project_id)?;
+    let (port, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
+    let binding = load_binding_by_id(&store, &binding_id, &project_id)?;
+    verify_binding_against_session(&binding, &session)?;
+    let _ = port;
+    read_project_summary_command(&store, &consumer_from_session(&session), m5_now_ms())
 }
 
 #[tauri::command]
 pub(crate) fn open_m5_source_deep_link(
     state: tauri::State<'_, crate::AppState>,
+    binding_id: String,
     project_id: String,
     source_id: String,
 ) -> Result<String, String> {
     let store = store_from_state(&state)?;
-    open_source_deep_link_command(
-        &store,
-        &SummaryConsumer {
-            role_session_id: derived_supervisor_session_id(&project_id),
-            role: "project_supervisor".into(),
-            scope_project_id: project_id,
-            expires_at_ms: m5_now_ms() + 3_600_000,
-        },
-        &source_id,
-        m5_now_ms(),
-    )
+    let (repository, _) = m3_context(&state, &project_id)?;
+    let (_, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
+    let binding = load_binding_by_id(&store, &binding_id, &project_id)?;
+    verify_binding_against_session(&binding, &session)?;
+    open_source_deep_link_command(&store, &session.project_id, &source_id)
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub(crate) struct M5IsolatedAcceptanceStatus {
     pub isolated: bool,
+    pub project_locator: String,
     pub project_id: String,
     pub launch_ordinal: u32,
     pub scene: String,
@@ -376,9 +503,14 @@ pub(crate) fn load_m5_isolated_acceptance_status(
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<M5IsolatedAcceptanceStatus, String> {
     let isolated = isolated_acceptance_requested() && store_from_state(&state).is_ok();
-    let project_id = crate::acceptance_runtime_profile::active_paths()?
+    let locator = crate::acceptance_runtime_profile::active_paths()?
         .map(|paths| paths.project_root.to_string_lossy().into_owned())
         .unwrap_or_default();
+    let project_id = if locator.is_empty() {
+        String::new()
+    } else {
+        resolve_product_project_id(&state, &locator).unwrap_or_else(|_| locator.clone())
+    };
     let launch_ordinal = std::env::var("SYN_M5R07_LAUNCH_ORDINAL")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -392,95 +524,313 @@ pub(crate) fn load_m5_isolated_acceptance_status(
     });
     Ok(M5IsolatedAcceptanceStatus {
         isolated,
+        project_locator: locator,
         project_id,
         launch_ordinal,
         scene,
     })
 }
 
+#[tauri::command]
+pub(crate) fn snapshot_m5_isolated_ui_receipt(
+    state: tauri::State<'_, crate::AppState>,
+    phase: String,
+) -> Result<String, String> {
+    if !isolated_acceptance_requested() {
+        return Err("m5_isolated_acceptance_inactive".into());
+    }
+    let store = store_from_state(&state)?;
+    let locator = crate::acceptance_runtime_profile::active_paths()?
+        .map(|paths| paths.project_root.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let project_id = resolve_product_project_id(&state, &locator)?;
+    crate::m5_isolated_acceptance::write_backend_derived_receipt(&store, &phase, &project_id)
+}
+
+#[tauri::command]
+pub(crate) fn load_m5_global_advice_fixture(
+    state: tauri::State<'_, crate::AppState>,
+    binding_id: String,
+    project_id: String,
+) -> Result<crate::m5_dto::M5GlobalAdviceFixture, String> {
+    let store = store_from_state(&state)?;
+    let (repository, _) = m3_context(&state, &project_id)?;
+    let (_, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
+    let binding = load_binding_by_id(&store, &binding_id, &project_id)?;
+    verify_binding_against_session(&binding, &session)?;
+    Ok(crate::m5_dto::M5GlobalAdviceFixture::frozen(
+        &session.project_id,
+    ))
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
-pub(crate) struct M5IsolatedUiReceipt {
-    pub phase: String,
+pub(crate) struct M5FormalStepRequest {
     pub binding_id: String,
-    pub role_session_id: String,
     pub project_id: String,
-    pub proposal_id: Option<String>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub(crate) struct M5FormalStepResponse {
+    pub step: String,
     pub grant_id: Option<String>,
-    pub dispatched: bool,
-    pub spawned: bool,
-    pub deep_link: Option<String>,
-    pub stale: Option<bool>,
-    pub notes: Vec<String>,
+    pub dispatch_id: Option<String>,
+    pub receipt_id: Option<String>,
+    pub claim_id: Option<String>,
+    pub review_id: Option<String>,
+    pub result_decision_recorded: bool,
+}
+
+#[tauri::command]
+pub(crate) fn run_m5_authorized_runtime(
+    state: tauri::State<'_, crate::AppState>,
+    request: M5FormalStepRequest,
+) -> Result<M5FormalStepResponse, String> {
+    let (store, binding, _, _) = require_binding(&state, &request.binding_id, &request.project_id)?;
+    let (grant_id, dispatch_id, _, _, _) = load_formal_progress(&store, &binding.project_id)?;
+    let grant_id = grant_id.ok_or_else(|| "formal_runtime_missing_grant".to_string())?;
+    let dispatch_id = dispatch_id.ok_or_else(|| "formal_runtime_missing_dispatch".to_string())?;
+    let grant = store
+        .load_grant(&grant_id)?
+        .ok_or_else(|| "formal_runtime_grant_not_found".to_string())?;
+    let dispatch = store
+        .load_dispatch(&dispatch_id)?
+        .ok_or_else(|| "formal_runtime_dispatch_not_found".to_string())?;
+    if grant.project_id != binding.project_id || dispatch.project_id != binding.project_id {
+        return Err("formal_runtime_project_join_failed".to_string());
+    }
+    let mut runtime = crate::m5_agent_runtime::SynNativeAgentRuntime::new();
+    let now = m5_now_ms();
+    let fail_cell = crate::m5_agent_runtime::WorkcellRun {
+        workcell_id: format!("wc-{}-fail", binding.project_id),
+        profile_digest: "profile:syn-native:v1".into(),
+        session_ref: format!("rt-{}", binding.project_id),
+        parent_grant_id: grant.grant_id.as_str().into(),
+        attempt_id: grant.attempt_id.as_str().into(),
+        dispatch_id: dispatch.dispatch_id.clone(),
+        effect_id: format!("{}-fail", dispatch.effect_id),
+        actor_binding: grant.worker_role_session_id.clone(),
+        command: WHITELISTED_COMMAND.into(),
+        child_depth: 0,
+        budget_tokens: 8,
+        stop_conditions: vec!["max_tokens".into()],
+        dynamic_package_enabled: false,
+    };
+    crate::m5_controlled_execution::run_authorized_workcell(
+        &store,
+        &mut runtime,
+        &fail_cell,
+        now,
+        crate::m5_agent_runtime::RuntimeFault::Timeout,
+    )?;
+    crate::m5_controlled_execution::retry_operation(
+        &store,
+        &format!("op-wc-{}-fail", binding.project_id),
+        now + 100,
+    )?;
+    let workcell = crate::m5_agent_runtime::WorkcellRun {
+        workcell_id: format!("wc-{}", binding.project_id),
+        profile_digest: "profile:syn-native:v1".into(),
+        session_ref: format!("rt-{}", binding.project_id),
+        parent_grant_id: grant.grant_id.as_str().into(),
+        attempt_id: grant.attempt_id.as_str().into(),
+        dispatch_id: dispatch.dispatch_id.clone(),
+        effect_id: dispatch.effect_id.clone(),
+        actor_binding: grant.worker_role_session_id.clone(),
+        command: WHITELISTED_COMMAND.into(),
+        child_depth: 0,
+        budget_tokens: 8,
+        stop_conditions: vec!["max_tokens".into()],
+        dynamic_package_enabled: false,
+    };
+    let receipt = crate::m5_controlled_execution::run_authorized_workcell(
+        &store,
+        &mut runtime,
+        &workcell,
+        now + 500,
+        crate::m5_agent_runtime::RuntimeFault::None,
+    )?;
+    persist_formal_progress(
+        &store,
+        &binding.project_id,
+        Some(grant.grant_id.as_str()),
+        Some(&dispatch.dispatch_id),
+        Some(&serde_json::to_string(&receipt).map_err(|e| e.to_string())?),
+        None,
+        None,
+    )?;
+    Ok(M5FormalStepResponse {
+        step: "runtime".into(),
+        grant_id: Some(grant.grant_id.as_str().to_string()),
+        dispatch_id: Some(dispatch.dispatch_id),
+        receipt_id: Some(receipt.receipt_id.as_str().to_string()),
+        claim_id: None,
+        review_id: None,
+        result_decision_recorded: false,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn record_m5_worker_report(
+    state: tauri::State<'_, crate::AppState>,
+    request: M5FormalStepRequest,
+) -> Result<M5FormalStepResponse, String> {
+    let (store, binding, _, _) = require_binding(&state, &request.binding_id, &request.project_id)?;
+    let (grant_id, dispatch_id, receipt_json, _, _) =
+        load_formal_progress(&store, &binding.project_id)?;
+    let grant_id = grant_id.ok_or_else(|| "formal_report_missing_grant".to_string())?;
+    let dispatch_id = dispatch_id.ok_or_else(|| "formal_report_missing_dispatch".to_string())?;
+    let receipt_json = receipt_json.ok_or_else(|| "formal_report_missing_receipt".to_string())?;
+    let grant = store
+        .load_grant(&grant_id)?
+        .ok_or_else(|| "formal_report_grant_not_found".to_string())?;
+    let dispatch = store
+        .load_dispatch(&dispatch_id)?
+        .ok_or_else(|| "formal_report_dispatch_not_found".to_string())?;
+    let receipt: crate::m5_runtime_receipt::RuntimeReceipt =
+        serde_json::from_str(&receipt_json).map_err(|e| format!("formal_receipt_decode:{e}"))?;
+    let now = m5_now_ms();
+    let report =
+        crate::worker_report::M5WorkerReport::from_base(crate::worker_report::WorkerReport {
+            status: "ok".into(),
+            did: "echoed".into(),
+            ..crate::worker_report::WorkerReport::default()
+        })
+        .as_execution(
+            crate::worker_report::ExecutionReceipt {
+                execution_id: receipt.receipt_id.as_str().into(),
+                started_at_ms: now,
+                completed_at_ms: Some(now + 100),
+                status: "SUCCEEDED".into(),
+                exit_code: Some(0),
+                output_hash: Some(receipt.trace_hash.clone()),
+                cost_tokens: None,
+            },
+            crate::worker_report::TrustedActor {
+                actor_id: binding.actor_id.clone(),
+                role: "worker".into(),
+                actor_type: "syn-native".into(),
+                authentication_method: "role-session".into(),
+            },
+        )
+        .bind_project(&binding.project_id, grant.orchestration_id.as_str())
+        .bind_execution_join(
+            grant.workflow_run_id.as_str(),
+            grant.work_item_id.as_str(),
+            &dispatch.node_id,
+            &dispatch.dispatch_id,
+            grant.attempt_id.as_str(),
+            grant.grant_id.as_str(),
+            &grant.worker_role_session_id,
+            receipt.receipt_id.as_str(),
+            &receipt.trace_hash,
+        );
+    let claim = crate::m5_claim_ledger::record_claim(&store, &report, Some(&receipt), now)?;
+    persist_formal_progress(
+        &store,
+        &binding.project_id,
+        Some(grant.grant_id.as_str()),
+        Some(&dispatch.dispatch_id),
+        Some(&receipt_json),
+        Some(&claim.claim_id),
+        None,
+    )?;
+    Ok(M5FormalStepResponse {
+        step: "report".into(),
+        grant_id: Some(grant.grant_id.as_str().to_string()),
+        dispatch_id: Some(dispatch.dispatch_id),
+        receipt_id: Some(receipt.receipt_id.as_str().to_string()),
+        claim_id: Some(claim.claim_id),
+        review_id: None,
+        result_decision_recorded: false,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn record_m5_independent_review(
+    state: tauri::State<'_, crate::AppState>,
+    request: M5FormalStepRequest,
+) -> Result<M5FormalStepResponse, String> {
+    let (store, binding, _, repository) =
+        require_binding(&state, &request.binding_id, &request.project_id)?;
+    let (grant_id, dispatch_id, receipt_json, claim_id, _) =
+        load_formal_progress(&store, &binding.project_id)?;
+    let claim_id = claim_id.ok_or_else(|| "formal_review_missing_claim".to_string())?;
+    let reviewer =
+        M3OwnedSupervisorSessionPort::open_for_project(&repository, &binding.project_id)?
+            .0
+            .reviewer_session()?;
+    let review = crate::m5_claim_ledger::record_review(
+        &store,
+        &claim_id,
+        &format!("reviewer:{}", binding.project_id),
+        &reviewer.role_session_id,
+        "VERIFIED",
+        m5_now_ms(),
+    )?;
+    persist_formal_progress(
+        &store,
+        &binding.project_id,
+        grant_id.as_deref(),
+        dispatch_id.as_deref(),
+        receipt_json.as_deref(),
+        Some(&claim_id),
+        Some(&review.review_id),
+    )?;
+    Ok(M5FormalStepResponse {
+        step: "review".into(),
+        grant_id,
+        dispatch_id,
+        receipt_id: None,
+        claim_id: Some(claim_id),
+        review_id: Some(review.review_id),
+        result_decision_recorded: false,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn record_m5_result_decision(
+    state: tauri::State<'_, crate::AppState>,
+    request: M5FormalStepRequest,
+) -> Result<M5FormalStepResponse, String> {
+    let (store, binding, _, _) = require_binding(&state, &request.binding_id, &request.project_id)?;
+    let (grant_id, dispatch_id, _, claim_id, review_id) =
+        load_formal_progress(&store, &binding.project_id)?;
+    let review_id = review_id.ok_or_else(|| "formal_result_missing_review".to_string())?;
+    crate::m5_claim_ledger::record_result_decision(
+        &store,
+        &review_id,
+        &binding.actor_id,
+        "ACCEPTED_RESULT",
+        None,
+        m5_now_ms(),
+    )?;
+    crate::m5_project_summary::rebuild_project_summary(&store, &binding.project_id, m5_now_ms())?;
+    Ok(M5FormalStepResponse {
+        step: "result".into(),
+        grant_id,
+        dispatch_id,
+        receipt_id: None,
+        claim_id,
+        review_id: Some(review_id),
+        result_decision_recorded: true,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn rebuild_m5_project_summary(
+    state: tauri::State<'_, crate::AppState>,
+    binding_id: String,
+    project_id: String,
+) -> Result<M5ProjectSummaryRead, String> {
+    let (store, binding, session, _) = require_binding(&state, &binding_id, &project_id)?;
+    crate::m5_project_summary::rebuild_project_summary(&store, &binding.project_id, m5_now_ms())?;
+    read_project_summary_command(&store, &consumer_from_session(&session), m5_now_ms())
 }
 
 #[tauri::command]
 pub(crate) fn write_m5_isolated_ui_receipt(
     state: tauri::State<'_, crate::AppState>,
-    receipt: M5IsolatedUiReceipt,
+    phase: String,
 ) -> Result<String, String> {
-    if !isolated_acceptance_requested() {
-        return Err("m5_isolated_acceptance_inactive".into());
-    }
-    let _ = store_from_state(&state)?;
-    let log_dir = crate::acceptance_runtime_profile::isolated_log_dir()?
-        .ok_or_else(|| "m5_isolated_log_dir_missing".to_string())?;
-    std::fs::create_dir_all(&log_dir).map_err(|e| format!("m5_isolated_log_dir:{e}"))?;
-    let path = log_dir.join(format!("m5r07-ui-{}.json", receipt.phase));
-    let body = serde_json::json!({
-        "schema": "syn.m5r07.isolated-ui-receipt.v1",
-        "phase": receipt.phase,
-        "binding_id": receipt.binding_id,
-        "role_session_id": receipt.role_session_id,
-        "project_id": receipt.project_id,
-        "proposal_id": receipt.proposal_id,
-        "grant_id": receipt.grant_id,
-        "dispatched": receipt.dispatched,
-        "spawned": receipt.spawned,
-        "deep_link": receipt.deep_link,
-        "stale": receipt.stale,
-        "notes": receipt.notes,
-        "written_at_ms": m5_now_ms(),
-    });
-    std::fs::write(&path, serde_json::to_vec_pretty(&body).map_err(|e| e.to_string())?)
-        .map_err(|e| format!("write_ui_receipt:{e}"))?;
-    Ok(path.to_string_lossy().into_owned())
-}
-
-#[derive(Clone, Debug, serde::Deserialize)]
-pub(crate) struct M5IsolatedFollowthroughRequest {
-    pub binding_id: String,
-    pub project_id: String,
-    pub grant_id: String,
-    pub dispatch_id: String,
-}
-
-#[tauri::command]
-pub(crate) fn run_m5_isolated_authorized_followthrough(
-    state: tauri::State<'_, crate::AppState>,
-    request: M5IsolatedFollowthroughRequest,
-) -> Result<crate::m5_isolated_acceptance::AuthorizedFollowthroughResult, String> {
-    if !isolated_acceptance_requested() {
-        return Err("m5_isolated_acceptance_inactive".into());
-    }
-    let store = store_from_state(&state)?;
-    let binding = crate::m5_project_supervisor::load_binding_by_id(
-        &store,
-        &request.binding_id,
-        &request.project_id,
-    )?;
-    crate::m5_isolated_acceptance::run_authorized_followthrough(
-        &store,
-        &binding.project_id,
-        &request.grant_id,
-        &request.dispatch_id,
-        &binding.actor_id,
-        m5_now_ms(),
-    )
-}
-
-#[tauri::command]
-pub(crate) fn load_m5_global_advice_fixture(
-    project_id: String,
-) -> Result<crate::m5_dto::M5GlobalAdviceFixture, String> {
-    Ok(crate::m5_dto::M5GlobalAdviceFixture::frozen(&project_id))
+    snapshot_m5_isolated_ui_receipt(state, phase)
 }

@@ -5,6 +5,10 @@ import {
   openM5ProjectSupervisor,
   openM5SourceDeepLink,
   recordM5AuthorizationDecision,
+  recordM5IndependentReview,
+  recordM5ResultDecision,
+  recordM5WorkerReport,
+  runM5AuthorizedRuntime,
   submitM5SupervisorTurn,
   type M5ProjectSummaryRead,
   type M5SupervisorOpenResponse,
@@ -67,7 +71,6 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
       project_id: session.project_id,
       proposal_id: proposalId,
       decision,
-      allowed_command: "echo",
     });
     if (result.grant_id) setGrantId(result.grant_id);
     if (result.dispatch_id) setDispatchId(result.dispatch_id);
@@ -78,13 +81,37 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
   }
 
   async function loadSummary() {
-    const next = await loadM5ProjectSummary(projectId);
+    if (!session) return;
+    const next = await loadM5ProjectSummary(session.binding_id, session.project_id);
     setSummary(next);
   }
 
   async function openLink(sourceId: string) {
-    const link = await openM5SourceDeepLink(projectId, sourceId);
+    if (!session) return;
+    const link = await openM5SourceDeepLink(session.binding_id, session.project_id, sourceId);
     setDeepLink(link);
+  }
+
+  async function runFormal(step: "runtime" | "report" | "review" | "result") {
+    if (!session) return;
+    const input = { binding_id: session.binding_id, project_id: session.project_id };
+    const outcome =
+      step === "runtime"
+        ? await runM5AuthorizedRuntime(input)
+        : step === "report"
+          ? await recordM5WorkerReport(input)
+          : step === "review"
+            ? await recordM5IndependentReview(input)
+            : await recordM5ResultDecision(input);
+    if (outcome.grant_id) setGrantId(outcome.grant_id);
+    if (outcome.dispatch_id) setDispatchId(outcome.dispatch_id);
+    setLog((rows) => [
+      ...rows,
+      `${outcome.step} receipt=${outcome.receipt_id ?? "none"} claim=${outcome.claim_id ?? "none"} review=${outcome.review_id ?? "none"} result=${String(outcome.result_decision_recorded)}`,
+    ]);
+    if (outcome.result_decision_recorded) {
+      await loadSummary();
+    }
   }
 
   return (
@@ -125,6 +152,18 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
         <button type="button" data-m5-action="approve" onClick={() => void decide("APPROVED")}>
           批准执行
         </button>
+        <button type="button" data-m5-action="runtime" onClick={() => void runFormal("runtime")}>
+          运行回执
+        </button>
+        <button type="button" data-m5-action="report" onClick={() => void runFormal("report")}>
+          记录报告
+        </button>
+        <button type="button" data-m5-action="review" onClick={() => void runFormal("review")}>
+          独立审查
+        </button>
+        <button type="button" data-m5-action="result" onClick={() => void runFormal("result")}>
+          结果决定
+        </button>
         <button type="button" data-m5-action="summary" onClick={() => void loadSummary()}>
           读取摘要
         </button>
@@ -132,7 +171,8 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
           type="button"
           data-m5-action="advice"
           onClick={() => {
-            void loadM5GlobalAdviceFixture(projectId).then((advice) => {
+            if (!session) return;
+            void loadM5GlobalAdviceFixture(session.binding_id, session.project_id).then((advice) => {
               setAdviceWritable(String(advice.writable));
               setLog((rows) => [...rows, `advice writable=${String(advice.writable)}`]);
             });

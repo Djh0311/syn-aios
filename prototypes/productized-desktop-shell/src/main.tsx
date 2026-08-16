@@ -22,7 +22,6 @@ import { mintSecretaryCoordinationIdempotencyKey } from "./lib/secretaryReadMode
 import { setTauriWindowTitle } from "./lib/tauriWindow";
 import {
   loadM5IsolatedAcceptanceStatus,
-  runM5IsolatedAuthorizedFollowthrough,
   writeM5IsolatedUiReceipt,
 } from "./lib/m5ProjectSupervisor";
 import type { WorkItemStateUpdateRequest } from "./lib/types/workflow";
@@ -2962,15 +2961,7 @@ async function installM5R07IsolatedAcceptanceDriver() {
     if (!bindingId || !roleSessionId) throw new Error("m5r07_binding_missing");
 
     if (status.scene === "resume") {
-      await writeM5IsolatedUiReceipt({
-        phase: "resume",
-        binding_id: bindingId,
-        role_session_id: roleSessionId,
-        project_id: projectId,
-        dispatched: false,
-        spawned: false,
-        notes: ["same_profile_supervisor_resumed"],
-      });
+      await writeM5IsolatedUiReceipt("resume");
       return;
     }
 
@@ -2983,16 +2974,7 @@ async function installM5R07IsolatedAcceptanceDriver() {
       return next?.dataset.m5ProposalId ? next : null;
     });
     await m5r07Click('[data-m5-action="reject"]');
-    await writeM5IsolatedUiReceipt({
-      phase: "scene-a",
-      binding_id: bindingId,
-      role_session_id: roleSessionId,
-      project_id: projectId,
-      proposal_id: m5r07Panel()?.dataset.m5ProposalId ?? null,
-      dispatched: false,
-      spawned: false,
-      notes: ["readonly_chat", "user_rejected_zero_grant"],
-    });
+    await writeM5IsolatedUiReceipt("scene-a");
 
     if (status.scene === "a") return;
 
@@ -3003,15 +2985,29 @@ async function installM5R07IsolatedAcceptanceDriver() {
       return next?.dataset.m5ProposalId ? next : null;
     });
     await m5r07Click('[data-m5-action="approve"]');
-    const approved = await m5r07WaitFor("approved_grant", () => {
+    await m5r07WaitFor("approved_grant", () => {
       const next = m5r07Panel();
       return next?.dataset.m5GrantId && next.dataset.m5DispatchId ? next : null;
     });
-    const follow = await runM5IsolatedAuthorizedFollowthrough({
-      binding_id: bindingId,
-      project_id: projectId,
-      grant_id: approved.dataset.m5GrantId ?? "",
-      dispatch_id: approved.dataset.m5DispatchId ?? "",
+    await m5r07Click('[data-m5-action="runtime"]');
+    await m5r07WaitFor("runtime_log", () => {
+      const log = document.querySelector("[data-m5-supervisor-log]");
+      return log?.textContent?.includes("runtime") ? log : null;
+    });
+    await m5r07Click('[data-m5-action="report"]');
+    await m5r07WaitFor("report_log", () => {
+      const log = document.querySelector("[data-m5-supervisor-log]");
+      return log?.textContent?.includes("report") ? log : null;
+    });
+    await m5r07Click('[data-m5-action="review"]');
+    await m5r07WaitFor("review_log", () => {
+      const log = document.querySelector("[data-m5-supervisor-log]");
+      return log?.textContent?.includes("review") ? log : null;
+    });
+    await m5r07Click('[data-m5-action="result"]');
+    await m5r07WaitFor("result_log", () => {
+      const log = document.querySelector("[data-m5-supervisor-log]");
+      return log?.textContent?.includes("result") ? log : null;
     });
     await m5r07Click('[data-m5-action="summary"]');
     await m5r07WaitFor("summary", () => document.querySelector("[data-m5-summary-stale]"));
@@ -3026,38 +3022,12 @@ async function installM5R07IsolatedAcceptanceDriver() {
       const next = m5r07Panel();
       return next?.dataset.m5DeepLink?.startsWith("syn://") ? next : null;
     });
-    await writeM5IsolatedUiReceipt({
-      phase: "scene-b",
-      binding_id: bindingId,
-      role_session_id: roleSessionId,
-      project_id: projectId,
-      proposal_id: m5r07Panel()?.dataset.m5ProposalId ?? null,
-      grant_id: approved.dataset.m5GrantId ?? null,
-      dispatched: true,
-      spawned: true,
-      deep_link: m5r07Panel()?.dataset.m5DeepLink ?? null,
-      stale: document.querySelector("[data-m5-summary-stale]")?.getAttribute("data-m5-summary-stale") === "true",
-      notes: [
-        "authorization_then_grant",
-        "timeout_retry_followthrough",
-        `duplicate_claim=${follow.duplicate_claim_id === follow.claim_id}`,
-        "readonly_advice",
-        "deep_link_clicked",
-      ],
-    });
+    await writeM5IsolatedUiReceipt("scene-b");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     document.documentElement.dataset.m5r07Error = message;
     try {
-      await writeM5IsolatedUiReceipt({
-        phase: "failed",
-        binding_id: m5r07Panel()?.dataset.m5BindingId ?? "",
-        role_session_id: m5r07Panel()?.dataset.m5RoleSessionId ?? "",
-        project_id: m5r07Panel()?.dataset.m5ProjectId ?? "",
-        dispatched: false,
-        spawned: false,
-        notes: [message],
-      });
+      await writeM5IsolatedUiReceipt("failed");
     } catch {
       // Isolated receipt write is best-effort after a driver failure.
     }

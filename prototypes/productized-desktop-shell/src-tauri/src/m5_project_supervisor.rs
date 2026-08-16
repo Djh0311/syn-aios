@@ -76,7 +76,8 @@ pub(crate) fn ensure_supervisor_schema(store: &M5OrchestrationStore) -> Result<(
                 project_id TEXT NOT NULL,
                 goal TEXT NOT NULL,
                 status TEXT NOT NULL,
-                created_at_ms INTEGER NOT NULL
+                created_at_ms INTEGER NOT NULL,
+                authorized_action TEXT NOT NULL DEFAULT 'none'
             );
             CREATE TABLE IF NOT EXISTS m5_role_sessions (
                 role_session_id TEXT PRIMARY KEY,
@@ -89,6 +90,10 @@ pub(crate) fn ensure_supervisor_schema(store: &M5OrchestrationStore) -> Result<(
             "#,
         )
         .map_err(|e| format!("supervisor_schema:{e}"))?;
+    let _ = store.connection().execute(
+        "ALTER TABLE m5_supervisor_proposals ADD COLUMN authorized_action TEXT NOT NULL DEFAULT 'none'",
+        [],
+    );
     Ok(())
 }
 
@@ -183,7 +188,6 @@ pub(crate) fn open_or_resume_supervisor(
     if session.project_id != expected_project_id {
         return Err("role_session_project_mismatch".to_string());
     }
-    persist_formal_role_session(store, &session, now_ms)?;
     if let Some(existing) = load_binding(store, expected_project_id, role_session_id)? {
         if existing.actor_id != session.actor_id {
             return Err("role_session_actor_mismatch".to_string());
@@ -251,15 +255,63 @@ pub(crate) fn load_binding_by_id(
         .map_err(|e| format!("load_binding_by_id:{e}"))?
         .ok_or_else(|| "supervisor_binding_not_found".to_string())?;
     require_complete_binding(&binding)?;
-    let session = load_formal_role_session(store, &binding.role_session_id)?
-        .ok_or_else(|| "role_session_not_found".to_string())?;
-    if session.project_id != binding.project_id
+    Ok(binding)
+}
+
+pub(crate) fn verify_binding_against_session(
+    binding: &SupervisorBinding,
+    session: &SupervisorSessionRef,
+) -> Result<(), String> {
+    require_complete_binding(binding)?;
+    if session.role_session_id != binding.role_session_id
+        || session.project_id != binding.project_id
         || session.actor_id != binding.actor_id
         || session.role != "project_supervisor"
     {
         return Err("binding_role_session_exact_join_failed".to_string());
     }
-    Ok(binding)
+    Ok(())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct SupervisorProposal {
+    pub proposal_id: String,
+    pub binding_id: String,
+    pub project_id: String,
+    pub goal: String,
+    pub status: String,
+    pub authorized_action: String,
+}
+
+pub(crate) fn load_supervisor_proposal(
+    store: &M5OrchestrationStore,
+    proposal_id: &str,
+    project_id: &str,
+    binding_id: &str,
+) -> Result<SupervisorProposal, String> {
+    ensure_supervisor_schema(store)?;
+    store
+        .connection()
+        .query_row(
+            "SELECT proposal_id, binding_id, project_id, goal, status,
+                    COALESCE(authorized_action, 'none')
+             FROM m5_supervisor_proposals
+             WHERE proposal_id=?1 AND project_id=?2 AND binding_id=?3",
+            params![proposal_id, project_id, binding_id],
+            |row| {
+                Ok(SupervisorProposal {
+                    proposal_id: row.get(0)?,
+                    binding_id: row.get(1)?,
+                    project_id: row.get(2)?,
+                    goal: row.get(3)?,
+                    status: row.get(4)?,
+                    authorized_action: row.get(5)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| format!("load_proposal:{e}"))?
+        .ok_or_else(|| "supervisor_proposal_not_found".to_string())
 }
 
 pub(crate) fn handle_supervisor_action(
@@ -283,18 +335,22 @@ pub(crate) fn handle_supervisor_action(
         }
         SupervisorAction::SubmitProposal { goal } => {
             let proposal_id = format!("prop-{}", uuid::Uuid::new_v4());
+            let authorized_action =
+                crate::m5_m3_identity::classify_whitelisted_action(&goal).to_string();
             store
                 .connection()
                 .execute(
                     "INSERT INTO m5_supervisor_proposals (
-                        proposal_id, binding_id, project_id, goal, status, created_at_ms
-                    ) VALUES (?1,?2,?3,?4,'DRAFT',?5)",
+                        proposal_id, binding_id, project_id, goal, status, created_at_ms,
+                        authorized_action
+                    ) VALUES (?1,?2,?3,?4,'DRAFT',?5,?6)",
                     params![
                         proposal_id,
                         binding.binding_id,
                         binding.project_id,
                         goal,
-                        now_ms
+                        now_ms,
+                        authorized_action
                     ],
                 )
                 .map_err(|e| format!("insert_proposal:{e}"))?;
@@ -335,12 +391,46 @@ pub(crate) fn record_user_authorization_decision(
             Ok(None)
         }
         "APPROVED" => {
-            let request =
-                request.ok_or_else(|| "approved_decision_missing_execution_request".to_string())?;
-            if request.project_id != live.project_id || request.principal_actor_id != live.actor_id
-            {
-                return Err("authorization_actor_or_project_mismatch".to_string());
+            let proposal =
+                load_supervisor_proposal(store, proposal_id, &live.project_id, &live.binding_id)?;
+            if proposal.status != "DRAFT" {
+                return Err("supervisor_proposal_not_draft".to_string());
             }
+            if proposal.authorized_action != crate::m5_m3_identity::WHITELISTED_COMMAND {
+                return Err("proposal_has_no_authorized_action".to_string());
+            }
+            let request = match request {
+                Some(request) => {
+                    if request.project_id != live.project_id
+                        || request.principal_actor_id != live.actor_id
+                    {
+                        return Err("authorization_actor_or_project_mismatch".to_string());
+                    }
+                    if request.proposal_id != proposal.proposal_id {
+                        return Err("authorization_proposal_mismatch".to_string());
+                    }
+                    if request.allowed_commands != vec![proposal.authorized_action.clone()] {
+                        return Err("renderer_grant_scope_rejected".to_string());
+                    }
+                    if request.policy_decision_ref
+                        != crate::m5_m3_identity::policy_decision_ref_for_action(
+                            &proposal.authorized_action,
+                        )
+                    {
+                        return Err("renderer_policy_rejected".to_string());
+                    }
+                    request
+                }
+                None => crate::m5_m3_identity::authorized_request_from_stored_proposal(
+                    &live,
+                    &proposal,
+                    &format!("session:worker:{}", live.project_id),
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0),
+                )?,
+            };
             approve_supervisor_proposal(store, &live, proposal_id)?;
             Ok(Some(prepare_and_dispatch(
                 store,
@@ -410,6 +500,36 @@ fn persist_turn(
         )
         .map_err(|e| format!("insert_turn:{e}"))?;
     Ok(())
+}
+
+pub(crate) fn count_grants_for_project(
+    store: &M5OrchestrationStore,
+    project_id: &str,
+) -> Result<i64, String> {
+    store
+        .connection()
+        .query_row(
+            "SELECT COUNT(*) FROM m5_execution_grants WHERE project_id=?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .or_else(|_| Ok(0))
+}
+
+pub(crate) fn latest_grant_dispatch(
+    store: &M5OrchestrationStore,
+    project_id: &str,
+) -> Result<Option<(String, String)>, String> {
+    store
+        .connection()
+        .query_row(
+            "SELECT grant_id, dispatch_id FROM m5_dispatches
+             WHERE project_id=?1 ORDER BY created_at_ms DESC LIMIT 1",
+            [project_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| format!("latest_grant_dispatch:{e}"))
 }
 
 fn load_binding(
@@ -552,14 +672,9 @@ mod tests {
         .unwrap();
         assert!(turn.created_proposal);
         assert!(!turn.created_grant);
-        let rejected = record_user_authorization_decision(
-            &store,
-            &binding,
-            &turn.text,
-            "REJECTED",
-            None,
-        )
-        .unwrap();
+        let rejected =
+            record_user_authorization_decision(&store, &binding, &turn.text, "REJECTED", None)
+                .unwrap();
         assert!(rejected.is_none());
         let grants: i64 = store
             .connection()

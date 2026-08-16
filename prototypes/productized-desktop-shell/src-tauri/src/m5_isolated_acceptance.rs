@@ -8,12 +8,13 @@ use crate::m5_controlled_execution::{retry_operation, run_authorized_workcell};
 use crate::m5_dto::{legacy_execution_manifest, M5GlobalAdviceFixture, M5SupervisorOpenRequest};
 use crate::m5_orchestration_store::M5OrchestrationStore;
 use crate::m5_product_commands::{
-    derived_supervisor_session_id, open_project_supervisor_command, open_source_deep_link_command,
-    read_project_summary_command, record_authorization_decision_command, supervisor_turn_command,
+    open_project_supervisor_command, open_source_deep_link_command, read_project_summary_command,
+    record_authorization_decision_command, supervisor_turn_command,
 };
 use crate::m5_project_summary::{rebuild_project_summary, SummaryConsumer};
-use crate::m5_project_supervisor::PersistentRoleSessionPort;
+use crate::m5_project_supervisor::ProjectSupervisorRoleSessionPort;
 use crate::worker_report::{ExecutionReceipt, M5WorkerReport, TrustedActor, WorkerReport};
+use rusqlite::OptionalExtension;
 use serde::Serialize;
 use std::path::Path;
 
@@ -49,6 +50,7 @@ pub(crate) fn run_authorized_followthrough(
     grant_id: &str,
     dispatch_id: &str,
     actor_id: &str,
+    reviewer_role_session_id: &str,
     now_ms: i64,
 ) -> Result<AuthorizedFollowthroughResult, String> {
     let grant = store.load_grant(grant_id)?.ok_or("missing_grant")?;
@@ -77,7 +79,13 @@ pub(crate) fn run_authorized_followthrough(
         stop_conditions: vec!["max_tokens".into()],
         dynamic_package_enabled: false,
     };
-    run_authorized_workcell(store, &mut runtime, &fail_cell, now_ms, RuntimeFault::Timeout)?;
+    run_authorized_workcell(
+        store,
+        &mut runtime,
+        &fail_cell,
+        now_ms,
+        RuntimeFault::Timeout,
+    )?;
     retry_operation(store, &format!("op-wc-{project_id}-fail"), now_ms + 100)?;
     let workcell = WorkcellRun {
         workcell_id: format!("wc-{project_id}"),
@@ -140,7 +148,7 @@ pub(crate) fn run_authorized_followthrough(
         store,
         &claim.claim_id,
         &format!("reviewer:{project_id}"),
-        &format!("reviewer-session:{project_id}"),
+        reviewer_role_session_id,
         "VERIFIED",
         now_ms + 1600,
     )?;
@@ -178,8 +186,32 @@ pub(crate) fn run_isolated_acceptance(app_data: &Path) -> Result<IsolatedAccepta
     })
 }
 
-fn port<'a>(store: &'a M5OrchestrationStore) -> PersistentRoleSessionPort<'a> {
-    PersistentRoleSessionPort::new(store)
+struct TestSessions {
+    session: crate::m5_project_supervisor::SupervisorSessionRef,
+}
+
+impl ProjectSupervisorRoleSessionPort for TestSessions {
+    fn load(
+        &self,
+        role_session_id: &str,
+    ) -> Result<crate::m5_project_supervisor::SupervisorSessionRef, String> {
+        if !role_session_id.is_empty() && role_session_id != self.session.role_session_id {
+            return Err("caller_invented_role_session_rejected".to_string());
+        }
+        Ok(self.session.clone())
+    }
+}
+
+fn test_sessions(project_id: &str) -> TestSessions {
+    TestSessions {
+        session: crate::m5_project_supervisor::SupervisorSessionRef {
+            role_session_id: format!("test-session:{project_id}"),
+            project_id: project_id.to_string(),
+            actor_id: format!("test-actor:{project_id}"),
+            role: "project_supervisor".into(),
+            status: "ACTIVE".into(),
+        },
+    }
 }
 
 fn open(
@@ -187,9 +219,10 @@ fn open(
     project_id: &str,
     now_ms: i64,
 ) -> Result<crate::m5_dto::M5SupervisorOpenResponse, String> {
+    let sessions = test_sessions(project_id);
     open_project_supervisor_command(
         store,
-        &port(store),
+        &sessions,
         M5SupervisorOpenRequest {
             project_id: project_id.into(),
             role_session_id: String::new(),
@@ -200,15 +233,12 @@ fn open(
 
 fn run_scene_a(path: &Path) -> Result<IsolatedSceneResult, String> {
     let store = M5OrchestrationStore::open(path)?;
+    let sessions = test_sessions("scratch-a");
     let opened = open(&store, "scratch-a", 1000)?;
-    assert_eq!(
-        opened.role_session_id,
-        derived_supervisor_session_id("scratch-a")
-    );
+    assert_eq!(opened.role_session_id, sessions.session.role_session_id);
     let chat = supervisor_turn_command(
         &store,
-        &opened.project_id,
-        &opened.binding_id,
+        &sessions,
         crate::m5_dto::M5SupervisorTurnRequest {
             binding_id: opened.binding_id.clone(),
             project_id: "scratch-a".into(),
@@ -219,8 +249,7 @@ fn run_scene_a(path: &Path) -> Result<IsolatedSceneResult, String> {
     )?;
     let proposal = supervisor_turn_command(
         &store,
-        &opened.project_id,
-        &opened.binding_id,
+        &sessions,
         crate::m5_dto::M5SupervisorTurnRequest {
             binding_id: opened.binding_id.clone(),
             project_id: "scratch-a".into(),
@@ -245,7 +274,7 @@ fn run_scene_a(path: &Path) -> Result<IsolatedSceneResult, String> {
         .unwrap_or(0);
     let invented = open_project_supervisor_command(
         &store,
-        &port(&store),
+        &sessions,
         M5SupervisorOpenRequest {
             project_id: "scratch-a".into(),
             role_session_id: "invented-session".into(),
@@ -271,11 +300,11 @@ fn run_scene_a(path: &Path) -> Result<IsolatedSceneResult, String> {
 
 fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
     let store = M5OrchestrationStore::open(path)?;
+    let sessions = test_sessions("scratch-b");
     let opened = open(&store, "scratch-b", 1000)?;
     let proposal = supervisor_turn_command(
         &store,
-        &opened.project_id,
-        &opened.binding_id,
+        &sessions,
         crate::m5_dto::M5SupervisorTurnRequest {
             binding_id: opened.binding_id.clone(),
             project_id: "scratch-b".into(),
@@ -286,7 +315,7 @@ fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
     )?;
     let binding =
         crate::m5_project_supervisor::load_binding_by_id(&store, &opened.binding_id, "scratch-b")?;
-    let chain = record_authorization_decision_command(
+    let expanded = record_authorization_decision_command(
         &store,
         &opened.binding_id,
         "scratch-b",
@@ -297,32 +326,46 @@ fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
                 project_id: "scratch-b".into(),
                 proposal_id: proposal.text.clone(),
                 deciding_actor_id: binding.actor_id.clone(),
-                worker_role_session_id: "m5:worker:scratch-b".into(),
+                worker_role_session_id: "test-worker:scratch-b".into(),
                 principal_actor_id: binding.actor_id.clone(),
-                workflow_ref: "m5:workflow:scratch-b".into(),
-                source_object_ref: "obj:scratch-b".into(),
-                allowed_commands: vec!["echo".into()],
-                cwd_ref: "/tmp/scratch-b".into(),
-                write_root_refs: vec!["/tmp/scratch-b".into()],
-                object_refs: vec!["obj:scratch-b".into()],
-                scope_fingerprint: "scope-b".into(),
-                policy_decision_ref: "pol-b".into(),
+                workflow_ref: "workflow:scratch-b".into(),
+                source_object_ref: "object:scratch-b".into(),
+                allowed_commands: vec!["echo".into(), "rm".into()],
+                cwd_ref: "scratch:scratch-b".into(),
+                write_root_refs: vec!["scratch:scratch-b".into()],
+                object_refs: vec!["object:scratch-b".into()],
+                scope_fingerprint: "scope:scratch-b".into(),
+                policy_decision_ref: crate::m5_m3_identity::policy_decision_ref_for_action("echo"),
                 now_ms: 2000,
                 ttl_ms: 60_000,
             },
         ),
+    )
+    .err();
+    let chain = record_authorization_decision_command(
+        &store,
+        &opened.binding_id,
+        "scratch-b",
+        &proposal.text,
+        "APPROVED",
+        None,
     )?
     .ok_or("expected_dispatch")?;
     let follow = run_authorized_followthrough(
         &store,
         "scratch-b",
         chain.grant_id.as_ref().ok_or("missing_grant")?.as_str(),
-        chain.dispatch_id.as_ref().ok_or("missing_dispatch")?.as_str(),
+        chain
+            .dispatch_id
+            .as_ref()
+            .ok_or("missing_dispatch")?
+            .as_str(),
         &binding.actor_id,
+        "test-reviewer:scratch-b",
         2500,
     )?;
     let consumer = SummaryConsumer {
-        role_session_id: derived_supervisor_session_id("scratch-b"),
+        role_session_id: sessions.session.role_session_id.clone(),
         role: "project_supervisor".into(),
         scope_project_id: "scratch-b".into(),
         expires_at_ms: 90_000,
@@ -330,14 +373,21 @@ fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
     let summary = read_project_summary_command(&store, &consumer, 5100)?;
     let stale = read_project_summary_command(&store, &consumer, 80_000)?;
     let deep_link =
-        open_source_deep_link_command(&store, &consumer, &summary.source_refs[0].source_id, 5200)?;
+        open_source_deep_link_command(&store, "scratch-b", &summary.source_refs[0].source_id)?;
     let advice = M5GlobalAdviceFixture::frozen("scratch-b");
-    let passed = follow.fact_project_id == "scratch-b"
+    let resolved = crate::m5_project_summary::resolve_source_ref(
+        &store,
+        "scratch-b",
+        &summary.source_refs[0].source_id,
+    )?;
+    let passed = expanded.as_deref() == Some("renderer_grant_scope_rejected")
+        && follow.fact_project_id == "scratch-b"
         && follow.duplicate_claim_id == follow.claim_id
         && !summary.source_refs.is_empty()
         && stale.stale
         && !summary.stale
-        && deep_link.starts_with("syn://project/scratch-b/")
+        && deep_link.starts_with("syn://m5/")
+        && resolved.source_id == summary.source_refs[0].source_id
         && !advice.writable;
     Ok(IsolatedSceneResult {
         scene: "scratch-b-authorized-echo-review-summary".into(),
@@ -350,6 +400,154 @@ fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
             format!("deep_link={deep_link}"),
         ],
     })
+}
+
+pub(crate) fn write_backend_derived_receipt(
+    store: &M5OrchestrationStore,
+    phase: &str,
+    project_id: &str,
+) -> Result<String, String> {
+    let grants: i64 = store
+        .connection()
+        .query_row(
+            "SELECT COUNT(*) FROM m5_execution_grants WHERE project_id=?1",
+            [project_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let rejected: i64 = store
+        .connection()
+        .query_row(
+            "SELECT COUNT(*) FROM m5_supervisor_proposals
+             WHERE project_id=?1 AND status='REJECTED'",
+            [project_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let approved: i64 = store
+        .connection()
+        .query_row(
+            "SELECT COUNT(*) FROM m5_supervisor_proposals
+             WHERE project_id=?1 AND status='APPROVED'",
+            [project_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let binding = store
+        .connection()
+        .query_row(
+            "SELECT binding_id, role_session_id, actor_id FROM m5_supervisor_bindings
+             WHERE project_id=?1",
+            [project_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    let grant_join = store
+        .connection()
+        .query_row(
+            "SELECT g.grant_id, d.dispatch_id, c.claim_id, r.review_id, f.fact_id
+             FROM m5_execution_grants g
+             JOIN m5_dispatches d ON d.grant_id = g.grant_id AND d.project_id = g.project_id
+             LEFT JOIN m5_claims c ON c.grant_id = g.grant_id AND c.project_id = g.project_id
+             LEFT JOIN m5_reviews r ON r.claim_id = c.claim_id AND r.project_id = g.project_id
+             LEFT JOIN m5_project_facts f ON f.claim_id = c.claim_id AND f.project_id = g.project_id
+             WHERE g.project_id=?1
+             ORDER BY g.issued_at_ms DESC LIMIT 1",
+            [project_id],
+            |row| {
+                Ok(serde_json::json!({
+                    "grant_id": row.get::<_, String>(0)?,
+                    "dispatch_id": row.get::<_, String>(1)?,
+                    "claim_id": row.get::<_, Option<String>>(2)?,
+                    "review_id": row.get::<_, Option<String>>(3)?,
+                    "fact_id": row.get::<_, Option<String>>(4)?,
+                }))
+            },
+        )
+        .optional()
+        .ok()
+        .flatten();
+    let consumer = SummaryConsumer {
+        role_session_id: binding.as_ref().map(|b| b.1.clone()).unwrap_or_default(),
+        role: "project_supervisor".into(),
+        scope_project_id: project_id.to_string(),
+        expires_at_ms: m5_now_ms_for_receipt() + 3_600_000,
+    };
+    let summary = read_project_summary_command(store, &consumer, m5_now_ms_for_receipt()).ok();
+    let stale = read_project_summary_command(store, &consumer, m5_now_ms_for_receipt() + 120_000)
+        .ok()
+        .map(|s| s.stale);
+    let deep_link = summary
+        .as_ref()
+        .and_then(|s| s.source_refs.first())
+        .and_then(|r| open_source_deep_link_command(store, project_id, &r.source_id).ok());
+    let deep_link_resolves = summary
+        .as_ref()
+        .and_then(|s| s.source_refs.first())
+        .and_then(|r| {
+            crate::m5_project_summary::resolve_source_ref(store, project_id, &r.source_id).ok()
+        })
+        .is_some();
+    let notes = match phase {
+        "scene-a" => vec![
+            format!("zero_grant={}", grants == 0),
+            format!("rejected_proposal={}", rejected > 0),
+        ],
+        "scene-b" => vec![
+            format!("approved_proposal={}", approved > 0),
+            format!(
+                "exact_join={}",
+                grant_join.as_ref().is_some_and(|j| {
+                    j.get("claim_id").and_then(|v| v.as_str()).is_some()
+                        && j.get("review_id").and_then(|v| v.as_str()).is_some()
+                        && j.get("fact_id").and_then(|v| v.as_str()).is_some()
+                })
+            ),
+            format!("stale_observed={}", stale.unwrap_or(false)),
+            format!("deep_link_resolves={deep_link_resolves}"),
+        ],
+        "resume" => vec![format!("binding_recovered={}", binding.is_some())],
+        other => vec![format!("phase={other}")],
+    };
+    let body = serde_json::json!({
+        "schema": "syn.m5r07.isolated-ui-receipt.v2",
+        "phase": phase,
+        "project_id": project_id,
+        "binding_id": binding.as_ref().map(|b| b.0.clone()),
+        "role_session_id": binding.as_ref().map(|b| b.1.clone()),
+        "grants": grants,
+        "rejected_proposals": rejected,
+        "approved_proposals": approved,
+        "grant_join": grant_join,
+        "stale": stale,
+        "deep_link": deep_link,
+        "deep_link_resolves": deep_link_resolves,
+        "dispatched": grants > 0,
+        "spawned": false,
+        "notes": notes,
+        "derived_from": "backend_store",
+    });
+    let log_dir = crate::acceptance_runtime_profile::isolated_log_dir()?
+        .ok_or_else(|| "m5_isolated_log_dir_missing".to_string())?;
+    std::fs::create_dir_all(&log_dir).map_err(|e| format!("m5_isolated_log_dir:{e}"))?;
+    let path = log_dir.join(format!("m5r07-ui-{phase}.json"));
+    std::fs::write(
+        &path,
+        serde_json::to_vec_pretty(&body).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("write_ui_receipt:{e}"))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+fn m5_now_ms_for_receipt() -> i64 {
+    crate::m5_product_commands::m5_now_ms()
 }
 
 #[cfg(test)]

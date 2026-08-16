@@ -130,26 +130,50 @@ pub(crate) fn rebuild_project_summary(
         .unwrap_or_else(|_| "orch:unknown".to_string());
 
     let mut refs = Vec::new();
-    if fact_count > 0 {
-        refs.push(SourceRef {
-            source_type: "project_fact".into(),
-            source_id: format!("facts:{project_id}"),
-            last_updated_ms: now_ms,
-        });
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT fact_id FROM m5_project_facts WHERE project_id=?1 ORDER BY created_at_ms DESC LIMIT 8",
+    ) {
+        let rows = stmt.query_map([project_id], |row| row.get::<_, String>(0));
+        if let Ok(rows) = rows {
+            for fact_id in rows.flatten() {
+                refs.push(SourceRef {
+                    source_type: "project_fact".into(),
+                    source_id: fact_id,
+                    last_updated_ms: now_ms,
+                });
+            }
+        }
     }
-    if unverified > 0 {
-        refs.push(SourceRef {
-            source_type: "unverified_claim".into(),
-            source_id: format!("claims:{project_id}"),
-            last_updated_ms: now_ms,
-        });
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT claim_id FROM m5_claims WHERE project_id=?1 AND claim_status='RECORDED_UNVERIFIED'
+         ORDER BY created_at_ms DESC LIMIT 8",
+    ) {
+        let rows = stmt.query_map([project_id], |row| row.get::<_, String>(0));
+        if let Ok(rows) = rows {
+            for claim_id in rows.flatten() {
+                refs.push(SourceRef {
+                    source_type: "unverified_claim".into(),
+                    source_id: claim_id,
+                    last_updated_ms: now_ms,
+                });
+            }
+        }
     }
-    if open_runs > 0 {
-        refs.push(SourceRef {
-            source_type: "workflow_run".into(),
-            source_id: format!("runs:{project_id}"),
-            last_updated_ms: now_ms,
-        });
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT workflow_run_id FROM m5_workflow_runs
+         WHERE project_id=?1 AND status IN ('CREATED','ACTIVE')
+         ORDER BY created_at_ms DESC LIMIT 8",
+    ) {
+        let rows = stmt.query_map([project_id], |row| row.get::<_, String>(0));
+        if let Ok(rows) = rows {
+            for run_id in rows.flatten() {
+                refs.push(SourceRef {
+                    source_type: "workflow_run".into(),
+                    source_id: run_id,
+                    last_updated_ms: now_ms,
+                });
+            }
+        }
     }
     let previous = load_summary_row(store, project_id)?;
     let version = previous.map(|s| s.version + 1).unwrap_or(1);
@@ -293,6 +317,59 @@ fn load_summary_row(
         )
         .optional()
         .map_err(|e| format!("load_summary:{e}"))
+}
+
+pub(crate) fn resolve_source_ref(
+    store: &M5OrchestrationStore,
+    project_id: &str,
+    source_id: &str,
+) -> Result<SourceRef, String> {
+    let conn = store.connection();
+    if let Ok(found) = conn.query_row(
+        "SELECT fact_id, created_at_ms FROM m5_project_facts
+         WHERE project_id=?1 AND fact_id=?2",
+        params![project_id, source_id],
+        |row| {
+            Ok(SourceRef {
+                source_type: "project_fact".into(),
+                source_id: row.get(0)?,
+                last_updated_ms: row.get(1)?,
+            })
+        },
+    ) {
+        return Ok(found);
+    }
+    if let Ok(found) = conn.query_row(
+        "SELECT claim_id, created_at_ms FROM m5_claims
+         WHERE project_id=?1 AND claim_id=?2",
+        params![project_id, source_id],
+        |row| {
+            Ok(SourceRef {
+                source_type: "unverified_claim".into(),
+                source_id: row.get(0)?,
+                last_updated_ms: row.get(1)?,
+            })
+        },
+    ) {
+        return Ok(found);
+    }
+    conn.query_row(
+        "SELECT workflow_run_id, created_at_ms FROM m5_workflow_runs
+         WHERE project_id=?1 AND workflow_run_id=?2",
+        params![project_id, source_id],
+        |row| {
+            Ok(SourceRef {
+                source_type: "workflow_run".into(),
+                source_id: row.get(0)?,
+                last_updated_ms: row.get(1)?,
+            })
+        },
+    )
+    .map_err(|_| "deep_link_source_not_found".to_string())
+}
+
+pub(crate) fn source_deep_link(source: &SourceRef) -> String {
+    format!("syn://m5/{}/{}", source.source_type, source.source_id)
 }
 
 fn count_or_zero(conn: &rusqlite::Connection, sql: &str, project_id: &str) -> i64 {

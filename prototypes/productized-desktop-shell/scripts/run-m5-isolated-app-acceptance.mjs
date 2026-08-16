@@ -390,6 +390,13 @@ async function main() {
     same_role_session:
       Boolean(sceneA?.role_session_id) &&
       sceneA?.role_session_id === resume?.role_session_id,
+    scene_a_zero_grant: sceneA?.grants === 0,
+    scene_b_exact_join: Boolean(sceneB?.grant_join?.claim_id && sceneB?.grant_join?.review_id),
+    scene_b_deep_link_resolves: sceneB?.deep_link_resolves === true,
+    receipts_backend_derived:
+      sceneA?.derived_from === "backend_store" &&
+      sceneB?.derived_from === "backend_store" &&
+      resume?.derived_from === "backend_store",
     window_scene_b: shotA,
     window_resume: shotB,
     m5_store_present: grants,
@@ -413,8 +420,12 @@ async function main() {
     sceneB &&
     resume &&
     receipt.same_binding &&
+    receipt.same_role_session &&
     sceneA.spawned === false &&
+    sceneA.grants === 0 &&
     sceneB.dispatched === true &&
+    sceneB.deep_link_resolves === true &&
+    receipt.receipts_backend_derived &&
     shotA.sha256 &&
     shotB.sha256;
   process.exitCode = passed ? 0 : 1;
