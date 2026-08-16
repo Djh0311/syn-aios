@@ -1,0 +1,74 @@
+{
+  "schema": "syn.m5r07.disposable-checkout.behavior-receipt.v1",
+  "candidate_sha": "65413a2d32830e689a6dc73ae34f75c4efbf223f",
+  "disposable_checkout": "/tmp/m5r07-disposable-65413a2",
+  "verified_at": "2026-08-16T18:47:41Z",
+  "authorization": {
+    "schemaVersion": 1,
+    "authorized": false
+  },
+  "environment": {
+    "cwd": "/tmp/m5r07-disposable-65413a2/prototypes/productized-desktop-shell/src-tauri",
+    "PATH": "/home/synadmin/.local/bin:/home/synadmin/.local/bin:/home/synadmin/.local/bin:/home/synadmin/.local/bin:/home/synadmin/.local/bin:/home/synadmin/.grok/bin:/home/synadmin/.cargo/bin:/home/synadmin/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files (x86)/Common Files/Oracle/Java/javapath:/mnt/c/Program Files/Common Files/Oracle/Java/javapath:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA NvDLISR:/mnt/c/Program Files (x86)/Windows Kits/8.1/Windows Performance Toolkit/:/mnt/c/Program Files (x86)/Microsoft VS Code/bin:/mnt/a/\u6a21\u7279\u901a\u544a\u5de5\u5177/Git/cmd:/mnt/c/Program Files/nodejs/:/mnt/c/Program Files/Tailscale/:/mnt/c/Users/admin/.grok/bin:/mnt/f/ClaudeCode:/mnt/f/VSCode/bin:/mnt/f/OpenCode:/mnt/c/Users/admin/AppData/Local/Microsoft/WindowsApps:/mnt/c/Users/admin/AppData/Roaming/npm:/mnt/c/Users/admin/AppData/Local/Microsoft/WinGet/Packages/pnpm.pnpm_Microsoft.Winget.Source_8wekyb3d8bbwe:/mnt/c/Microsoft VS Code/bin:/mnt/f/cursor/resources/app/bin:/snap/bin",
+    "HOME": "/home/synadmin",
+    "USER": "synadmin",
+    "DISPLAY": ":0",
+    "CARGO_HOME": null,
+    "RUSTUP_HOME": null,
+    "offline_flag": "--offline",
+    "uname": "Linux DESKTOP-FRK8K62 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
+    "node": "v22.23.2",
+    "npm": "10.9.8"
+  },
+  "opening_hash": "65413a2d32830e689a6dc73ae34f75c4efbf223f",
+  "final_hash": "65413a2d32830e689a6dc73ae34f75c4efbf223f",
+  "opening_equals_final": true,
+  "candidate_contains_m6": false,
+  "commands": [
+    {
+      "command": "cargo check --lib --offline",
+      "cwd": "/tmp/m5r07-disposable-65413a2/prototypes/productized-desktop-shell/src-tauri",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "/tmp/m5r07-disp-check.log"
+    },
+    {
+      "command": "cargo test --lib --offline -- m5_ -- --test-threads=1",
+      "cwd": "/tmp/m5r07-disposable-65413a2/prototypes/productized-desktop-shell/src-tauri",
+      "exit_code": 0,
+      "result": "PASS",
+      "passed": 80,
+      "failed": 0,
+      "filtered_out": 1809,
+      "log": "/tmp/m5r07-disp-m5.log"
+    },
+    {
+      "command": "npm run typecheck",
+      "cwd": "/tmp/m5r07-disposable-65413a2/prototypes/productized-desktop-shell",
+      "exit_code": 0,
+      "result": "PASS",
+      "log": "/tmp/m5r07-disp-typecheck.log"
+    },
+    {
+      "command": "npm run build",
+      "cwd": "/tmp/m5r07-disposable-65413a2/prototypes/productized-desktop-shell",
+      "exit_code": 0,
+      "result": "PASS",
+      "modules": 310,
+      "log": "/tmp/m5r07-disp-build.log"
+    }
+  ],
+  "isolated_tauri": {
+    "command": "node scripts/run-m5-isolated-app-acceptance.mjs",
+    "cwd": "/home/synadmin/workspace/syn/prototypes/productized-desktop-shell",
+    "exit_code": 0,
+    "profile_root": "/tmp/syn-r4-acceptance-kar6hg",
+    "launcher_receipt_sha256": "b56b8d1dc78f7cdf40034ae64550a43636d4e6aa85e33b82f52ff6d719aee546",
+    "note": "run on authority working tree immediately before candidate commit; disposable checkout re-ran compile/typecheck/build only"
+  },
+  "stage": "stage-14",
+  "leaf": "M5R07",
+  "status": "AWAITING_INDEPENDENT_ACCEPTANCE"
+}

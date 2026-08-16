@@ -1,0 +1,18 @@
+{
+  "binding_id": "sup-7a2b5b2c-d697-48c2-a66f-5c67c1d345ff",
+  "deep_link": null,
+  "dispatched": false,
+  "grant_id": null,
+  "notes": [
+    "readonly_chat",
+    "user_rejected_zero_grant"
+  ],
+  "phase": "scene-a",
+  "project_id": "/tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2",
+  "proposal_id": "prop-2eb18a2e-e7df-4f2b-b970-f8de359c9732",
+  "role_session_id": "m5:project-supervisor:/tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2",
+  "schema": "syn.m5r07.isolated-ui-receipt.v1",
+  "spawned": false,
+  "stale": null,
+  "written_at_ms": 1786904413789
+}

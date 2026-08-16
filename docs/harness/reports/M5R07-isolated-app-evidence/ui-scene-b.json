@@ -1,0 +1,21 @@
+{
+  "binding_id": "sup-7a2b5b2c-d697-48c2-a66f-5c67c1d345ff",
+  "deep_link": "syn://project//tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2/facts:/tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2",
+  "dispatched": true,
+  "grant_id": "7a682b30-904f-4c44-a4b7-5e80f81964be",
+  "notes": [
+    "authorization_then_grant",
+    "timeout_retry_followthrough",
+    "duplicate_claim=true",
+    "readonly_advice",
+    "deep_link_clicked"
+  ],
+  "phase": "scene-b",
+  "project_id": "/tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2",
+  "proposal_id": "prop-20d4dc04-09b2-407b-bcea-5da94921a8b9",
+  "role_session_id": "m5:project-supervisor:/tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2",
+  "schema": "syn.m5r07.isolated-ui-receipt.v1",
+  "spawned": true,
+  "stale": false,
+  "written_at_ms": 1786904415066
+}
