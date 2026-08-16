@@ -5,62 +5,66 @@
 - 状态：**`AWAITING_INDEPENDENT_ACCEPTANCE`**
 - 不宣布 M5 完成，不关闭 stage-14，不激活 M6
 
-本包是对独立验收失败的最窄修正，不是 closeout。
+本包是对独立验收失败的最窄返修，不是 closeout。
 
 ## 候选载体
 
-本工作树相对 `7a6598a` 只含 M5 修正。七个未跟踪 M6 文件与 `linux-schema.json` 仍原位未 add。
+本工作树相对 `04200bb` 只新增 M5 返修提交。七个未跟踪 M6 文件、`linux-schema.json` 与 2026-08-17 壳方向文档仍原位未 add。
 
 | 项 | 值 |
 |---|---|
-| 先前失败实现 candidate | `20740a8654ddddea08717800d9be0536d4b0021d` |
-| 当前 main（修正前） | `7a6598a7ba58cecc5cbc61f228a3e512ff65b0b1` |
-| 新实现 candidate | `65413a2d32830e689a6dc73ae34f75c4efbf223f` |
+| 基线 HEAD | `04200bb57e20240edc04f582f21ccf1ec0ed61d1` |
+| 先前失败实现 candidate | `65413a2d32830e689a6dc73ae34f75c4efbf223f` |
+| 新实现 candidate | `faa6ed191f6bef29ddd03b74b4369c4b4e6445fd` |
 | Isolated launcher receipt | `docs/harness/reports/M5R07-isolated-app-launcher-receipt.json` |
-| Disposable checkout | `/tmp/m5r07-disposable-65413a2` |
+| Disposable checkout | `/tmp/m5r07-disposable-faa6ed1` |
 | Disposable receipt | `docs/harness/reports/M5R07-disposable-checkout-receipt.json` |
 
-## 六个缺口的产品结果
+## 返修产品结果
 
-1. **真实隔离 AppState / command / 项目壳**  
-   `AppState` 在普通、隔离 profile 与验收构造路径安装 `{app_data}/m5/orchestration.sqlite`。六个正式 command 加四个隔离辅助 command 登记在 `command_registry.rs`。现有项目壳总览页挂 `ProjectSupervisorPanel`，经 `invoke` 调用，不是 crate 内测试直调。
+1. **M3-owned RoleSession + 服务器项目身份**  
+   普通产品 `open_m5_project_supervisor` 经 `m5_m3_identity` 打开/恢复 M3 ordinary RoleSession；不再发明 `m5:project-supervisor:{id}` 或把 `m5_role_sessions` 当产品身份根。项目身份由 index / isolated profile 服务器解析。调用方自造 `role_session_id` 被拒绝。隔离 Tauri 恢复到同一 `session:sha256:…` 与同一 binding。
 
-2. **正式持久 RoleSession**  
-   `m5_role_sessions` 持久化 M3 形 ID。turn / decision 经 `load_binding_by_id` 精确校验 binding + project + role_session + actor。调用方自造 `role_session_id` 被拒绝。
+2. **渲染器不得选 Grant command/scope**  
+   前端不再发送 `allowed_command`。提案提交时服务器写入 `authorized_action`；批准只绑定该存储动作与 `pol:m5r07:{action}`。扩权 command 被拒（`renderer_grant_scope_rejected`）。
 
-3. **正式授权链**  
-   公开执行入口只有 `record_user_authorization_decision`：DRAFT proposal → 用户 `APPROVED`/`REJECTED` → Authorization → Grant → Dispatch。隔离场景与 UI 不再直接调用 `prepare_and_dispatch`。拒绝零 Grant。
+3. **普通 UI 正式执行链**  
+   项目面板用正式 command：runtime receipt、worker report、independent review、result decision、summary。隔离 helper 仅 `SYN_M5R07_ISOLATED_ACCEPTANCE=1` 可写 receipt。隔离 DOM 驱动点击正式按钮，不再调用 isolated followthrough command。
 
-4. **ProjectSummary 语义**  
-   读取不重建。`SummaryStale` 返回已持久摘要且 `stale=true`。DTO 保留 `source_refs` 与 `syn://` deep link。
+4. **Summary ACL / source / deep-link**  
+   consumer 来自 M3 RoleSession。source refs 是事实/claim/run 的真实 id。deep-link `syn://m5/{type}/{id}` 经 `resolve_source_ref` 回源。
 
-5. **两场景隔离 Tauri 交互**  
-   `scripts/run-m5-isolated-app-acceptance.mjs` 铸造 R4 隔离 profile（隔离 app-data / scratch / fake runtime），拉起 debug 二进制 + 现有项目壳。`main.tsx` 驱动真实 DOM：只读对话、提出、拒绝、批准、摘要、只读 advice、deep-link 点击；强退后同 profile 恢复同一 binding / role_session。
+5. **隔离 UI receipt 后端派生**  
+   `write_m5_isolated_ui_receipt` 只收 phase，从 store 派生 grant 计数、join、stale、deep-link、binding。Scene A：`grants=0`、`spawned=false`、拒绝提案。Scene B：exact grant/dispatch/claim/review/fact join、`stale=true`、deep-link 可解析。Resume：`same_binding=true`、`same_role_session=true`。
 
-6. **Receipt**  
-   见本目录 JSON。disposable checkout 绑定命令、环境、退出码、opening/final hash 与 candidate SHA。
+6. **Disposable checkout 后真实隔离 Tauri**  
+   实现提交后在 `/tmp/m5r07-disposable-faa6ed1` checkout `faa6ed1` 跑 cargo/typecheck/build 与 `node scripts/run-m5-isolated-app-acceptance.mjs`。opening=final=`faa6ed1`。
+
+## 未记录 delta 说明
+
+`commands.rs` 与 `lib_read_model_boundary_tests.rs` 先前各加 `m5_store_path: None`：**仅因** `AppState` 新增该字段后既有测试字面量 E0063；不改 command 语义或读模型边界。本返修未再改这两文件。
 
 ## 隔离场景事实
 
-- Scene A：只读 chat + 用户 REJECTED，`spawned=false`，无 grant。
-- Scene B：用户 APPROVED 后走正式链；followthrough 只在已有 Grant/Dispatch 上做 timeout→retry→echo、独立 review、重复 claim 幂等、摘要、只读 advice、deep-link 点击。
-- Resume：`same_binding=true`，`same_role_session=true`。
-- 窗口截图：在 `DISPLAY=:0` + `GDK_BACKEND=x11` 下写出 1920×1080 PPM。选中 drawable 是 X11 root（xid=1080，空 title），两帧 SHA 相同，**不得写成面板像素 PASS**。UI 交互证据是运行中 webview 经正式 command 写出的 scene/resume JSON。
+- Scene A：只读 chat + REJECTED，`grants=0`，`spawned=false`。
+- Scene B：APPROVED 后经正式 runtime/report/review/result/summary；exact join 成立；deep-link 可解析；stale 可观察。
+- Resume：同一 binding + 同一 M3 role_session。
+- 窗口截图：`DISPLAY=:0` 写出 1920×1080 PPM。选中 drawable 是 X11 root（xid=1080，空 title），两帧 SHA 相同，**不得写成面板像素 PASS**。
 - 旧入口：仍 guarded-legacy，未物理删除。
 
 ## 验证
 
-- `cargo check --lib --offline`：PASS
-- `cargo test --lib --offline -- m5_`：80 passed / 0 failed
-- 完整 `cargo test --lib --offline`：不宣称 PASS。本环境观察到既有非 M5 失败：`conversation_transport_command_tests`（6）、`exec_process_registry` reaper（1）、`fix9_tests`（5）、`manual_relay::conversation_transport`（3）。另有 `manual_relay` 关机/杀进程测试在本环境无法跑完，不能冒充 M5 回归。
-- `npm run typecheck`：PASS
-- `npm run build`：PASS（310 modules）
-- 隔离 Tauri 交互 / deep-link / 强退恢复：PASS（JSON receipts）
+- `cargo check --lib --offline`（disposable）：PASS
+- `cargo test --lib --offline -- m5_`（disposable）：83 passed / 0 failed
+- 完整 `cargo test --lib --offline`：不宣称 PASS。权威树先前观察到既有非 M5 失败：`conversation_transport_command_tests`、`exec_process_registry` reaper、`fix9_tests`、`manual_relay::conversation_transport`。本轮未复跑全库。
+- `npm run typecheck`（disposable）：PASS
+- `npm run build`（disposable）：PASS（310 modules）
+- 隔离 Tauri 交互 / deep-link / 强退恢复：PASS（disposable checkout JSON receipts）
 - 窗口截图：`EXECUTED_ROOT_ONLY / NOT_CLAIMED_PANEL_PIXELS`
 
 ## 交给总线
 
 - Git：本地 `main` 相对 `origin/main` 超前；未 push、未 merge、未 rebase。
 - Harness：唯一 current leaf = M5R07；authorization closed；stage-14 仍开。
-- M6 / D0C04 / D0C05 / M1–M4 冻结合同未动。
-- 请总线只读复核新的 M5-only candidate SHA，不要把本报告当成 M5 完成。
+- M6 / D0C04 / D0C05 / M1–M4 冻结合同未动。壳方向文档与七个 m6_*.rs 未跟踪文件仍原位保全。
+- 请总线只读复核新的 M5-only candidate SHA `faa6ed1` 及其证据绑定提交，不要把本报告当成 M5 完成。

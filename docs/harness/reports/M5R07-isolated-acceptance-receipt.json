@@ -1,69 +1,24 @@
 {
-  "schema": "syn.m5r07.isolated-acceptance.behavior-receipt.v2",
-  "candidate_sha": "65413a2d32830e689a6dc73ae34f75c4efbf223f",
-  "disposable_checkout": "/tmp/m5r07-disposable-65413a2",
+  "schema": "syn.m5r07.isolated-acceptance.v3",
+  "candidate_sha": "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd",
   "disposable_checkout_receipt": "docs/harness/reports/M5R07-disposable-checkout-receipt.json",
-  "baseline_failed_candidate": "20740a8654ddddea08717800d9be0536d4b0021d",
-  "current_main_before_correction": "7a6598a7ba58cecc5cbc61f228a3e512ff65b0b1",
-  "verified_at": "2026-08-16T18:41:21Z",
-  "authorization": {
-    "schemaVersion": 1,
-    "authorized": false
+  "isolated_app_launcher_receipt": "docs/harness/reports/M5R07-isolated-app-launcher-receipt.json",
+  "ui_receipts": {
+    "scene_a": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-a.json",
+    "scene_b": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-b.json",
+    "resume": "docs/harness/reports/M5R07-isolated-app-evidence/ui-resume.json"
   },
-  "results": {
-    "cargo_check_lib_offline": "PASS",
-    "cargo_test_lib_offline_m5_filter": {
-      "result": "PASS",
-      "passed": 80,
-      "failed": 0,
-      "command": "cargo test --lib --offline -- m5_ -- --test-threads=1"
-    },
-    "cargo_test_lib_offline_full": {
-      "result": "NOT_CLAIMED_PASS",
-      "note": "full --lib did not finish cleanly in this environment; observed preexisting non-M5 failures in conversation_transport_command_tests (6), exec_process_registry reaper (1), fix9_tests (5), manual_relay::conversation_transport (3). Two manual_relay process-shutdown tests did not complete.",
-      "failed_families": [
-        "conversation_transport_command_tests",
-        "exec_process_registry::tests::system_group_reaper_waits_for_a_descendant_after_its_leader_exits",
-        "fix9_tests",
-        "manual_relay::conversation_transport"
-      ]
-    },
-    "typescript_typecheck": {
-      "result": "PASS",
-      "command": "npm run typecheck"
-    },
-    "production_build": {
-      "result": "PASS",
-      "command": "npm run build",
-      "modules": 310
-    },
-    "isolated_tauri_scenes": {
-      "result": "PASS",
-      "command": "node scripts/run-m5-isolated-app-acceptance.mjs",
-      "profile_root": "/tmp/syn-r4-acceptance-kar6hg",
-      "same_binding": true,
-      "same_role_session": true,
-      "scene_a_spawned": false,
-      "scene_b_dispatched": true,
-      "deep_link_prefix": "syn://project/",
-      "launcher_receipt_sha256": "b56b8d1dc78f7cdf40034ae64550a43636d4e6aa85e33b82f52ff6d719aee546"
-    },
-    "window_capture": {
-      "result": "EXECUTED_ROOT_ONLY",
-      "claimed_as_panel_pixels": false,
-      "display": ":0",
-      "gdk_backend": "x11",
-      "selected_drawable": "x11_root xid=1080",
-      "scene_b_ppm_sha256": "a8aaf2a0a91b2ff218775a0d2b6a229c9c4488dce4f835689a24559f9f414490",
-      "resume_ppm_sha256": "a8aaf2a0a91b2ff218775a0d2b6a229c9c4488dce4f835689a24559f9f414490",
-      "note": "both frames hashed identical empty X11 root; not claimed as project-supervisor panel pixels"
-    },
-    "computer_use": "NOT_EXECUTED"
+  "proofs": {
+    "rejection_zero_grant": true,
+    "exact_joins": true,
+    "stale": true,
+    "deep_link_resolves": true,
+    "restart_recovery": true,
+    "receipts_backend_derived": true,
+    "m3_role_session": true
   },
-  "stage": "stage-14",
+  "window_capture": "EXECUTED_ROOT_ONLY / NOT_CLAIMED_PANEL_PIXELS",
   "leaf": "M5R07",
-  "status": "AWAITING_INDEPENDENT_ACCEPTANCE",
-  "m6_files_untouched": true,
-  "stage_14_closed": false,
-  "m5_announced_complete": false
+  "stage": "stage-14",
+  "status": "AWAITING_INDEPENDENT_ACCEPTANCE"
 }

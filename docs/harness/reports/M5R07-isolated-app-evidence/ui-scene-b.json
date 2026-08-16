@@ -1,21 +1,29 @@
 {
-  "binding_id": "sup-7a2b5b2c-d697-48c2-a66f-5c67c1d345ff",
-  "deep_link": "syn://project//tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2/facts:/tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2",
+  "approved_proposals": 1,
+  "binding_id": "sup-6c00d80d-55a6-4e28-b249-ed5713887111",
+  "deep_link": "syn://m5/project_fact/fact-eff80fe5-0ba7-4613-a5cd-fb637c85f0fc",
+  "deep_link_resolves": true,
+  "derived_from": "backend_store",
   "dispatched": true,
-  "grant_id": "7a682b30-904f-4c44-a4b7-5e80f81964be",
+  "grant_join": {
+    "claim_id": "claim-30624c25-71e9-4130-bbc0-95f32e50bc18",
+    "dispatch_id": "f55630f3-d280-4f54-a4ec-f2da1b8c7f0d",
+    "fact_id": "fact-eff80fe5-0ba7-4613-a5cd-fb637c85f0fc",
+    "grant_id": "1b46c4d1-ca96-458d-b883-516b98d7dacb",
+    "review_id": "rev-08cf079f-04f3-4b57-aab4-1507b1e23317"
+  },
+  "grants": 1,
   "notes": [
-    "authorization_then_grant",
-    "timeout_retry_followthrough",
-    "duplicate_claim=true",
-    "readonly_advice",
-    "deep_link_clicked"
+    "approved_proposal=true",
+    "exact_join=true",
+    "stale_observed=true",
+    "deep_link_resolves=true"
   ],
   "phase": "scene-b",
-  "project_id": "/tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2",
-  "proposal_id": "prop-20d4dc04-09b2-407b-bcea-5da94921a8b9",
-  "role_session_id": "m5:project-supervisor:/tmp/syn-r4-acceptance-kar6hg/fixture/SYN R4 ISOLATED ACCEPTANCE syn-r4-36e09b0233451bb2",
-  "schema": "syn.m5r07.isolated-ui-receipt.v1",
-  "spawned": true,
-  "stale": false,
-  "written_at_ms": 1786904415066
+  "project_id": "project:tmp-syn-r4-acceptance-dwra2y-fixture-syn-r4-isolated-acceptance-syn-r4-81180b15a9d7b7e8",
+  "rejected_proposals": 1,
+  "role_session_id": "session:sha256:3aac8e78b7e2ef323c4918d12011151e075207fb10f3dbdbc78a00f8da2ff57b",
+  "schema": "syn.m5r07.isolated-ui-receipt.v2",
+  "spawned": false,
+  "stale": true
 }
