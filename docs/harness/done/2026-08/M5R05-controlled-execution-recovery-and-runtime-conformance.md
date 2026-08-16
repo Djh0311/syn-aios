@@ -29,3 +29,9 @@
 
 - M1–M4 冻结合同；m6_*.rs；stage-12 / D0C04 / D0C05
 - 真实模型/provider/DSH、push/reset、伪造 App/Hook 证据
+
+## 执行记录与完成回执（2026-08-16）
+
+- 结果：`M5R05_CONTROLLED_EXECUTION_AND_RUNTIME_CONFORMANCE=PASS`；
+- 内容提交 `a5d93e8d6f37dd6e9f5da0f168327ce7af41b25f`；
+- 路由下一叶 M5R06。

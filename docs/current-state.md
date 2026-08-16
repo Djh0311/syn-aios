@@ -5,7 +5,7 @@
 ## 2026-08-16 M5 事实重整启动（当前状态）
 
 - M5 与 M6 现有实现统一定级为 `M5/M6 CANDIDATE WIP / UNIT-LEVEL PROTOTYPE / NOT_ACCEPTED / NOT_MAINLINE`；57（M5 定向）/ 33（M6 定向）单测只作为候选原型单测基线，不绑定阶段退出。此前 `docs/harness/plan.md` 手工勾选的 stage-14/15 完成标记已撤销，不构成阶段历史。
-- 用户 2026-08-16 明确按实际继续完成剩余 M5；`docs/plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` 为现行实施计划。真实 `stage-14` 已建立，REC-00 / M5R01 已归档，`M5R00=NOT_NEEDED`，唯一 current leaf 为 M5R05，`authorization.json` 为精确 closed 两字段。
+- 用户 2026-08-16 明确按实际继续完成剩余 M5；`docs/plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` 为现行实施计划。真实 `stage-14` 已建立，REC-00 / M5R01 已归档，`M5R00=NOT_NEEDED`，唯一 current leaf 为 M5R06，`authorization.json` 为精确 closed 两字段。
 - 本地 `main` 已从 `9103c3b` 推进到 M5R01 内容提交 `7cb8ac0` 及后续 M5R02 工作树；R0 恢复载体仍在。M5/M6 仍为 `CANDIDATE WIP / NOT_ACCEPTED / NOT_MAINLINE`。
 - M6 保持未激活：须在 M5 独立验收后才另建真实 stage-15。M7–M11、Headless Core、Primary/epoch 继续 `PLANNED / NOT_ACTIVE`。
 
