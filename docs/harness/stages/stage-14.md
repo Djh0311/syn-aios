@@ -58,7 +58,7 @@
 - [x] M5R00 前置实现与 adapter 修正（NOT_NEEDED，前置矩阵无 GAP）
 - [x] M5R01 执行合同矫正与旧数据映射
 - [x] M5R02 持久编排核心与 ExecutionGrant
-- [ ] M5R03 WorkerReport、独立审查与事实提升
+- [x] M5R03 WorkerReport、独立审查与事实提升
 - [ ] M5R04 普通项目的持久 Project Supervisor
 - [ ] M5R05 受控执行、恢复与 runtime conformance
 - [ ] M5R06 ProjectSummary 正式投影

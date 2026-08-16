@@ -44,3 +44,11 @@
 - push/merge/rebase/deploy/release；reset/stash/clean；git add -A 吞入混合 WIP
 - 伪造 Hook receipt、authorization、stage/leaf、测试或 App 证据
 - 在 Grant persist/readback 完成前放行 Runnable/dispatch；留未知 Runner 旁路
+
+## 执行记录与完成回执（2026-08-16）
+
+- 结果：`M5R02_PERSISTENT_ORCHESTRATION_AND_EXECUTION_GRANT=PASS`；
+- 合同 `docs/contracts/m5-persistent-orchestration-and-execution-grant-v1.md` 冻结；
+- 内容提交 `93ba9b0c83ad9e0d4a600aafde0959ea1353850e`；
+- `cargo check --lib --offline` PASS；`cargo test --lib --offline -- m5_` 57 passed；
+- 路由下一叶 M5R03 WorkerReport、独立审查与事实提升。
