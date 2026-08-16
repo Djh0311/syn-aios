@@ -1,32 +1,8 @@
 {
   "hooks": {
-    "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "node \"/Users/yoyi/workspace/product-line-lite-migration/.claude/harness-lite/hooks/session-start.js\"",
-        "timeout": 15
-      }]
-    }],
-    "UserPromptSubmit": [{
-      "hooks": [{
-        "type": "command",
-        "command": "node \"/Users/yoyi/workspace/product-line-lite-migration/.claude/harness-lite/hooks/user-prompt.js\"",
-        "timeout": 10
-      }]
-    }],
-    "Stop": [{
-      "hooks": [{
-        "type": "command",
-        "command": "node \"/Users/yoyi/workspace/product-line-lite-migration/.claude/harness-lite/hooks/stop.js\"",
-        "timeout": 30
-      }]
-    }],
-    "PreToolUse": [{
-      "hooks": [{
-        "type": "command",
-        "command": "node \"/Users/yoyi/workspace/product-line-lite-migration/.claude/harness-lite/hooks/pre-push.js\" --surface codex",
-        "timeout": 10
-      }]
-    }]
+    "SessionStart": [{"matcher":"startup|resume|clear|compact","hooks":[{"type":"command","command":"\"/home/synadmin/.local/share/node-v22.23.2-linux-x64/bin/node\" \"$(/usr/bin/git rev-parse --show-toplevel)/.claude/harness-lite/hooks/dispatcher.js\"","timeout":15,"additionalContextLimit":1800}]}],
+    "UserPromptSubmit": [{"hooks":[{"type":"command","command":"\"/home/synadmin/.local/share/node-v22.23.2-linux-x64/bin/node\" \"$(/usr/bin/git rev-parse --show-toplevel)/.claude/harness-lite/hooks/dispatcher.js\"","timeout":10,"additionalContextLimit":1800}]}],
+    "Stop": [{"hooks":[{"type":"command","command":"\"/home/synadmin/.local/share/node-v22.23.2-linux-x64/bin/node\" \"$(/usr/bin/git rev-parse --show-toplevel)/.claude/harness-lite/hooks/dispatcher.js\"","timeout":30}]}],
+    "PreToolUse": [{"matcher":"^Bash$","hooks":[{"type":"command","command":"\"/home/synadmin/.local/share/node-v22.23.2-linux-x64/bin/node\" \"$(/usr/bin/git rev-parse --show-toplevel)/.claude/harness-lite/hooks/dispatcher.js\"","timeout":10,"additionalContextLimit":1800}]}]
   }
 }

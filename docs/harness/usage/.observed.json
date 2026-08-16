@@ -1,0 +1,14 @@
+{
+  "events": {
+    "SessionStart": {
+      "at": "2026-08-15T21:27:09.964Z",
+      "event": "SessionStart",
+      "session": "synthetic-official04-canary",
+      "turn": null,
+      "definitionDigest": "sha256:08f85bbbd212b37b729ae27971755d7327d6efc463a4411f68defada55934d6e",
+      "packageDigest": "sha256:7c1727e4fbf91a12b020cbea121abd788dad213ab84ad6aac94635615aee7b83",
+      "decision": "executed"
+    }
+  },
+  "source": "codex-host-hook"
+}

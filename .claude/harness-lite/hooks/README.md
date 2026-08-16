@@ -1,54 +1,11 @@
-# Harness Lite 钩子接法
+# Harness Lite 0.8 Hooks
 
-四个钩子共用项目内 runtime。前三个恢复上下文和写事实；`PreToolUse` 只在五类硬边界出现时给出决定，普通开发动作不打扰。
+四个 Codex 事件共用 `hooks/dispatcher.js`：`SessionStart` 恢复短链，`UserPromptSubmit` 记录 user-role 来源 receipt 和 Git baseline，`Stop` 只有在短期授权文件与当前 project/session/turn/leaf/stage 精确绑定且有新产品进展时才返回顶层 `decision: "block"`；固定 continuation 先判为 internal，不能自签授权或扩大范围。`PreToolUse` 只匹配 `^Bash$` 并硬拦未确认的精确 push。
 
-## Claude
+`project` profile 把 definition 精确合并到权威 root checkout 的 `.codex/hooks.json` 并保留外来组。`managed` profile 不写项目 Harness Hook，由管理员配置的 `managed_dir` 统一加载 global gateway；gateway 校验受保护 registry、allowlist 和 global runtime 后才转发。非法 JSON、未知 Harness 冲突、未知 digest 或不安全路径进入 HOLD。
 
-把下面片段合并进项目自己的 `.claude/settings.json`，路径换成目标项目。安装器只生成片段，不覆盖用户设置。
+官方 wire 字段使用 `hook_event_name`、`session_id`、turn 事件的 `turn_id`，Bash 命令使用 `tool_input.command`。`transcript_path` 不是稳定接口。PreToolUse 拒绝使用 `hookSpecificOutput.permissionDecision: "deny"`；非 push 输出为空，绝不返回尚未支持的 `ask`。
 
-```json
-{
-  "hooks": {
-    "SessionStart": [{"hooks":[{"type":"command","command":"node \"/path/to/project/.claude/harness-lite/hooks/session-start.js\"","timeout":15}]}],
-    "UserPromptSubmit": [{"hooks":[{"type":"command","command":"node \"/path/to/project/.claude/harness-lite/hooks/user-prompt.js\"","timeout":10}]}],
-    "Stop": [{"hooks":[{"type":"command","command":"node \"/path/to/project/.claude/harness-lite/hooks/stop.js\"","timeout":30}]}],
-    "PreToolUse": [{"hooks":[{"type":"command","command":"node \"/path/to/project/.claude/harness-lite/hooks/pre-push.js\" --surface claude","timeout":10}]}]
-  }
-}
-```
+健康状态必须分别证明 installed、configured、trusted/policyTrusted、四事件 observed，以及 native pre-push configured/probed。证据 bundle 保存精简 hooks/list 前后快照、started/completed run id 和无秘密 receipt，再做 exact/ambiguous/missing join。Desktop、CLI、unknown-live 和 synthetic 分开计算，离线直接执行 dispatcher 不能补真实宿主或 Desktop。
 
-Claude 的未授权硬门输出 `ask`，已经存在且匹配当前任务的用户授权输出 `allow`。
-
-## Codex
-
-Codex 使用同一核心，但适配语义不同：当前 Codex 不执行 `ask`，所以未授权必须输出 `deny`。安装器给出 `.codex/harness-lite/hooks-snippet.json`，由用户或项目维护者合并到受信任的 `.codex/hooks.json`。
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [{"hooks":[{"type":"command","command":"node \"/path/to/project/.claude/harness-lite/hooks/pre-push.js\" --surface codex","timeout":10}]}]
-  }
-}
-```
-
-## 普通 CLI 与 Git
-
-- 显式检查：`node .claude/harness-lite/bin/hl.js gate <类别> <动作> <目标> --target <项目> --write`。
-- 原生 `pre-push` 应调用 `.claude/harness-lite/lib/git-pre-push.js`；它先检查当前用户授权，再做原有密钥扫描，任一失败都以非零退出。
-- 安装器不会静默改 `.git/hooks`、`core.hooksPath`、Claude 或 Codex 的用户配置。
-
-## 五类硬门
-
-- `external`：进入远端、服务器、生产或真实世界。
-- `destructive`：删除或难恢复动作。
-- `context`：改变或结束当前工作。
-- `control`：修改 Harness 的守门、授权或审计。
-- `project-sensitive`：项目额外声明的真实凭据、设备等边界。
-
-授权只从 `docs/harness/authorization.json` 读取，没有 `hl authorize` 自授权命令。break-glass 只引用当前用户授权里的专用 grant，并写 `docs/harness/audit/*.jsonl`；不记录原始命令或敏感参数。
-
-## 可信边界
-
-这是轻量协作门：Codex trusted hook 的 `deny`、Claude 的宿主决定、CLI 非零退出和 Git hook 会在各自注册入口阻断当次动作。同一 macOS 用户仍能停用 hook、改授权文件或直跑底层命令，因此不能宣传为防本机蓄意绕过的系统安全边界。
-
-不要用 `PreCompact`；压缩后恢复由 `SessionStart` 完成。`Stop` 必须保持 30 秒，并通过 `hookSpecificOutput.additionalContext` 回传。
+原生 Git pre-push 是单独、repo-wide 的维护动作；需要精确授权后才链式保留外来 hook，并用 disposable local bare remote probe。它与 Codex PreToolUse 共用同一 pending + user-role event + 模型 push-assert 的一次性绑定和密钥扫描逻辑。wrapper 在已管理 worktree 发现 runtime identity 或 marker 损坏时 fail closed；未安装 0.8 runtime 的其它 worktree不介入，只链外来 hook。

@@ -1,79 +1,161 @@
 'use strict';
-// 轻量授权账：只认用户来源、只在当前 stage/leaf 有效。
-// 同一系统账号能改这个文件，所以它是支持执行面的流程边界，不是假装成 OS 安全边界。
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
+const io = require('./io.js');
+const tree = require('./tree.js');
 
-const file = (root) => path.join(root, 'docs', 'harness', 'authorization.json');
+const RELATIVE_PATH = 'docs/harness/authorization.json';
+const EXCLUDE_LINE = '/docs/harness/authorization.json';
+const MAX_BYTES = 4096;
+const MAX_LEASE_MS = 24 * 60 * 60 * 1000;
+const CLOSED = Object.freeze({ schemaVersion: 1, authorized: false });
+const CLOSED_KEYS = ['authorized', 'schemaVersion'];
+const ACTIVE_KEYS = ['authorized', 'executionReceipt', 'expiresAt', 'leaf', 'schemaVersion', 'stage'];
+const RECEIPT = /^u-[0-9a-f]{20}$/;
 
+const exactKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
+  && Object.keys(value).sort().join(',') === [...keys].sort().join(',');
+const canonicalIso = (value) => typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+function shape(value) {
+  if (exactKeys(value, CLOSED_KEYS) && value.schemaVersion === 1 && value.authorized === false) return 'closed';
+  if (exactKeys(value, ACTIVE_KEYS) && value.schemaVersion === 1 && value.authorized === true
+    && typeof value.leaf === 'string' && value.leaf.length > 0 && !path.isAbsolute(value.leaf) && !value.leaf.split(/[\\/]/).includes('..')
+    && typeof value.stage === 'string' && value.stage.length > 0 && RECEIPT.test(value.executionReceipt)
+    && canonicalIso(value.expiresAt)) return 'active';
+  return 'malformed';
+}
+function sameStat(a, b) {
+  return a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
+}
+function parentSafety(root) {
+  let base;
+  try { base = fs.realpathSync(root); } catch { return false; }
+  for (const rel of ['docs', 'docs/harness']) {
+    const target = path.join(base, rel);
+    try { const stat = fs.lstatSync(target); if (stat.isSymbolicLink() || !stat.isDirectory()) return false; }
+    catch (error) { if (error.code === 'ENOENT') return true; return false; }
+  }
+  return true;
+}
 function read(root) {
+  root = path.resolve(root); if (!parentSafety(root)) return { kind: 'unsafe' };
+  const file = path.join(root, RELATIVE_PATH);
+  let beforePath;
+  try { beforePath = fs.lstatSync(file); }
+  catch (error) { return error.code === 'ENOENT' ? { kind: 'missing' } : { kind: 'unsafe' }; }
+  if (!beforePath.isFile() || beforePath.isSymbolicLink() || beforePath.size > MAX_BYTES) return { kind: 'unsafe' };
+  let fd;
   try {
-    const value = JSON.parse(fs.readFileSync(file(root), 'utf8'));
-    return value && typeof value === 'object' ? value : null;
-  } catch { return null; }
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const before = fs.fstatSync(fd, { bigint: true }); if (!before.isFile() || before.size > BigInt(MAX_BYTES)) return { kind: 'unsafe' };
+    const buffer = Buffer.alloc(MAX_BYTES + 1); let offset = 0;
+    while (offset < buffer.length) { const count = fs.readSync(fd, buffer, offset, buffer.length - offset, null); if (!count) break; offset += count; }
+    const after = fs.fstatSync(fd, { bigint: true }); if (offset > MAX_BYTES || !sameStat(before, after)) return { kind: 'unsafe' };
+    let value; try { value = JSON.parse(buffer.subarray(0, offset).toString('utf8')); } catch { return { kind: 'malformed' }; }
+    const kind = shape(value); return kind === 'malformed' ? { kind } : { kind, value };
+  } catch { return { kind: 'unsafe' }; }
+  finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* already closed */ } }
+}
+function validateStop(root, input, state, chain = tree.readChain(root), now = new Date()) {
+  const result = read(root); if (result.kind !== 'active' || typeof input?.stop_hook_active !== 'boolean') return { ok: false, reason: `authorization:${result.kind}` };
+  const value = result.value, currentLeaf = chain.leaf ? path.relative(root, chain.leaf.file).replaceAll('\\', '/') : null;
+  if (!chain.plan || !chain.health.ok || !chain.leaf || !chain.stage || value.leaf !== currentLeaf || value.stage !== chain.stage.name) return { ok: false, reason: 'authorization:chain' };
+  const receipt = state?.receipt, source = state?.userPromptSubmit;
+  if (!receipt || !source || source.origin !== 'user-prompt-submit' || source.receiptId !== receipt.receiptId
+    || value.executionReceipt !== receipt.receiptId || receipt.project !== path.resolve(root)
+    || receipt.thread !== (input.session_id || null) || receipt.turn !== (input.turn_id || null)
+    || source.project !== path.resolve(root) || source.session !== (input.session_id || null) || source.turn !== (input.turn_id || null)) return { ok: false, reason: 'authorization:receipt' };
+  if (!canonicalIso(state.startedAt) || !canonicalIso(value.expiresAt)) return { ok: false, reason: 'authorization:time-shape' };
+  const startedAt = Date.parse(state.startedAt), expiresAt = Date.parse(value.expiresAt), at = now.getTime();
+  if (startedAt > at || at >= expiresAt || expiresAt > startedAt + MAX_LEASE_MS) return { ok: false, reason: 'authorization:time-window' };
+  return { ok: true, value };
+}
+function issue(root, input, opts = {}) {
+  root = path.resolve(root); const current = read(root); if (!['missing', 'closed', 'active'].includes(current.kind)) return { ok: false, reason: `authorization:${current.kind}` };
+  const state = require('./hook.js').readTurn(root, input), chain = tree.readChain(root), receipt = state?.receipt;
+  if (!receipt || state?.userPromptSubmit?.origin !== 'user-prompt-submit' || receipt.project !== root
+    || receipt.thread !== (input.session_id || null) || receipt.turn !== (input.turn_id || null)
+    || !canonicalIso(state.startedAt) || !chain.plan || !chain.health.ok || !chain.leaf || !chain.stage) return { ok: false, reason: 'authorization:binding' };
+  const expiresAt = opts.expiresAt; if (!canonicalIso(expiresAt)) return { ok: false, reason: 'authorization:expiresAt' };
+  const start = Date.parse(state.startedAt), end = Date.parse(expiresAt); if (end <= Date.now() || end > start + MAX_LEASE_MS) return { ok: false, reason: 'authorization:lease' };
+  const value = { schemaVersion: 1, authorized: true, leaf: path.relative(root, chain.leaf.file).replaceAll('\\', '/'), stage: chain.stage.name,
+    executionReceipt: receipt.receiptId, expiresAt };
+  io.atomic(path.join(root, RELATIVE_PATH), `${JSON.stringify(value, null, 2)}\n`, 0o600); return { ok: true, value };
 }
 
-const leafId = (c) => c && c.leaf ? c.leaf.name.split('-')[0] : null;
-
-function active(root, chain) {
-  const record = read(root);
-  if (!record) return { ok: false, why: '没有有效授权记录', record: null };
-  if (record.version !== 1 || record.issuedBy !== 'user' || !record.id) {
-    return { ok: false, why: '授权记录不是用户来源或格式不对', record };
+function image(file) {
+  let cursor = path.dirname(file), parent;
+  for (;;) {
+    try { const stat = fs.lstatSync(cursor); parent = { path: cursor, type: stat.isDirectory() && !stat.isSymbolicLink() ? 'directory' : 'unsafe', dev: stat.dev, ino: stat.ino, real: fs.realpathSync(cursor) }; break; }
+    catch (error) { if (error.code !== 'ENOENT' || cursor === path.dirname(cursor)) throw error; cursor = path.dirname(cursor); }
   }
-  const c = chain || require('./tree.js').readChain(root);
-  if (c.lifecycle && !c.lifecycle.ok) return { ok: false, why: '当前生命周期状态不合法', record };
-  const scope = record.scope || {};
-  const stageMatches = scope.kind === 'stage' && !!c.stage && scope.id === c.stage.id;
-  if (stageMatches && require('./tree.js').progress(root, c).allDone) {
-    return { ok: false, why: '阶段已经完成，授权自动失效', record };
+  try { const stat = fs.lstatSync(file); if (!stat.isFile() || stat.isSymbolicLink()) return { file, type: 'unsafe', parent }; return { file, type: 'file', mode: stat.mode & 0o777, body: fs.readFileSync(file), parent }; }
+  catch (error) { if (error.code === 'ENOENT') return { file, type: 'missing', parent }; throw error; }
+}
+function sameImage(expected) {
+  const actual = image(expected.file); return actual.type === expected.type && actual.parent.type === expected.parent.type && actual.parent.dev === expected.parent.dev
+    && actual.parent.ino === expected.parent.ino && actual.parent.real === expected.parent.real
+    && (actual.type === 'missing' || (actual.type === 'file' && actual.mode === expected.mode && actual.body.equals(expected.body)));
+}
+function samePostimage(change) {
+  const actual = image(change.before.file), prior = change.expected.parent, directParent = prior.path === path.dirname(change.before.file);
+  return actual.type === 'file' && actual.mode === change.mode && actual.body.equals(Buffer.from(change.text))
+    && (!directParent || (actual.parent.type === prior.type && actual.parent.dev === prior.dev && actual.parent.ino === prior.ino && actual.parent.real === prior.real));
+}
+function restore(value) { if (value.type === 'missing') fs.rmSync(value.file, { force: true }); else if (value.type === 'file') io.atomic(value.file, value.body, value.mode); else throw new Error('unsafe preimage'); }
+function gitExclude(root) {
+  const run = spawnSync('/usr/bin/git', ['rev-parse', '--path-format=absolute', '--git-path', 'info/exclude'], { cwd: root, encoding: 'utf8',
+    env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' } });
+  return run.status === 0 && run.stdout.trim() ? path.resolve(run.stdout.trim()) : null;
+}
+function prepare(root, opts = {}) {
+  root = path.resolve(root); const operation = opts.operation || 'install', legacy04 = opts.identityKind === 'official-04';
+  // official-04 has already been byte-verified by install.js and its archived
+  // seven-field authorization can exceed the active-runtime 4 KiB read cap.
+  // Do not reinterpret that frozen legacy control as an active authorization.
+  const state = legacy04 ? { kind: 'legacy-04' } : read(root);
+  if (operation === 'uninstall') return ['missing', 'closed'].includes(state.kind) ? { ok: true, operation, state, changes: [] } : { ok: false, reason: `authorization:${state.kind}` };
+  const legacy = ['owned-05', 'official-04'].includes(opts.identityKind);
+  if (!legacy && !['missing', 'closed'].includes(state.kind)) return { ok: false, reason: `authorization:${state.kind}` };
+  if (legacy && state.kind === 'unsafe') return { ok: false, reason: 'authorization:unsafe' };
+  const authFile = path.join(root, RELATIVE_PATH), before = image(authFile);
+  if (!['missing', 'file'].includes(before.type)) return { ok: false, reason: 'authorization:unsafe' };
+  const authChange = state.kind === 'closed' && !legacy ? null : { name: 'authorization:file', before,
+    expected: legacy ? { ...before, type: 'missing', body: undefined, mode: undefined } : before,
+    text: `${JSON.stringify(CLOSED, null, 2)}\n`, mode: 0o600 };
+  const excludeFile = gitExclude(root); let excludeChange = null;
+  if (excludeFile) {
+    const exclude = image(excludeFile); if (!['missing', 'file'].includes(exclude.type) || exclude.parent.type !== 'directory') return { ok: false, reason: 'authorization:exclude-unsafe' };
+    const body = exclude.type === 'file' ? exclude.body.toString('utf8') : '', lines = body.split(/\r?\n/);
+    if (!lines.includes(EXCLUDE_LINE)) { const text = `${body}${body && !body.endsWith('\n') ? '\n' : ''}${EXCLUDE_LINE}\n`; excludeChange = { name: 'authorization:exclude', before: exclude, expected: exclude, text, mode: exclude.type === 'file' ? exclude.mode : 0o600 }; }
   }
-  const matches = scope.kind === 'stage'
-    ? stageMatches
-    : scope.kind === 'leaf' && scope.id === leafId(c);
-  if (!matches) return { ok: false, why: '授权不属于当前工作', record };
-  return { ok: true, why: null, record };
+  return { ok: true, operation, state, legacy, changes: [authChange, excludeChange].filter(Boolean) };
 }
-
-const stageMayContinue = (root, chain) => {
-  const a = active(root, chain);
-  return !!(a.ok && a.record.scope && a.record.scope.kind === 'stage');
-};
-
-// 阶段完成后普通授权仍失效；只给 close-stage 一张窄的终态归档票。
-function canCloseStage(root, chain) {
-  const record = read(root);
-  if (!record || record.version !== 1 || record.issuedBy !== 'user' || !record.id) {
-    return { ok: false, why: '没有用户来源的阶段授权', record };
+function apply(plan, fault = () => {}) {
+  const written = [];
+  try {
+    for (const change of plan.changes) {
+      if (!sameImage(change.expected)) throw new Error(`${change.name}:concurrent-change`);
+      fault(`${change.name}:before`); if (!sameImage(change.expected)) throw new Error(`${change.name}:concurrent-change`);
+      io.atomic(change.before.file, change.text, change.mode); written.push(change); fault(`${change.name}:written`);
+      if (!samePostimage(change)) throw new Error(`${change.name}:postimage-concurrent-change`);
+    }
+    return { ok: true, wrote: written.length > 0, written };
+  } catch (error) {
+    const recovery = [];
+    for (const change of written.reverse()) try {
+      if (!samePostimage(change)) recovery.push(`${change.name}:concurrent-change`); else restore(change.before);
+    } catch (restoreError) { recovery.push(`${change.name}:${restoreError.message}`); }
+    return { ok: false, wrote: false, reason: recovery.length ? `${error.message};${recovery.join('|')}` : error.message, written: [] };
   }
-  const c = chain || require('./tree.js').readChain(root);
-  if (!c.lifecycle.ok || !c.stage || c.extraStages.length) return { ok: false, why: '当前阶段状态不唯一', record };
-  if (c.lifecycle.currentCount || c.lifecycle.unfinishedCount) return { ok: false, why: '阶段还有未完成 leaf', record };
-  const p = require('./tree.js').progress(root, c);
-  if (!p.total || !p.allDone) return { ok: false, why: '阶段还没有完整完成记录', record };
-  if (!record.scope || record.scope.kind !== 'stage' || record.scope.id !== c.stage.id) {
-    return { ok: false, why: '授权不属于这个已完成阶段', record };
-  }
-  const target = path.relative(root, c.stage.file).split(path.sep).join('/');
-  const grant = grantFor(record, { category: 'context', operation: 'change', target });
-  return grant ? { ok: true, record, grant, chain: c, progress: p, target }
-    : { ok: false, why: '阶段授权没有覆盖收尾动作', record };
+}
+function rollback(result) {
+  const failures = [];
+  for (const change of [...(result?.written || [])].reverse()) try {
+    if (!samePostimage(change)) failures.push(`${change.name}:concurrent-change`); else restore(change.before);
+  } catch (error) { failures.push(`${change.name}:${error.message}`); }
+  return failures;
 }
 
-function targetMatches(pattern, target) {
-  const p = String(pattern || '');
-  const t = String(target || '');
-  if (p === '*') return true;
-  if (p.endsWith('*')) return t.startsWith(p.slice(0, -1));
-  if (p.endsWith('/')) return t === p.slice(0, -1) || t.startsWith(p);
-  return t === p;
-}
-
-function grantFor(record, request) {
-  return (record && Array.isArray(record.grants) ? record.grants : []).find((g) =>
-    g && g.id && g.category === request.category
-    && (g.operations || []).some((x) => x === '*' || x === request.operation)
-    && (g.targets || []).some((x) => targetMatches(x, request.target)));
-}
-
-module.exports = { file, read, active, stageMayContinue, canCloseStage, targetMatches, grantFor };
+module.exports = { RELATIVE_PATH, EXCLUDE_LINE, MAX_BYTES, MAX_LEASE_MS, CLOSED, canonicalIso, shape, read, validateStop, issue, prepare, apply, rollback };

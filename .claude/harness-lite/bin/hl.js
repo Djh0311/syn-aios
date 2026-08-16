@@ -1,210 +1,58 @@
 #!/usr/bin/env node
 'use strict';
-// 唯一命令入口。子命令派发，报错就是一行人话 + 非零退出码。
 const path = require('path');
 
-const ROOT = path.join(__dirname, '..');
-
-// 带值的就这一个。--write / --json 是开关，
-// 不分开的话 `hl report --write "这轮：…"` 会把那句话当成 --write 的值吃掉。
-const TAKES_VALUE = new Set(['--target', '--break-glass', '--reason']);
-
-function flag(args, name) {
-  const i = args.indexOf(name);
-  if (i === -1) return null;
-  if (!TAKES_VALUE.has(name)) return true;
-  return args[i + 1] === undefined || args[i + 1].startsWith('--') ? true : args[i + 1];
-}
-
-// --target 给的项目目录，默认当前目录
-const target = (args) => path.resolve(String(flag(args, '--target') || process.cwd()));
-
-function out(args, data, text) {
-  console.log(flag(args, '--json') ? JSON.stringify(data, null, 2) : text);
-}
-
-// 位置参数：不是 --xxx、也不是带值那种 --xxx 的值
+const CLI_COMMANDS = ['status', 'verify', 'map', 'mistake', 'install', 'selfcheck'];
+const VALUE_FLAGS = new Set(['--target', '--source', '--extension', '--profile', '--global-root']);
+const flag = (args, name) => args.includes(name);
+function value(args, name) { const at = args.indexOf(name); return at >= 0 ? args[at + 1] : null; }
 function positional(args) {
   const out = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i].startsWith('--')) {
-      if (TAKES_VALUE.has(args[i]) && args[i + 1] !== undefined && !args[i + 1].startsWith('--')) i++;
-      continue;
-    }
+    if (args[i].startsWith('--')) { if (VALUE_FLAGS.has(args[i])) i++; continue; }
     out.push(args[i]);
   }
   return out;
 }
-
-const CMDS = {
-  limits() {
-    const { check, format } = require('../lib/limits.js');
-    const rows = check(ROOT);
-    console.log(format(rows));
-    return rows.some((r) => r.over) ? 1 : 0;
-  },
-
-  // 从树顶到当前叶子那一条链（R6：只读一条链，不读整棵树）
-  chain(args) {
-    const tree = require('../lib/tree.js');
-    const c = tree.readChain(target(args));
-    out(args, c, tree.formatChain(c));
-  },
-
-  // 共 N、完成 M、在干第 M+1（R2）
-  progress(args) {
-    const tree = require('../lib/tree.js');
-    const p = tree.progress(target(args));
-    out(args, p, tree.formatProgress(p));
-  },
-
-  // git 只读事实（R11）
-  facts(args) {
-    const gf = require('../lib/gitfacts.js');
-    const f = gf.facts(target(args));
-    out(args, f, gf.format(f));
-  },
-
-  // 叶子退场：声明当前 leaf 完成并归档。dry-run 默认
-  done(args) {
-    const name = positional(args)[0];
-    if (!name) { console.error('要说哪个叶子：hl done L3 [--write]'); return 1; }
-    const r = require('../lib/done.js').done(target(args), name, { write: !!flag(args, '--write') });
-    if (!r.ok) { console.error(r.msg); return 1; }
-    out(args, r, r.msg + (r.wrote ? '' : '（dry-run，加 --write 才真移）') + '\n' + r.handoff);
-  },
-
-  // 最后一个 leaf 完成后，单独归档 stage；默认仍是 dry-run。
-  'close-stage'(args) {
-    if (positional(args).length) { console.error('用法：hl close-stage [--write]'); return 1; }
-    const r = require('../lib/close-stage.js').closeStage(target(args), { write: !!flag(args, '--write') });
-    if (!r.ok) { console.error(r.msg); return 1; }
-    out(args, r, r.msg + (r.wrote ? '' : '（dry-run，加 --write 才真归档）'));
-  },
-
-  // 未完成不冒充完成：放回 unfinished/，原因写进 leaf。
-  park(args) {
-    const pos = positional(args);
-    if (!pos[0] || !pos[1]) { console.error('用法：hl park <叶子> <原因> [--write]'); return 1; }
-    const r = require('../lib/lifecycle.js').park(target(args), pos[0], pos.slice(1).join(' '), { write: !!flag(args, '--write') });
-    if (!r.ok) { console.error(r.msg); return 1; }
-    out(args, r, r.msg + (r.file ? `：${r.file}` : ''));
-  },
-
-  // 没有 current 时，从 unfinished/ 恢复一个；需要整阶段授权。
-  resume(args) {
-    const name = positional(args)[0];
-    if (!name) { console.error('用法：hl resume <叶子> [--write]'); return 1; }
-    const r = require('../lib/lifecycle.js').resume(target(args), name, { write: !!flag(args, '--write') });
-    if (!r.ok) { console.error(r.msg); return 1; }
-    out(args, r, r.msg);
-  },
-
-  // 所有执行面共用的硬门。普通动作直接过；未获授权的硬门退出码 2。
-  gate(args) {
-    const pos = positional(args);
-    if (pos.length < 3) { console.error('用法：hl gate <类别> <动作> <目标> [--break-glass <grant>] [--reason <原因>] [--write]'); return 1; }
-    const q = { category: pos[0], operation: pos[1], target: pos.slice(2).join(' ') };
-    const r = require('../lib/gate.js').evaluate(target(args), q, {
-      breakGlass: flag(args, '--break-glass'), reason: flag(args, '--reason'), write: !!flag(args, '--write'),
-    });
-    out(args, r, r.decision === 'allow' ? `通过：${r.reason}` : `停下：${r.reason}`);
-    return r.decision === 'allow' ? 0 : 2;
-  },
-
-  auth(args) {
-    const r = require('../lib/authorization.js').active(target(args));
-    out(args, r, r.ok ? `当前授权：${r.record.id}（${r.record.scope.kind} ${r.record.scope.id}）` : `当前无有效授权：${r.why}`);
-    return r.ok ? 0 : 2;
-  },
-
-  // 代理那栏落盘。机器那栏由 hooks/stop.js 写，这里写不了（R4）
-  report(args) {
-    const root = target(args);
-    const tree = require('../lib/tree.js');
-    const report = require('../lib/report.js');
-    const r = report.writeHead(root, tree.progress(root), positional(args), { write: !!flag(args, '--write') });
-    if (r.warn) console.log(r.warn);
-    out(args, r, r.wrote ? `已追加到 ${r.file}\n${r.text}` : `${r.note}（dry-run，加 --write 才真写）\n${r.text}`);
-  },
-
-  // 每个工具上次什么时候用、一共几次（R12）
-  usage(args) {
-    const u = require('../lib/usage.js');
-    const rows = u.table(target(args));
-    out(args, rows, u.format(rows));
-  },
-
-  // 给改动路径 → 该跑哪几个测试 + 一条能直接复制的命令（R11）
-  tests(args) {
-    const files = positional(args);
-    if (!files.length) { console.error('要给改动路径：hl tests src/order/create.ts'); return 1; }
-    const tp = require('../lib/tests-pick.js');
-    const p = tp.pick(target(args), files);
-    out(args, p, tp.format(p));
-  },
-
-  // 只有这条显式命令会执行项目登记；task 只按给出的改动路径选择。
-  check(args) {
-    const [profile, ...files] = positional(args);
-    if (!profile) { console.error('用法：hl check <quick|task|full|manual> [改动路径...]'); return 1; }
-    const checks = require('../lib/checks.js');
-    const r = checks.run(target(args), profile, files);
-    out(args, r, checks.format(r));
-    return r.ok ? 0 : 1;
-  },
-
-  // 有哪些模块、每个几行、导出了什么。写新东西前先看有没有现成的（R11）
-  map(args) {
-    const m = require('../lib/map.js');
-    const built = m.build(target(args), { dirs: positional(args) });
-    out(args, built, m.format(built));
-  },
-
-  // 一句话追加、一句话搜。没有字段、没有必填项（R11）
-  mistake(args) {
-    const mk = require('../lib/mistakes.js');
-    const root = target(args);
-    const pos = positional(args);
-    if (pos[0] === 'add') {
-      const r = mk.add(root, pos.slice(1).join(' '), { write: !!flag(args, '--write') });
-      if (!r.ok) { console.error(r.msg); return 1; }
-      out(args, r, r.msg + (r.wrote ? '' : '（dry-run，加 --write 才真写）'));
-      return 0;
-    }
-    const word = pos.join(' ');
-    const hits = mk.search(root, word);
-    out(args, hits, mk.format(hits, word));
-  },
-};
-
+function text(command, result) {
+  if (result?.status === 'HOLD') return `HOLD${result.reason ? `；${result.reason}` : ''}`;
+  if (command === 'status') return result.text;
+  if (command === 'verify') return result.ran ? `${result.ok ? '通过' : '失败'}：${result.summary}` : `计划：${result.command}`;
+  if (command === 'map') return result.length ? result.map((x) => `${x.file}  ${x.lines} 行${x.exports.length ? `  ${x.exports.join(',')}` : ''}`).join('\n') : '没有代码模块';
+  if (command === 'mistake') return Array.isArray(result) ? result.join('\n') || '没有相关错题' : `${result.wrote ? '已' : '会'}追加 ${result.line}`;
+  if (command === 'install') return `${result.status}${result.kind ? `：${result.kind}` : ''}${result.reason ? `；${result.reason}` : ''}${result.differences?.length ? `；${result.differences.join('、')}` : ''}`;
+  if (command === 'selfcheck') return `${require('../lib/limits.js').format(result.rows)}${result.tests ? `\n全测：${result.tests.ok ? '通过' : '失败'} ${result.tests.seconds.toFixed(2)}s` : ''}\n用户命令 0；内部接口 ${result.disclosure.internalInterfaces}`;
+  return JSON.stringify(result);
+}
 function main(argv) {
-  const [cmd, ...args] = argv;
-  if (!cmd || cmd === '--help' || cmd === '-h') {
-    console.log(`用法：hl <${Object.keys(CMDS).join('|')}> [--target <项目目录>] [--json]`);
-    return cmd ? 0 : 1;
+  const [command, ...args] = argv;
+  if (!command || command === '--help' || command === '-h') {
+    console.log(`内部接口：${CLI_COMMANDS.join('、')}。用户只需用自然语言描述目标、边界和取舍。`); return command ? 0 : 1;
   }
-  if (!CMDS[cmd]) {
-    console.error(`没有这个子命令：${cmd}。有的是：${Object.keys(CMDS).join('、')}`);
-    return 1;
+  if (!CLI_COMMANDS.includes(command)) {
+    console.error(`0.8 不提供内部命令 ${command}；代理改用 status/verify/map/mistake/install/selfcheck，用户无需运行 Harness 命令。`); return 1;
   }
-  // 这一轮跑过哪些工具，钩子写记录时要（R12）。记不上不挡主流程
-  if (cmd !== 'limits') require('../lib/usage.js').noteTool(target(args), cmd);
-  // 指的目录和人在的仓库不是一个 → 先说一句，绝不拦（R7）。--json 那条路要保持纯 JSON
-  if (cmd !== 'limits' && !flag(args, '--json')) {
-    const note = require('../lib/gitfacts.js').splitCheck(target(args), process.cwd());
-    if (note) console.log(note);
+  const root = path.resolve(value(args, '--target') || process.cwd()), pos = positional(args); let result;
+  const writeRequiresCurrent = (command === 'verify' && flag(args, '--run')) || (command === 'mistake' && pos[0] === 'add' && flag(args, '--write'));
+  if (writeRequiresCurrent && !require('../lib/install.js').verify06(root).ok) result = { status: 'HOLD', ok: false, reason: 'runtime identity 未通过，内部写接口保持零写' };
+  if (!result && command === 'status') result = require('../lib/work.js').status(root);
+  if (!result && command === 'verify') result = require('../lib/work.js').verify(root, { files: pos, run: flag(args, '--run'), profile: value(args, '--profile') || 'task' });
+  if (!result && command === 'map') result = require('../lib/work.js').map(root, pos);
+  if (!result && command === 'mistake') result = require('../lib/work.js').mistake(root, pos[0] === 'add' ? pos.slice(1).join(' ') : pos.join(' '), { add: pos[0] === 'add', write: flag(args, '--write') });
+  if (!result && command === 'install') {
+    const install = require('../lib/install.js');
+    const extension = value(args, '--extension'), globalRoot = value(args, '--global-root') || undefined;
+    if (extension && flag(args, '--uninstall')) result = install.uninstallExtension(root, extension, { write: flag(args, '--write') });
+    else if (extension) result = install.installExtension(root, extension, { write: flag(args, '--write'), upgrade: flag(args, '--upgrade') });
+    else if (flag(args, '--probe-native-pre-push')) result = install.probeNative(root, { write: flag(args, '--write') });
+    else if (flag(args, '--native-pre-push')) result = install.installNative(root, { write: flag(args, '--write') });
+    else if (flag(args, '--uninstall')) result = install.uninstall(root, { write: flag(args, '--write'), globalRoot });
+    else result = install.install(root, { write: flag(args, '--write'), upgrade: flag(args, '--upgrade'), source: value(args, '--source') || undefined,
+      profile: value(args, '--profile') || undefined, globalRoot });
   }
-  return CMDS[cmd](args) || 0;
+  if (!result && command === 'selfcheck') result = require('../lib/limits.js').selfcheck(path.join(__dirname, '..'), { run: flag(args, '--run') });
+  console.log(flag(args, '--json') ? JSON.stringify(result, null, 2) : text(command, result));
+  return result?.ok === false || result?.status === 'HOLD' ? 1 : 0;
 }
-
-if (require.main === module) {
-  try {
-    process.exit(main(process.argv.slice(2)));
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
-}
-
-module.exports = { main, flag };
+if (require.main === module) { try { process.exit(main(process.argv.slice(2))); } catch (error) { console.error(error.message); process.exit(1); } }
+module.exports = { CLI_COMMANDS, main, positional, value };

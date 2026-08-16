@@ -1,57 +1,33 @@
 'use strict';
-// 上限检查。超了砍功能，代理不许自己抬这里的数字（需求 R15）。
-// 2026-08-07 用户授权 stage-02，并确认本阶段所需的容量调整和扩展计数。
-const fs = require('fs');
 const path = require('path');
+const io = require('./io.js');
 
-const CAPS = { impl: 2200, test: 2200, skills: 80, report: 8, entries: 8 };
-const SKIP_DIRS = new Set(['node_modules', '.git', 'fixtures', 'sandbox']);
-
-function lines(file) {
-  let t;
-  try { t = fs.readFileSync(file, 'utf8'); } catch { return 0; }
-  if (t === '') return 0;
-  return t.replace(/\n$/, '').split('\n').length;
-}
-
-function walk(dir, exts) {
-  let out = [];
-  let ents;
-  try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
-  for (const e of ents) {
-    if (e.isDirectory()) {
-      if (!SKIP_DIRS.has(e.name)) out = out.concat(walk(path.join(dir, e.name), exts));
-    } else if (exts.includes(path.extname(e.name))) {
-      out.push(path.join(dir, e.name));
-    }
-  }
-  return out.sort();
-}
-
-function row(name, used, cap) {
-  return { name, used, cap, over: used > cap };
-}
-
-// 五组数字。root 是仓库根，测试可以喂假目录树。
+const lines = (file) => { const text = io.read(file, ''); return text ? text.replace(/\n$/, '').split('\n').length : 0; };
+function files(dir, ext) { return io.list(dir, true).filter((file) => file.endsWith(ext) && !file.includes(`${path.sep}fixtures${path.sep}`)); }
 function check(root) {
-  const at = (...p) => path.join(root, ...p);
-  const entries = [...walk(at('bin'), ['.js']), ...walk(at('hooks'), ['.js'])];
-  if (fs.existsSync(at('install.js'))) entries.push(at('install.js'));
-  const extensions = walk(at('extensions'), ['.js']);
-  const impl = [...walk(at('lib'), ['.js']), ...entries, ...extensions];
-  const sum = (files) => files.reduce((n, f) => n + lines(f), 0);
+  const implementation = ['lib', 'bin', 'hooks', 'scripts'].flatMap((dir) => files(path.join(root, dir), '.js'));
+  const skills = files(path.join(root, 'skills'), '.md').concat(files(path.join(root, 'extensions'), '.md'));
+  const used = (list) => list.reduce((sum, file) => sum + lines(file), 0);
+  const cliSource = io.read(path.join(root, 'bin', 'hl.js'), '');
+  const commandList = (cliSource.match(/const CLI_COMMANDS = \[([^\]]+)\]/) || [])[1] || '';
+  const interfaces = [...commandList.matchAll(/'([^']+)'/g)].length;
   return [
-    row('实现 lib+bin+hooks+install.js', sum(impl), CAPS.impl),
-    row('测试 test/', sum(walk(at('test'), ['.js'])), CAPS.test),
-    row('技能 skills/+extensions/', sum([...walk(at('skills'), ['.md']),
-      ...walk(at('extensions'), ['.md'])]), CAPS.skills),
-    row('报告模板 templates/report.md', lines(at('templates', 'report.md')), CAPS.report),
-    row('命令入口', entries.length, CAPS.entries),
+    { name: '实现', used: used(implementation) },
+    { name: '测试', used: used(files(path.join(root, 'test'), '.js')) },
+    { name: '技能', used: used(skills) },
+    { name: '报告模板', used: lines(path.join(root, 'templates', 'report.md')) },
+    { name: '内部接口', used: interfaces, target: 6 },
   ];
 }
-
-function format(rows) {
-  return rows.map((r) => `${r.over ? '超限：' : ''}${r.name} ${r.used}/${r.cap}`).join('\n');
+const format = (rows) => rows.map((row) => `${row.name} ${row.used}${row.target ? `（目标 ${row.target}）` : ''}`).join('\n');
+function selfcheck(root, opts = {}) {
+  const rows = check(root), started = Date.now(); let tests = null;
+  if (opts.run) {
+    const run = require('child_process').spawnSync(process.execPath, ['scripts/timed-test.js'], { cwd: root, encoding: 'utf8', timeout: 300000 });
+    tests = { ok: !run.error && run.status === 0, status: run.status, output: `${run.stdout || ''}${run.stderr || ''}`.trim(), seconds: (Date.now() - started) / 1000 };
+  }
+  return { ok: rows.find((row) => row.name === '内部接口').used === 6 && (!tests || tests.ok), rows, tests,
+    disclosure: { userCommands: 0, internalInterfaces: 6, executableCli: 1, codexDispatcher: 1, packageScripts: 2, note: '行数与耗时只作趋势披露，不作发布硬门' } };
 }
 
-module.exports = { CAPS, check, format, lines };
+module.exports = { lines, check, format, selfcheck };

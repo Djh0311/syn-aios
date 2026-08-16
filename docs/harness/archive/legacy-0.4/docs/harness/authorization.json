@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "id": "USER-SYN-D0D01-MAIN-BUNDLE-WIP-MIGRATION-ATTEMPT6-20260816T023204",
+  "issuedBy": "user",
+  "scope": {
+    "kind": "leaf",
+    "id": "D0D01"
+  },
+  "summary": "用户在 2026-08-16 收到 Attempt5 因全局 umask 077 导致本地恢复树 3581 项 fs_mode 不一致的回执后明确要求『别停直接做到迁移完成』。Attempt6 固定根 run-id 20260816T023204，并授权在不覆盖、不清理任何旧候选的前提下持续修正：本地失败使用全新单调编号子候选全量重建；传输中断使用全新远端子候选，不在同一路径重传。staging/产物保持 umask 077，checkout/extract 使用 umask 022 后仅按冻结 manifest 精确恢复 600/644/755。目标 /home/synadmin/workspace/syn 仍须为空且绝不覆盖。范围固定为 main@9103c3b 的完整可达历史与冻结 tracked/untracked WIP；真实 .env、凭据、活动 SQLite、生成物和非 main refs排除；D0C04/D0C05 不执行，成功只签 SOURCE_BYTES_MATCH。",
+  "grants": [
+    {
+      "id": "D0D01-CONTEXT",
+      "category": "context",
+      "operations": ["change"],
+      "targets": ["D0D01*"]
+    },
+    {
+      "id": "D0D01-CONTROL",
+      "category": "control",
+      "operations": ["modify"],
+      "targets": [
+        "docs/harness/authorization.json",
+        "docs/harness/plan.md",
+        "docs/harness/stages/stage-12.md",
+        "docs/harness/leaves/D0D01-syn-full-source-migration-to-5600x-wsl.md",
+        "docs/harness/unfinished/D0D01-syn-full-source-migration-to-5600x-wsl.md",
+        "docs/harness/done/2026-08/D0D01-syn-full-source-migration-to-5600x-wsl.md",
+        "docs/harness/audit/2026-08.jsonl",
+        "docs/harness/usage/.turn"
+      ]
+    },
+    {
+      "id": "D0D01-LOCAL-ARTIFACTS",
+      "category": "project-sensitive",
+      "operations": ["act", "create", "modify"],
+      "targets": [
+        "/private/tmp/syn-source-migration-attempt6-20260816T023204",
+        "/private/tmp/syn-source-migration-attempt6-20260816T023204/*"
+      ]
+    },
+    {
+      "id": "D0D01-EXISTING-SSH-IDENTITY-ACT-ONLY",
+      "category": "project-sensitive",
+      "operations": ["act"],
+      "targets": [
+        "/Users/yoyi/.ssh/syn_5600x_wsl_ed25519",
+        "/Users/yoyi/.ssh/known_hosts"
+      ]
+    },
+    {
+      "id": "D0D01-REMOTE-PREFLIGHT",
+      "category": "external",
+      "operations": ["act"],
+      "targets": [
+        "synadmin@100.98.94.76:47123-attempt6-readonly-new-root-20260816T023204-absent-target-syn-empty-and-prior-candidates-no-write-boundary",
+        "synadmin@100.98.94.76:47123-readonly-identity-disk-inode-git-gnu-tar-sha256-python3-and-codex-tools"
+      ]
+    },
+    {
+      "id": "D0D01-REMOTE-MIGRATION",
+      "category": "external",
+      "operations": ["act"],
+      "targets": [
+        "synadmin@100.98.94.76:47123:/home/synadmin/workspace/.syn-source-migration-attempt6-20260816T023204",
+        "synadmin@100.98.94.76:47123:/home/synadmin/workspace/.syn-source-migration-attempt6-20260816T023204/*",
+        "synadmin@100.98.94.76:47123:/home/synadmin/workspace/syn",
+        "synadmin@100.98.94.76:47123:/home/synadmin/workspace/syn/*"
+      ]
+    }
+  ],
+  "exclusions": [
+    "D0C04-or-D0C05-execution-or-automatic-resume",
+    "SSH-service-firewall-portproxy-package-or-restart-change",
+    "remote-write-target-other-than-new-attempt6-20260816T023204-root-and-target-syn",
+    "non-main-head-remote-tracking-ref-refs-stash-reflog-or-dangling-object-migration",
+    "git-add-commit-push-merge-rebase-reset-clean-stash",
+    "source-product-code-or-test-change",
+    "real-env-credential-secret-private-key-password-token-or-login-state-read-output-copy-create-modify-or-delete",
+    "runtime-data-or-active-SQLite",
+    "target-node_modules-dist-build-cache-or-other-ignored-generated-output",
+    "dependency-install-build-test-or-product-runtime",
+    "Attempt1-through-Attempt5-replay-same-path-retry-overwrite-or-cleanup",
+    "overwrite-reuse-or-cleanup-of-an-earlier-Attempt6-local-or-remote-subattempt",
+    "AppleDouble-dot-underscore-xattr-ACL-or-file-flags-in-untracked-archive",
+    "further-write-or-delete-under-/private/tmp/syn-source-migration-9103c3b-20260816T003730",
+    "further-write-or-delete-under-/private/tmp/syn-source-migration-9103c3b-20260816T005527",
+    "further-write-or-delete-under-/private/tmp/syn-source-migration-9103c3b-20260816T005925",
+    "further-write-or-delete-under-/home/synadmin/workspace/.syn-source-migration-9103c3b-20260816T005925",
+    "further-write-or-delete-under-/private/tmp/syn-source-migration-9103c3b-20260816T012913",
+    "create-write-or-delete-under-/home/synadmin/workspace/.syn-source-migration-9103c3b-20260816T012913",
+    "deploy-or-release",
+    "M5-M10-activation-or-implementation",
+    "Headless-Core-or-Edge-implementation",
+    "Primary-data-migration-or-authority-epoch-switch",
+    "stage-12-close"
+  ]
+}
