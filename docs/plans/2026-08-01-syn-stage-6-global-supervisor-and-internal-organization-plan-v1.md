@@ -5,7 +5,7 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M6。<br>
 硬前置：M3 Global Supervisor RoleSession / Handoff；M5 ProjectSummary 与 execution identity；M4 Secretary consult 入口。<br>
-当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权跨项目写、真实消息、桌面应用或产品代码。
+当前路线状态：M1–M4 已完成各自具名范围，M5–M6 均未激活。Harness 动态 stage / leaf 另看 `../harness/plan.md`；本计划不授权跨项目写、真实消息、Agent Runtime、桌面应用或产品代码。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 2026-08-01 修订与当前能力盘点 → master → M3-M5 退出回执 → 本计划。M5 未验收的旧记录不得被本计划升级成统一组织事实。
 
@@ -35,6 +35,7 @@
 - 用户采纳跨项目建议后，由谁、按哪些 per-project grants 应用，部分成功如何回滚；
 - 多视角咨询的触发条件、独立性证明、成本上限、超时和结果并排方式；
 - 真实全局主管模型 / provider、成本和跨项目真实数据。
+- runtime Profile 与组织角色档案的映射边界，以及 child run 的稳定历史保留方式。
 
 ## 1. 阶段目标
 
@@ -46,6 +47,7 @@
 6. 建立临时 agent 历史：来源任务、attempt、结果和审计，并与稳定成员严格分型；
 7. 重大问题可按需让不同模型或不同方法的咨询角色独立形成意见，并排呈现共识、分歧和来源；
 8. 内部组织默认是后台能力与目录，不强迫组织图成为日常入口。
+9. 把 runtime child / subagent 明确限制为执行引用；稳定角色、临时成员和职责关系只由 Syn 组织与执行事实建立。
 
 ## 2. 本阶段不做
 
@@ -71,6 +73,7 @@
 | `Availability` | directory projection | source、observed_at、TTL；陈旧即 unknown，不作授权 |
 | `ConsultHandoff` | M3 Handoff | from/to、scope、refs、question、receipt；无项目写权限 |
 | `MultiViewConsultation` | Global Supervisor / consultation domain | question、独立咨询角色与模型 / 方法引用、各自来源、共识、分歧、成本、结果状态；只提供意见，不拥有用户决定或项目执行 |
+| `ChildRunRef` | M5 runtime execution | 只引用 parent Workcell / Attempt / Grant / trace；不自动生成 StableMember、TemporaryAgent 或组织层级 |
 
 跨项目读取只允许 ProjectSummary，以及 ref 的 type、title、scrubbed summary、version、deep-link metadata；原始项目文件、transcript、secret 和未裁剪 memory 不进入 global scope。模型侧解引用必须再次经过项目 owner 的 policy gateway；用户点击 deep link 回源不等于把原文加入 global session。
 
@@ -98,11 +101,11 @@
 
 ### SYN-ORG-006 — 临时 agent 历史
 
-从 M5 WorkItem / Attempt / Report / audit 投影临时 agent；可搜索任务、结果、失败和来源；UI 明确“临时”。人工晋升新建 / 绑定 StableMember 并保留 `promoted_from`，不修改原历史类型 / 来源。
+从 M5 WorkItem / Attempt / RuntimeReceipt / Report / audit 投影临时 agent；runtime child session 只有在能精确绑定 Attempt、Grant、actor 和 receipt 时才成为来源，不能按 session 名或 parent/child 关系猜成员。可搜索任务、结果、失败和来源；UI 明确“临时”。人工晋升新建 / 绑定 StableMember 并保留 `promoted_from`，不修改原历史类型 / 来源。
 
 ### SYN-ORG-006A — 独立多视角会诊
 
-对同一重大问题向两个以上相互独立的咨询角色派发相同、最小且有来源的问题包；咨询方在提交前互不读取对方结论，系统再并排生成共识、分歧和证据索引。普通问题仍走单角色；会诊结果只形成意见和用户待决定项，不直接生成项目命令、授权或正式事实。
+对同一重大问题向两个以上相互独立的咨询角色派发相同、最小且有来源的问题包；咨询方使用独立 RoleSession / Workcell / context packet，在提交前互不读取对方结论，系统再并排生成共识、分歧和证据索引。普通问题仍走单角色；runtime final answer 只形成咨询结果候选，会诊结果只形成意见和用户待决定项，不直接生成项目命令、授权或正式事实。
 
 ### SYN-ORG-007 — 隔离 App 双项目验收
 
@@ -145,7 +148,7 @@ ORG-002 + ORG-003 + ORG-004 + ORG-005 + ORG-006 + ORG-006A → ORG-007
 | Isolated Tauri | 顶层入口、source link、成员查找 / 联系可见，并保留桌面窗口截图 / 交互 / deep-link 点击证据 | 真实模型 / 消息通过 |
 | 经授权真实场景 | 指定 summary / provider / profile 的只读分析 | 跨项目写或发布通过 |
 
-关键验收：从两个项目摘要发现冲突并回源；对项目 domain store、event/audit/outbox、sidecar / compatibility projection、文件和 spawn 设置 write-spy / hash baseline，M6 允许变化的只有自身 advisory / directory / audit owner；用户能找到并联系 stable member；更换伪服务提供方后 stable member 的身份、记忆引用和权限不漂移；temporary agent 不伪装成 stable；多视角意见在汇总前保持独立且不自动生成决定；stale availability 不参与能力判定。
+关键验收：从两个项目摘要发现冲突并回源；对项目 domain store、event/audit/outbox、sidecar / compatibility projection、文件和 spawn 设置 write-spy / hash baseline，M6 允许变化的只有自身 advisory / directory / audit owner；用户能找到并联系 stable member；更换伪服务提供方或 runtime 后 stable member 的身份、记忆引用和权限不漂移；runtime child 不冒充组织成员，temporary agent 不伪装成 stable；多视角输入在汇总前保持独立，runtime final answer 不自动生成决定；stale availability 不参与能力判定。
 
 ## 8. 授权与停止条件
 

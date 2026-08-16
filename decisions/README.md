@@ -8,6 +8,7 @@
 
 当前权威登记明确保留的决定是：
 
+- [`2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`](2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md)：Syn 原生治理核心、可替换 Agent Runtime 与受治理自升级方向；
 - [`2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md`](2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md)：产品正本、材料分层和知识基础设施确认；
 - [`2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`](2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md)：事件驱动、个人 / 项目范围和角色运行方式；
 - [`2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`](2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md)：当前记忆自捕获、每日整理和技能候选政策；

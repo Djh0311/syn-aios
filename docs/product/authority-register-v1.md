@@ -12,7 +12,7 @@
 由高到低：
 
 1. 当前用户明确指令；
-2. [`../../decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md`](../../decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md)与它确认的[`syn-product-canon-v1.md`](syn-product-canon-v1.md)；
+2. [`../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`](../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md)、[`../../decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md`](../../decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md)与它们确认的[`syn-product-canon-v1.md`](syn-product-canon-v1.md)；
 3. [`knowledge-infrastructure-canon-v1.md`](knowledge-infrastructure-canon-v1.md)等专题正本；
 4. 本文第 3 节精确列出的当前有效专题决定；
 5. [`../workbench-system-architecture-v1.md`](../workbench-system-architecture-v1.md)和[`../workbench-frontend-display-boundary-v1.md`](../workbench-frontend-display-boundary-v1.md)。
@@ -57,6 +57,7 @@
 | [`knowledge-infrastructure-canon-v1.md`](knowledge-infrastructure-canon-v1.md) | 所有智能体共用的知识与技能获取基础层 | 冻结具体检索引擎和表结构 |
 | [`../workbench-system-architecture-v1.md`](../workbench-system-architecture-v1.md) | 当前目标软件模块边界 | 产品愿景和当前实现完成度 |
 | [`../workbench-frontend-display-boundary-v1.md`](../workbench-frontend-display-boundary-v1.md) | 普通、专业和开发界面的显示边界 | 具体视觉稿和阶段授权 |
+| [`../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`](../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md) | Syn 原生治理核心、可替换 Agent Runtime 与受治理自升级方向 | 当前实现完成度或自动升级授权 |
 | [`../../decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md`](../../decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md) | 本轮产品正本、材料分层和知识基础设施的确认决定 | 当前代码完成度 |
 | [`../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`](../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md) | 事件驱动、个人 / 项目范围和角色运行方式 | 当前接线完成度 |
 | [`../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`](../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md) | 当前记忆自捕获、每日整理和技能候选政策 | 具体自动阈值和实现方案 |
@@ -87,7 +88,8 @@
 
 ## 6. 当前计划和事实入口
 
-- 总迁移顺序：[`../plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`](../plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md)。
+- 总迁移顺序：[`../plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`](../plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md)，当前覆盖 M1–M11；阶段存在不等于已激活。
+- M5/M6 当前修正实施计划：[`../plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md`](../plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md)，状态 `PLANNED / NOT_ACTIVE`；只组织事实恢复与阶段退出，不改产品正本、不自动激活 stage-14/15。
 - 当前事实：[`../current-state.md`](../current-state.md)。
 - 当前开发入口：[`../harness/plan.md`](../harness/plan.md)及其当前链；没有活动阶段时不得从历史计划恢复授权。
 
@@ -107,7 +109,7 @@
 |---|---|---|
 | `docs/product/` | 当前产品入口 | 只有这里的正本、登记和明确链接拥有对应现行职责 |
 | `decisions/` | 混合历史目录 | 只有第 3 节精确列出的决定现行，其余降级 |
-| `docs/plans/` | 当前计划与历史计划混合目录 | 只有计划索引列出的总计划、M1-M10 和停放计划保留对应状态；其他默认历史 |
+| `docs/plans/` | 当前计划与历史计划混合目录 | 只有计划索引列出的总计划、M1-M11、已登记修正计划和停放计划保留对应状态；其他默认历史 |
 | `docs/contracts/` | 冻结工程合同基线 | 约束点名阶段的对象和安全边界，不自动表示代码实现或产品方向 |
 | `docs/research/`、`docs/design/` | 研究与设计来源 | 可以支持新决定，不能直接开工或升格 |
 | `tasks/` | 历史任务记录 | 完成或旧任务不恢复当前任务状态 |

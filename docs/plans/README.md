@@ -15,15 +15,17 @@
 ## 当前计划关系
 
 - 唯一当前总开发计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`。
-- 该计划完整覆盖公共底座重构到首个全日试点和发布候选；M10 之后五类长期业务、个人服务器备份、开源成本工具和高级检索按真实需求另建路线，不伪装成已经排完的终身计划。
+- 该计划完整覆盖公共底座重构、首个全日试点、发布候选与受治理自升级底座；M11 之后五类长期业务、个人服务器备份、开源成本工具和高级检索按真实需求另建路线，不伪装成已经排完的终身计划。
 - M0 产品正本、权威分级、候选收口和文档入口整理已经完成；它是文档收口，不是产品代码阶段。
 - M1、M2 已完成主线收口。
 - M3 已完成：M3C01–M3C08 已进入主线并归档，M3C08 内容提交为 `fa8e392`，阶段状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。
-- M4C01–M4C10 已进入主线并归档，`stage-06` 已程序性关闭。2026-08-11 独立总线复核的五项 P1 已由 M4R01–M4R06 修正；M4R07 v2 portable receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。M4R01–M4R07 均已归档，`stage-07` 已关闭；当前没有活动 stage / leaf，M5–M10 继续未激活。
+- M4C01–M4C10 已进入主线并归档，`stage-06` 已程序性关闭。2026-08-11 独立总线复核的五项 P1 已由 M4R01–M4R06 修正；M4R07 v2 portable receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。M4R01–M4R07 均已归档，`stage-07` 已关闭；M5–M11 继续未激活。当前 Harness 现场单独看 `../harness/plan.md`，本索引不复制动态 leaf 状态。
 - M4 当前修正与收口入口：`2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。第 8 次后端 `recovery_timer` 保留真实 98 秒等待；UI / Computer Use / PNG / attestation 为 `NOT_EXECUTED / NOT_APPLICABLE`，既非失败也非视觉 PASS。
+- M5/M6 当前事实重整与产品闭环入口：`2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md`。状态为 `PLANNED / NOT_ACTIVE`；现有 M5/M6 字节只按未验收 candidate WIP 读取，计划不自动激活 stage-14/15 或施工。
+- 2026-08-16 用户确认“Syn 原生治理与执行核心 + 外部 Agent Runtime 可替换 + 受治理自升级”；DSH 只作为方法来源和可选 adapter。正式决定见 `../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`，研究证据见 `../research/2026-08-16-deepseek-harness-ai-opc-reference-research-v1.md`。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
 
-## M1-M10 独立阶段计划
+## M1-M11 独立阶段计划
 
 | 阶段 | 文件 | 状态 |
 |---|---|---|
@@ -34,10 +36,12 @@
 | M4 修正 | `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md` | M4R01–M4R07 已完成并归档，`stage-07` 已关闭；不重开 stage-06，不自动激活下游 |
 | M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |
+| M5/M6 修正 | `2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` | `PLANNED / NOT_ACTIVE`；先恢复事实载体，再顺序完成并独立验收 M5、M6 |
 | M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE`；存储策略片与真实日常接入分层依赖 |
 | M8 | `2026-08-01-syn-stage-8-connector-and-credential-reference-plan-v1.md` | `PLANNED / NOT_ACTIVE`；设计、框架和真实服务提供方分层授权 |
 | M9 | `2026-08-01-syn-stage-9-read-model-migration-and-legacy-retirement-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖替代链证据 |
 | M10 | `2026-08-01-syn-stage-10-full-day-pilot-and-release-hardening-plan-v1.md` | `PLANNED / NOT_ACTIVE`；发布动作另获用户指令 |
+| M11 | `2026-08-16-syn-stage-11-governed-self-upgrade-platform-plan-v1.md` | `PLANNED / NOT_ACTIVE`；升级候选、canary、签名与晋升均不因计划存在自动获权 |
 
 ## 停放计划
 
@@ -52,7 +56,7 @@
 - `2026-07-23-development-harness-routing-code-map-and-authority-governance-remediation-plan-v1.md`：旧开发治理计划；旧 `AUTHORITY.md` / `CURRENT.md` 路由已经退出。
 - `2026-07-23-l3-obsidian-full-interface-and-maximal-integration-small-stage-plan-v1.md`：已被 Syn 原生知识工作区路线取代。
 - 2026-08-01 曾出现的窄范围交办旁路重建只保留为历史来源；对应计划不在当前主线仓库，不再保留一个失效的本地文件指针。
-- 除上面列出的当前总计划、M1-M10 阶段计划和停放计划外，本目录其他文件默认按 `HISTORICAL / SUPERSEDED` 阅读，除非权威登记明确给出更窄状态。
+- 除上面列出的当前总计划、M1-M11 阶段计划和停放计划外，本目录其他文件默认按 `HISTORICAL / SUPERSEDED` 阅读，除非权威登记明确给出更窄状态。
 
 历史计划可以提供当时的需求、实现选择、风险、迁移素材和证据指针，但不能反向授予当前写入、运行或排期效力。
 

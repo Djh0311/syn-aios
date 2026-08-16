@@ -1,7 +1,7 @@
 # Syn 全能个人 AI 工作台总开发计划 v1
 
 日期：2026-08-01<br>
-状态：**当前总开发计划；M0–M3 已完成各自具名主线范围。M4 的 M4R07 v2 后端/普通产品链为 12/12 PASS，M4R01–M4R07 已归档且 `stage-07` 已关闭；M5–M10 未激活。**<br>
+状态：**当前总开发计划；M0–M3 已完成各自具名主线范围。M4 的 M4R07 v2 后端/普通产品链为 12/12 PASS，M4R01–M4R07 已归档且 `stage-07` 已关闭；M5–M11 未激活。**<br>
 计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、桌面应用、存储、真实消息、外部连接、凭据、Git（版本控制写入）或发布权限。当前事实看 `../current-state.md`、源码和新鲜验证；具体施工入口看当前用户指令、`AGENTS.md` 与轻量开发护栏的活动阶段、唯一活动叶和 `../harness/authorization.json`。没有活动阶段时，不从本计划推导自动下一包。
 
 ## 0. 目标
@@ -14,6 +14,8 @@
 - 个人范围与项目范围并存，不强迫所有生活和信息进入项目；
 - 日常与开发是明确的执行通道，共用角色、权限、事件、审计和记忆底座；
 - 知识、记忆、任务、方案、审批、工作流、Agent、Harness、通知、日报、外部软件和凭据作为受控能力协同，不成为互不相干的孤岛；
+- 用户逐步只保留目标、资源、风险和例外等最高层决定；重复、低风险判断在用户签署的政策内下沉给 Syn；
+- Syn 自己持有治理核心与默认 Agent Runtime 合同，并能通过候选、隔离验证、canary、签名晋升和回滚持续升级自己的能力；
 - 现有后端能力按 `KEEP / EXTRACT / REWRITE / RETIRE / HOLD` 处置，通过绞杀式迁移逐步换掉旧路，不做一次性推倒重来。
 
 ## 1. 权威与证据口径
@@ -23,11 +25,12 @@
 1. 当前用户指令；
 2. `../product/syn-product-canon-v1.md` 与 `../product/authority-register-v1.md`；
 3. `../product/knowledge-infrastructure-canon-v1.md`；
-4. `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`；
-5. `../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`；
-6. 继续有效的角色、项目内自然对话、两轴治理、共享传输和执行人闸决定；
-7. `../workbench-system-architecture-v1.md` 的目标模块边界；
-8. `../current-state.md`、当前源码与新鲜验证所证明的实现事实。
+4. `../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`；
+5. `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`；
+6. `../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`；
+7. 继续有效的角色、项目内自然对话、两轴治理、共享传输和执行人闸决定；
+8. `../workbench-system-architecture-v1.md` 的目标模块边界；
+9. `../current-state.md`、当前源码与新鲜验证所证明的实现事实。
 
 `../../AGENTS.md` 与轻量开发护栏只管理每次施工怎样进行和是否有权限，不反过来定义产品。计划、阶段文件和开发护栏存在，都不等于当前任务已经激活。
 
@@ -89,12 +92,13 @@ Tauri / React UI
        ├─ Attention / Decision / Daily
        ├─ Project Orchestration / Execution
        ├─ Knowledge / Memory / Personal Model
-       └─ Connector / Credential Reference
+       ├─ Connector / Credential Reference
+       └─ Governed Upgrade / Promotion
     → Transaction + Event + Audit + Outbox
       → SQLite authoritative state
       → Rebuildable read models
     → Adapters
-       ├─ Agent / Model
+       ├─ Agent Runtime Workcell / Model
        ├─ Tool / MCP / Harness
        ├─ External Knowledge / File
        └─ External Connector
@@ -159,6 +163,8 @@ payload_summary / payload_ref / payload_hash
 | `ConnectorDefinition/Grant` | 外部软件能力和授权 | view/index/sync/action/secret 分开授权 |
 | `CredentialRef` | 受保护凭据引用 | 不保存 secret 本文；日志、事件、记忆只存引用 / hash |
 | `SkillCandidate/SkillVersion` | 可复用方法和正式技能 | 版本、验证、权限和回滚；不自动扩权 |
+| `AgentRuntimeProfile/WorkcellRun/RuntimeReceipt` | 可替换 AI 执行工作单元 | runtime session / trace 只作执行引用；Syn 持有 operation、grant、事实与验收 |
+| `UpgradeCandidate/EvaluationReceipt/PromotionDecision` | Skill、Profile、Plugin、Provider 或代码升级 | 生成、验收、晋升职责分离；治理根不可自批 |
 
 ## 4. 现有能力处置
 
@@ -182,7 +188,7 @@ payload_summary / payload_ref / payload_hash
 
 - 从 command registry / `commands.rs` 提取 scope resolver 与 authorization gateway；
 - 从 conversation transport 提取 `ConversationTransportPort`；
-- 从 Codex runner 提取 `AgentAdapter`；
+- 从 Codex runner 提取 vendor-neutral `AgentRuntimeAdapter`、`AgentAdapter` 与 `RuntimeReceipt`；
 - 从 Supervisor MCP 提取 `CapabilityGateway` / `ToolAdapter`；
 - 从 sidecar / workflow 写入提取 Unit of Work、EventWriter、AuditWriter、Outbox；
 - 从原生知识工作区提取外部资料来源端口与知识来源适配器；来源登记、检索路由和上下文装配留在核心知识层；
@@ -204,6 +210,8 @@ payload_summary / payload_ref / payload_hash
 - Connector registry、connection、grant、sync cursor、inbound item、action request / result、credential ref；
 - 各域读模型，停止页面查询反复构建完整 snapshot；
 - 首页秘书情境 + 对话、全局主管入口和成员目录。
+- 可销毁 Agent Workcell、append-only runtime trace、工具前 / 中 / 后管线和 runtime conformance suite；
+- ImprovementSignal、UpgradeCandidate、能力 / 权限差异、独立评测、canary、签名晋升与回滚控制面。
 
 ### 4.4 RETIRE：等替代链验收后退役
 
@@ -230,6 +238,8 @@ payload_summary / payload_ref / payload_hash
 - 凭据库采用 Keychain、加密文件或其他实现；
 - 自动记忆策略矩阵和 skill 启用阈值；
 - 多 provider、OpenClaw / Claude Code / OpenCode 的真实接入；
+- DeepSeek Harness 或其他外部 runtime 的真实接入价值、维护成本和 conformance 结果；
+- 首个自升级样本、低风险自动晋升政策与 updater / 签名实现；
 - 生产、发布、真实资金、个人账号动作和无人值守执行。
 
 ## 5. 阶段总览与依赖
@@ -256,15 +266,17 @@ M8 Connector + CredentialRef
 M9 读模型切换 + 旧路退役
          ↓
 M10 全日使用试点 + 发布硬化
+         ↓
+M11 受治理自升级平台
 ```
 
 M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 / 记忆合同和隔离存储可在 M2 后先做；角色知识装配要与 M3 合同对齐，真实日常事件接入再等待 M4 / M5。M8 的连接器框架可早做，真实第三方接入必须等凭据和外部动作合同独立通过。
 
-本计划的完整范围是“Syn 公共底座重构 → 首个全日使用试点 → 发布候选”，不是 Syn 一生所有业务能力的逐功能排期。M10 以后，游戏开发、智能体开发、企业系统、个人工作和股票市场分别按真实使用需要建立业务路线；个人服务器异地备份、开源成本工具和高级知识检索也在进入真实需求时单独建包。它们没有提前排成固定阶段，不影响 M3-M10 的主线完整性。
+本计划的完整范围是“Syn 公共底座重构 → 首个全日使用试点 → 发布候选 → 受治理自升级底座”，不是 Syn 一生所有业务能力的逐功能排期。M11 以后，游戏开发、智能体开发、企业系统、个人工作和股票市场分别按真实使用需要建立业务路线；个人服务器异地备份、开源成本工具和高级知识检索也在进入真实需求时单独建包。它们没有提前排成固定阶段，不影响 M3–M11 的主线完整性。
 
 ### 5.1 独立阶段计划索引
 
-下列文件把 master 的顺序展开为可单独审查的阶段合同。M1–M3 已完成主线收口；M3C08 内容提交为 `fa8e392`。M4C01–M4C10 已进入主线，`stage-06` 已程序性关闭；独立总线复核的五项普通产品 P1 已由 M4R01–M4R06 修正，M4R07 v2 后端/普通产品链为 12/12 PASS。M4R01–M4R07 已完成并归档，`stage-07` 已关闭；当前没有活动 stage / leaf，M5–M10 仍为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。
+下列文件把 master 的顺序展开为可单独审查的阶段合同。M1–M3 已完成主线收口；M3C08 内容提交为 `fa8e392`。M4C01–M4C10 已进入主线，`stage-06` 已程序性关闭；独立总线复核的五项普通产品 P1 已由 M4R01–M4R06 修正，M4R07 v2 后端/普通产品链为 12/12 PASS。M4R01–M4R07 已完成并归档，`stage-07` 已关闭；M5–M11 仍为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。当前 Harness 现场另看 `../harness/plan.md`，不在 master 复制动态 leaf 状态。
 
 | 阶段 | 独立计划 | 当前路由状态 |
 |---|---|---|
@@ -278,6 +290,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 | M8 | `2026-08-01-syn-stage-8-connector-and-credential-reference-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M9 | `2026-08-01-syn-stage-9-read-model-migration-and-legacy-retirement-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M10 | `2026-08-01-syn-stage-10-full-day-pilot-and-release-hardening-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M11 | `2026-08-16-syn-stage-11-governed-self-upgrade-platform-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 
 独立计划维护本阶段的现状事实、HOLD、owner、薄切片、写域、授权、验证和退出门；master 继续只维护长期方向、依赖和总完成定义，不复制动态任务状态。
 
@@ -368,12 +381,16 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 - Proposal、Authorization、C4、Dispatch、ExecutionAttempt、WorkerReport、C5 / C6、GlobalReview、UserDecision 用同一 correlation / run identity；
 - 项目主管按协调复杂度选择单 Agent 或多 Agent，风险治理独立判断；
 - runner 只接受控制核心生成的 ExecutionGrant；
+- vendor-neutral `AgentRuntimeAdapter` 接受 Syn 的 Workcell 合同；DeepSeek Harness 只可能成为一个适配器，不是默认治理核心；
+- runtime Step / Turn、Tool Pipeline 和模型可见上下文形成可重建 trace，但不成为项目事实账本；
+- Syn 持有 durable operation、lease、timer、retry、dead letter、effect ledger；不依赖 runtime 进程内 job / schedule；
+- 外部副作用 checkpoint 后结果缺失时记录 `OUTCOME_UNKNOWN`，按 effect id 回读而不是盲重试；
 - stop / retry / resume 名称与真实能力一致；
 - 项目摘要投影给秘书 / 全局主管，不复制项目事实。
 
 前端：保留现有项目壳和专业 tab，不重新发明已撤回的项目页布局；默认项目主管对话，方案 / 审批 / 运行按明确动作打开。
 
-退出门：隔离 scratch project 覆盖 read-only、单 allowlisted write、用户拒绝、worker blocked、runner failure / recovery、全局意见和最终用户决定。固定测试路径不再定义通用业务语义。
+退出门：隔离 scratch project 覆盖 read-only、单 allowlisted write、用户拒绝、worker blocked、runtime kill / restart / recovery、child grant 不扩权、duplicate effect、trace readback、全局意见和最终用户决定；至少两种 runtime 实现或 fake conformance adapter 证明合同不绑定单一 Harness。固定测试路径不再定义通用业务语义。
 
 ### M6 — 全局主管与内部组织
 
@@ -388,6 +405,8 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 - 内部组织默认后台，不要求组织图成为日常入口。
 
 稳定成员身份由 Syn 持有，不等于模型、服务提供方、线程或进程；替换底层能力不会换人、重置记忆或扩大权限。
+
+Runtime Profile 不是角色档案，child / subagent 不是稳定成员，runtime parent / child 关系也不自动成为组织关系。多视角咨询必须证明输入隔离，执行 workcell 的 final answer 只进入报告候选。
 
 退出门：全局主管能从两个项目摘要发现冲突并回源；需要时能取得彼此独立的多视角意见；意见未经用户确认不改任一项目；用户能找到并直接联系指定稳定成员；替换底层服务后成员身份和权限不漂移；临时 agent 不伪装成常驻成员。
 
@@ -405,10 +424,13 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 - 建立可纠正的用户知识深度：用户自述进入个人事实，系统判断进入带来源、置信度和时效的模型推断；
 - 每日聊天、项目结果、纠正和重复模式整理；
 - SkillCandidate / SkillDraft / SkillVersion、验证、启用、权限和回滚；
+- 可执行 Skill / Profile / Plugin package 的来源、digest、依赖、capability manifest、sandbox 要求、兼容范围、评测集、签名、canary 和撤回；
 - task memory packet 带 revision / fingerprint / stale 判定；
 - 用户查看、纠正、冻结、废弃、关闭自动学习和批量撤销入口。
 
-退出门：任一稳定角色和临时智能体都能按范围取得带来源的最小资料包，并能看见资料不足、过期、冲突和技能不可用；常驻角色重启后能区分并取回“用户是谁、近期做了什么、长期做过什么、当前有哪些未闭环事项”，且每项带来源、时间和作用域；用户知识深度可纠正，事实与推断不混型；检索命中不自动成为事实，技能发现不自动扩权；故障注入无无解释半状态；敏感信息、权限和外部动作不得自动入记忆或扩权；冲突不静默覆盖；自动写入每条都有策略结果和审计；外部动作技能不因重复成功获得新权限。
+Runtime session、trace、compaction summary 和 transcript 均不是长期记忆；它们只能作为带来源的 Observation 输入。动态 package 只能生成候选，不能从运行内存直接晋级。
+
+退出门：任一稳定角色和临时智能体都能按范围取得带来源的最小资料包，并能看见资料不足、过期、冲突和技能不可用；常驻角色重启后能区分并取回“用户是谁、近期做了什么、长期做过什么、当前有哪些未闭环事项”，且每项带来源、时间和作用域；用户知识深度可纠正，事实与推断不混型；检索命中不自动成为事实，技能发现不自动扩权；可执行能力包经过静态 / 权限差异、隔离回放、独立评测、canary、签名晋升和撤回；故障注入无无解释半状态；敏感信息、权限和外部动作不得自动入记忆或扩权；冲突不静默覆盖；自动写入每条都有策略结果和审计；外部动作技能不因重复成功获得新权限。
 
 ### M8 — Connector 与凭据引用
 
@@ -416,11 +438,13 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 
 - ConnectorDefinition、ConnectionAccount、CredentialRef、CapabilityGrant、SyncCursor、InboundItem、ActionRequest / Result；
 - `view / index / sync / action / secret` 分开声明、授权、撤销和审计；
-- 先把 Codex（代码智能体）、外部知识库与文件源、主管能力协议和开发护栏包装为内部适配器；外部系统支持模型上下文协议（MCP）时优先使用，但核心知识与上下文服务本身不放在适配器层；
+- 分开抽取 AgentRuntime、Agent / Model、Tool、Harness、KnowledgeSource 与 Connector 端口；只统一 capability envelope，不合成一个万能 adapter；
+- DeepSeek Harness 若进入，只属于 `AgentRuntimeAdapter`；其 Tool / Plugin 只能提交 CapabilityRequest / ActionIntent，不能直接取得 Connector 凭据或外部写权；
+- 先把 Codex（代码智能体）、外部知识库与文件源、主管能力协议和开发护栏包装为对应内部适配器；外部系统支持模型上下文协议（MCP）时优先使用，但核心知识与上下文服务本身不放在适配器层；
 - 一个低风险只读外部 connector 作为第一真实样本；
 - 设置 / 管理面显示来源、授权范围、最近同步、错误、断开和撤权，不显示 secret 正文。
 
-进入真实连接器前，每个 provider 单独冻结数据合同：真源、正文 / 引用、同步方向、冲突、删除、撤权、外发、保留期和写操作确认。凭据存储选型和真实 secret 使用单独重档授权。
+进入真实连接器前，每个 provider 单独冻结数据合同：真源、正文 / 引用、同步方向、冲突、删除、撤权、外发、保留期和写操作确认。凭据存储选型和真实 secret 使用单独重档授权；secret 尽量只在 connector adapter 内解引用，不进入 runtime session、trace、memory 或普通日志。文件系统 sandbox 不等于网络、进程、同 UID 凭据和现实副作用隔离。
 
 退出门：未授权 capability 在 adapter 前拒绝；secret 不进 SQLite event / audit / memory / chat；至少两种内部标识和调用形状不同的伪适配器通过同一角色、会话、权限和结果合同，证明接口不绑定 Codex 或某一家线程编号；mock connector 全合同通过；真实只读 connector 的授权、同步、断开和错误在 App 可见。
 
@@ -433,6 +457,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 - 所有 UI 条目有 typed `ObjectRef` 和精确 deep link；
 - shadow read → new primary → compatibility read-only；
 - 按 §4.4 清单逐项 command unregister、归档和恢复演练。
+- runtime / profile / package / session compatibility 纳入 inventory；可逆卸载只证明内部注册清理，现实副作用单独 reconcile / compensate。
 
 退出门：新旧页面逐页 parity；差异有批准说明；投影可重建；raw JSON 默认不出产品响应；旧 store 有只读 manifest / hash / export；回滚演练通过。物理删除另行批准。
 
@@ -454,9 +479,22 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 12. 常驻角色带来源恢复用户是谁、近期与长期工作和未闭环事项，知识深度可以纠正；
 13. 稳定角色与临时智能体按不同权限取得正确资料和技能说明，未获准的技能仍不可执行。
 
-硬化项：性能、分页、索引重建、备份 / 恢复、迁移回滚、可观测性、secret scrub、成本 / 预算、故障注入、长时间运行、权限回归、真实桌面可用性。
+硬化项：性能、分页、索引重建、备份 / 恢复、迁移回滚、可观测性、secret scrub、成本 / 预算、故障注入、长时间运行、权限回归、真实桌面可用性；另验证 runtime 中途崩溃、session resume / fork / compaction、child grant 不扩权、插件供应链、sandbox degraded、重复外部副作用、动态 package 默认关闭，以及执行者与验收者分离。预算同时覆盖钱、token、时间、模型、工具和外部调用，不把 token pressure 当完整成本治理。
 
 发布门：所有目标场景真实 App 通过；高风险外部动作仍未默认开放；旧路退役清单完成或明确 HOLD；没有把 synthetic / build 冒充真实使用。
+
+### M11 — 受治理自升级平台
+
+详见 `2026-08-16-syn-stage-11-governed-self-upgrade-platform-plan-v1.md`。
+
+交付：
+
+- ImprovementSignal、UpgradeCandidate、CandidateArtifact、CapabilityDiff、EvaluationReceipt、CanaryAssignment、PromotionDecision 与 RollbackReceipt；
+- Skill / Profile / Plugin、Runtime / Provider 兼容和 Syn 代码三条升级轨道；
+- 隔离 worktree / workcell、供应链与权限差异、确定性测试、历史回放、独立 Verifier、canary、签名晋升、监控和回滚；
+- 受保护治理根：Identity / Scope / Policy / Grant / Credential / Audit / Budget / Verifier / Updater / Kill Switch 不进入普通自升级。
+
+退出门：三条轨道各有至少一个有界样本走完候选到回滚；低风险自动晋升只来自用户签署的有限政策；核心代码和治理根不能自批；外部 runtime 是否接入由同一 conformance 与成本证据决定。
 
 ## 7. 并行与写所有权
 
@@ -467,15 +505,16 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 - M4 Secretary 与 M5 Project Orchestration 可并行，但不得同时改公共 event / scope / App 装配；
 - 知识和记忆可以分域并行，但知识来源登记、上下文包所有权以及统一工作单元与发件箱各自只有一个写入者；
 - Connector framework 与具体 connector 分开；真实 provider 一次只激活一个；
+- 自升级的 candidate writer、security reviewer、verifier、rollout / updater 分写面；候选不能修改 oracle 或晋升策略；
 - UI 视觉优化不与读模型切换混在同一任务包，除非验收必须。
 
 每个任务包必须声明：`authority_chain`、`plan_anchor`、`existing_before_new`、`write_surface`、`capabilities_touched`、`forbidden_alternatives`、`verification`、`rollback` 和 `retirement_effect`。
 
 ## 8. 任务包与阶段激活规则
 
-- master plan 只定义顺序；只有 Harness Lite current stage、唯一 current leaf 与 matching `authorization.json` 才构成具体执行授权。
+- master plan 只定义顺序，不构成执行授权。当前用户清晰自然语言决定目标与边界；current stage / leaf 是工作投影，不能扩大用户原话；`authorization.json` 只用于满足精确绑定条件的短期 Stop 内部续跑。
 - 每个任务包只交付一个可独立验收的薄切片，不能用“全面重构”做无界写面。
-- 安全 / scope、schema migration、真实 provider、凭据、真实项目写入、自动连环和不可逆退役分别建包。
+- 安全 / scope、schema migration、真实 provider、凭据、真实项目写入、自动连环、升级晋升和不可逆退役分别建包。
 - 涉及安全闸、scope 或授权判断的实现包按 `AGENTS.md` 高危清单逐包取得用户明确授权；阶段已排入计划不等于这项授权已经发生。
 - 一个阶段未通过退出门，下一阶段只能做不依赖它的只读设计或隔离 fixture，不得假设前置已完成。
 - 完成任务后更新 `../current-state.md` 的事实、证据和下一入口；不在总计划复制逐任务进度。
@@ -492,6 +531,8 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 - 只能靠前端隐藏来声称后端安全；
 - 只能靠 fake / synthetic 来声称真实 App 可用；
 - 为赶进度需要一次删除多个旧真源或失去恢复路径。
+- runtime / plugin / 自升级候选需要改写自己的权限、预算、审计、oracle、Verifier 或晋升门；
+- 外部副作用结果未知却只能靠自动重试继续。
 
 停止后只报告事实、影响和所需新决定，不私自改目标或放宽验收。
 
@@ -513,4 +554,6 @@ Syn 的这轮重构只有在以下条件同时满足时才算完成：
 - 内部成员可搜索、可直接联系，临时 agent 可追踪；
 - App 重启、失败、迁移和回滚不会让会话、未决、项目事实或未闭环事项静默消失；
 - 旧业务路径在替代链真实验收后有序退役；
+- Runtime、模型和插件可替换且不会改变角色、事实、权限与未完成 operation；
+- 系统能在受保护治理根之下生成、验证、灰度、晋升和撤回改进，不能自己降低验收标准；
 - 产品正本、当前状态、代码、测试、真实应用和发布结论各自诚实一致。

@@ -5,7 +5,7 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M7。<br>
 分层前置：知识来源登记、上下文包合同以及隔离存储与策略只需 M1/M2 退出证据；接入真实角色会话需再等 M3，接入真实采集与每日整理需再等 M4/M5。任何 M7 实现仍需独立活动任务包。<br>
-当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权自动学习、真实聊天采集、技能启用、桌面应用或产品代码。
+当前路线状态：M1–M4 已完成各自具名范围，M5–M7 未激活。Harness 动态 stage / leaf 另看 `../harness/plan.md`；本计划不授权自动学习、真实聊天采集、动态插件、技能启用、桌面应用或产品代码。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 记忆与全工作台修订 → 总计划 → 对应分层前置回执 → 本计划。前置较少的切片可提前，不等于整阶段可标完成。
 
@@ -31,6 +31,8 @@
 - 当前 “daily loop” 只处理少数治理事件的 best-effort candidate，失败仅 warning；不是 scheduler、DailyReport 或全日 consolidation。
 - 生产源码没有 `PersonalFact`、`ModelAssertion / PersonalModel`、`SkillCandidate / SkillDraft / SkillVersion` 领域实现。
 - Skill 页面只是只读索引，没有登记、验证、启用、回滚的治理状态。
+- runtime session / trace / compaction summary 尚未与 Observation、正式记忆和 Skill 候选建立显式隔离合同。
+- 可执行 Skill / Profile / Plugin package 尚无 package digest、依赖、capability manifest、sandbox 要求、签名、canary 和供应链状态。
 
 ### HOLD / 需冻结决定
 
@@ -43,6 +45,7 @@
 - 用户知识深度的领域范围、证据、新鲜度、置信度和过期策略；
 - daily consolidation 时区 / window / budget / checkpoint / retention；
 - Skill 候选阈值、验证环境、启用权限、来源权限上限与废弃策略；
+- 动态 runtime package、Profile 和插件候选的包格式、签名、canary 范围与撤回策略；
 - SQLite / sidecar 最终切换、历史对账和真实 App 数据。
 
 ## 1. 阶段目标
@@ -56,7 +59,7 @@
 7. 在 PersonalFact 与 ModelAssertion 上建立可纠正的用户知识深度，用于调整解释深度和资料选择，不因一次对话固化；
 8. 对话、项目结果、用户纠正和重复模式只经结构化事件进入观察，再按策略进入候选；
 9. 建立真正的每日整理运行，支持预算、检查点、重跑和部分失败恢复；
-10. 建立技能候选、技能草稿和技能版本，本阶段首个实现只采用本地验证、人工启用、可回滚；低风险内部技能的策略自动启用保留为独立暂缓项；
+10. 建立技能候选、技能草稿和技能版本；可执行能力包经过来源 / 权限 / 供应链差异、隔离回放、独立评测、canary、签名晋升和回滚。首个实现仍采用人工启用；低风险自动启用由用户签署的独立政策控制；
 11. 用户可查看、纠正、冻结、废弃、关闭自动学习和批量撤销；敏感信息、权限、允许清单、沙箱和外部动作授权永不因知识、记忆或技能自动扩张。
 
 ## 2. 本阶段不做
@@ -73,6 +76,8 @@
 - 不在 parity 前删除 JSON sidecar；
 - 不接真实 external connector 数据或凭据；
 - 不以已有 candidate UI、task packet 或 synthetic test 声称自动学习闭环完成。
+- 不把 runtime transcript、session event、compaction summary 或模型自述直接写成 FormalMemory / SkillVersion。
+- 不让动态 Cordis package 或其他进程内插件从“运行成功”直接晋升为生产能力。
 
 ## 3. 对象、owner 与政策底线
 
@@ -88,6 +93,8 @@
 | `ModelAssertion` | personal model domain | inference、confidence、validity window、evidence、可否认 |
 | `ConsolidationRun` | daily memory service | 消费 M4 `daily_window_id / DailyReportVersion`、input watermark、budget、checkpoint、result refs、status；不拥有 wall-clock scheduler |
 | `SkillCandidate/Draft/Version` | skill governance | source refs、tests、runtime capability ceiling、manual-first enable、rollback |
+| `ExecutableCapabilityPackage` | skill / upgrade registry | package digest、依赖、capability manifest、sandbox、兼容范围、签名、canary 与撤回；不是普通记忆 |
+| `RuntimeObservationRef` | memory capture | 只引用 runtime session / trace / compaction 边界；内容先按来源与敏感性形成 Observation，不能直接晋级 |
 | `TaskMemoryPacket` | task packet builder | revision / fingerprint / stale；只消费 active formal memory |
 
 政策硬边界：`secret / credential / auth / permission / allowlist / sandbox / external-action approval` 一律禁止自动提升；冲突、敏感内容和推断默认 Candidate / Quarantine；自动规则只能匹配显式、低风险、版本化的 allowlist。
@@ -132,7 +139,21 @@ Skill capability ceiling 每次执行都按“来源权限 ∩ 生成者权限 �
 
 ### SYN-MEM-007 — Skill 生命周期
 
-实现 Candidate→Draft→Version→validated→enabled / disabled / rolled_back；验证只在隔离本地 fixture。本阶段首个实现 / exit evidence 只采用人工启用；满足已批准修订的低风险自动启用仍是独立 HOLD / package，不永久删除该产品方向。每次执行按完整权限交集重算 capability ceiling。
+实现：
+
+```text
+Candidate
+  → Draft
+  → static / permission / supply-chain diff
+  → isolated replay
+  → independent evaluation
+  → Version
+  → canary
+  → signed / pinned promotion
+  → enabled / disabled / rolled_back
+```
+
+验证只在隔离本地 fixture。候选生成者不能写 EvaluationReceipt 或 PromotionDecision。动态 runtime package 只可导出为 Candidate；进程停止前“能用”不等于持久安装。本阶段首个实现 / exit evidence 只采用人工启用；满足已批准政策的低风险自动启用仍是独立 package，不永久删除该产品方向。每次执行按完整权限交集重算 capability ceiling。
 
 ### SYN-MEM-008 — 用户控制与批量撤销
 
@@ -179,18 +200,18 @@ M7-D（等待 M4/M5）: MEM-005 → MEM-006
 | Knowledge fixtures | 角色、范围、任务与权限过滤；来源、新鲜度、缺口和技能说明可追溯 | 已接全部角色、真实资料源或技能执行 |
 | Contract / policy fixtures | 分类、自动矩阵、权限 ceiling、冲突一致 | service 已实现 |
 | Unit / property | 幂等、冲突、saga、撤销、secret exclusion | live memory 已迁移 |
-| Temp stores / fault injection | 每个半写点可恢复、parity、daily rerun、Skill rollback | 真实 App / 数据通过 |
+| Temp stores / fault injection | 每个半写点可恢复、parity、daily rerun、包权限差异、隔离 replay、canary、Skill rollback | 真实 App / 数据通过 |
 | Non-test build | production path 可构建 | 桌面行为正确 |
 | Isolated Tauri | 用户控制、source/history、故障状态可见 | 真实聊天 / Skill 启用通过 |
 | 经授权 live scenarios | 指定 source、数据、policy 的真实证据 | 全自动学习或发布通过 |
 
-机械验收：无不可解释半状态；自动写每条有 policy result / audit；secret / permission 不进入自动提升；冲突不覆盖；同一 source / window 重跑不重复 Formal / Fact / Skill；TaskMemoryPacket stale 仍准确。
+机械验收：无不可解释半状态；自动写每条有 policy result / audit；secret / permission 不进入自动提升；runtime compaction 不成为事实或记忆；动态 package 不直升；冲突不覆盖；同一 source / window 重跑不重复 Formal / Fact / Skill；TaskMemoryPacket stale 仍准确。
 
 ## 8. 授权与停止条件
 
 真实知识源读取或写回、外部索引服务、知识跨范围共享、实时旁路存储迁移、每种真实采集来源、普通聊天采集、个人事实自动规则、真实模型调用、技能验证或启用、批量撤销真实数据分别建包。M7 不授权外部连接器、凭据、外部动作、项目执行、Git（版本控制写入）或发布。
 
-立即停止：政策矩阵未冻结；事实 / 推断混型；secret / permission 进入记忆或 Skill；跨 store 半状态无恢复；冲突被覆盖；Skill 自动扩权，或自动启用缺独立 package、未命中冻结 policy matrix、超过 runtime capability ceiling；M4/M7 双写日报；迁移缺 rollback；WIP 冲突；fixture 被表述成 live data 验收。
+立即停止：政策矩阵未冻结；事实 / 推断混型；secret / permission 进入记忆或 Skill；跨 store 半状态无恢复；冲突被覆盖；Skill / Plugin 自动扩权，或自动启用缺独立 package、权限差异、EvaluationReceipt / PromotionDecision，未命中冻结 policy matrix、超过 runtime capability ceiling；候选能改 verifier / oracle；M4/M7 双写日报；迁移缺 rollback；WIP 冲突；fixture 被表述成 live data 验收。
 
 ## 9. 阶段退出与 M8 输入
 
@@ -202,7 +223,7 @@ M7-D（等待 M4/M5）: MEM-005 → MEM-006
 - PersonalFact / ModelAssertion 分型、来源、纠正、历史和撤销成立；
 - 一个常驻角色重启后能带来源、时间和作用域恢复“用户是谁、近期做了什么、长期做过什么、当前有哪些未闭环事项”；用户知识深度可纠正、否认和过期；
 - ConsolidationRun 幂等、可恢复、预算可观测；
-- SkillCandidate / Draft / Version 可验证、manual-first 启用、运行时重算 ceiling、可回滚且不扩权；低风险自动启用若未单独完成则明确 HOLD；
+- SkillCandidate / Draft / Version 与可执行能力包可验证，经过 package / capability diff、隔离回放、独立评测、canary、manual-first 签名启用，运行时重算 ceiling、可撤回且不扩权；低风险自动启用若未单独完成则明确 HOLD；
 - sidecar migration 有 parity / compatibility / rollback，未物理删除；
 - isolated App 故障场景通过；真实数据结论分项记录；
 - 向 M8 提供 connector inbound event 的 memory policy contract；

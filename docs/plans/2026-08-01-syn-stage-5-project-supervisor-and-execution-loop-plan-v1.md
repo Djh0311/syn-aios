@@ -5,7 +5,7 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M5。<br>
 硬前置：M1 scope / workflow-owner / report / ExecutionGrant；M2 UoW；M3 Project Supervisor RoleSession。<br>
-当前活动阶段 / 叶：无（`NONE`）；M3 已完成并关闭，M4 处于独立修正再验收前的 `NOT_ACTIVE` 状态，本计划仍未激活；本计划不授权真实项目写、执行器、Codex、桌面应用或产品代码。第 0 节是 2026-08-01 的预激活盘点，M5 真正启动前必须对当前代码重新核验。
+当前路线状态：M1–M4 已完成各自具名范围，M5 仍未激活。Harness 动态 stage / leaf 另看 `../harness/plan.md`，不从本计划推导；本计划不授权真实项目写、执行器、Codex、DSH、桌面应用或产品代码。第 0 节是 2026-08-01 的预激活盘点，M5 真正启动前必须对当前代码重新核验。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../current-state.md` → 2026-08-01 修订与当前能力盘点 → master → M1-M3 退出回执 → 本计划。现有特殊路径零件只作迁移素材，不等于普通项目闭环。
 
@@ -33,6 +33,9 @@
 
 - 普通项目如何登记、归档与解析稳定 ProjectId；
 - stop / retry / resume 的真实进程结果、receipt、重复命令与崩溃恢复；
+- runtime session fork / resume / compaction、child run 深度、tool interception 和 trace 重建能力；
+- Syn 原生 runtime 与 DeepSeek Harness 等外部 adapter 的 conformance、维护成本和 sandbox enforcement 状态；
+- runtime 内 checkpoint 后本地崩溃、receipt 丢失与 `OUTCOME_UNKNOWN` 的恢复语义；
 - Proposal → Authorization → Dispatch → Report → Review 各断点的 restart 语义；
 - ProjectSummary schema、freshness watermark、敏感裁剪、source refs、失效和重建；
 - 单 agent / 多 agent 协调策略的确定性输入；
@@ -48,6 +51,7 @@
 6. stop / retry / resume 名称与真实进程语义一致，失败可恢复、重放幂等；
 7. 生成可重建、最小、只读 `ProjectSummary` 给 Secretary / Global Supervisor；
 8. 保留现有知识、记忆、Harness、MCP、Runner 能力，通过稳定 ports 重组，不推倒重来。
+9. 建立 vendor-neutral `AgentRuntimeAdapter` 和可销毁 Workcell；Syn 自己持有 durable operation、grant、预算、外部 effect 和最终验收。
 
 ## 2. 本阶段不做
 
@@ -75,6 +79,9 @@
 | ProjectSummary | project projector | 最小、source-backed、watermark、可重建、只读、不可反写 |
 | runner / side-effect command | infrastructure adapter | 只经 `ExecutionGrantGateway` 消费服务端加载的 Grant；不得用普通 capability 替代 |
 | project conversation / MCP read & proposal tools | infrastructure adapter | 经 `RoleSession + ConversationCapabilityGateway`；普通只读 / submit_proposal 不要求 ExecutionGrant，也不得产生副作用 |
+| AgentRuntimeProfile / WorkcellRun | project execution | 精确绑定 Attempt / Grant / profile digest / budget / stop conditions；runtime 不能拥有业务状态 |
+| RuntimeSessionRef / ExecutionTraceRef / ChildRunRef | runtime adapter | 只是执行引用；不成为 RoleSession、成员身份、项目事实或长期记忆 |
+| RuntimeReceipt | claim ledger input | 记录 trace hash、tool/effect refs、成本、degraded 与 unresolved；仍需独立 verifier |
 
 PRJ-001 必须裁决 `CorrelationId` 与 `OrchestrationId` 是同一 canonical ID 还是明确父子关系，以及 `WorkflowRunId` 的唯一分配时点。签发顺序固定为：Authorization 后建立 Run / WorkItem 与 worker RoleSession binding，在 M2 UoW 中创建不可执行的 `PreparedAttempt` 并分配稳定 AttemptId，再 mint 精确绑定该 AttemptId 的 attempt-scoped ExecutionGrant；grant 持久化并 readback 通过后才创建 Dispatch、把 Attempt 推进到可运行态并经 outbox 启动。ExecutionGrant 至少冻结 actor、worker / RoleSession、AttemptId、scope、允许 command、cwd / write roots、object refs、authorization id + revision、policy decision、expiry / revocation、idempotency / effect key 和 grant hash；调用参数只能收窄，不能补充权限。mint / readback / dispatch 失败必须撤销 Grant 并把 PreparedAttempt 留在不可运行的可恢复 / 已取消状态，不得留下可复用 Grant 或可运行 Attempt。
 
@@ -82,7 +89,7 @@ PRJ-001 必须裁决 `CorrelationId` 与 `OrchestrationId` 是同一 canonical I
 
 ### SYN-PRJ-001 — 项目执行合同与现状映射
 
-冻结全链对象自身 ID、canonical orchestration/correlation identity、WorkflowRunId 分配、PreparedAttempt 状态机、owner、restart points、两类 user decision、上述 Grant 签发 / readback / revoke / dispatch 顺序与 principal、完整 grant 字段、分型 report kind / trusted actor、两类 gateway、ProjectSummary query port 和旧对象 mapping。只写合同 / migration matrix。
+冻结全链对象自身 ID、canonical orchestration/correlation identity、WorkflowRunId 分配、PreparedAttempt 状态机、owner、restart points、两类 user decision、上述 Grant 签发 / readback / revoke / dispatch 顺序与 principal、完整 grant 字段、分型 report kind / trusted actor、两类 gateway、ProjectSummary query port 和旧对象 mapping；同时冻结 `AgentRuntimeAdapter`、Profile / Workcell / SessionRef / TraceRef / ChildRunRef / RuntimeReceipt、Step / Turn 与工具前 / 中 / 后管线。只写合同 / migration matrix。
 
 ### SYN-PRJ-002 — Orchestration identity 与 exact joins
 
@@ -94,7 +101,7 @@ PRJ-001 必须裁决 `CorrelationId` 与 `OrchestrationId` 是同一 canonical I
 
 ### SYN-PRJ-004 — ExecutionGrant → Runner / CapabilityGateway
 
-拆分 `ExecutionGrantGateway` 与 `ConversationCapabilityGateway` 及两组拒绝测试。服务端只在 Run / WorkItem / worker RoleSession binding 和不可执行 PreparedAttempt 已持久化后 mint 精确绑定 AttemptId 的 Grant；副作用 command / Runner 只接受 Grant id，并逐字段对照 actor、RoleSession、AttemptId、scope、command、cwd/write roots、object refs、authorization revision、expiry/revocation 和 effect key；调用参数不得补充权限。只读 project conversation / knowledge / submit_proposal 继续走 RoleSession + capability，不得拿普通 capability 替代 Grant。每次只迁一个入口。
+拆分 `ExecutionGrantGateway` 与 `ConversationCapabilityGateway` 及两组拒绝测试。服务端只在 Run / WorkItem / worker RoleSession binding 和不可执行 PreparedAttempt 已持久化后 mint 精确绑定 AttemptId 的 Grant；副作用 command / Runner / AgentRuntime 只接受 Grant id，并逐字段对照 actor、RoleSession、AttemptId、scope、command、cwd/write roots、object refs、authorization revision、expiry/revocation 和 effect key；调用参数不得补充权限。runtime 自带 Approval / Sandbox 只是第二道防线，不能扩大 Syn Grant。只读 project conversation / knowledge / submit_proposal 继续走 RoleSession + capability，不得拿普通 capability 替代 Grant。每次只迁一个入口。
 
 ### SYN-PRJ-005 — 持久 Project Supervisor 应用服务
 
@@ -102,7 +109,11 @@ PRJ-001 必须裁决 `CorrelationId` 与 `OrchestrationId` 是同一 canonical I
 
 ### SYN-PRJ-006 — 受控执行与恢复
 
-把保留的 runner / workflow 能力收进 aggregate；定义 dispatch、attempt、stop / retry / resume、timeout、worker blocked、provider failure、receipt lost 和 restart recovery。外部副作用遵循 M2 outbox。
+把保留的 runner / workflow 能力收进 aggregate；定义 durable operation、lease、timer、checkpoint、dispatch、attempt、stop / retry / resume、timeout、worker blocked、provider failure、receipt lost、dead letter 和 restart recovery。公司级持久性不依赖 runtime 进程内 job / schedule。外部副作用遵循 M2 outbox；checkpoint 后结果缺失写 `OUTCOME_UNKNOWN`，先按 effect id 回读、reconcile / compensate，不盲重试。
+
+### SYN-PRJ-006A — Agent Runtime conformance
+
+使用 fake runtime 与至少一个第二实现验证同一 Profile / Workcell / Tool Pipeline / Trace / Child Run / RuntimeReceipt 合同。DeepSeek Harness 若参与，只使用固定版本与隔离 profile 作为候选 adapter；测试覆盖 runtime kill、resume / fork / compaction、child grant 不扩权、动态 package 默认关闭、sandbox degraded 可见和 duplicate effect。通过不等于批准长期依赖或真实项目接入。
 
 ### SYN-PRJ-007 — ProjectSummary projector
 
@@ -119,9 +130,9 @@ PRJ-001 必须裁决 `CorrelationId` 与 `OrchestrationId` 是同一 canonical I
 ## 5. 顺序、并行与写所有权
 
 ```text
-PRJ-001 → PRJ-002 → PRJ-004 → PRJ-003 → PRJ-005 → PRJ-006
+PRJ-001 → PRJ-002 → PRJ-004 → PRJ-003 → PRJ-005 → PRJ-006 → PRJ-006A
                                              └→ PRJ-007 → PRJ-008
-PRJ-006 + PRJ-007 + PRJ-008 ─────────────────────────────→ PRJ-009
+PRJ-006A + PRJ-007 + PRJ-008 ────────────────────────────→ PRJ-009
 ```
 
 - project orchestration aggregate 由 M5 单写；M1 policy / owner guard、M2 UoW、M3 RoleSession 均由其 owner 提供 adapter；
@@ -148,12 +159,12 @@ PRJ-006 + PRJ-007 + PRJ-008 ─────────────────�
 |---|---|---|
 | Contract / static | owner、join、grant、状态和 capability 一致 | 运行链已接通 |
 | Unit / property | 跨项目拒绝、grant revocation、report binding、幂等 transition | Runner 可用 |
-| Temp + fake runner | crash points、stop/retry/resume、outbox、summary rebuild | 真实项目执行 |
+| Temp + fake runtime | crash points、stop/retry/resume、outbox、trace rebuild、child grant、duplicate effect、summary rebuild | 真实项目执行或外部 runtime 合格 |
 | Non-test build | production path 可构建 | 桌面行为正确 |
 | Isolated Tauri scratch | 用户可见 proposal→decision 闭环、failure/recovery、source links，并保留桌面窗口截图 / 交互 / deep-link 点击证据 | 真实 Codex / 写根通过 |
 | 经授权真实 project | 指定项目、grant、runner、readback 的精确场景 | 其他项目、发布或无人值守通过 |
 
-关键验收：前置 AuthorizationDecision 与末端 ResultUserDecision 不可互换；用户拒绝零 spawn / 零业务 mutation；report 不冒充事实；runner 只消费完整服务端 Grant；两个 project 的 id / root / workflow / grant / actor 互串全部 fail closed；ProjectSummary 与源 watermark 一致且不可反写。
+关键验收：前置 AuthorizationDecision 与末端 ResultUserDecision 不可互换；用户拒绝零 spawn / 零业务 mutation；report / runtime final answer 不冒充事实；runner / runtime 只消费完整服务端 Grant；两个 project 的 id / root / workflow / grant / actor 互串全部 fail closed；runtime trace 能重建模型上下文但不能写公司事实或正式记忆；ProjectSummary 与源 watermark 一致且不可反写。
 
 ## 8. 独立授权与停止条件
 
@@ -166,8 +177,9 @@ scope / owner 修复、local schema / store migration、App 启动 / 强制退�
 全部满足才进入 M6：
 
 - 普通项目 Project Supervisor RoleSession 与项目 facts / tools 的最小只读能力成立；
-- Proposal → AuthorizationDecision → Authorization → Run / WorkItem + worker RoleSession binding → PreparedAttempt(稳定 AttemptId、不可执行) → attempt-scoped Grant → Dispatch → runnable Attempt → ExecutedReport → Review → ResultUserDecision 以对象自身 ID + canonical orchestration identity 精确 join、可恢复、幂等；manual/offline claim 保持非执行分型；
+- Proposal → AuthorizationDecision → Authorization → Run / WorkItem + worker RoleSession binding → PreparedAttempt(稳定 AttemptId、不可执行) → attempt-scoped Grant → Dispatch → AgentWorkcellRun → RuntimeReceipt / ExecutedReport → independent Review → ResultUserDecision 以对象自身 ID + canonical orchestration identity 精确 join、可恢复、幂等；manual/offline claim 保持非执行分型；
 - runner 只消费服务端 grant；stop / retry / resume 结论与实际能力一致；
+- runtime conformance 覆盖 kill / restart、resume / compaction、child grant、trace、degraded sandbox 和未知外部结果；DSH 不成为完成前提；
 - ProjectSummary version / watermark / source refs / rebuild / ACL 与 `ProjectSummaryQueryPort` 冻结；
 - scratch isolated App 全链通过，真实项目证据按授权单独结算；
 - 旧 fixed path 有 manifest / compatibility / rollback，未删除；

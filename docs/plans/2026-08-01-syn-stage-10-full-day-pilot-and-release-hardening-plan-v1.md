@@ -5,7 +5,7 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M10。<br>
 硬前置：M1-M9 exit receipts、retirement / HOLD manifest、可恢复 read models、隔离 profile 和发布候选配置均冻结。<br>
-当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权启动桌面应用、真实数据 / 服务提供方 / 项目写、签名、公证、发布、Git 或外部动作。
+当前路线状态：M1–M4 已完成各自具名范围，M5–M10 未激活。Harness 动态 stage / leaf 另看 `../harness/plan.md`；本计划不授权启动桌面应用、DSH、真实数据 / 服务提供方 / 项目写、签名、公证、发布、Git 或外部动作。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 当前源码 / 真实桌面应用证据 → master → M1-M9 退出 / 暂缓回执 → 本计划。任何历史构建、截图或配置回执都按原证据层级使用。
 
@@ -35,6 +35,8 @@
 - release SLO / performance budget、错误预算、telemetry / privacy、crash report、support / recovery；
 - 哪些 M9 legacy HOLD 可随 release 保留，哪些必须阻断发布；
 - 用户可接受的长时间运行窗口和现场验收安排。
+- 首个生产候选使用 Syn 原生 runtime 还是外部 adapter、固定版本 / package digest、动态扩展政策和 conformance 基线。
+- sandbox 在目标平台的完整 / 部分 / 不可用状态，以及网络、进程、凭据和插件供应链的独立隔离措施。
 
 “全日”不是若干短测的集合。PIL-001 必须冻结：最短连续 wall-clock 时长、开始 / 结束与跨日边界、允许的计划内重启 / 中断次数和单次上限、静默窗口、scenario 最大间隔、最大人工补录比例、无事件观察时长、用户离开 / 返回规则。缺任一字段不得把分散收据合并成全日试点。
 
@@ -47,6 +49,8 @@
 5. 高风险外部 action 默认关闭，任何试点例外逐动作 grant；
 6. 将 synthetic、build、isolated App、真实 App、release candidate、published artifact 分层结算；
 7. 只有所有阻断门通过且用户显式批准发布，才产生 release / publish 动作。
+8. 验证 Agent Runtime 只是可销毁执行工作单元：中途崩溃、session resume / fork / compaction、child run 和 adapter 替换不改变 RoleSession、正式事实、权限、记忆或未完成 operation。
+9. 同时治理钱、token、时间、模型、工具、外部调用和算力，不把上下文 token pressure 当完整成本预算。
 
 ## 2. 全日试点剧本
 
@@ -67,6 +71,9 @@
 13. 用户找到一名稳定成员和一名历史临时智能体，并可回源和联系；
 14. 无事件窗口保持零模型调用；有事件时预算与成本回执可见；
 15. 本地导出、备份 / 恢复与当前发布回退在隔离副本实际演练；个人服务器异地备份在该基础上另包接入。
+16. runtime 在 tool / connector action 中途被强制终止；Syn 以 effect id 和来源回读恢复，结果未知时保持 `OUTCOME_UNKNOWN`，不得重复外部副作用。
+17. runtime session resume / fork / compaction 后，模型上下文 trace 可重建；RoleSession、公司事实和正式记忆不因摘要或 runtime handle 变化而漂移。
+18. child agent 无法扩大 parent grant、scope、Tool、Connector 或 CredentialRef；执行者 final answer / goal complete 仍需独立验收。
 
 任一场景缺少真实 truth source、直接观察、receipt 或 recovery，只能记录 `NOT_ACCEPTED / HOLD`，不能用邻近测试补齐。
 
@@ -80,6 +87,8 @@
 - 不隐藏 degraded / HOLD / legacy path，也不把 disabled feature 宣称完成；
 - 不自动上传日志、transcript、project data、memory 或 secret；
 - 不在未获用户明确批准时签名、公证、发布、push、tag 或创建 release。
+- 不在生产 Profile 默认开启动态 package / runtime 自改；启用候选必须有来源、digest、能力清单、签名、canary 和回滚。
+- 不把 filesystem sandbox、Approval 弹窗或 worker 自报完成单独当成生产安全 / 业务验收。
 
 ## 4. 试点与发布对象 owner
 
@@ -93,6 +102,8 @@
 | `ReleaseArtifact` | release channel | signature/notarization/checksum/install/update/rollback evidence |
 | `Privacy/TelemetryPolicy` | user / policy owner | fields、redaction、retention、opt-in、export/delete |
 | `GoNoGoDecision` | 用户 | blockers、accepted risks、HOLD、exact publish action |
+| `RuntimeConformanceReceipt` | independent acceptance owner | runtime/profile/package digest、kill/recovery、trace、child grant、sandbox enforcement、cost、duplicate effect 与 unresolved |
+| `UpgradeBaseline` | M11 input owner | 可复现 RC、测试 / 回放集、预算、权限基线、updater / rollback anchor；不激活自升级 |
 
 验收 owner 与实现 owner 分离：实现线不能只用自己的测试收据宣布真实 App / release 通过。
 
@@ -108,7 +119,7 @@
 
 ### SYN-PIL-003 — 隔离 smoke 与权限回归
 
-在 isolated profile 运行 M1-M9 核心 allow / deny、secret scan、migration dry-run、projector rebuild、connector mock、zero-event 模型计数。只证明候选前置。
+在 isolated profile 运行 M1-M9 核心 allow / deny、secret scan、migration dry-run、projector rebuild、connector mock、zero-event 模型计数，并冻结 runtime / profile / package digest。覆盖 child grant、动态 extension 默认关闭、sandbox enforcement status 与 trace / fact / memory 分层。只证明候选前置。
 
 ### SYN-PIL-004 — 真实 App 全日 pilot
 
@@ -116,7 +127,7 @@
 
 ### SYN-PIL-005 — 故障、恢复与长运行
 
-独立注入 provider / connector / DB / projector / process / network / disk / permission / receipt failures；覆盖本地导出、backup / restore、migration rollback、stale / retry、long-running 与 resource budgets。个人服务器只在用户已搭建并单独批准对应目标、凭据和网络后作为异地备份适配器加入，不成为本地恢复能力的前置。
+独立注入 provider / connector / DB / projector / runtime process / network / disk / permission / receipt failures；在 Tool / Action 中途 kill runtime，覆盖 resume / fork / compaction、child grant 不扩权、duplicate effect、`OUTCOME_UNKNOWN`、sandbox degraded、本地导出、backup / restore、migration rollback、stale / retry、long-running 与钱 / token / time / tool / external-call budgets。个人服务器只在用户已搭建并单独批准对应目标、凭据和网络后作为异地备份适配器加入，不成为本地恢复能力的前置。
 
 ### SYN-PIL-006 — 打包、安装、更新与回退候选
 
@@ -156,6 +167,8 @@ PIL-001 → PIL-002 → PIL-003 → PIL-004 → PIL-005 → PIL-006 → PIL-007 
 
 每条 scenario receipt 必须含：source revision、app/build hash、profile、时间、用户动作、actual result、readback、failure / recovery、screenshots / logs 的脱敏引用、证据层级和未证明项。
 
+Runtime 相关 receipt 还必须含：adapter/version/package digest、sandbox enforcement status、grant/policy version、runtime session / trace hash、child refs、tool/effect refs、各类预算、unresolved 和独立 verifier。Harness final answer、goal complete 或 worker report 不能替代这些字段。
+
 ## 8. Go / No-Go 阻断门
 
 出现任一项即 `NO-GO / HOLD`：
@@ -169,6 +182,13 @@ PIL-001 → PIL-002 → PIL-003 → PIL-004 → PIL-005 → PIL-006 → PIL-007 
 - legacy path 不知是否仍可写，或 retirement HOLD 未明确风险；
 - release artifact 不可复现、未签名 / 未公证（若渠道要求）、checksum / install / update 不一致；
 - telemetry / privacy 未冻结；
+- runtime 中途崩溃会丢公司 operation，或未知外部结果只能靠盲重试；
+- session resume / fork / compaction 会改变 RoleSession、正式事实或正式记忆；
+- child agent 能扩大 grant / scope / tool / connector / credential；
+- 动态插件默认开启，package 来源 / digest / capability / 签名 / 回滚不明；
+- sandbox 部分生效或不可用却未进入可见 `DEGRADED / HOLD`；
+- 验收者与执行 workcell 未分离，或把 runtime 自报完成当业务通过；
+- 只有 token / round 限制，没有钱、时间、工具、外部调用与异常消费熔断；
 - dirty WIP、build source 或 artifact provenance 不清；
 - freeze 后修复未使受影响 receipts / artifact hash 失效，或未从最早受影响切片重新执行；
 - 发布、push、tag、签名或外部系统写入缺用户明确授权。
@@ -179,6 +199,7 @@ PIL-001 → PIL-002 → PIL-003 → PIL-004 → PIL-005 → PIL-006 → PIL-007 
 - App / schema / projector / connector / provider 各自有独立 kill switch / rollback，不通过放宽 policy 恢复；
 - upgrade / downgrade 兼容范围写进 release notes；不兼容时先导出 / 停止，不强行启动；
 - external effect 一律有 effect id、result receipt 和人工核对；未决动作不因 App restart 自动重发；
+- runtime / plugin 卸载只回退内部注册；现实副作用仍按来源回读与补偿处理；
 - incident receipt 只存脱敏摘要 / refs / hashes；secret 与 raw user content 不进入普通诊断；
 - rollback 后核对会话、attention、项目 facts、memory、cursor、outbox 和 projector，残留不明即继续 HOLD。
 
@@ -194,6 +215,8 @@ M10 只有同时满足以下条件才可称“阶段完成”：
 - release candidate 可复现、可追源、可安装、可更新、可回退；
 - high-risk external action 默认关闭，secret boundary 通过；
 - M9 legacy / compatibility 清单真实一致；
+- runtime conformance、崩溃恢复、trace 分层、child grant、供应链、sandbox degraded 和多维预算门通过；
+- 形成可供 M11 使用的可复现 UpgradeBaseline、独立验收集与 updater / rollback anchor，但不因此激活自升级；
 - 独立验收给出 go / no-go，用户另行明确是否执行发布；
 - 产品权威登记、`../current-state.md`、发布说明以及支持与回滚手册只记录实际事实；
 - 未获发布授权时安全停在“release candidate accepted / not published”，不得自动 tag / push / publish。

@@ -14,6 +14,7 @@
 - `docs/product/syn-product-canon-v1.md`
 - `docs/product/knowledge-infrastructure-canon-v1.md`
 - `decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md`
+- `decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`
 - `decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`
 - `decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`
 - `docs/workflow-task-package-design-v1.md`
@@ -22,6 +23,7 @@
 - `decisions/2026-05-28-codex-workflow-min-model.md`
 - `decisions/2026-05-29-codex-session-workflow-route-correction.md`
 - `decisions/2026-05-31-editable-canvas-codex-as-director-v1.md`
+- `docs/research/2026-08-16-deepseek-harness-ai-opc-reference-research-v1.md`
 
 2026-08-01 当前交互校正：
 
@@ -70,6 +72,7 @@
 - 控制核心掌握事实、权限、状态机、策略和审计。
 - 知识登记、检索路由、上下文装配和来源引用是 Syn 核心能力；外部资料库、文件源和代码索引通过适配器接入。
 - 智能体、工具、模型、开发护栏和连接器等外部能力通过适配器接入。
+- Syn 自己持有不可插件化的治理根和默认执行合同；模型、工具、Profile、Skill、插件与 Agent Runtime 属于可升级 userland，可以替换但不能改写治理根。
 - 多个智能体围绕项目协作时，先把中间结果放到项目黑板。
 - 只有控制核心能把候选、汇报、工具摘要或建议升级为正式事实。
 - 记忆层是核心能力，但进入核心的是记忆治理，不是具体检索或存储实现。
@@ -102,6 +105,13 @@
 
 - 纯微核容易过早把重点放到插件系统、动态加载和扩展市场。
 - 当前第一问题是项目协作和事实治理，不是插件生态。
+
+这不等于拒绝插件接缝。Syn 吸收 DeepSeek Harness / Cordis 的 Service / Provider / Consumer、Profile 组合、事件化运行轨迹和可逆内部注册方法，但不直接把 DSH 设为架构根：
+
+- Identity / Scope / Policy / ExecutionGrant / Audit / Budget / Verifier / Updater 信任链不可作为普通插件；
+- Agent Runtime、Model、Tool、Workflow、Skill 和 Connector 可以通过稳定端口替换；
+- 外部 runtime 只能在 Syn 生成的有界执行合同内工作；
+- 动态 package 只能产生候选，不能自批、自签或自动成为生产能力。
 
 ### 3.4 不做全量事件溯源
 
@@ -208,6 +218,8 @@
 - 内部关注、显式交接和待决定回源规则。
 - 事件、事务、outbox、幂等和失败回执规则。
 - connector capability 与 CredentialRef 规则。
+- Agent Runtime 的 Profile、Workcell、Session Ref、Trace、Child Run、Budget 与 Receipt 合同。
+- 自升级候选的能力差异、独立验收、签名晋升、canary、撤回和受保护信任根。
 
 不负责：
 
@@ -218,6 +230,9 @@
 - 模型供应商 API。
 - 工具调用具体参数。
 - UI 页面状态。
+- 某个 Agent Runtime、插件框架或模型供应商的内部实现。
+
+控制核心本身分为受保护治理根和可版本化策略 / 业务模块。后者可以升级，但不能绕过前者的签名、职责分离、审计和回滚；执行候选不能拥有修改或批准治理根的权限。
 
 ### 5.4 知识与上下文基础层
 
@@ -319,6 +334,7 @@ v1 事实层由三类组成：
 
 适配器类型：
 
+- AgentRuntimeAdapter：Syn 原生 workcell、DeepSeek Harness 或其他执行 runtime；接收有界运行合同，返回运行轨迹与 receipt。
 - AgentAdapter：Codex、Claude Code、OpenClaw、OpenCode、VS Code 等。
 - 知识来源适配器（`KnowledgeSourceAdapter`）：外部知识库、本地文档根、代码索引和其他资料源；可以使用模型上下文协议（MCP）或其他受控协议，只接入来源，不拥有知识作用域、上下文装配和引用规则。
 - MemoryStorageAdapter：JSON、SQLite、未来图数据库或向量库。
@@ -344,6 +360,33 @@ v1 事实层由三类组成：
 - 接收受控命令。
 - 返回结果、摘要、证据引用或错误。
 
+`AgentRuntimeAdapter` 必须使用 vendor-neutral 合同：
+
+```text
+AgentRuntimeProfile
+  adapter_kind / version / package_digest
+  capability_manifest / sandbox_mode / enforcement_status
+  session / child-run / tool-interception support
+  dynamic_extension_policy
+
+AgentWorkcellRun
+  attempt_id / grant_id / runtime_profile_digest
+  budget / deadline / stop_conditions / external_effect_policy
+  runtime_session_ref / trace_ref / child_run_refs
+
+RuntimeReceipt
+  terminal_state / trace_hash / tool_call_refs / effect_refs
+  cost / enforcement_degradation / unresolved / failure_reason
+```
+
+映射边界：
+
+- runtime session 只是 `RuntimeSessionRef`，不是 Syn `RoleSession`；
+- child / subagent 只是 `ChildRunRef`，不是稳定成员；
+- goal / workflow / loop 是 WorkItem 内部执行策略，不是 Syn `WorkflowRun` 真源；
+- tool call 是 CapabilityGateway 请求，不直接取得现实权力；
+- final answer / worker complete 只是报告候选，不是独立验收。
+
 适配器不能：
 
 - 直接推进工作流状态。
@@ -354,7 +397,7 @@ v1 事实层由三类组成：
 
 ### 5.8 后置优化层
 
-> 本节以及 5.9—5.11 的外部参考属于候选或研究来源，不是当前必做架构、活动计划或施工授权。活动候选只看 `docs/product/candidate-register-v1.md`；下文保留的主要价值是说明这些外部方向不能越过 Syn 核心边界。
+> 本节以及 5.9—5.12 的外部参考属于研究来源，不是当前实现事实、活动计划或施工授权。已经由用户确认的净架构边界以产品正本和 2026-08-16 决定为准；具体外部项目仍只提供实现参考，不能越过 Syn 核心。
 
 工作台可以在最终蓝图后期引入优化层，例如 GEPA 这类 prompt / template / agent instruction 优化框架。
 
@@ -604,6 +647,49 @@ H0-H7：先把 codex-local 真实自动化工作流产品化
 
 - current master 先在 M3 / M5 收敛中立会话和执行合同，再在 M8 接 adapter / connector；不按旧 H / I 计划续跑。
 - 抽象完成不能声称 Claude Code / OpenClaw / OpenCode 已接入；provider credential / model verification 仍需独立任务与授权。
+
+### 5.12 DeepSeek Harness 方法与 Syn 原生 Runtime 约束
+
+DeepSeek Harness（DSH）可以作为 Agent Runtime 方法参考和可选适配器，但不是 Syn 的控制核心或必需依赖。
+
+参考资料：
+
+- `docs/research/2026-08-16-deepseek-harness-ai-opc-reference-research-v1.md`
+- `docs/research/2026-08-14-deepseek-harness-reference-research-v1.md`（历史初步判断）
+
+吸收的方法：
+
+- Service Definition / Provider / Consumer 能力接缝；
+- Profile / Bundle / Patch 式运行组合；
+- append-only runtime event 与“模型可见上下文可重建”不变量；
+- Step / Turn 分离和 pre-execute / execute / post-execute 工具管线；
+- 外部副作用前 checkpoint 与崩溃后的诚实 `OUTCOME_UNKNOWN`；
+- Profile、Tool、Workflow、Child Run 和动态 Package 的可观察、版本化与候选化。
+
+强制边界：
+
+- DSH Approval / Sandbox 只能是 runtime 内第二道防线，不能替代 Syn `ExecutionGrant`、ConnectorGrant 或 CredentialRef；
+- DSH Session Event Log 只保存模型运行上下文与轨迹，不是 Syn 正式事件、审计、知识、记忆或业务事实账本；
+- DSH Goal / Schedule / Job / Workflow / Ralph 不承担公司级持久 operation owner；Syn 自己负责 durable queue、lease、timer、retry、dead letter、effect ledger 和恢复；
+- Cordis 可逆注册只覆盖受管理的内部 effect。邮件、付款、网络发送、远程写入等现实副作用必须用幂等键、outbox、来源回读、reconcile / compensation 与人工接管；
+- 动态 Cordis Package 默认关闭；即使生成成功，也只能进入 Skill / Plugin / Profile 候选链；
+- DSH、Syn 原生 runtime 和未来其他 runtime 必须通过相同 conformance suite，是否接入由安全、可靠性、维护与成本证据决定。
+
+推荐关系：
+
+```text
+Syn Policy + Operation Owner
+  -> ExecutionGrant / AgentWorkcellRun
+  -> AgentRuntimeGateway
+      -> Syn Native Runtime
+      -> DeepSeek Harness Adapter（可选）
+      -> Other Runtime Adapter（可选）
+  -> RuntimeReceipt + TraceRef
+  -> Independent Verifier
+  -> Syn Fact / State / Memory Candidate
+```
+
+当前边界：M1–M4 不重开；M5 冻结并实现通用 Runtime 合同，M7 治理可执行能力包，M8 接外部适配器，M9 管替换与退役，M10 做生产硬化，M11 承接受治理自升级。文件存在不激活任何阶段。
 
 ## 6. 个人范围与项目单元
 
@@ -938,6 +1024,20 @@ user_decision（若需要）
 - 写事件和审计。
 - 生成记忆候选。
 
+项目 `WorkflowRun` 是 Syn 的持久业务运行真源。一次或多次 `AgentWorkcellRun` 只是其中可销毁的执行工作单元：
+
+```text
+WorkflowRun / WorkItem
+  -> durable operation + ExecutionGrant
+  -> AgentWorkcellRun
+  -> runtime Step / Turn / Tool Pipeline
+  -> RuntimeReceipt / WorkerReport
+  -> independent verification
+  -> Syn state transition
+```
+
+Workcell 进程、runtime session 或外部 Harness 被销毁后，WorkflowRun、未决外部 effect、预算、审计和恢复入口不能随之丢失。进程内 job / schedule 只能做局部便利能力。
+
 边界：
 
 - 工作流不是普通任务列表。
@@ -958,6 +1058,13 @@ user_decision（若需要）
 - 用户消息、App 打开、定时器、外部数据变化、项目状态变化、完成、失败和用户纠正都可以触发事件。
 - 没有事件时不启动 Agent / 模型空转。
 - 所有 handler 必须有幂等键、预算、重试上限、失败回执和审计。
+
+运行轨迹与正式账本分层：
+
+- `RuntimeEvent` / `RuntimeTrace` 记录模型实际看见的消息、Step、Turn、Tool Call / Result 和 compaction 边界，使 runtime 上下文可重建；
+- `WorkbenchEvent` / `AuditEvent` 只记录经过对象 owner 与 Policy 接受的结构化事实、引用和 hash；
+- Runtime Trace 可以成为证据来源，但不能自动晋升为正式事实、长期记忆或完成结论；
+- 外部动作 checkpoint 后本地崩溃且缺少结果时必须写 `OUTCOME_UNKNOWN`，先按 effect id 回读，不把未知写成成功或失败，也不盲重试。
 
 事件包括：
 
@@ -1087,6 +1194,23 @@ user_decision（若需要）
 - 把首页、摘要、日报或 ProjectSummary 当第二事实源。
 - 把 connector read grant 当 write grant，或把 CredentialRef 展开进业务数据。
 - 用占位入口冒充真实能力。
+- 让 runtime session、goal、child agent 或 final answer 直接推进 Syn 正式状态。
+- 让自升级候选改写自己的 oracle、权限、预算、审计或晋升策略。
+
+自升级实施统一走：
+
+```text
+ImprovementSignal
+  -> UpgradeCandidate
+  -> capability / permission / supply-chain diff
+  -> isolated worktree / workcell
+  -> deterministic test + replay + independent verifier
+  -> canary
+  -> signed PromotionDecision
+  -> monitored rollout / rollback
+```
+
+没有可靠 verifier 的候选只能停在建议或可体验草案；治理根变更始终由用户签署。完整阶段合同见 `docs/plans/2026-08-16-syn-stage-11-governed-self-upgrade-platform-plan-v1.md`。
 
 ## 14. 一句话
 
@@ -1106,3 +1230,4 @@ user_decision（若需要）
 - 秘书持续守住未闭环，首页和日报只做可回源聚合。
 - 日常 / 开发按工作显式分通道。
 - 外部软件按能力接入，凭据只以保护引用参与。
+- 默认 Agent Runtime 原生、外部 Runtime 可替换，自升级只在治理根之下通过候选晋升发生。

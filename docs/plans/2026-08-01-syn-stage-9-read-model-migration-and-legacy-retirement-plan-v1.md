@@ -5,7 +5,7 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M9。<br>
 硬前置：M1-M8 exit receipts；各目标 domain 有 authoritative source、projector、parity、rollback 与 replacement acceptance。<br>
-当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权主读切换、命令注销、归档、删除、桌面应用或产品代码。
+当前路线状态：M1–M4 已完成各自具名范围，M5–M9 未激活。Harness 动态 stage / leaf 另看 `../harness/plan.md`；本计划不授权主读切换、runtime 替换、命令注销、归档、删除、桌面应用或产品代码。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../current-state.md` → 当前能力盘点 → master → M1-M8 退出 / 暂缓回执 → 本计划。历史迁移夹具和演练只作素材，不升级为真实切换事实。
 
@@ -42,6 +42,7 @@
 5. 逐页 / 逐对象 parity、rebuild、failure / rollback 可机械复现；
 6. raw JSON 默认不出产品响应；legacy data 有 manifest、hash、export 和残留解释；
 7. 一次只退役一个 capability / command family，物理删除继续另批。
+8. 把 Agent Runtime / Profile / Plugin package / session compatibility 纳入替换与退役 inventory，区分内部注册撤销和现实副作用补偿。
 
 ## 2. 本阶段不做
 
@@ -53,6 +54,7 @@
 - 不把 ObjectRef 只做前端字符串；后端 resolver / scope / owner 必须同合同；
 - 不在 M9 顺带做新业务功能、视觉重做、真实 connector 或发布；
 - 不用 fixture / build / history 声称 live cutover 完成。
+- 不把 Cordis / Plugin 可卸载或 listener 清理成功写成邮件、付款、远程 API 等现实动作已经回滚。
 
 ## 3. 退役清单与 owner
 
@@ -70,6 +72,7 @@
 10. 旧 `knowledge_vault_*` single-layer note APIs；
 11. legacy JSON / sidecar primary write paths；
 12. 旧计划、旧按钮和隐藏 action 的执行语义。
+13. 旧 Agent Runtime / runner、Profile、Plugin package、runtime session / trace compatibility 与动态扩展入口。
 
 每一项必须有：current owner、replacement owner、read / write references、data manifest、replacement evidence、cutover owner、rollback owner、unregister owner、archive / export path、residual HOLD。退役线是唯一 writer。
 
@@ -77,7 +80,7 @@
 
 ### SYN-MIG-001 — Read-model / retirement inventory freeze
 
-冻结全部 page / command / store / UI reference graph、typed ObjectRef registry、candidate family、owner、opening hashes、acceptance source 和禁止删除项。每个 family 必须列 exact symbol / command / UI route / store，并逐项标 `KEEP / EXTRACT / RETIRE / HOLD`；在该清单冻结前任何 family unregister 不可激活。只读分析 / 文档。
+冻结全部 page / command / store / UI reference graph、typed ObjectRef registry、runtime / profile / package / session compatibility、candidate family、owner、opening hashes、acceptance source 和禁止删除项。每个 family 必须列 exact symbol / command / UI route / store / package digest / runtime profile，并逐项标 `KEEP / EXTRACT / RETIRE / HOLD`；在该清单冻结前任何 family unregister / unload 不可激活。只读分析 / 文档。
 
 ### SYN-MIG-002 — Typed ObjectRef 与 deep-link resolver
 
@@ -139,6 +142,8 @@ MIG-001 → MIG-002 → MIG-003 → MIG-004 → MIG-005 → MIG-005A
 - raw legacy blob 只在受限 archive / export，不进入普通产品 DTO；
 - archive/export 与 physical delete 分开；删除只能针对显式、验证后的 exact target，另获用户批准；
 - 每次失败只回滚当前 family，不同时恢复多个旧主写路径。
+- runtime / plugin 内部注册可以用 dispose / unload / version pin 回退；已发生的文件、网络和外部 connector effect 仍按 effect id、来源回读、reconcile / compensation 和人工接管结算。
+- runtime session / trace 可归档或替换，但不能带走 Syn RoleSession、WorkflowRun、正式事实、审计、长期记忆或未决 outbox。
 
 ## 7. 验证矩阵
 
@@ -170,4 +175,5 @@ MIG-001 → MIG-002 → MIG-003 → MIG-004 → MIG-005 → MIG-005A
 - raw JSON 默认不出产品响应；
 - 旧 store 未未经授权物理删除；
 - 给 M10 提供 release candidate 路由、HOLD、recovery / rollback scripts 和全日场景 truth sources；
+- 给 M11 提供 runtime / profile / package version pin、兼容窗、撤回、export 和恢复合同；
 - `../current-state.md` 回写实际完成、暂缓和下一入口；M10 未激活不得续跑。

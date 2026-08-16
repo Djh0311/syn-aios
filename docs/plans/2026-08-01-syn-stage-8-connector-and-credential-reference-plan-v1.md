@@ -5,7 +5,7 @@
 状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M8。<br>
 分层前置：`CON-000` design-only 仍需当前用户明确指令或 matching active package；“design-only”只缩小写面，不豁免激活规则。framework 实现需 M1/M2 exit；RoleSession / memory / Secretary 集成再等 M3/M7/M4 合同；真实 provider 另需独立授权。<br>
-当前活动阶段 / 叶：无（`NONE`）；M3 尚未激活，本计划也未激活；本计划不授权网络、真实账号、凭据、付费服务提供方、外部动作、桌面应用或产品代码。
+当前路线状态：M1–M4 已完成各自具名范围，M5–M8 未激活。Harness 动态 stage / leaf 另看 `../harness/plan.md`；本计划不授权网络、DSH、真实账号、凭据、付费服务提供方、外部动作、桌面应用或产品代码。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 2026-08-01 修订 → 总计划 → 对应分层前置回执 → 本计划。提前只做设计不得建立生产连接器或凭据真源。
 
@@ -36,15 +36,18 @@
 - provider 网络、账号、付费、rate limit、数据驻留和隐私要求；
 - read / index / sync / action 的实际 capability 边界和确认方式；
 - 多 provider、OpenClaw / Claude Code / OpenCode 等真实接入；
+- AgentRuntime、Agent / Model、Tool、Harness、KnowledgeSource 与 Connector 的精确端口边界；
+- DSH 插件 / MCP Tool 如何只提交 CapabilityRequest / ActionIntent，而不直接取得凭据和 connector write；
+- 文件系统 sandbox 之外的网络、进程、同 UID 凭据、插件供应链和外部副作用隔离；
 - 真实 App、真实 network 和真实 secret 的验收。
 
 ## 1. 阶段目标
 
-1. 统一内部与外部 adapter 的 capability 描述、输入输出 schema、风险、确认、审计、重试和失败合同；
+1. 统一内部与外部 adapter 的 capability envelope、输入输出 schema、风险、确认、审计、重试和失败合同；不把不同 owner 的端口合成万能 adapter；
 2. 建立 ConnectorDefinition、ConnectionAccount metadata、CapabilityGrant、SyncCursor、InboundItem、ActionRequest / Result；
 3. `view / index / sync / action / secret` 分开声明、授权、撤销和审计；
 4. 建立 opaque `CredentialRef` 与 vault port；普通 DB / event / audit / memory / chat 只存 opaque ref、非敏感 status 和非 secret-derived content hash，不存 secret 或 secret 的直接 hash；
-5. 先把 Codex（代码智能体）、外部知识来源、主管能力协议和开发护栏包装为内部适配器；知识核心服务本身不在本阶段适配器化；
+5. 分开抽取 AgentRuntime、Agent / Model、Tool、Harness、KnowledgeSource 与 Connector 端口；DeepSeek Harness 若接入，只属于 `AgentRuntimeAdapter`；
 6. 先用 mock provider 走完整合同，再以一个低风险只读 connector 做首个真实样本；
 7. 设置 / 管理面展示来源、授权范围、最近同步、错误、断开和撤权，不显示 secret 正文；
 8. 写型 external action 永远与只读 connector 分包，并用 M2 outbox / effect id / result command。
@@ -60,6 +63,9 @@
 - 不以 mock、index metadata 或 capability list 声称 provider 已接入；
 - 不在 M8 物理删除旧内部命令 / adapter；
 - 不把开发护栏候选、技能插件或知识索引自动视为可执行连接器。
+- 不让 Harness Tool / Plugin 自己解引用 CredentialRef、绕过 ConnectorGateway 或直接写外部系统。
+- 不把 MCP Tools bridge 等同于完整 MCP Resources / Prompts、GUI 控制或业务连接器已经存在。
+- 不把 filesystem sandbox 标签等同于网络、进程、凭据和恶意插件的完整隔离。
 
 ## 3. 对象、owner 与 capability 边界
 
@@ -73,6 +79,8 @@
 | `InboundItem` | connector domain | source ref、external id/version、summary/ref/hash、sensitivity、dedupe |
 | `ActionRequest/Result` | Action domain | user confirmation、effect id、payload ref/hash、external receipt、result command；Outbox 只拥有 delivery / effect 状态，不拥有 action 业务结论 |
 | adapter | infrastructure | 只执行已授权 capability，不拥有 grant / domain transition |
+| `AgentRuntimeAdapter` | M5 runtime port | 只执行 Workcell；不拥有 ConnectorDefinition、CredentialRef、外部事实或 ActionResult |
+| `CapabilityRequest/ActionIntent` | Policy / Connector gateway input | 来自 runtime / tool 的请求；必须重新判 Grant、effect id、预算和 provider data contract |
 
 每个 capability 合同至少固定：subject / role / scope、input / output schema、risk、confirmation、secret / egress、audit、idempotency、retry、rate / budget、failure / compensation、retention。
 
@@ -84,11 +92,11 @@
 
 ### SYN-CON-001 — Adapter 与 Provider Data Contract 基线
 
-冻结内部 / 外部 adapter interface、capability taxonomy、provider data contract 模板、secret boundary、error / receipt、revoke / delete / retention、mock fixtures。至少设计两种内部标识和调用形状不同的伪服务提供方，证明 Syn 的角色和会话身份不依赖某一家线程编号。只写合同。
+冻结共享 capability envelope，以及 AgentRuntime、Agent / Model、Tool、Harness、KnowledgeSource、Connector 各自 interface / owner；再冻结 provider data contract 模板、secret boundary、error / receipt、revoke / delete / retention、mock fixtures。至少设计两种内部标识和调用形状不同的伪服务提供方，证明 Syn 的角色和会话身份不依赖某一家线程编号。只写合同。
 
 ### SYN-CON-002 — 内部 Adapter 抽取
 
-把 Codex（代码智能体）、外部知识来源、主管能力协议和开发护栏包装为统一能力描述与端口；外部来源可使用模型上下文协议（MCP）或其他受控协议。用两种伪适配器通过同一角色、会话、权限、结果和错误合同；不改变现有权限，不引入凭据引用，不把只读索引变成执行面，也不复制 M7 的知识来源登记与上下文装配职责。
+把 Codex（代码智能体）、Agent Runtime、外部知识来源、主管能力协议和开发护栏包装为各自端口，共享最小 capability envelope；外部来源可使用模型上下文协议（MCP）或其他受控协议。DSH 只能包装为 `AgentRuntimeAdapter`，其 Tool / Plugin 输出重新进入 Syn CapabilityGateway。用两种伪适配器通过同一角色、会话、权限、结果和错误合同；不改变现有权限，不引入凭据引用，不把只读索引变成执行面，也不复制 M7 的知识来源登记与上下文装配职责。
 
 ### SYN-CON-003 — CredentialRef 与 vault port
 
@@ -108,7 +116,7 @@
 
 ### SYN-CON-007 — 写型 action 独立候选包
 
-本阶段只冻结，不默认激活。要求 explicit confirmation、effect id、outbox claim、external result command、partial failure / compensation、readback 与 per-action grant；绝不复用只读 grant。
+本阶段只冻结，不默认激活。runtime / tool 只能提交 `ActionIntent`；ConnectorGateway 要求 explicit confirmation、effect id、outbox claim、external result command、partial failure / compensation、source readback 与 per-action grant；绝不复用只读 grant。checkpoint 后结果缺失进入 `OUTCOME_UNKNOWN`，不得由 runtime 盲重试。
 
 ### SYN-CON-008 — 隔离 / 真实 App 分层验收
 
@@ -151,7 +159,7 @@ CON-001 → CON-002
 | Isolated Tauri | 管理面、错误、撤权、secret 不可见 | 真实账号通过 |
 | 经授权真实 read connector | 指定 provider/account/dataset 的真实证据 | write action、其他 provider 或发布通过 |
 
-机械验收：unsupported / ungranted capability 在 adapter 前拒绝；静态 secret scan 与 sentinel 动态 success/error/timeout/retry/diagnostics/UI 检查分别通过；cursor / dedupe 重试不重复 InboundItem；断开 / 撤权后零新调用；错误在 App 可见且不泄露 provider response 原文。静态 scan 单独不构成运行时 secret-exclusion 结论。
+机械验收：unsupported / ungranted capability 在 adapter 前拒绝；runtime / plugin 不能直接解引用 CredentialRef 或执行 connector action；静态 secret scan 与 sentinel 动态 success/error/timeout/retry/diagnostics/UI 检查分别通过；session / trace / memory /普通日志不出现 secret；cursor / dedupe 重试不重复 InboundItem；断开 / 撤权后零新调用；错误在 App 可见且不泄露 provider response 原文。静态 scan 或 filesystem sandbox 单独不构成运行时 secret-exclusion / isolation 结论。
 
 ## 8. 独立授权与停止条件
 

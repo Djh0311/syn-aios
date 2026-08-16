@@ -1,6 +1,8 @@
 # Syn 产品与架构候选登记 v1
 
-日期：2026-08-09
+初版日期：2026-08-09
+
+最近更新：2026-08-13
 状态：**唯一活动候选入口；不是产品正本，不是开发计划，不是执行授权。**
 
 候选只保存真正需要用户以后决定的问题。具体表名、字段名、代码拆法、阈值和测试夹具属于实施设计，不因为尚未实现就全部变成产品候选。下文的 `CAND` 是“候选编号”，只用于稳定引用。
@@ -57,6 +59,36 @@
 决定前默认：只做人工分析和候选记录，不建设自动发布链。
 
 来源：[`../workbench-system-architecture-v1.md`](../workbench-system-architecture-v1.md)中的后置优化设计来源。
+
+### CAND-013 Primary Core + Edge Core 分布式运行架构转正门
+
+已确定的候选方向：
+
+- 目标运行模型采用一个 Primary Core + 多个 Edge Core，不建立平级多 Primary，也不同步活动 SQLite 冒充多节点状态；
+- 近期先把后续开发源码和开发环境迁到 5600X WSL，这只是开发迁移；
+- 独立 Headless Core、远程 transport、身份、单写者、故障恢复和切换合同通过后，5600X 才可能成为 Interim Primary；
+- Mac 保留全功能 Edge + 主 Desktop UI：当前连接内嵌实现，Interim 阶段连接 5600X，未来连接 EPYC；
+- 未来 EPYC 独立 VM 通过候选、恢复与切换验收后，才可能接替 5600X 成为唯一 Primary。
+
+当前未成立：
+
+- 仓内尚无独立 `syn-core-lib`、Headless Primary service、远程 Node Registry、设备配对、AuthorityLease 或跨节点 reconciliation；
+- 5600X、WSL2、Tailscale、磁盘、GPU、systemd、网络入口和备份链尚未现场验收；
+- M1–M4 已完成，M5–M10 未激活；本候选不重开或倒改已完成阶段，也不自动激活下游；
+- 开发环境迁移、WSL 构建、Tailscale ping、临时端口可达和候选进程启动，均不能单独证明 Headless 或 Primary 切换完成。
+
+以后需要决定：
+
+- remote transport、双向认证、设备密钥、Primary 数据库与存储方式；
+- Lease/Grant 时长、离线风险、owner、epoch/fencing 和 reconciliation 合同；
+- 5600X 与 EPYC 的网络、备份、RPO/RTO、稳定观察和切换/回切手册；
+- 手机长期保持 UI-only，还是未来成为受限 Edge。
+
+决定前默认：现行 Mac/Tauri 架构继续是当前事实与回退基线；允许按独立计划迁移开发环境，但不得把迁移结果升格为架构转正、Headless 完成、正式数据迁移或 Primary/epoch 切换。
+
+详细候选：[`syn-primary-edge-core-distributed-runtime-architecture-candidate-v2.md`](syn-primary-edge-core-distributed-runtime-architecture-candidate-v2.md)。
+
+开发迁移计划：[`../plans/2026-08-13-syn-5600x-wsl-development-environment-migration-plan-v1.md`](../plans/2026-08-13-syn-5600x-wsl-development-environment-migration-plan-v1.md)。
 
 ## 3. 已处理或明确后置
 
