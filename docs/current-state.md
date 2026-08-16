@@ -1,6 +1,15 @@
 # 当前状态
 
-截至 2026-08-13，M1–M3 已完成各自具名主线范围。M3 内容提交 `fa8e392`，状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4C01–M4C10 已进入主线，`stage-06` 已程序性关闭；2026-08-11 独立总线复核发现的五项普通产品 P1 已由 M4R01–M4R06 修正，M4R07 的 v2 可携带 receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。M4R01–M4R07 均已完成并归档，`stage-07` 已关闭，当前状态是 `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`；当前没有活动 stage、活动 leaf 或持续授权，M5–M10 继续 `PLANNED / NOT_ACTIVE`。
+截至 2026-08-16，M1–M3 已完成各自具名主线范围。M3 内容提交 `fa8e392`，状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4C01–M4C10 已进入主线，`stage-06` 已程序性关闭；2026-08-11 独立总线复核发现的五项普通产品 P1 已由 M4R01–M4R06 修正，M4R07 的 v2 可携带 receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。M4R01–M4R07 均已完成并归档，`stage-07` 已关闭，当前状态是 `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`。
+
+## 2026-08-16 M5 事实重整启动（当前状态）
+
+- M5 与 M6 现有实现统一定级为 `M5/M6 CANDIDATE WIP / UNIT-LEVEL PROTOTYPE / NOT_ACCEPTED / NOT_MAINLINE`；57（M5 定向）/ 33（M6 定向）单测只作为候选原型单测基线，不绑定阶段退出。此前 `docs/harness/plan.md` 手工勾选的 stage-14/15 完成标记已撤销，不构成阶段历史。
+- 用户 2026-08-16 明确“按计划开始 M5”；`docs/plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` 成为 M5 现行实施计划。真实 `stage-14` 已建立，唯一 current leaf 为 REC-00（事实恢复门），`authorization.json` 为精确 closed 两字段。
+- M5 候选 WIP 与迁移/Harness Lite 0.8/架构文档混合仍在本机 uncommitted 工作树（HEAD 仍为 main@9103c3b，index 相对 HEAD 无 staged delta）；R0 恢复载体（tar + SHA-256 manifest + 分层归责）在 REC-00 中形成。
+- M6 保持未激活：须在 M5 独立验收后才另建真实 stage-15。M7–M11、Headless Core、Primary/epoch 继续 `PLANNED / NOT_ACTIVE`。
+
+当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。D0D01 只证明 `main@9103c3b26b060e854be119a8cedaa856a2a900ce` 与冻结 WIP 的 `SOURCE_BYTES_MATCH`；它不证明依赖安装、产品运行、Headless Core、Primary / Edge、部署或发布。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；本轮文档校准 `stage-13` 已完成并归档，当前无 current leaf，`authorization.json` 保持 closed。
 
 ## 现在分别看哪里
 
@@ -9,7 +18,7 @@
 3. `docs/product/authority-register-v1.md`：决定各类文件当前有什么效力；
 4. `docs/workbench-system-architecture-v1.md`：决定现行系统边界；
 5. 本文件、源码与新鲜验证：说明已实现事实、未知和证据上限；
-6. `AGENTS.md`、`docs/harness/plan.md` 与 `docs/harness/done/2026-08/`：确认 M4R01–M4R07 均已归档、`stage-07` 已关闭且当前没有活动 stage / leaf；历史授权只证明当时施工有依据，不延续为新的实现权限。
+6. `AGENTS.md`、`docs/harness/plan.md`、唯一 current leaf（若存在）与 `docs/harness/done/2026-08/`：确认当前工作投影和历史收口；leaf / stage / 旧授权不能扩大当前用户原话。
 
 验收报告、交接、历史任务、研究和旧决定只按登记状态提供证据或来源，不自行成为产品定义、当前计划或持续授权。
 
@@ -44,7 +53,7 @@
 - 第 8 次仍执行普通 `recovery_timer`，真实等待 98 秒并保留后端恢复验证；其 receipt SHA 被 `launch_8_ui_validation` 范围对象绑定。取消的只是 UI / Computer Use / PNG / attestation gate。
 - `launch_8_ui_validation` 明确记录 `required_by_current_contract=false`、`execution_status=NOT_EXECUTED`、`acceptance_result=NOT_APPLICABLE`、Computer Use 次数 0、截图/attestation/capture signal 均未写。这既不是视觉失败，也不是页面、Accessibility、截图质量或 Computer Use 的 `PASS`。
 - `docs/harness/reports/M4R07-isolated-product-reacceptance-evidence/manifest.json` 使用 `syn.m4r07.closeout-evidence-manifest.v2`，精确绑定 portable receipt SHA 与 `launch_8_ui_validation` canonical SHA。当前完成标记只证明该 v2 后端/普通产品链范围。
-- M4R07 已归档，`stage-07` Harness 生命周期已经关闭；该关闭事实不自动激活 M5–M10，也不扩大上述 v2 产品链证据范围。
+- M4R07 已归档，`stage-07` Harness 生命周期已经关闭；该关闭事实不自动激活 M5–M11，也不扩大上述 v2 产品链证据范围。
 
 ## M3C01–M3C07 已证实的主线事实
 
@@ -71,19 +80,19 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 - M5 ProjectSummary 合同和 owner 尚未激活，M4 项目摘要来源保持 `HOLD / UNAVAILABLE`；不得据此声称“全部用户相关 open loops”已经接入。
 - M6 Global Supervisor 成功 consult 未实现；M4 只持 M3 Handoff 请求/回执边界，普通产品 recipient 显式 unavailable。
 - M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M4 只产出 source-backed event/ref，不写 M7 对象。
-- M8 真实 connector、credential 与外部 source 未进入；M9 旧路 command unregister/物理退役、M10 全日真实试点与发布硬化也未进入。
+- M8 真实 connector、credential 与外部 source 未进入；M9 旧路 command unregister/物理退役、M10 全日真实试点与发布硬化、M11 受治理自升级也未进入。
 - 真实个人资料、真实用户项目写入、真实模型/provider、真实 Codex 消息、真实账号/凭据/connector、网络外部写入、真实数据迁移、push、merge、rebase、部署和发布均未进入。
 - M4R07 v2 只证明本机隔离普通产品的后端/产品链；第 8 次 UI / Computer Use / PNG / attestation 为 `NOT_EXECUTED / NOT_APPLICABLE`，没有视觉验收结论。它也不证明长期运行、真实日常节奏、真实数据/provider/connector、发布包或生产结论。
-- 5600X / WSL / Tailscale 只作为未来迁移与访问方向保留；尚未建立对应 stage / leaf 或验收证据，不是当前实现、完成事实或执行入口。
+- 5600X WSL 已成为用户指定的权威源码工作仓库，D0D01 有 `SOURCE_BYTES_MATCH` 证据；长期 SSH 当前启动周期与重启后稳定性仍分别由 D0C04 / D0C05 结算，不能从当前可连接反推 `PERSISTENT_SSH_RESTART_STABLE`。
+- 2026-08-16 已完成 DSH 官方研究、Syn 原生治理核心 / 可替换 Agent Runtime / 受治理自升级方向决定、架构与 M5–M11 计划校准；这些是文档和计划事实，不是产品代码、DSH 集成或自升级实现。
 
 ## 当前开发状态与停止点
 
-M4 / stage-06 已程序性关闭；M4R01–M4R07 已完成并归档，M4R07 v2 产品链证据为 PASS，`stage-07` 已关闭。当前没有活动 stage、活动 leaf 或持续授权。`USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810` 只作为历史授权记录，不延续到 M5 或其他工作。
+M4 / stage-06 已程序性关闭；M4R01–M4R07 已完成并归档，M4R07 v2 产品链证据为 PASS，`stage-07` 已关闭。WSL 迁移 `stage-12` 仍开着但没有 current leaf，D0C04 / D0C05 不因本轮文档收口恢复；文档校准 `stage-13` 已归档。`USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810` 只作为历史授权记录，不延续到 M5 或其他工作。
 
-后续任何实现都需要新的当前用户指令、匹配 stage、唯一 leaf 与授权。若需要真实数据/模型/provider/connector/远端/发布，或要进入 M5–M10，必须停在该事实，不扩大本次 M4R07 v2 结论。
+后续任何实现都需要新的当前用户指令和匹配的 Harness 工作投影。若需要真实数据 / 模型 / provider / connector / 设备写 / 发布，或要进入 M5–M11，必须停在该事实，不扩大本次 M4R07 v2、D0D01 或文档校准结论。
 
 ## 保全
 
-- `/Users/yoyi/workspace/product-line-syn-fnd-002` 继续只读保留既有战略开发中工作；它不是当前主线事实。
-- `/Users/yoyi/workspace/product-line-syn-m2-closeout` 继续保留 M2 审查锚点。
-- 不从这些工作树清理、覆盖、暂存或归责既有改动。
+- 5600X WSL `/home/synadmin/workspace/syn` 是当前权威工作仓库；其中既有 dirty WIP 继续保全，不 reset、clean、stash、覆盖或归责。
+- `/Users/yoyi/workspace/product-line-syn-fnd-002` 与 `/Users/yoyi/workspace/product-line-syn-m2-closeout` 只作为旧 Mac 审查锚点保留，不再作为当前主线写入位置。
