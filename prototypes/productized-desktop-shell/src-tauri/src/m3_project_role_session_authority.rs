@@ -61,8 +61,12 @@ pub(crate) struct M3ProjectRoleSessionAuthorityError {
 }
 
 impl M3ProjectRoleSessionAuthorityError {
-    fn new(code: impl Into<String>) -> Self {
+    pub(crate) fn new(code: impl Into<String>) -> Self {
         Self { code: code.into() }
+    }
+
+    pub(crate) fn unavailable() -> Self {
+        Self::new(M3_AUTHORITY_UNAVAILABLE)
     }
 }
 
@@ -100,6 +104,15 @@ impl M3ProjectRoleSessionAuthorityHandle {
             _ordinary_product: (),
         }
     }
+}
+
+/// Server-only AppState slot boundary. A missing handle is the uninstalled
+/// authority, not an invitation for the caller to mint a session or a code.
+pub(crate) fn require_installed_authority(
+    slot: Option<&M3ProjectRoleSessionAuthorityHandle>,
+) -> Result<&dyn M3ProjectRoleSessionAuthorityPort, M3ProjectRoleSessionAuthorityError> {
+    slot.map(|handle| handle as &dyn M3ProjectRoleSessionAuthorityPort)
+        .ok_or_else(M3ProjectRoleSessionAuthorityError::unavailable)
 }
 
 impl M3ProjectRoleSessionAuthorityPort for M3ProjectRoleSessionAuthorityHandle {
@@ -189,6 +202,7 @@ fn is_index_locator_claim(value: &str) -> bool {
 #[cfg(test)]
 mod m3_project_role_session_authority_tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn request(claim: &str) -> M3ProjectRoleSessionRequest {
         M3ProjectRoleSessionRequest {
@@ -280,13 +294,106 @@ mod m3_project_role_session_authority_tests {
         );
     }
 
+    fn uninstalled_fixture_app_state() -> crate::AppState {
+        crate::AppState {
+            index_path: PathBuf::from("/m3o01r01/fixture/index.json"),
+            tasks_path: PathBuf::from("/m3o01r01/fixture/tasks.md"),
+            workflow_state_path: PathBuf::from("/m3o01r01/fixture/workflow-state.json"),
+            m3_role_session_read_runtime: Default::default(),
+            m1_project_index: None,
+            m3_project_role_session_authority: None,
+            m5_store_path: None,
+        }
+    }
+
+    fn installed_fixture_app_state() -> crate::AppState {
+        crate::AppState {
+            index_path: PathBuf::from("/m3o01r01/ordinary/index.json"),
+            tasks_path: PathBuf::from("/m3o01r01/ordinary/tasks.md"),
+            workflow_state_path: PathBuf::from("/m3o01r01/ordinary/workflow-state.json"),
+            m3_role_session_read_runtime: Default::default(),
+            m1_project_index: None,
+            m3_project_role_session_authority: Some(
+                M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(),
+            ),
+            m5_store_path: None,
+        }
+    }
+
+    fn ordinary_product_app_data_root() -> PathBuf {
+        let parent = std::env::temp_dir().join(format!(
+            "m3o01r01-ordinary-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let root = parent.join("local.codex.governance.workbench");
+        std::fs::create_dir_all(&root).expect("create ordinary app-data root");
+        std::fs::canonicalize(&root).expect("canonicalize ordinary app-data root")
+    }
+
+    fn assert_unavailable_slot(state: &crate::AppState) {
+        match state.m3_project_role_session_authority_port() {
+            Ok(_) => panic!("uninstalled AppState slot must not yield an authority port"),
+            Err(error) => assert_eq!(error.code, M3_AUTHORITY_UNAVAILABLE),
+        }
+    }
+
     #[test]
-    fn m3_project_role_session_authority_missing_port_is_unavailable() {
-        let missing: Option<&dyn M3ProjectRoleSessionAuthorityPort> = None;
-        assert!(missing.is_none());
-        assert_eq!(
-            M3ProjectRoleSessionAuthorityError::new(M3_AUTHORITY_UNAVAILABLE).code,
-            M3_AUTHORITY_UNAVAILABLE
+    fn m3_project_role_session_authority_uninstalled_app_state_returns_unavailable() {
+        let legacy = crate::AppState::try_new().expect("legacy AppState must construct");
+        assert_unavailable_slot(&legacy);
+        assert_unavailable_slot(&uninstalled_fixture_app_state());
+    }
+
+    #[test]
+    fn m3_project_role_session_authority_ordinary_slot_stays_fail_closed() {
+        let lib = include_str!("lib.rs");
+        assert!(
+            lib.contains("M3ProjectRoleSessionAuthorityHandle::install_ordinary_product()"),
+            "ordinary product constructor must still install the authority"
+        );
+        assert!(
+            lib.matches("m3_project_role_session_authority: None,").count() >= 3,
+            "acceptance/legacy constructors must leave the authority uninstalled"
+        );
+
+        let fixture = installed_fixture_app_state();
+        let fixture_port = fixture
+            .m3_project_role_session_authority_port()
+            .expect("installed slot must expose the authority");
+        assert_code(
+            fixture_port.provision(&request("project:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
+            M3_CANONICAL_PROJECT_ID_SOURCE_UNAVAILABLE,
+        );
+
+        let ordinary_root = ordinary_product_app_data_root();
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let ordinary = crate::AppState::try_new_with_ordinary_product_ports(
+            &ordinary_root,
+            &manifest_dir.join("../../index-kernel/codex-index.json"),
+            &manifest_dir.join("../../../tasks/README.md"),
+            crate::m4_secretary_conversation::M4SecretaryConversationProviderConfig::Unavailable,
+        )
+        .expect("ordinary product AppState must construct");
+        let port = ordinary
+            .m3_project_role_session_authority_port()
+            .expect("ordinary installation must expose the installed authority");
+        assert_code(
+            port.provision(&request("project:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
+            M3_CANONICAL_PROJECT_ID_SOURCE_UNAVAILABLE,
+        );
+        assert_code(
+            port.load(&request("project:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")),
+            M3_CANONICAL_PROJECT_ID_SOURCE_UNAVAILABLE,
+        );
+        assert_code(
+            port.restore(&restore_request(
+                "project:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            )),
+            M3_CANONICAL_PROJECT_ID_SOURCE_UNAVAILABLE,
         );
     }
 }

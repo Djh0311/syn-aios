@@ -409,10 +409,13 @@ impl AppState {
     #[allow(dead_code)]
     pub(crate) fn m3_project_role_session_authority_port(
         &self,
-    ) -> Option<&dyn m3_project_role_session_authority::M3ProjectRoleSessionAuthorityPort> {
-        self.m3_project_role_session_authority
-            .as_ref()
-            .map(|handle| handle as &dyn m3_project_role_session_authority::M3ProjectRoleSessionAuthorityPort)
+    ) -> Result<
+        &dyn m3_project_role_session_authority::M3ProjectRoleSessionAuthorityPort,
+        m3_project_role_session_authority::M3ProjectRoleSessionAuthorityError,
+    > {
+        m3_project_role_session_authority::require_installed_authority(
+            self.m3_project_role_session_authority.as_ref(),
+        )
     }
 }
 
