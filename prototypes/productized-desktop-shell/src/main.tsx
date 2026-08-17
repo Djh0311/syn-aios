@@ -2922,15 +2922,15 @@ async function m5r07OpenSupervisorPanel() {
   const tile = await m5r07WaitFor("project_tile", () => document.querySelector<HTMLButtonElement>(".project-tile"));
   tile.click();
   await m5r07Delay(400);
-  const overview = await m5r07WaitFor("overview_tab", () => {
-    return Array.from(document.querySelectorAll<HTMLButtonElement>(".project-tool-tabs button")).find(
-      (button) => button.textContent?.includes("总览") || button.title?.includes("项目总览"),
-    ) ?? null;
+  await m5r07WaitFor("jiaoban_tab_active", () => {
+    const active = document.querySelector<HTMLButtonElement>(".project-tool-tabs button.active");
+    const label = `${active?.textContent ?? ""}${active?.title ?? ""}`;
+    return active && label.includes("交办") ? active : null;
   });
-  overview.click();
-  await m5r07WaitFor("supervisor_open", () => {
+  await m5r07WaitFor("supervisor_session", () => {
     const panel = m5r07Panel();
-    return panel?.dataset.m5SessionStatus === "open" ? panel : null;
+    const status = panel?.dataset.m5SessionStatus;
+    return status === "open" || status === "unavailable" ? panel : null;
   });
 }
 

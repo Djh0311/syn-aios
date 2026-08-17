@@ -230,21 +230,19 @@ export function ProjectWorkspaceShell({
             renderLayout={(content) => (
               <JiaobanMergedLayout
                 {...content}
+                main={<ProjectSupervisorPanel projectId={project.project_root} />}
                 workflowPanel={jiaobanWorkflowPanel}
                 onOpenWorkflow={() => onSelectTool("workflow")}
               />
             )}
           />
         ) : selectedTool === "overview" ? (
-          <>
-            <ProjectOverview
-              project={project}
-              workflowState={workflowState}
-              planAuthorizationStore={planAuthorizationStore}
-              onSelectTool={onSelectTool}
-            />
-            <ProjectSupervisorPanel projectId={project.project_root} />
-          </>
+          <ProjectOverview
+            project={project}
+            workflowState={workflowState}
+            planAuthorizationStore={planAuthorizationStore}
+            onSelectTool={onSelectTool}
+          />
         ) : selectedTool === "workflow" ? (
           workflowPanel
         ) : selectedTool === "agent-sessions" ? (
