@@ -97,7 +97,7 @@ scene A / scene B / resume / second launch / window capture：**全部 `NOT_EXEC
 4. launcher `npm ci --offline --ignore-scripts` → exit 0；`added 90 packages, and audited 91 packages`；`log_path=/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/logs/launcher-npm-ci-offline.log`；`log_sha256=f6b3d37d0e75a22e330744fb9f9580b68a0ef9e3119dae0b6246e35710edd3d6`；`exit_path=.../launcher-npm-ci-offline.exit`
 5. 独立 `cargo build --offline --bins`：cwd `/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/launcher/prototypes/productized-desktop-shell/src-tauri`；argv `["cargo","build","--offline","--bins"]`；exit 0；`log_path=/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/logs/launcher-cargo-build-bins-offline.log`；`log_sha256=840b3b42dd8c3eaf57c12d76717cb869b23581a501419631b7f8db568baf3698`；`exit_path=.../launcher-cargo-build-bins-offline.exit`
 6. 只读端口检查：`ss` 无监听，`127.0.0.1:5173` connect refused → **UNUSED**；未杀任何进程
-7. 用户声明 host `DISPLAY=:0` 不可用。实际命令：
+7. host `DISPLAY=:0` 未使用；本次选择 Xvfb :99。实际命令：
 
 ```text
 timeout 240s xvfb-run -a -s "-screen 0 1280x800x24" node scripts/run-m5-isolated-app-acceptance.mjs

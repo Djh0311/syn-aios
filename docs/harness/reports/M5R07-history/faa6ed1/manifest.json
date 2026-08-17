@@ -4,6 +4,7 @@
   "evidence_binding_commit_sha": "f05d47b5d4ce8843dcca3bf3aa203948bacfa8cf",
   "status": "HISTORICAL_SUPERSEDED_NON_AUTHORITY",
   "current_evidence": false,
+  "excluded_from_current_evidence": true,
   "artifacts": [
     {
       "history_path": "docs/harness/reports/M5R07-history/faa6ed1/isolated-acceptance-receipt.json",
