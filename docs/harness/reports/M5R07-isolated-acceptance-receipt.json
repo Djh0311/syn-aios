@@ -67,30 +67,9 @@
       ]
     }
   },
-  "current_ui_scene_receipts": "NONE",
-  "current_positive_ui_proofs": "NONE",
-  "historical_not_current_evidence": {
-    "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd": {
-      "status": ["historical", "SUPERSEDED", "NOT_CURRENT_EVIDENCE"],
-      "scene_files_byte_frozen": {
-        "ui_scene_a": {
-          "path": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-a.json",
-          "sha256": "5e730c077cd8c281b729596a19e5421c74d704e539615a9d7f1d7d6b3eeb1909"
-        },
-        "ui_scene_b": {
-          "path": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-b.json",
-          "sha256": "5206360ae97f1f47b182a7fc7fdd4ec308c8446599029af4c3e8b629ecb1721a"
-        },
-        "ui_resume": {
-          "path": "docs/harness/reports/M5R07-isolated-app-evidence/ui-resume.json",
-          "sha256": "d3970ecc535d6bec58bbccb31c21f0d6f8286aa4a137682bd71661dfa4b7f7b6"
-        }
-      }
-    },
-    "df11a4a3fa19c6d91c8aaa006e395f83c155e772": {
-      "status": ["historical", "NOT_CURRENT_EVIDENCE"],
-      "note": "older disposable/unavailable receipts only; not mixed into current proof"
-    }
+  "historical_evidence_manifest": {
+    "path": "docs/harness/reports/M5R07-history/faa6ed1/manifest.json",
+    "excluded_from_current_evidence": true
   },
   "stage14_blocker_excluded_from_m5_implementation": "ordinary M1 legacy ProjectRecord to canonical/alias composition",
   "f51_product_fail": false,

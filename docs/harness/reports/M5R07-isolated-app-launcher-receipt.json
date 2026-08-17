@@ -9,6 +9,7 @@
   "launcher_head": "f51c3f64ed21d83730f47b26b86587e1c9b7fe6b",
   "launcher_tree": "dbdeaedaf28f42bbbff7b38ca8764b3332929d5b",
   "launcher_status_after_detach": "clean",
+  "pre_run_after_detach_clean": true,
   "launcher_clone": {
     "argv": ["git", "clone", "--shared", "--no-checkout", "/home/synadmin/workspace/syn", "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/launcher"],
     "started_at": "2026-08-17T22:40:10+08:00",
@@ -20,14 +21,35 @@
     "started_at": "2026-08-17T22:40:10+08:00",
     "exit": 0
   },
+  "source_target_reuse_symlink": {
+    "path": "prototypes/productized-desktop-shell/src-tauri/target",
+    "link": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/launcher/prototypes/productized-desktop-shell/src-tauri/target",
+    "target": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/source/prototypes/productized-desktop-shell/src-tauri/target",
+    "kind": "symlink"
+  },
   "launcher_npm_ci": {
     "cwd": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/launcher/prototypes/productized-desktop-shell",
     "argv": ["npm", "ci", "--offline", "--ignore-scripts"],
     "started_at": "2026-08-17T22:40:11+08:00",
     "ended_at": "2026-08-17T22:40:12+08:00",
     "exit": 0,
+    "exit_path": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/logs/launcher-npm-ci-offline.exit",
+    "exit_source": "fresh_evidence_exit_file",
+    "log_path": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/logs/launcher-npm-ci-offline.log",
+    "log_sha256": "f6b3d37d0e75a22e330744fb9f9580b68a0ef9e3119dae0b6246e35710edd3d6",
     "added_packages": 90,
     "audited_packages": 91
+  },
+  "launcher_cargo_build_bins_offline": {
+    "cwd": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/launcher/prototypes/productized-desktop-shell/src-tauri",
+    "argv": ["cargo", "build", "--offline", "--bins"],
+    "started_at": "2026-08-17T22:40:35+08:00",
+    "ended_at": "2026-08-17T22:41:49+08:00",
+    "exit": 0,
+    "exit_path": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/logs/launcher-cargo-build-bins-offline.exit",
+    "exit_source": "fresh_evidence_exit_file",
+    "log_path": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/logs/launcher-cargo-build-bins-offline.log",
+    "log_sha256": "840b3b42dd8c3eaf57c12d76717cb869b23581a501419631b7f8db568baf3698"
   },
   "port_5173": {
     "checked_at": "2026-08-17T22:42:16+08:00",
@@ -120,14 +142,19 @@
     "derived_from": "installed_authority_slots",
     "isolated_authority_unavailable": true
   },
+  "post_run_tracked_diff": false,
+  "post_run_generated_untracked": [
+    "prototypes/productized-desktop-shell/src-tauri/target",
+    "prototypes/productized-desktop-shell/src-tauri/gen/schemas/linux-schema.json"
+  ],
   "leaf": "M5R07",
   "stage": "stage-14",
   "status": "AWAITING_INDEPENDENT_ACCEPTANCE",
   "closeout": "NOT_CLOSEOUT",
   "m5_complete": "NOT_M5_COMPLETE",
-  "historical_not_current": {
-    "df11a4a3fa19c6d91c8aaa006e395f83c155e772": "historical launcher profile /tmp/syn-r4-acceptance-0abhHq; NOT_CURRENT_EVIDENCE",
-    "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd": "historical scene A/B/resume files; SUPERSEDED / NOT_CURRENT_EVIDENCE"
+  "historical_evidence_manifest": {
+    "path": "docs/harness/reports/M5R07-history/faa6ed1/manifest.json",
+    "excluded_from_current_evidence": true
   },
   "evidence_commit_sha": "NOT_SELF_REFERENCED"
 }

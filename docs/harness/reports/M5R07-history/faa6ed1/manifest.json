@@ -1,0 +1,46 @@
+{
+  "schema": "syn.m5r07.historical-evidence-manifest.v1",
+  "candidate_sha": "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd",
+  "evidence_binding_commit_sha": "f05d47b5d4ce8843dcca3bf3aa203948bacfa8cf",
+  "status": "HISTORICAL_SUPERSEDED_NON_AUTHORITY",
+  "current_evidence": false,
+  "artifacts": [
+    {
+      "history_path": "docs/harness/reports/M5R07-history/faa6ed1/isolated-acceptance-receipt.json",
+      "source_path_at_f05": "docs/harness/reports/M5R07-isolated-acceptance-receipt.json",
+      "git_blob_sha1": "67a8b89f0f65bd319c1ab870030a9da982e75069",
+      "byte_size": 963,
+      "sha256": "c2df0cc85bbcbd04128185d58fe313f958ad16c3fd71d571c5a1207ccb9a0b9f",
+      "byte_preserved": true
+    },
+    {
+      "history_path": "docs/harness/reports/M5R07-history/faa6ed1/ui-scene-a.json",
+      "source_path_at_f05": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-a.json",
+      "git_blob_sha1": "b495574bc45857fcd9faaa5492350d0b7e83f2fb",
+      "byte_size": 659,
+      "sha256": "5e730c077cd8c281b729596a19e5421c74d704e539615a9d7f1d7d6b3eeb1909",
+      "byte_preserved": true
+    },
+    {
+      "history_path": "docs/harness/reports/M5R07-history/faa6ed1/ui-scene-b.json",
+      "source_path_at_f05": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-b.json",
+      "git_blob_sha1": "7af3c171701674bc18697204a4304a2c13ea963c",
+      "byte_size": 1074,
+      "sha256": "5206360ae97f1f47b182a7fc7fdd4ec308c8446599029af4c3e8b629ecb1721a",
+      "byte_preserved": true
+    },
+    {
+      "history_path": "docs/harness/reports/M5R07-history/faa6ed1/ui-resume.json",
+      "source_path_at_f05": "docs/harness/reports/M5R07-isolated-app-evidence/ui-resume.json",
+      "git_blob_sha1": "ea67b1fc6da835f25a19abbdb0bdbd68c5f6a24c",
+      "byte_size": 992,
+      "sha256": "d3970ecc535d6bec58bbccb31c21f0d6f8286aa4a137682bd71661dfa4b7f7b6",
+      "byte_preserved": true
+    }
+  ],
+  "forbidden_claims": [
+    "current_f51_evidence",
+    "m1_m3_authority_pass",
+    "isolated_full_loop_pass"
+  ]
+}
