@@ -7,3 +7,5 @@
 来源：独立验收发现普通登记仍是测试专用；用户要求在当前工作树做窄纠正。
 
 产品：`docs/contracts/m1-project-index-ordinary-authority-v1.md`，`M1ProjectIndexAuthorityPort`，普通 `AppState` Result 边界。
+
+实现 commit：`061eefee9291dbeddf792af6d78dc48bb5b0f8e5`。不声称已解阻。

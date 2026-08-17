@@ -29,8 +29,7 @@ M1 已有原子 UUID registry。普通登记只挂在测试用 `M1ProjectIndexRe
 
 只证明离线 scoped checks。不证明真实 App、provider、网络、发布或独立验收。
 
+- 实现 commit：`061eefee9291dbeddf792af6d78dc48bb5b0f8e5`
 - `git diff --check`：clean
 - `cargo test --lib --offline -- m1_project_index -- --test-threads=1`：17 passed；0 failed
 - `cargo check --lib --offline`：exit 0（既有 warning，无本包新增 error）
-
-实现 SHA 另作 evidence binding commit。
