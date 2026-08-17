@@ -33,6 +33,8 @@ mod memory_lint_store;
 mod observation_store;
 mod operation_control;
 mod ordinary_product_storage_bootstrap;
+mod m1_project_index;
+mod m1_project_role_identity;
 mod page_read_model;
 mod plan_authorization_store;
 mod project_consultation_proposal_store;
@@ -154,6 +156,12 @@ struct AppState {
     #[cfg(not(test))]
     m4_source_route_registry:
         Option<m4_source_route_resolver::M4RegisteredSourceOwnerRouteRegistry>,
+    // M1I01 owns the server-only project_index registry and project-role
+    // identity authority. Ordinary product composition installs it; legacy
+    // and acceptance hosts keep it unavailable. Renderer/Tauri never see
+    // the raw registry.
+    #[allow(dead_code)]
+    m1_project_index: Option<m1_project_index::M1ProjectIndexAuthority>,
     m5_store_path: Option<PathBuf>,
 }
 include!("types.rs");
@@ -192,6 +200,7 @@ impl AppState {
                     m4_secretary_conversation_runtime: Default::default(),
                     #[cfg(not(test))]
                     m4_source_route_registry: None,
+                    m1_project_index: None,
                     m5_store_path: install_m5_store_path(
                         &paths.app_data_root.join("local.codex.governance.workbench"),
                     )
@@ -213,6 +222,7 @@ impl AppState {
                 m4_secretary_conversation_runtime: Default::default(),
                 #[cfg(not(test))]
                 m4_source_route_registry: None,
+                m1_project_index: None,
                 m5_store_path: install_m5_store_path(
                     &paths.app_data_root.join("local.codex.governance.workbench"),
                 )
@@ -237,6 +247,7 @@ impl AppState {
             m4_secretary_conversation_runtime: Default::default(),
             #[cfg(not(test))]
             m4_source_route_registry: None,
+            m1_project_index: None,
             m5_store_path: None,
         })
     }
@@ -349,6 +360,10 @@ impl AppState {
             m4_secretary_conversation_runtime,
             #[cfg(not(test))]
             m4_source_route_registry: Some(m4_source_route_registry),
+            m1_project_index: Some(
+                m1_project_index::M1ProjectIndexAuthority::open_ordinary_product(app_data_root)
+                    .map_err(|error| error.code)?,
+            ),
             m5_store_path: Some(install_m5_store_path(app_data_root)?),
         })
     }
@@ -369,6 +384,13 @@ impl AppState {
 
     pub(crate) fn product_index_path(&self) -> &Path {
         &self.index_path
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn m1_project_index(
+        &self,
+    ) -> Option<&m1_project_index::M1ProjectIndexAuthority> {
+        self.m1_project_index.as_ref()
     }
 }
 
