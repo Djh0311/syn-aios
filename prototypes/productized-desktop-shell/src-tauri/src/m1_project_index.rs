@@ -1,4 +1,4 @@
-//! Server-only project_index base for M1I01R01.
+//! Server-only project_index base for M1I01R01 / M1I01R02.
 //!
 //! This owner mints opaque `project:<uuid>` values and stores exact aliases as
 //! resolver inputs. It does not create ActorId, RoleRef, ScopeRef,
@@ -20,6 +20,8 @@ pub(crate) const M1_PROJECT_INDEX_SCHEMA_VERSION: &str = "m1.project-index.regis
 pub(crate) const M1_ORDINARY_APP_DATA_DIR_NAME: &str = "local.codex.governance.workbench";
 pub(crate) const M1_ORDINARY_REGISTRY_RELATIVE_PATH: &str = "m1/project-index-v1.json";
 const M1_LOCK_RELATIVE_PATH: &str = ".m1-project-index-v1.lock";
+const M1_ESTABLISHED_MARKER_RELATIVE_PATH: &str = ".m1-project-index.established";
+const M1_ESTABLISHED_MARKER_VALUE: &[u8] = b"m1.project-index.established.v1\n";
 const M1_RESOLVER_REVISION: u64 = 1;
 const M1_LOCK_RETRY_LIMIT: usize = 256;
 const M1_LOCK_RETRY_DELAY: Duration = Duration::from_millis(5);
@@ -92,6 +94,7 @@ struct M1ProjectIndexStore {
     canonical_app_data_root: PathBuf,
     registry_path: PathBuf,
     lock_path: PathBuf,
+    established_marker_path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -199,10 +202,13 @@ impl M1ProjectIndexStore {
     fn from_root(canonical_app_data_root: PathBuf) -> Self {
         let registry_path = canonical_app_data_root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH);
         let lock_path = canonical_app_data_root.join(M1_LOCK_RELATIVE_PATH);
+        let established_marker_path =
+            canonical_app_data_root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH);
         Self {
             canonical_app_data_root,
             registry_path,
             lock_path,
+            established_marker_path,
         }
     }
 
@@ -213,12 +219,28 @@ impl M1ProjectIndexStore {
                 "m1_project_index_registry_malformed",
             )),
             Err(error) if error.kind() == ErrorKind::NotFound => {
+                if self.established_marker_is_present()? {
+                    return Ok(RegistryPresence::EstablishedMissing);
+                }
                 let registry_dir = self.registry_path.parent();
                 match registry_dir {
                     Some(dir) if dir.exists() => Ok(RegistryPresence::EstablishedMissing),
                     _ => Ok(RegistryPresence::Absent),
                 }
             }
+            Err(_) => Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_unreadable",
+            )),
+        }
+    }
+
+    fn established_marker_is_present(&self) -> Result<bool, M1ProjectIndexError> {
+        match fs::symlink_metadata(&self.established_marker_path) {
+            Ok(metadata) if metadata.file_type().is_file() => Ok(true),
+            Ok(_) => Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_malformed",
+            )),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
             Err(_) => Err(M1ProjectIndexError::new(
                 "m1_project_index_registry_unreadable",
             )),
@@ -360,6 +382,7 @@ impl M1ProjectIndexStore {
         registry: &M1ProjectIndexRegistry,
     ) -> Result<(), M1ProjectIndexError> {
         validate_loaded_registry(registry)?;
+        self.persist_established_marker()?;
         let parent = self
             .registry_path
             .parent()
@@ -378,6 +401,34 @@ impl M1ProjectIndexStore {
                 .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_sync_failed"))?;
         }
         fs::rename(&temp_path, &self.registry_path)
+            .map_err(|_| M1ProjectIndexError::new("m1_project_index_registry_replace_failed"))?;
+        let dir = File::open(parent)
+            .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_open_failed"))?;
+        dir.sync_all()
+            .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_sync_failed"))?;
+        Ok(())
+    }
+
+    fn persist_established_marker(&self) -> Result<(), M1ProjectIndexError> {
+        if self.established_marker_is_present()? {
+            return Ok(());
+        }
+        let parent = self.established_marker_path.parent().ok_or_else(|| {
+            M1ProjectIndexError::new("m1_project_index_registry_parent_required")
+        })?;
+        let temp_path = parent.join(format!(
+            ".m1-project-index.established.{}.tmp",
+            Uuid::new_v4().simple()
+        ));
+        {
+            let mut file = File::create(&temp_path)
+                .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_create_failed"))?;
+            file.write_all(M1_ESTABLISHED_MARKER_VALUE)
+                .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_write_failed"))?;
+            file.sync_all()
+                .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_sync_failed"))?;
+        }
+        fs::rename(&temp_path, &self.established_marker_path)
             .map_err(|_| M1ProjectIndexError::new("m1_project_index_registry_replace_failed"))?;
         let dir = File::open(parent)
             .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_open_failed"))?;
@@ -906,6 +957,7 @@ mod tests {
         assert!(opened.is_none());
         assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
         assert!(!root.join("m1").exists());
+        assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
         let _ = fs::remove_dir_all(root);
     }
 
@@ -958,6 +1010,44 @@ mod tests {
             "m1_project_index_registry_missing"
         );
         assert!(!registry_path.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn m1_project_index_rejects_whole_m1_directory_loss() {
+        let (registrar, root) = isolated_registrar();
+        registrar
+            .register_isolated_project(M1RegisterIsolatedProjectRequest {
+                exact_alias: Some("/exact/alias/directory-loss".to_string()),
+            })
+            .expect("register");
+        let marker_path = root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH);
+        let registry_dir = root.join("m1");
+        assert!(marker_path.is_file());
+        assert_ne!(
+            marker_path.parent().expect("marker parent"),
+            registry_dir.as_path()
+        );
+        fs::remove_dir_all(&registry_dir).expect("delete established m1 directory");
+        assert!(marker_path.is_file());
+        assert!(!registry_dir.exists());
+        assert_eq!(
+            M1ProjectIndexReadHandle::open_from_root(root.clone())
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_missing"
+        );
+        assert_eq!(
+            registrar
+                .register_isolated_project(M1RegisterIsolatedProjectRequest {
+                    exact_alias: Some("/exact/alias/after-directory-loss".to_string()),
+                })
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_missing"
+        );
+        assert!(!registry_dir.exists());
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
         let _ = fs::remove_dir_all(root);
     }
 
