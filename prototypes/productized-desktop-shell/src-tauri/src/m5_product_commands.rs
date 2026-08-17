@@ -611,7 +611,15 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
     state: &crate::AppState,
     request: M5FormalStepRequest,
 ) -> Result<M5FormalStepResponse, String> {
-    let (store, binding, _, _) = require_binding(state, &request.binding_id, &request.project_id)?;
+    let (store, binding, _, project_id) =
+        require_binding(state, &request.binding_id, &request.project_id)?;
+    let worker = load_project_role(state, &project_id, M3ProjectRole::Worker)?;
+    if worker.role != M3ProjectRole::Worker {
+        return Err("worker_role_mismatch".to_string());
+    }
+    if worker.actor_id.trim().is_empty() || worker.role_session_id.trim().is_empty() {
+        return Err("worker_view_unbound".to_string());
+    }
     let (grant_id, dispatch_id, _, _, _) = load_formal_progress(&store, &binding.project_id)?;
     let grant_id = grant_id.ok_or_else(|| "formal_runtime_missing_grant".to_string())?;
     let dispatch_id = dispatch_id.ok_or_else(|| "formal_runtime_missing_dispatch".to_string())?;
@@ -624,6 +632,12 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
     if grant.project_id != binding.project_id || dispatch.project_id != binding.project_id {
         return Err("formal_runtime_project_join_failed".to_string());
     }
+    if worker.project_id != grant.project_id {
+        return Err("worker_project_mismatch".to_string());
+    }
+    if worker.role_session_id != grant.worker_role_session_id {
+        return Err("worker_session_join_failed".to_string());
+    }
     let mut runtime = crate::m5_agent_runtime::SynNativeAgentRuntime::new();
     let now = m5_now_ms();
     let fail_cell = crate::m5_agent_runtime::WorkcellRun {
@@ -634,7 +648,7 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
         attempt_id: grant.attempt_id.as_str().into(),
         dispatch_id: dispatch.dispatch_id.clone(),
         effect_id: format!("{}-fail", dispatch.effect_id),
-        actor_binding: grant.worker_role_session_id.clone(),
+        actor_binding: worker.role_session_id.clone(),
         command: WHITELISTED_COMMAND.into(),
         child_depth: 0,
         budget_tokens: 8,
@@ -661,7 +675,7 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
         attempt_id: grant.attempt_id.as_str().into(),
         dispatch_id: dispatch.dispatch_id.clone(),
         effect_id: dispatch.effect_id.clone(),
-        actor_binding: grant.worker_role_session_id.clone(),
+        actor_binding: worker.role_session_id.clone(),
         command: WHITELISTED_COMMAND.into(),
         child_depth: 0,
         budget_tokens: 8,
@@ -693,8 +707,8 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
         review_id: None,
         result_decision_recorded: false,
         reviewer_actor_id: None,
-        worker_actor_id: None,
-        worker_role_session_id: Some(grant.worker_role_session_id),
+        worker_actor_id: Some(worker.actor_id),
+        worker_role_session_id: Some(worker.role_session_id),
     })
 }
 
@@ -1214,6 +1228,129 @@ mod tests {
         assert_eq!(again.binding_id, opened.binding_id);
         assert_eq!(again.role_session_id, opened.role_session_id);
         assert_eq!(again.project_id, opened.project_id);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    fn approve_echo(
+        state: &crate::AppState,
+        alias: &str,
+    ) -> crate::m5_dto::M5SupervisorOpenResponse {
+        register_alias(state, alias);
+        let opened = open_m5_project_supervisor_with_state(
+            state,
+            M5SupervisorOpenRequest {
+                project_id: alias.into(),
+            },
+        )
+        .expect("open");
+        let proposal = submit_m5_project_supervisor_turn_with_state(
+            state,
+            M5SupervisorTurnRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+                kind: "submit_proposal".into(),
+                text: "echo hello".into(),
+            },
+        )
+        .expect("propose");
+        let approved = record_m5_authorization_decision_with_state(
+            state,
+            M5AuthorizationDecisionRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+                proposal_id: proposal.text,
+                decision: "APPROVED".into(),
+            },
+        )
+        .expect("approve");
+        assert!(approved.dispatched);
+        opened
+    }
+
+    fn worker_role_session_id(state: &crate::AppState, alias: &str) -> String {
+        load_project_role(
+            state,
+            &resolve_registered_project_id(state, alias).unwrap(),
+            M3ProjectRole::Worker,
+        )
+        .expect("load worker")
+        .role_session_id
+    }
+
+    fn m3_db(app_data_root: &Path) -> rusqlite::Connection {
+        rusqlite::Connection::open(
+            app_data_root.join(crate::m3_role_session_repository::M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH),
+        )
+        .expect("open m3 db")
+    }
+
+    fn durable_runtime_snapshot(state: &crate::AppState) -> (i64, i64, i64) {
+        let store = store_from_state(state).expect("m5 store");
+        let count = |sql: &str| {
+            store
+                .connection()
+                .query_row(sql, [], |row| row.get::<_, i64>(0))
+                .unwrap_or(0)
+        };
+        (
+            count("SELECT COUNT(*) FROM m5_durable_operations"),
+            count("SELECT COUNT(*) FROM m5_command_receipts"),
+            count("SELECT COUNT(*) FROM m5_formal_progress WHERE receipt_json IS NOT NULL"),
+        )
+    }
+
+    #[test]
+    fn runtime_rejects_inactive_worker_without_durable_writes() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-inactive-worker");
+        let worker_session = worker_role_session_id(&state, "syn-m5r07-inactive-worker");
+        let before = durable_runtime_snapshot(&state);
+        m3_db(&root)
+            .execute(
+                "UPDATE m3_role_sessions SET state = 'SUSPENDED', resolution_reason = 'PERMISSION_MISMATCH_OR_UNKNOWN' WHERE role_session_id = ?1",
+                rusqlite::params![worker_session],
+            )
+            .expect("suspend worker");
+        let err = run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id,
+                project_id: opened.project_id,
+            },
+        )
+        .expect_err("inactive worker must fail closed");
+        assert_eq!(err, "m3_project_role_session_inactive");
+        assert_eq!(durable_runtime_snapshot(&state), before);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn runtime_rejects_permission_drift_without_durable_writes() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-drift-worker");
+        let worker_session = worker_role_session_id(&state, "syn-m5r07-drift-worker");
+        let before = durable_runtime_snapshot(&state);
+        m3_db(&root)
+            .execute(
+                "UPDATE m3_role_sessions SET state = 'ACTIVE', resolution_reason = NULL, permission_snapshot_ref = ?1 WHERE role_session_id = ?2",
+                rusqlite::params![
+                    "permission:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    worker_session
+                ],
+            )
+            .expect("drift worker permission");
+        let err = run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id,
+                project_id: opened.project_id,
+            },
+        )
+        .expect_err("permission drift must fail closed");
+        assert_eq!(err, "m3_project_role_session_permission_drift");
+        assert_eq!(durable_runtime_snapshot(&state), before);
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }
 }

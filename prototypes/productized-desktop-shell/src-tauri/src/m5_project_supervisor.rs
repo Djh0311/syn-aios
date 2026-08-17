@@ -79,15 +79,6 @@ pub(crate) fn ensure_supervisor_schema(store: &M5OrchestrationStore) -> Result<(
                 created_at_ms INTEGER NOT NULL,
                 authorized_action TEXT NOT NULL DEFAULT 'none'
             );
-            -- Compatibility table only. Not an identity source; do not INSERT.
-            CREATE TABLE IF NOT EXISTS m5_role_sessions (
-                role_session_id TEXT PRIMARY KEY,
-                actor_id TEXT NOT NULL,
-                role TEXT NOT NULL,
-                project_id TEXT NOT NULL,
-                status TEXT NOT NULL,
-                created_at_ms INTEGER NOT NULL
-            );
             "#,
         )
         .map_err(|e| format!("supervisor_schema:{e}"))?;
@@ -627,5 +618,69 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, "supervisor_proposal_not_draft");
+    }
+
+    #[test]
+    fn fresh_store_schema_does_not_create_m5_role_sessions() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        ensure_supervisor_schema(&store).unwrap();
+        let created: i64 = store
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='m5_role_sessions'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(created, 0);
+        let source = include_str!("m5_project_supervisor.rs");
+        assert!(!source.contains(&format!("CREATE TABLE IF NOT EXISTS m5_{}", "role_sessions")));
+    }
+
+    #[test]
+    fn leftover_m5_role_sessions_table_is_not_read_or_written() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let leftover_table = format!("m5_{}", "role_sessions");
+        store
+            .connection()
+            .execute_batch(&format!(
+                "CREATE TABLE {leftover_table} (
+                    role_session_id TEXT PRIMARY KEY,
+                    actor_id TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    project_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at_ms INTEGER NOT NULL
+                );
+                INSERT INTO {leftover_table}
+                    (role_session_id, actor_id, role, project_id, status, created_at_ms)
+                VALUES ('legacy-rs', 'legacy-actor', 'project_supervisor', 'proj-a', 'ACTIVE', 1);"
+            ))
+            .unwrap();
+        let sessions = MapSessions(HashMap::from([(
+            "rs-1".into(),
+            session("rs-1", "proj-a", "actor-a"),
+        )]));
+        let binding = open_or_resume_supervisor(&store, &sessions, "rs-1", "proj-a", 1000).unwrap();
+        handle_supervisor_action(
+            &store,
+            &binding,
+            SupervisorAction::Chat {
+                text: "ignore leftover table".into(),
+            },
+            1100,
+        )
+        .unwrap();
+        let leftover: (String, i64) = store
+            .connection()
+            .query_row(
+                &format!("SELECT actor_id, COUNT(*) FROM {leftover_table}"),
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(leftover, ("legacy-actor".into(), 1));
+        assert_eq!(binding.role_session_id, "rs-1");
+        assert_eq!(binding.actor_id, "actor-a");
     }
 }
