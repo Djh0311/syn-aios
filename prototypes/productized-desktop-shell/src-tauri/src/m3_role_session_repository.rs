@@ -1881,6 +1881,47 @@ impl M3RoleSessionSqliteRepository {
         }))
     }
 
+    /// Read-only count of ACTIVE RoleSessions that share one exact role and
+    /// project-bound scope. Used only to fail closed on more than one live
+    /// candidate; it does not create, resume, or accept a caller session id.
+    pub(crate) fn list_active_sessions_for_project_role(
+        &self,
+        role_ref: &OpaqueRef,
+        scope_ref: &OpaqueRef,
+    ) -> Result<Vec<RoleSessionId>, M3RoleSessionRepositoryError> {
+        validate_reference_fields(&[
+            ("role_ref", role_ref.as_str()),
+            ("scope_ref", scope_ref.as_str()),
+        ])?;
+        let connection = self.read_connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT role_session_id
+                 FROM m3_role_sessions
+                 WHERE role_ref = ?1 AND scope_ref = ?2 AND state = 'ACTIVE'
+                 ORDER BY role_session_id ASC",
+            )
+            .map_err(|error| {
+                M3RoleSessionRepositoryError::sqlite("m3_active_project_role_prepare", error)
+            })?;
+        let rows = statement
+            .query_map(
+                params![role_ref.as_str(), scope_ref.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(|error| {
+                M3RoleSessionRepositoryError::sqlite("m3_active_project_role_query", error)
+            })?;
+        let mut ids = Vec::new();
+        for row in rows {
+            let value = row.map_err(|error| {
+                M3RoleSessionRepositoryError::sqlite("m3_active_project_role_row", error)
+            })?;
+            ids.push(RoleSessionId::try_from_canonical(value).map_err(domain_error)?);
+        }
+        Ok(ids)
+    }
+
     /// Complete, binding-authorized lifecycle history for the ordinary
     /// conversation join.  Raw message bodies remain outside M3; this method
     /// returns only the frozen Turn metadata already owned by the M3 ledger.

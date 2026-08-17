@@ -31,6 +31,7 @@ pub(crate) const M3_BINDING_DRIFT: &str = "m3_project_role_session_binding_drift
 pub(crate) const M3_PERMISSION_DRIFT: &str = "m3_project_role_session_permission_drift";
 pub(crate) const M3_SESSION_UNAVAILABLE: &str = "m3_project_role_session_unavailable";
 pub(crate) const M3_SESSION_INACTIVE: &str = "m3_project_role_session_inactive";
+pub(crate) const M3_SESSION_DUPLICATE: &str = "m3_project_role_session_duplicate";
 
 pub(crate) use crate::m3_project_role_identity_source::M3ProjectRole;
 
@@ -208,6 +209,7 @@ impl M3ProjectRoleSessionAuthorityHandle {
             .prepare_or_continue_provision(&project_id, request.role)
             .map_err(|error| M3ProjectRoleSessionAuthorityError::new(error.code))?;
         let repository = Self::open_repository(source, true)?;
+        reject_duplicate_active_sessions(&repository, &bundle)?;
         let session = match Self::load_matching_session(&repository, &bundle)? {
             Some(session) => session,
             None if bundle.readable => {
@@ -222,6 +224,7 @@ impl M3ProjectRoleSessionAuthorityHandle {
                 })?
             }
         };
+        reject_duplicate_active_sessions(&repository, &bundle)?;
         let readable = if bundle.readable {
             bundle
         } else {
@@ -243,6 +246,7 @@ impl M3ProjectRoleSessionAuthorityHandle {
             .load_readable(&project_id, role)
             .map_err(|error| M3ProjectRoleSessionAuthorityError::new(error.code))?;
         let repository = Self::open_repository(source, false)?;
+        reject_duplicate_active_sessions(&repository, &bundle)?;
         let session = Self::load_matching_session(&repository, &bundle)?.ok_or_else(|| {
             M3ProjectRoleSessionAuthorityError::new(M3_SESSION_UNAVAILABLE)
         })?;
@@ -366,6 +370,24 @@ fn verify_session_matches_bundle(
     }
     if session.status != RoleSessionState::Active {
         return Err(M3ProjectRoleSessionAuthorityError::new(M3_SESSION_INACTIVE));
+    }
+    Ok(())
+}
+
+fn reject_duplicate_active_sessions(
+    repository: &M3RoleSessionSqliteRepository,
+    bundle: &M3ProjectRoleIdentityBundle,
+) -> Result<(), M3ProjectRoleSessionAuthorityError> {
+    let binding = bundle
+        .server_binding()
+        .map_err(|error| M3ProjectRoleSessionAuthorityError::new(error.code))?;
+    let active = repository
+        .list_active_sessions_for_project_role(&binding.role_ref, &binding.scope_ref)
+        .map_err(map_repository_error)?;
+    if active.len() > 1 {
+        return Err(M3ProjectRoleSessionAuthorityError::new(
+            M3_SESSION_DUPLICATE,
+        ));
     }
     Ok(())
 }
@@ -709,6 +731,112 @@ mod m3_project_role_session_authority_tests {
         assert!(
             lib.contains("SharedProductAuthorityProfile::IsolatedUninstalled"),
             "isolated acceptance must explicitly leave M1/M3 uninstalled"
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn m3_deleted_established_source_json_fails_closed_and_does_not_rebuild() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let project_id = state
+            .m1_project_index_authority()
+            .expect("ordinary m1")
+            .register_exact_alias(&M1RegisterExactAliasRequest {
+                exact_alias: "syn-m3o03-deleted-source".to_string(),
+            })
+            .expect("register")
+            .project_id;
+        let port = state
+            .m3_project_role_session_authority_port()
+            .expect("ordinary m3");
+        let _view = port
+            .provision(&request(
+                project_id.clone(),
+                M3ProjectRole::ProjectSupervisor,
+            ))
+            .expect("first provision");
+        let source_path = root.join("m3/project-role-identity-source-v1.json");
+        let marker_path = root.join(".m3-project-role-identity-source.established");
+        assert!(source_path.is_file());
+        assert!(marker_path.is_file());
+        let before = m3_role_session_count(&root);
+        std::fs::remove_file(&source_path).expect("delete established source json");
+        assert_code(
+            port.provision(&request(
+                project_id.clone(),
+                M3ProjectRole::ProjectSupervisor,
+            )),
+            M3_IDENTITY_SOURCE_MISSING,
+        );
+        assert_code(
+            port.load(&request(
+                project_id.clone(),
+                M3ProjectRole::ProjectSupervisor,
+            )),
+            M3_IDENTITY_SOURCE_MISSING,
+        );
+        assert_code(
+            port.restore(&restore_request(
+                project_id,
+                M3ProjectRole::ProjectSupervisor,
+            )),
+            M3_IDENTITY_SOURCE_MISSING,
+        );
+        assert!(!source_path.exists());
+        assert!(marker_path.is_file());
+        assert_eq!(m3_role_session_count(&root), before);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn m3_duplicate_active_project_role_sessions_fail_closed() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let project_id = state
+            .m1_project_index_authority()
+            .expect("ordinary m1")
+            .register_exact_alias(&M1RegisterExactAliasRequest {
+                exact_alias: "syn-m3o03-duplicate-active".to_string(),
+            })
+            .expect("register")
+            .project_id;
+        let port = state
+            .m3_project_role_session_authority_port()
+            .expect("ordinary m3");
+        let view = port
+            .provision(&request(project_id.clone(), M3ProjectRole::Worker))
+            .expect("first provision");
+        let db_path = root.join("conversation/m3-role-session-v1.sqlite3");
+        let connection = rusqlite::Connection::open(&db_path).expect("open m3 db");
+        connection
+            .execute(
+                "INSERT INTO m3_role_sessions (
+                     role_session_id, actor_id, role_ref, scope_ref, current_object_ref,
+                     execution_channel, permission_snapshot_ref, owner_fingerprint, state,
+                     revision, created_at, last_resumed_at, resolution_reason
+                 )
+                 SELECT
+                     'session:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+                     actor_id, role_ref, scope_ref, current_object_ref,
+                     execution_channel, permission_snapshot_ref, owner_fingerprint, 'ACTIVE',
+                     revision, created_at, last_resumed_at, resolution_reason
+                 FROM m3_role_sessions
+                 WHERE role_session_id = ?1",
+                rusqlite::params![view.role_session_id],
+            )
+            .expect("insert extra active same project/role session");
+        assert_code(
+            port.provision(&request(project_id.clone(), M3ProjectRole::Worker)),
+            M3_SESSION_DUPLICATE,
+        );
+        assert_code(
+            port.load(&request(project_id.clone(), M3ProjectRole::Worker)),
+            M3_SESSION_DUPLICATE,
+        );
+        assert_code(
+            port.restore(&restore_request(project_id, M3ProjectRole::Worker)),
+            M3_SESSION_DUPLICATE,
         );
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }

@@ -8,6 +8,8 @@
 
 产品：`docs/contracts/m3-project-role-identity-source-v1.md`，`m3_project_role_identity_source.rs`，普通 `AppState` 里对 M3 权威的最小接线。
 
+独立验收已 REJECT `48d8dbc` / `5795123`。本文件仍是 unfinished 纠正投影。返修只补：已建立源 JSON 删除后 fail-closed 为 `m3_project_role_identity_source_missing`；接受 view 前对同 project/role 多活动候选返回 `m3_project_role_session_duplicate`。
+
 不许动：
 
 - M5R07 current / stage-14 关闭 / authorization 手填

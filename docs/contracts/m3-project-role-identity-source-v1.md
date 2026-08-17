@@ -76,7 +76,9 @@ permission snapshot 默认拒绝：`allow_capabilities` 为空，零 execution /
 
 同一 `(project, role)` 的再次 provision 必须幂等返回已匹配 view，不得另写第二条身份。
 
-中断的 `PREPARED` 只能由同一 provision 输入完成。不同 project/role、或与已存储派生快照不一致的输入，不得完成、修复或覆盖该中断状态。
+中断的 `PREPARED` 只能由同一 provision 输入完成。不同 project/role、或与已存储派生快照不一致的输入，不得完成、修复或覆盖该中断状态。源文件仍在时，精确同输入的 `PREPARED` 可以续跑。
+
+服务器必须在首次成功持久化 `PREPARED` 或 `READABLE` 时写入独立 established marker。此后若源 JSON 被删除，provision / load / restore 必须稳定返回 `m3_project_role_identity_source_missing`。不得把该缺失当成从未建立的空 store、重建 `PREPARED`，或借仍存在的 SQLite RoleSession 恢复成功。从未建立过源（无 marker、无源文件）时，首次 provision 仍可建立。
 
 ## 6. Load / restore
 
@@ -88,6 +90,8 @@ load / restore：
 - 不得接受调用方自选 `role_session_id`；只使用源绑定的会话
 
 可读源缺失时，不得把 `PREPARED` 提升为成功 view。
+
+在接受任何 source-bound session view 之前，必须核验同一 canonical project 与 role 的活动 RoleSession 候选。多于一个活动候选时，稳定返回 `m3_project_role_session_duplicate`。不得用调用方 `role_session_id`、path 推导、scratch fallback 或 resume 绕过。
 
 ## 7. Fail closed
 
@@ -108,6 +112,7 @@ load / restore：
 | permission 漂移 | `m3_project_role_session_permission_drift` |
 | 无可用会话 | `m3_project_role_session_unavailable` |
 | 会话存在但非活动 | `m3_project_role_session_inactive` |
+| 同一 project/role 多于一个活动会话候选 | `m3_project_role_session_duplicate` |
 
 M1 同根复核失败继续使用既有 M1 稳定码。
 

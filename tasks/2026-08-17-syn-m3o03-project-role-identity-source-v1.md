@@ -26,6 +26,8 @@
 8. 首次 provision 幂等：先写 PREPARED 身份包，仅当 source / binding / session 精确匹配后才可读；中断状态只能由同一 provision 输入完成。
 9. 经既有 M3 repository 驱动 RoleSession；优先独立源存储，不改现有 M3 schema。
 
+独立验收已 REJECT `48d8dbc` / `5795123`。返修只补两处：已建立源 JSON 删除后稳定返回 `m3_project_role_identity_source_missing`；接受 view 前对同 project/role 多活动候选返回 `m3_project_role_session_duplicate`。
+
 ## 验证
 
 只在 disposable checkout 取证：`git diff --check`、定向 M1+M3 离线测试、`cargo check --lib --offline`。不声称 M3/M5 完成，不关闭任何任务。

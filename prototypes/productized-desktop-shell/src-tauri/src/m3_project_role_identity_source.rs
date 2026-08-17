@@ -26,6 +26,10 @@ pub(crate) const M3_PROJECT_ROLE_IDENTITY_SOURCE_SCHEMA_VERSION: &str =
     "m3.project-role-identity-source.store.v1";
 pub(crate) const M3_ORDINARY_IDENTITY_SOURCE_RELATIVE_PATH: &str =
     "m3/project-role-identity-source-v1.json";
+pub(crate) const M3_IDENTITY_SOURCE_ESTABLISHED_MARKER_RELATIVE_PATH: &str =
+    ".m3-project-role-identity-source.established";
+const M3_IDENTITY_SOURCE_ESTABLISHED_MARKER_VALUE: &[u8] =
+    b"m3.project-role-identity-source.established.v1\n";
 pub(crate) const M3_IDENTITY_SOURCE_UNAVAILABLE: &str = "m3_identity_source_unavailable";
 pub(crate) const M3_IDENTITY_SOURCE_MISSING: &str = "m3_project_role_identity_source_missing";
 pub(crate) const M3_IDENTITY_SOURCE_CORRUPT: &str = "m3_project_role_identity_source_corrupt";
@@ -179,6 +183,7 @@ struct M3ProjectRoleIdentitySourceStore {
     canonical_app_data_root: PathBuf,
     store_path: PathBuf,
     lock_path: PathBuf,
+    established_marker_path: PathBuf,
 }
 
 #[derive(Clone, Debug)]
@@ -322,8 +327,69 @@ impl M3ProjectRoleIdentitySourceStore {
         Self {
             store_path: canonical_app_data_root.join(M3_ORDINARY_IDENTITY_SOURCE_RELATIVE_PATH),
             lock_path: canonical_app_data_root.join(M3_IDENTITY_SOURCE_LOCK_RELATIVE_PATH),
+            established_marker_path: canonical_app_data_root
+                .join(M3_IDENTITY_SOURCE_ESTABLISHED_MARKER_RELATIVE_PATH),
             canonical_app_data_root,
         }
+    }
+
+    fn established_marker_is_present(&self) -> Result<bool, M3ProjectRoleIdentitySourceError> {
+        match fs::symlink_metadata(&self.established_marker_path) {
+            Ok(metadata) if metadata.file_type().is_file() => Ok(true),
+            Ok(_) => Err(M3ProjectRoleIdentitySourceError::new(
+                M3_IDENTITY_SOURCE_CORRUPT,
+            )),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+            Err(_) => Err(M3ProjectRoleIdentitySourceError::new(
+                M3_IDENTITY_SOURCE_CORRUPT,
+            )),
+        }
+    }
+
+    fn persist_established_marker(&self) -> Result<(), M3ProjectRoleIdentitySourceError> {
+        if self.established_marker_is_present()? {
+            return Ok(());
+        }
+        let parent = self.established_marker_path.parent().ok_or_else(|| {
+            M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_parent_required")
+        })?;
+        fs::create_dir_all(parent).map_err(|_| {
+            M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_dir_create_failed")
+        })?;
+        let temp_path = parent.join(format!(
+            ".m3-project-role-identity-source.established.{}.tmp",
+            Uuid::new_v4().simple()
+        ));
+        {
+            let mut file = File::create(&temp_path).map_err(|_| {
+                M3ProjectRoleIdentitySourceError::new(
+                    "m3_project_role_identity_source_tmp_create_failed",
+                )
+            })?;
+            file.write_all(M3_IDENTITY_SOURCE_ESTABLISHED_MARKER_VALUE)
+                .map_err(|_| {
+                    M3ProjectRoleIdentitySourceError::new(
+                        "m3_project_role_identity_source_tmp_write_failed",
+                    )
+                })?;
+            file.sync_all().map_err(|_| {
+                M3ProjectRoleIdentitySourceError::new(
+                    "m3_project_role_identity_source_tmp_sync_failed",
+                )
+            })?;
+        }
+        fs::rename(&temp_path, &self.established_marker_path).map_err(|_| {
+            M3ProjectRoleIdentitySourceError::new(
+                "m3_project_role_identity_source_replace_failed",
+            )
+        })?;
+        let dir = File::open(parent).map_err(|_| {
+            M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_dir_open_failed")
+        })?;
+        dir.sync_all().map_err(|_| {
+            M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_dir_sync_failed")
+        })?;
+        Ok(())
     }
 
     fn load_or_empty(&self) -> Result<IdentitySourceStoreDocument, M3ProjectRoleIdentitySourceError> {
@@ -332,11 +398,18 @@ impl M3ProjectRoleIdentitySourceStore {
             Ok(_) => Err(M3ProjectRoleIdentitySourceError::new(
                 M3_IDENTITY_SOURCE_CORRUPT,
             )),
-            Err(error) if error.kind() == ErrorKind::NotFound => Ok(IdentitySourceStoreDocument {
-                schema_version: M3_PROJECT_ROLE_IDENTITY_SOURCE_SCHEMA_VERSION.to_string(),
-                store_revision: 0,
-                identities: Vec::new(),
-            }),
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                if self.established_marker_is_present()? {
+                    return Err(M3ProjectRoleIdentitySourceError::new(
+                        M3_IDENTITY_SOURCE_MISSING,
+                    ));
+                }
+                Ok(IdentitySourceStoreDocument {
+                    schema_version: M3_PROJECT_ROLE_IDENTITY_SOURCE_SCHEMA_VERSION.to_string(),
+                    store_revision: 0,
+                    identities: Vec::new(),
+                })
+            }
             Err(_) => Err(M3ProjectRoleIdentitySourceError::new(
                 M3_IDENTITY_SOURCE_CORRUPT,
             )),
@@ -380,6 +453,7 @@ impl M3ProjectRoleIdentitySourceStore {
         document: &IdentitySourceStoreDocument,
     ) -> Result<(), M3ProjectRoleIdentitySourceError> {
         validate_document(document)?;
+        self.persist_established_marker()?;
         let parent = self.store_path.parent().ok_or_else(|| {
             M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_parent_required")
         })?;
@@ -839,6 +913,10 @@ impl M3ProjectRoleIdentitySourceHandle {
         self.store.store_path.clone()
     }
 
+    pub(crate) fn established_marker_path_for_test(&self) -> PathBuf {
+        self.store.established_marker_path.clone()
+    }
+
     fn write_document_for_test(
         &self,
         mutate: impl FnOnce(&mut IdentitySourceStoreDocument),
@@ -1021,6 +1099,31 @@ mod m3_project_role_identity_source_tests {
             M3_IDENTITY_SOURCE_DUPLICATE,
         );
 
+        let _ = prepared.role;
+        let _ = fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn deleted_established_source_json_fails_closed_and_does_not_rebuild() {
+        let root = ordinary_named_root();
+        let source = M3ProjectRoleIdentitySourceHandle::install_ordinary_product(&root)
+            .expect("install source");
+        let project_id = register_typed_id(&root, "syn-m3o03-source-deleted");
+        let prepared = source
+            .prepare_or_continue_provision(&project_id, M3ProjectRole::Worker)
+            .expect("first prepare");
+        assert!(source.established_marker_path_for_test().is_file());
+        fs::remove_file(source.store_path_for_test()).expect("delete established source json");
+        assert!(source.established_marker_path_for_test().is_file());
+        assert_code(
+            source.prepare_or_continue_provision(&project_id, M3ProjectRole::Worker),
+            M3_IDENTITY_SOURCE_MISSING,
+        );
+        assert_code(
+            source.load_readable(&project_id, M3ProjectRole::Worker),
+            M3_IDENTITY_SOURCE_MISSING,
+        );
+        assert!(!source.store_path_for_test().exists());
         let _ = prepared.role;
         let _ = fs::remove_dir_all(root.parent().expect("parent"));
     }
