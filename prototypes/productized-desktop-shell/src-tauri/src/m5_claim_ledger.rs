@@ -1,9 +1,14 @@
 // M5R03 claim ledger, independent review, and fact promotion.
 
-use crate::m5_orchestration_service::receipt_matches_readback;
+use crate::m5_orchestration_identity::{AttemptId, GrantId, RuntimeReceiptId};
+use crate::m5_orchestration_service::{
+    assert_execution_attempt_readback_carriers, receipt_matches_readback,
+};
 use crate::m5_orchestration_store::M5OrchestrationStore;
 use crate::m5_prepared_attempt::AttemptState;
-use crate::m5_runtime_receipt::{EnforcementStatus, RuntimeReceipt};
+use crate::m5_runtime_receipt::{
+    EnforcementStatus, IndependentRuntimeReceiptVerifier, RuntimeReceipt, RuntimeReceiptVerifier,
+};
 use crate::worker_report::{M5WorkerReport, ReportKind};
 use rusqlite::{params, OptionalExtension};
 use sha2::{Digest, Sha256};
@@ -17,9 +22,16 @@ pub(crate) struct ClaimRecord {
     pub claim_status: String,
     pub project_id: String,
     pub orchestration_id: String,
-    pub report_hash: String,
-    pub grant_id: Option<String>,
+    pub workflow_run_id: Option<String>,
+    pub work_item_id: Option<String>,
+    pub node_id: Option<String>,
+    pub dispatch_id: Option<String>,
     pub attempt_id: Option<String>,
+    pub grant_id: Option<String>,
+    pub worker_role_session_id: Option<String>,
+    pub authoritative_receipt_ref: Option<String>,
+    pub authenticated_actor_id: Option<String>,
+    pub report_hash: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -137,6 +149,19 @@ pub(crate) fn record_claim(
             let persisted = store
                 .load_execution_attempt_readback(receipt_ref)?
                 .ok_or_else(|| "executed_claim_missing_persisted_readback".to_string())?;
+            assert_execution_attempt_readback_carriers(store, &persisted)?;
+            let embedded = report
+                .execution_receipt
+                .as_ref()
+                .ok_or_else(|| "executed_claim_missing_embedded_receipt".to_string())?;
+            if embedded.execution_id != persisted.receipt_id {
+                return Err("executed_claim_execution_id_mismatch".to_string());
+            }
+            if embedded.output_hash.as_deref() != Some(persisted.trace_hash.as_str()) {
+                return Err("executed_claim_output_hash_mismatch".to_string());
+            }
+            let persisted_receipt = runtime_receipt_from_persisted(&persisted)?;
+            IndependentRuntimeReceiptVerifier.verify(store, &persisted_receipt)?;
             if let Some(receipt) = receipt {
                 if report.authoritative_receipt_ref.as_deref() != Some(receipt.receipt_id.as_str())
                 {
@@ -224,6 +249,9 @@ pub(crate) fn record_claim(
     }
 
     if let Some(existing) = load_claim_by_hash(store, &report_hash)? {
+        if !exact_claim_replay(&existing, report, &status) {
+            return Err("claim_report_hash_divergent".to_string());
+        }
         return Ok(existing);
     }
 
@@ -407,7 +435,9 @@ pub(crate) fn load_claim(
         .connection()
         .query_row(
             "SELECT claim_id, report_kind, claim_status, project_id, orchestration_id,
-                    report_hash, grant_id, attempt_id
+                    workflow_run_id, work_item_id, node_id, dispatch_id, attempt_id, grant_id,
+                    worker_role_session_id, authoritative_receipt_ref, authenticated_actor_id,
+                    report_hash
              FROM m5_claims WHERE claim_id=?1",
             [claim_id],
             map_claim,
@@ -424,7 +454,9 @@ fn load_claim_by_hash(
         .connection()
         .query_row(
             "SELECT claim_id, report_kind, claim_status, project_id, orchestration_id,
-                    report_hash, grant_id, attempt_id
+                    workflow_run_id, work_item_id, node_id, dispatch_id, attempt_id, grant_id,
+                    worker_role_session_id, authoritative_receipt_ref, authenticated_actor_id,
+                    report_hash
              FROM m5_claims WHERE report_hash=?1",
             [report_hash],
             map_claim,
@@ -440,10 +472,49 @@ fn map_claim(row: &rusqlite::Row<'_>) -> rusqlite::Result<ClaimRecord> {
         claim_status: row.get(2)?,
         project_id: row.get(3)?,
         orchestration_id: row.get(4)?,
-        report_hash: row.get(5)?,
-        grant_id: row.get(6)?,
-        attempt_id: row.get(7)?,
+        workflow_run_id: row.get(5)?,
+        work_item_id: row.get(6)?,
+        node_id: row.get(7)?,
+        dispatch_id: row.get(8)?,
+        attempt_id: row.get(9)?,
+        grant_id: row.get(10)?,
+        worker_role_session_id: row.get(11)?,
+        authoritative_receipt_ref: row.get(12)?,
+        authenticated_actor_id: row.get(13)?,
+        report_hash: row.get(14)?,
     })
+}
+
+fn runtime_receipt_from_persisted(
+    record: &crate::m5_orchestration_store::ExecutionAttemptReadbackRecord,
+) -> Result<RuntimeReceipt, String> {
+    Ok(RuntimeReceipt {
+        receipt_id: RuntimeReceiptId::new(record.receipt_id.clone()),
+        grant_id: GrantId::new(record.grant_id.clone()),
+        attempt_id: AttemptId::new(record.attempt_id.clone()),
+        dispatch_id: record.dispatch_id.clone(),
+        effect_id: record.effect_id.clone(),
+        trace_hash: record.trace_hash.clone(),
+        actor_binding: record.actor_binding.clone(),
+        enforcement_status: EnforcementStatus::parse(&record.enforcement_status)?,
+        outcome: record.outcome.clone(),
+    })
+}
+
+fn exact_claim_replay(existing: &ClaimRecord, report: &M5WorkerReport, status: &str) -> bool {
+    existing.report_kind == report.kind.to_string()
+        && existing.claim_status == status
+        && existing.project_id == report.project_id.clone().unwrap_or_default()
+        && existing.orchestration_id == report.orchestration_id.clone().unwrap_or_default()
+        && existing.workflow_run_id == report.workflow_run_id
+        && existing.work_item_id == report.work_item_id
+        && existing.node_id == report.node_id
+        && existing.dispatch_id == report.dispatch_id
+        && existing.attempt_id == report.attempt_id
+        && existing.grant_id == report.grant_id
+        && existing.worker_role_session_id == report.worker_role_session_id
+        && existing.authoritative_receipt_ref == report.authoritative_receipt_ref
+        && existing.authenticated_actor_id == report.actor.as_ref().map(|a| a.actor_id.clone())
 }
 
 fn claim_worker_session(
@@ -955,5 +1026,198 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM m5_claims", [], |row| row.get(0))
             .unwrap_or(0);
         assert_eq!(count, 0);
+    }
+
+    fn claim_count(store: &M5OrchestrationStore) -> i64 {
+        store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_claims", [], |row| row.get(0))
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn executed_claim_missing_or_tampered_carriers_is_zero_write() {
+        for (sql, expected) in [
+            (
+                "DELETE FROM m5_events WHERE event_type='ExecutionAttemptReadbackRecorded'",
+                "execution_readback_carriers_missing",
+            ),
+            (
+                "UPDATE m5_events SET source_ref='forged' WHERE event_type='ExecutionAttemptReadbackRecorded'",
+                "execution_readback_carriers_divergent",
+            ),
+            (
+                "UPDATE m5_execution_attempt_readbacks SET trace_hash='tampered-trace'",
+                "execution_readback_hash_mismatch",
+            ),
+        ] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let (report, receipt) = executed_terminal(
+                &store,
+                "rr-carrier",
+                "hash-carrier",
+                EnforcementStatus::Ok,
+                "SUCCEEDED",
+            );
+            store.connection().execute(sql, []).unwrap();
+            let err = record_claim(&store, &report, Some(&receipt), 3000).unwrap_err();
+            assert_eq!(err, expected, "{sql}");
+            assert_eq!(claim_count(&store), 0, "{sql}");
+        }
+    }
+
+    #[test]
+    fn executed_claim_embedded_execution_id_or_output_hash_mismatch_is_zero_write() {
+        for (label, mutate) in [
+            (
+                "execution_id",
+                Box::new(|r: &mut M5WorkerReport| {
+                    if let Some(embedded) = r.execution_receipt.as_mut() {
+                        embedded.execution_id = "rr-forged".into();
+                    }
+                }) as Box<dyn Fn(&mut M5WorkerReport)>,
+            ),
+            (
+                "output_hash",
+                Box::new(|r: &mut M5WorkerReport| {
+                    if let Some(embedded) = r.execution_receipt.as_mut() {
+                        embedded.output_hash = Some("tampered-hash".into());
+                    }
+                }),
+            ),
+        ] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let (mut report, receipt) = executed_terminal(
+                &store,
+                "rr-embed",
+                "hash-embed",
+                EnforcementStatus::Ok,
+                "SUCCEEDED",
+            );
+            mutate(&mut report);
+            let err = record_claim(&store, &report, Some(&receipt), 3000).unwrap_err();
+            assert!(
+                err == "executed_claim_execution_id_mismatch"
+                    || err == "executed_claim_output_hash_mismatch",
+                "{label} -> {err}"
+            );
+            assert_eq!(claim_count(&store), 0, "{label}");
+        }
+    }
+
+    #[test]
+    fn same_report_hash_divergent_terminal_chain_is_zero_write() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (first_report, first_receipt) = executed_terminal(
+            &store,
+            "rr-div-a",
+            "hash-shared",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
+        let first = record_claim(&store, &first_report, Some(&first_receipt), 3000).unwrap();
+        let (second_report, second_receipt) = executed_terminal(
+            &store,
+            "rr-div-b",
+            "hash-shared",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
+        let err = record_claim(&store, &second_report, Some(&second_receipt), 3100).unwrap_err();
+        assert_eq!(err, "claim_report_hash_divergent");
+        assert_eq!(claim_count(&store), 1);
+        let loaded = load_claim(&store, &first.claim_id).unwrap().unwrap();
+        assert_eq!(loaded.claim_id, first.claim_id);
+        assert_eq!(
+            loaded.authoritative_receipt_ref.as_deref(),
+            Some("rr-div-a")
+        );
+    }
+
+    #[test]
+    fn revoked_grant_record_claim_is_zero_write() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (report, receipt) = executed_terminal(
+            &store,
+            "rr-revoked",
+            "hash-revoked",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
+        let mut grant = store
+            .load_grant(report.grant_id.as_deref().unwrap())
+            .unwrap()
+            .unwrap();
+        grant.revoke(4_000);
+        store.persist_grant(&grant).unwrap();
+        let persisted = store
+            .load_execution_attempt_readback(receipt.receipt_id.as_str())
+            .unwrap()
+            .unwrap();
+        let replayed = record_execution_attempt_readback(
+            &store,
+            receipt.clone(),
+            persisted.source_attempt_revision,
+            2_500,
+        );
+        assert!(
+            replayed.is_ok(),
+            "historical execution readback replay must survive later grant revoke: {replayed:?}"
+        );
+        let err = record_claim(&store, &report, Some(&receipt), 5_000).unwrap_err();
+        assert_eq!(err, "receipt_grant_not_active");
+        assert_eq!(claim_count(&store), 0);
+
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (report, receipt) = executed_terminal(
+            &store,
+            "rr-revoked-replay",
+            "hash-revoked-replay",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
+        let first = record_claim(&store, &report, Some(&receipt), 3_000).unwrap();
+        let mut grant = store
+            .load_grant(report.grant_id.as_deref().unwrap())
+            .unwrap()
+            .unwrap();
+        grant.revoke(4_000);
+        store.persist_grant(&grant).unwrap();
+        let err = record_claim(&store, &report, Some(&receipt), 5_000).unwrap_err();
+        assert_eq!(err, "receipt_grant_not_active");
+        assert_eq!(claim_count(&store), 1);
+        let loaded = load_claim(&store, &first.claim_id).unwrap().unwrap();
+        assert_eq!(loaded.claim_id, first.claim_id);
+    }
+
+    #[test]
+    fn exact_claim_replay_rejects_divergent_report_kind_same_hash() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let mut manual = M5WorkerReport::from_base(WorkerReport {
+            status: "ok".into(),
+            did: "manual note".into(),
+            ..WorkerReport::default()
+        })
+        .as_manual()
+        .bind_project("proj-1", "orch-1");
+        manual.report_hash = Some("hash-kind".into());
+        let first = record_claim(&store, &manual, None, 3_000).unwrap();
+        assert_eq!(first.report_kind, "manual");
+
+        let mut offline = M5WorkerReport::from_base(WorkerReport {
+            status: "ok".into(),
+            did: "offline note".into(),
+            ..WorkerReport::default()
+        })
+        .as_offline()
+        .bind_project("proj-1", "orch-1");
+        offline.report_hash = Some("hash-kind".into());
+        let err = record_claim(&store, &offline, None, 3_100).unwrap_err();
+        assert_eq!(err, "claim_report_hash_divergent");
+        assert_eq!(claim_count(&store), 1);
+        let loaded = load_claim(&store, &first.claim_id).unwrap().unwrap();
+        assert_eq!(loaded.claim_id, first.claim_id);
+        assert_eq!(loaded.report_kind, "manual");
+        assert_eq!(loaded.report_hash, "hash-kind");
     }
 }

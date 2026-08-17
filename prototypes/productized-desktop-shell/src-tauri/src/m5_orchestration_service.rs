@@ -16,7 +16,9 @@ use crate::m5_orchestration_store::{
 };
 use crate::m5_prepared_attempt::{AttemptState, PreparedAttempt};
 use crate::m5_runtime_admission::{join_stored_plan_grant_dispatch, AdmittedRuntimeCapability};
-use crate::m5_runtime_receipt::{EnforcementStatus, RuntimeReceipt};
+use crate::m5_runtime_receipt::{
+    EnforcementStatus, IndependentRuntimeReceiptVerifier, RuntimeReceipt, RuntimeReceiptVerifier,
+};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1114,7 +1116,12 @@ pub(crate) fn record_execution_attempt_readback_with_fault(
         if let Some(existing) =
             store.load_execution_attempt_readback(receipt.receipt_id.as_str())?
         {
-            return replay_execution_attempt_readback(store, &receipt, &existing);
+            return replay_execution_attempt_readback(
+                store,
+                &receipt,
+                &existing,
+                expected_attempt_revision,
+            );
         }
         first_record_execution_attempt_readback(
             store,
@@ -1137,19 +1144,18 @@ fn replay_execution_attempt_readback(
     store: &M5OrchestrationStore,
     receipt: &RuntimeReceipt,
     existing: &ExecutionAttemptReadbackRecord,
+    expected_attempt_revision: i64,
 ) -> Result<(PreparedAttempt, ExecutionAttemptReadbackRecord), String> {
+    if expected_attempt_revision != existing.source_attempt_revision {
+        return Err("execution_readback_replay_revision_mismatch".to_string());
+    }
     if !receipt_matches_readback(receipt, existing) {
         return Err("execution_readback_replay_divergent".to_string());
     }
+    assert_execution_attempt_readback_carriers(store, existing)?;
     let attempt = store
         .load_attempt(&existing.attempt_id)?
         .ok_or_else(|| "execution_readback_attempt_missing".to_string())?;
-    if attempt.state.as_m1_str() != existing.derived_attempt_state
-        || attempt.revision != existing.committed_attempt_revision
-    {
-        return Err("execution_readback_terminal_mismatch".to_string());
-    }
-    assert_execution_attempt_readback_carriers(store, existing)?;
     Ok((attempt, existing.clone()))
 }
 
@@ -1160,6 +1166,7 @@ fn first_record_execution_attempt_readback(
     now_ms: i64,
     fault: ExecutionReadbackFault,
 ) -> Result<(PreparedAttempt, ExecutionAttemptReadbackRecord), String> {
+    IndependentRuntimeReceiptVerifier.verify(store, &receipt)?;
     let derived = derive_attempt_state_from_receipt(&receipt)?;
     let attempt = store
         .load_attempt(receipt.attempt_id.as_str())?
@@ -1199,8 +1206,16 @@ fn first_record_execution_attempt_readback(
     }
     let op = load_operation_by_effect(store, &receipt.effect_id)?
         .ok_or_else(|| "execution_readback_durable_op_missing".to_string())?;
+    let chain = load_joined_dispatch_chain(store, &receipt.dispatch_id, now_ms)?;
     assert_execution_readback_chain_exact(
-        &receipt, &attempt, &dispatch, &grant, &binding, &outbox, &op,
+        &receipt,
+        &attempt,
+        &dispatch,
+        &grant,
+        &binding,
+        &outbox,
+        &chain.plan,
+        &op,
     )?;
     let committed_revision = expected_attempt_revision + 1;
     let receipt_id = receipt.receipt_id.as_str().to_string();
@@ -1286,6 +1301,7 @@ fn assert_execution_readback_chain_exact(
     grant: &crate::m5_execution_grant::ExecutionGrant,
     binding: &WorkerBindingRecord,
     outbox: &OutboxItemDto,
+    plan: &PlanAuthorizationRecord,
     op: &crate::m5_controlled_execution::DurableOperation,
 ) -> Result<(), String> {
     if receipt.grant_id.as_str() != grant.grant_id.as_str()
@@ -1305,9 +1321,31 @@ fn assert_execution_readback_chain_exact(
         || dispatch.grant_id != grant.grant_id.as_str()
         || attempt.grant_id.as_ref().map(|g| g.as_str()) != Some(grant.grant_id.as_str())
         || binding.attempt_id != attempt.attempt_id.as_str()
-        || binding.project_id != attempt.project_id
-        || grant.project_id != attempt.project_id
-        || dispatch.project_id != attempt.project_id
+        || binding.work_item_id != attempt.work_item_id.as_str()
+        || binding.workflow_run_id != attempt.workflow_run_id.as_str()
+        || binding.orchestration_id != attempt.orchestration_id.as_str()
+        || outbox.outbox_item_id != dispatch.outbox_item_id
+    {
+        return Err("execution_readback_join_mismatch".to_string());
+    }
+    if attempt.project_id != grant.project_id
+        || dispatch.project_id != grant.project_id
+        || binding.project_id != grant.project_id
+        || plan.project_id != grant.project_id
+        || attempt.orchestration_id.as_str() != grant.orchestration_id.as_str()
+        || dispatch.orchestration_id != grant.orchestration_id.as_str()
+        || binding.orchestration_id != grant.orchestration_id.as_str()
+        || plan.orchestration_id != grant.orchestration_id.as_str()
+        || attempt.workflow_run_id.as_str() != grant.workflow_run_id.as_str()
+        || dispatch.workflow_run_id != grant.workflow_run_id.as_str()
+        || binding.workflow_run_id != grant.workflow_run_id.as_str()
+        || attempt.work_item_id.as_str() != grant.work_item_id.as_str()
+        || dispatch.work_item_id != grant.work_item_id.as_str()
+        || attempt.node_id.as_str() != dispatch.node_id
+        || attempt.authorization_id.as_str() != plan.authorization_id
+        || grant.authorization_id.as_str() != plan.authorization_id
+        || attempt.authorization_revision != plan.authorization_revision
+        || grant.authorization_revision != plan.authorization_revision
     {
         return Err("execution_readback_join_mismatch".to_string());
     }
@@ -1317,6 +1355,9 @@ fn assert_execution_readback_chain_exact(
         || op.grant_id != receipt.grant_id.as_str()
         || op.last_receipt_id.as_deref() != Some(receipt.receipt_id.as_str())
         || op.state != durable_state_from_receipt(receipt)
+        || op.project_id != grant.project_id
+        || op.orchestration_id != grant.orchestration_id.as_str()
+        || op.workflow_run_id != grant.workflow_run_id.as_str()
     {
         return Err("execution_readback_durable_mismatch".to_string());
     }
@@ -1375,10 +1416,59 @@ fn persist_execution_attempt_readback_carriers(
     Ok(())
 }
 
+fn runtime_receipt_from_readback(
+    record: &ExecutionAttemptReadbackRecord,
+) -> Result<RuntimeReceipt, String> {
+    Ok(RuntimeReceipt {
+        receipt_id: RuntimeReceiptId::new(record.receipt_id.clone()),
+        grant_id: GrantId::new(record.grant_id.clone()),
+        attempt_id: AttemptId::new(record.attempt_id.clone()),
+        dispatch_id: record.dispatch_id.clone(),
+        effect_id: record.effect_id.clone(),
+        trace_hash: record.trace_hash.clone(),
+        actor_binding: record.actor_binding.clone(),
+        enforcement_status: EnforcementStatus::parse(&record.enforcement_status)?,
+        outcome: record.outcome.clone(),
+    })
+}
+
+fn assert_execution_attempt_readback_self_integrity(
+    store: &M5OrchestrationStore,
+    record: &ExecutionAttemptReadbackRecord,
+) -> Result<RuntimeReceipt, String> {
+    if record.source_attempt_revision + 1 != record.committed_attempt_revision {
+        return Err("execution_readback_revision_integrity".to_string());
+    }
+    let receipt = runtime_receipt_from_readback(record)?;
+    let derived = derive_attempt_state_from_receipt(&receipt)?;
+    if derived.as_m1_str() != record.derived_attempt_state {
+        return Err("execution_readback_derived_state_mismatch".to_string());
+    }
+    let canonical = canonical_execution_readback_hash(
+        &receipt,
+        derived.as_m1_str(),
+        record.source_attempt_revision,
+        record.committed_attempt_revision,
+    );
+    if canonical != record.canonical_readback_hash {
+        return Err("execution_readback_hash_mismatch".to_string());
+    }
+    let attempt = store
+        .load_attempt(&record.attempt_id)?
+        .ok_or_else(|| "execution_readback_attempt_missing".to_string())?;
+    if attempt.state.as_m1_str() != record.derived_attempt_state
+        || attempt.revision != record.committed_attempt_revision
+    {
+        return Err("execution_readback_terminal_mismatch".to_string());
+    }
+    Ok(receipt)
+}
+
 pub(crate) fn assert_execution_attempt_readback_carriers(
     store: &M5OrchestrationStore,
     record: &ExecutionAttemptReadbackRecord,
 ) -> Result<(), String> {
+    assert_execution_attempt_readback_self_integrity(store, record)?;
     let grant = store
         .load_grant(&record.grant_id)?
         .ok_or_else(|| "execution_readback_grant_missing".to_string())?;
@@ -2600,7 +2690,10 @@ mod tests {
             let err = record_execution_attempt_readback(&store, receipt, attempt.revision, 2_500)
                 .unwrap_err();
             assert!(
-                err.contains("mismatch") || err.contains("missing"),
+                err.contains("mismatch")
+                    || err.contains("missing")
+                    || err.contains("not_found")
+                    || err.starts_with("receipt_"),
                 "{label} -> {err}"
             );
             assert_eq!(execution_counts(&store), before, "{label}");
@@ -2683,5 +2776,131 @@ mod tests {
             .unwrap();
         let err = store.load_attempt(result.attempt_id.as_str()).unwrap_err();
         assert!(err.starts_with("unknown_attempt_state:"), "{err}");
+    }
+
+    #[test]
+    fn execution_readback_empty_trace_or_effect_is_zero_write() {
+        for (label, mutate) in [
+            (
+                "trace",
+                Box::new(|r: &mut RuntimeReceipt| r.trace_hash.clear())
+                    as Box<dyn Fn(&mut RuntimeReceipt)>,
+            ),
+            (
+                "effect",
+                Box::new(|r: &mut RuntimeReceipt| r.effect_id.clear()),
+            ),
+        ] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let (attempt, mut receipt) = seed_dispatched_receipt(
+                &store,
+                "rr-empty",
+                EnforcementStatus::Ok,
+                "SUCCEEDED",
+                2_000,
+            );
+            mutate(&mut receipt);
+            let before = execution_counts(&store);
+            let err = record_execution_attempt_readback(&store, receipt, attempt.revision, 2_500)
+                .unwrap_err();
+            assert_eq!(err, "receipt_missing_trace_or_effect", "{label}");
+            assert_eq!(execution_counts(&store), before, "{label}");
+        }
+    }
+
+    #[test]
+    fn execution_readback_unknown_durable_state_rejects_failed_receipt() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (attempt, receipt) =
+            seed_dispatched_receipt(&store, "rr-unk-op", EnforcementStatus::Ok, "FAILED", 2_000);
+        store
+            .connection()
+            .execute("UPDATE m5_durable_operations SET state='NOT_A_STATE'", [])
+            .unwrap();
+        let before = execution_counts(&store);
+        let err = record_execution_attempt_readback(&store, receipt, attempt.revision, 2_500)
+            .unwrap_err();
+        assert!(err.starts_with("unknown_op_state:"), "{err}");
+        assert_eq!(execution_counts(&store), before);
+        let loaded = store
+            .load_attempt(attempt.attempt_id.as_str())
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded.state, AttemptState::Dispatched);
+        assert_eq!(loaded.revision, attempt.revision);
+    }
+
+    #[test]
+    fn execution_readback_wrong_op_project_orch_run_is_zero_write() {
+        for sql in [
+            "UPDATE m5_durable_operations SET project_id='proj-other'",
+            "UPDATE m5_durable_operations SET orchestration_id='orch-other'",
+            "UPDATE m5_durable_operations SET workflow_run_id='run-other'",
+        ] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let (attempt, receipt) = seed_dispatched_receipt(
+                &store,
+                "rr-scope",
+                EnforcementStatus::Ok,
+                "SUCCEEDED",
+                2_000,
+            );
+            store.connection().execute(sql, []).unwrap();
+            let before = execution_counts(&store);
+            let err = record_execution_attempt_readback(&store, receipt, attempt.revision, 2_500)
+                .unwrap_err();
+            assert_eq!(err, "execution_readback_durable_mismatch", "{sql}");
+            assert_eq!(execution_counts(&store), before, "{sql}");
+        }
+    }
+
+    #[test]
+    fn execution_readback_wrong_replay_revision_is_zero_write() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (attempt, receipt) =
+            seed_dispatched_receipt(&store, "rr-rev", EnforcementStatus::Ok, "SUCCEEDED", 2_000);
+        let expected = attempt.revision;
+        record_execution_attempt_readback(&store, receipt.clone(), expected, 2_500).unwrap();
+        let before = execution_counts(&store);
+        let err =
+            record_execution_attempt_readback(&store, receipt, expected + 1, 3_000).unwrap_err();
+        assert_eq!(err, "execution_readback_replay_revision_mismatch");
+        assert_eq!(execution_counts(&store), before);
+    }
+
+    #[test]
+    fn execution_readback_tampered_persisted_fields_fail_self_integrity() {
+        for sql in [
+            "UPDATE m5_execution_attempt_readbacks SET trace_hash='tampered-trace'",
+            "UPDATE m5_execution_attempt_readbacks SET outcome='FAILED'",
+            "UPDATE m5_execution_attempt_readbacks SET derived_attempt_state='FAILED'",
+            "UPDATE m5_execution_attempt_readbacks SET canonical_readback_hash='deadbeef'",
+            "UPDATE m5_execution_attempt_readbacks SET committed_attempt_revision=99",
+        ] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let (attempt, receipt) = seed_dispatched_receipt(
+                &store,
+                "rr-tamp",
+                EnforcementStatus::Ok,
+                "SUCCEEDED",
+                2_000,
+            );
+            let (_, record) =
+                record_execution_attempt_readback(&store, receipt, attempt.revision, 2_500)
+                    .unwrap();
+            store.connection().execute(sql, []).unwrap();
+            let tampered = store
+                .load_execution_attempt_readback(&record.receipt_id)
+                .unwrap()
+                .unwrap();
+            let err = assert_execution_attempt_readback_carriers(&store, &tampered).unwrap_err();
+            assert!(
+                err == "execution_readback_hash_mismatch"
+                    || err == "execution_readback_derived_state_mismatch"
+                    || err == "execution_readback_revision_integrity"
+                    || err == "execution_readback_terminal_mismatch",
+                "{sql} -> {err}"
+            );
+        }
     }
 }

@@ -1,6 +1,7 @@
 // M5R05 persistent controlled execution. stop/retry/resume change stored
 // state. Unknown outcomes reconcile by effect id; they do not blind-retry.
 
+use crate::m2_dto::OutboxItemStatus;
 use crate::m5_agent_runtime::{
     AgentRuntimeAdapter, RuntimeFault, SynNativeAgentRuntime, WorkcellRun,
 };
@@ -8,7 +9,6 @@ use crate::m5_orchestration_identity::{AttemptId, OrchestrationId, WorkflowRunId
 use crate::m5_orchestration_service::{
     assert_dispatch_readback_substrate, load_joined_dispatch_chain,
 };
-use crate::m2_dto::OutboxItemStatus;
 use crate::m5_orchestration_store::M5OrchestrationStore;
 use crate::m5_prepared_attempt::AttemptState;
 use crate::m5_runtime_admission::AdmittedRuntimeCapability;
@@ -165,7 +165,7 @@ pub(crate) fn load_operation(
             map_op,
         )
         .optional()
-        .map_err(|e| format!("load_op:{e}"))
+        .map_err(map_op_load_err)
 }
 
 pub(crate) fn load_operation_by_effect(
@@ -184,10 +184,34 @@ pub(crate) fn load_operation_by_effect(
             map_op,
         )
         .optional()
-        .map_err(|e| format!("load_op_effect:{e}"))
+        .map_err(map_op_load_err)
+}
+
+fn map_op_load_err(err: rusqlite::Error) -> String {
+    let text = err.to_string();
+    if let Some(idx) = text.find("unknown_op_state:") {
+        return text[idx..].to_string();
+    }
+    let mut source = std::error::Error::source(&err);
+    while let Some(inner) = source {
+        let inner_text = inner.to_string();
+        if let Some(idx) = inner_text.find("unknown_op_state:") {
+            return inner_text[idx..].to_string();
+        }
+        source = inner.source();
+    }
+    format!("load_op:{err}")
 }
 
 fn map_op(row: &rusqlite::Row<'_>) -> rusqlite::Result<DurableOperation> {
+    let state_raw: String = row.get(8)?;
+    let state = DurableOperationState::parse(&state_raw).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(
+            8,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+        )
+    })?;
     Ok(DurableOperation {
         operation_id: row.get(0)?,
         attempt_id: AttemptId::new(row.get(1)?),
@@ -197,8 +221,7 @@ fn map_op(row: &rusqlite::Row<'_>) -> rusqlite::Result<DurableOperation> {
         grant_id: row.get(5)?,
         dispatch_id: row.get(6)?,
         effect_id: row.get(7)?,
-        state: DurableOperationState::parse(&row.get::<_, String>(8)?)
-            .unwrap_or(DurableOperationState::Failed),
+        state,
         retry_count: row.get::<_, i64>(9)? as u32,
         max_retries: row.get::<_, i64>(10)? as u32,
         last_receipt_id: row.get(11)?,
@@ -319,11 +342,7 @@ pub(crate) fn run_admitted_workcell(
         OutboxItemStatus::Delivered => {}
         _ => return Err("readback_substrate_outbox_not_delivered".to_string()),
     }
-    assert_dispatch_readback_substrate(
-        store,
-        &dispatch_id,
-        chain.attempt.attempt_id.as_str(),
-    )?;
+    assert_dispatch_readback_substrate(store, &dispatch_id, chain.attempt.attempt_id.as_str())?;
     if workcell.effect_id.trim().is_empty()
         || workcell.effect_id != chain.dispatch.effect_id
         || workcell.effect_id != chain.grant.effect_key
@@ -420,11 +439,7 @@ pub(crate) fn run_authorized_workcell(
     }
     if workcell.parent_grant_id != grant.grant_id.as_str()
         || workcell.parent_grant_id != dispatch.grant_id
-        || attempt
-            .grant_id
-            .as_ref()
-            .map(|id| id.as_str())
-            != Some(grant.grant_id.as_str())
+        || attempt.grant_id.as_ref().map(|id| id.as_str()) != Some(grant.grant_id.as_str())
     {
         return Err("workcell_grant_join_failed".to_string());
     }
@@ -633,23 +648,15 @@ mod tests {
                 "UPDATE m5_outbox_items SET status='POISON'",
                 "readback_substrate_outbox_not_delivered",
             ),
-            (
-                "DELETE FROM m5_outbox_items",
-                "outbox_not_found",
-            ),
+            ("DELETE FROM m5_outbox_items", "outbox_not_found"),
         ] {
             let store = M5OrchestrationStore::open_in_memory().unwrap();
             let cell = cell(&store, "outbox");
             store.connection().execute(sql, []).unwrap();
             let mut runtime = SynNativeAgentRuntime::new();
-            let err = run_authorized_workcell(
-                &store,
-                &mut runtime,
-                &cell,
-                3000,
-                RuntimeFault::None,
-            )
-            .unwrap_err();
+            let err =
+                run_authorized_workcell(&store, &mut runtime, &cell, 3000, RuntimeFault::None)
+                    .unwrap_err();
             assert_eq!(err, expected, "{sql}");
             assert_eq!(durable_op_count(&store), 0);
             assert!(runtime.events().is_empty());
@@ -688,5 +695,43 @@ mod tests {
             assert_eq!(durable_op_count(&store), 0);
             assert!(runtime.events().is_empty());
         }
+    }
+
+    #[test]
+    fn unknown_durable_state_fails_closed() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let cell = cell(&store, "unk-state");
+        let effect_id = cell.effect_id.clone();
+        persist_operation(
+            &store,
+            &DurableOperation {
+                operation_id: "op-unk-state".into(),
+                attempt_id: AttemptId::new(cell.attempt_id),
+                project_id: "proj-1".into(),
+                orchestration_id: "orch".into(),
+                workflow_run_id: "run".into(),
+                grant_id: cell.parent_grant_id,
+                dispatch_id: cell.dispatch_id,
+                effect_id: effect_id.clone(),
+                state: DurableOperationState::Running,
+                retry_count: 0,
+                max_retries: 2,
+                last_receipt_id: None,
+                error: None,
+                updated_at_ms: 1000,
+            },
+        )
+        .unwrap();
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_durable_operations SET state='NOT_A_STATE' WHERE operation_id='op-unk-state'",
+                [],
+            )
+            .unwrap();
+        let err = load_operation(&store, "op-unk-state").unwrap_err();
+        assert!(err.starts_with("unknown_op_state:"), "{err}");
+        let by_effect = load_operation_by_effect(&store, &effect_id).unwrap_err();
+        assert!(by_effect.starts_with("unknown_op_state:"), "{by_effect}");
     }
 }
