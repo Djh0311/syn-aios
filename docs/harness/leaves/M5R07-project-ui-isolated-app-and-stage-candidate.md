@@ -21,7 +21,7 @@
 2. M5 owner。U01 已关闭默认入口与安全有限 control 产品面，但没有建立 complex terminal retry 的新 Attempt / Grant / Dispatch / effect lineage；worker-blocked、terminal failure/recovery、duplicate operation/effect 仍缺 server-derived ordinary positive 场景，不得用翻状态冒充恢复。
 3. M5 owner。当前 shared-isolated launcher 是 unavailable-only；scene / window / restart 均 `NOT_EXECUTED`；缺正向 ordinary-product Tauri acceptance carrier。最终 positive ordinary GUI 证据仍受第 1 项 M1 owner 阻塞。
 
-证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b 尚无 fresh evidence-binding。U01a 独立复核为 exact 两文件、typecheck/build PASS；U01b 为 exact 九路径、cargo check PASS、execution_control 6/6、typecheck/build PASS。下一步若继续，只能另做 U02 ordinary disposable positive Tauri runner / server-owned fixture，或另开 complex retry；shared-isolated 始终只作 authority-unavailable negative regression。真正 legacy ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞。不得自动进入 M1 修正、M6 或 closeout。
+证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b 尚无 fresh evidence-binding。U01a 独立复核为 exact 两文件、typecheck/build PASS；U01b 为 exact 九路径、cargo check PASS、execution_control 6/6、typecheck/build PASS。下一步先做 U01c complex terminal retry 的新 Attempt / Grant / Dispatch / effect lineage，再做 U02 ordinary disposable positive Tauri runner / server-owned fixture；shared-isolated 始终只作 authority-unavailable negative regression。真正 legacy ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞。不得自动进入 M1 修正、M6 或 closeout。
 
 载体：U01a `f962038e725ba4e24b2699a46cd1a8d274f13ae6`；U01b `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`（均 scoped independent PASS；非 evidence / 非 closeout）。implementation `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`；fresh evidence final tip `0e0fcb26233dfbe618129ea05160b835f660f74b`；gateway predecessor `1433d51466e59352cc8859e1c47f176da04f25b0`。
 
@@ -62,6 +62,7 @@
 - tasks/2026-08-17-syn-m5r07-dispatch-readback-consumption-repair-v1.md [新增]
 - tasks/2026-08-17-syn-m5r07-terminal-execution-readback-v1.md [新增]
 - tasks/2026-08-17-syn-m5r07-ui-control-recovery-v1.md [U01 新增]
+- tasks/2026-08-18-syn-m5r07-terminal-retry-lineage-v1.md [U01c 新增]
 - docs/harness/plan.md、docs/current-state.md、docs/harness/audit/2026-08.jsonl、docs/harness/stages/stage-14.md（仅独立验收 closeout；当前用户边界禁止改 plan/stage/authorization）
 - docs/harness/reports/M5R07-*
 - docs/harness/leaves/M5R07-project-ui-isolated-app-and-stage-candidate.md
