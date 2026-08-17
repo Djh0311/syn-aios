@@ -12,7 +12,7 @@ use crate::m5_m3_identity::policy_decision_ref_for_action;
 use crate::m5_orchestration_identity::{AttemptId, OrchestrationId, WorkflowRunId};
 use crate::m5_orchestration_service::{
     assert_dispatch_readback_substrate, assert_execution_attempt_readback_carriers,
-    load_joined_dispatch_chain, JoinedDispatchChain,
+    load_joined_dispatch_chain, prepare_retry_lineage_on_active_plan, JoinedDispatchChain,
 };
 use crate::m5_orchestration_store::{
     M5OrchestrationStore, M5SqliteUnitOfWork, PlanAuthorizationRecord,
@@ -472,6 +472,8 @@ pub(crate) struct FormalProgressPointer {
     pub grant_id: Option<String>,
     pub dispatch_id: Option<String>,
     pub receipt_json: Option<String>,
+    pub claim_id: Option<String>,
+    pub review_id: Option<String>,
 }
 
 pub(crate) fn load_formal_progress_pointer(
@@ -495,7 +497,7 @@ pub(crate) fn load_formal_progress_pointer(
     let row = store
         .connection()
         .query_row(
-            "SELECT grant_id, dispatch_id, receipt_json
+            "SELECT grant_id, dispatch_id, receipt_json, claim_id, review_id
              FROM m5_formal_progress WHERE project_id=?1",
             [project_id],
             |row| {
@@ -503,23 +505,62 @@ pub(crate) fn load_formal_progress_pointer(
                     row.get::<_, Option<String>>(0)?,
                     row.get::<_, Option<String>>(1)?,
                     row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
                 ))
             },
         )
         .optional()
         .map_err(|e| format!("load_formal_progress:{e}"))?;
     Ok(match row {
-        Some((grant_id, dispatch_id, receipt_json)) => FormalProgressPointer {
+        Some((grant_id, dispatch_id, receipt_json, claim_id, review_id)) => FormalProgressPointer {
             grant_id,
             dispatch_id,
             receipt_json,
+            claim_id,
+            review_id,
         },
         None => FormalProgressPointer {
             grant_id: None,
             dispatch_id: None,
             receipt_json: None,
+            claim_id: None,
+            review_id: None,
         },
     })
+}
+
+fn switch_formal_progress_lineage(
+    store: &M5OrchestrationStore,
+    project_id: &str,
+    expected_grant_id: &str,
+    expected_dispatch_id: &str,
+    next_grant_id: &str,
+    next_dispatch_id: &str,
+    now_ms: i64,
+) -> Result<(), String> {
+    let _ = load_formal_progress_pointer(store, project_id)?;
+    let changed = store
+        .connection()
+        .execute(
+            "UPDATE m5_formal_progress
+             SET grant_id=?1, dispatch_id=?2, receipt_json=NULL, claim_id=NULL,
+                 review_id=NULL, updated_at_ms=?3
+             WHERE project_id=?4 AND grant_id=?5 AND dispatch_id=?6",
+            params![
+                next_grant_id,
+                next_dispatch_id,
+                now_ms,
+                project_id,
+                expected_grant_id,
+                expected_dispatch_id
+            ],
+        )
+        .map_err(|e| format!("switch_formal_progress:{e}"))?;
+    if changed != 1 {
+        return Err("formal_progress_lineage_cas_failed".to_string());
+    }
+    Ok(())
 }
 
 fn load_control_head(
@@ -976,6 +1017,50 @@ fn has_external_effect(joined: &JoinedControlChain) -> bool {
     false
 }
 
+fn authoritative_known_no_effect(joined: &JoinedControlChain) -> bool {
+    let Some(readback) = joined.readback.as_ref() else {
+        return false;
+    };
+    let Some(op) = joined.operation.as_ref() else {
+        return false;
+    };
+    if !matches!(
+        joined.chain.attempt.state,
+        AttemptState::Failed | AttemptState::TimedOut
+    ) {
+        return false;
+    }
+    if readback.enforcement_status != EnforcementStatus::Ok.as_str() {
+        return false;
+    }
+    if readback.outcome != "FAILED" && readback.outcome != "TIMED_OUT" {
+        return false;
+    }
+    if readback.derived_attempt_state != joined.chain.attempt.state.as_m1_str()
+        || readback.derived_attempt_state != readback.outcome
+    {
+        return false;
+    }
+    if op.last_receipt_id.as_deref() != Some(readback.receipt_id.as_str()) {
+        return false;
+    }
+    match (readback.outcome.as_str(), &op.state) {
+        ("FAILED", DurableOperationState::Failed)
+        | ("TIMED_OUT", DurableOperationState::TimedOut) => {}
+        _ => return false,
+    }
+    if matches!(
+        op.state,
+        DurableOperationState::Completed
+            | DurableOperationState::OutcomeUnknown
+            | DurableOperationState::DeadLettered
+            | DurableOperationState::Cancelled
+    ) {
+        return false;
+    }
+    true
+}
+
 fn derived_durable_state(head: &ControlHead, joined: Option<&JoinedControlChain>) -> String {
     if let Some(state) = head.durable_state.as_deref() {
         if state != "ABSENT" {
@@ -1028,6 +1113,15 @@ fn derive_control_view(
     {
         phase = "OUTCOME_UNKNOWN".to_string();
         blocked_reason = Some("outcome_unknown_requires_same_effect_reconcile".into());
+    } else if matches!(attempt_state.as_deref(), Some("FAILED") | Some("TIMED_OUT")) {
+        phase = attempt_state.clone().unwrap_or_else(|| "TERMINAL".into());
+        if joined.map(authoritative_known_no_effect).unwrap_or(false) {
+            can_retry = true;
+        } else if joined.map(|j| j.readback.is_none()).unwrap_or(true) {
+            blocked_reason = Some("terminal_retry_requires_authoritative_no_effect_proof".into());
+        } else {
+            blocked_reason = Some("terminal_failure_has_external_effect".into());
+        }
     } else if attempt_terminal {
         phase = attempt_state.clone().unwrap_or_else(|| "TERMINAL".into());
         blocked_reason = Some("terminal_attempt_no_new_lineage".into());
@@ -1109,6 +1203,112 @@ fn replay_control_response(
     ))
 }
 
+fn apply_retry_lineage(
+    store: &M5OrchestrationStore,
+    binding: &SupervisorBinding,
+    session: &SupervisorSessionRef,
+    worker: Option<&M3ProjectRoleSessionView>,
+    pointer: &FormalProgressPointer,
+    joined: &JoinedControlChain,
+    head: &ControlHead,
+    expected_revision: u64,
+    now_ms: i64,
+    fault: ControlApplyFault,
+) -> Result<M5ExecutionControlResponse, String> {
+    if !authoritative_known_no_effect(joined) {
+        return Err("terminal_retry_requires_authoritative_no_effect_proof".to_string());
+    }
+    let worker = worker.ok_or_else(|| "control_worker_view_required".to_string())?;
+    let old_grant_id = pointer
+        .grant_id
+        .as_deref()
+        .ok_or_else(|| "formal_progress_missing_grant".to_string())?;
+    let old_dispatch_id = pointer
+        .dispatch_id
+        .as_deref()
+        .ok_or_else(|| "formal_progress_missing_dispatch".to_string())?;
+    let lineage = prepare_retry_lineage_on_active_plan(
+        store,
+        &joined.chain.plan,
+        &joined.chain,
+        &worker.role_session_id,
+        &binding.actor_id,
+        &binding.actor_id,
+        &joined.chain.grant.policy_decision_ref,
+        now_ms,
+    )?;
+    let new_grant_id = lineage
+        .grant_id
+        .as_ref()
+        .ok_or_else(|| "retry_lineage_missing_grant".to_string())?
+        .as_str()
+        .to_string();
+    let new_dispatch_id = lineage
+        .dispatch_id
+        .as_ref()
+        .ok_or_else(|| "retry_lineage_missing_dispatch".to_string())?
+        .as_str()
+        .to_string();
+    switch_formal_progress_lineage(
+        store,
+        &binding.project_id,
+        old_grant_id,
+        old_dispatch_id,
+        &new_grant_id,
+        &new_dispatch_id,
+        now_ms,
+    )?;
+    let new_chain = load_joined_dispatch_chain(store, &new_dispatch_id, now_ms)?;
+    let receipt_id = format!(
+        "m5-ctrl-{}",
+        sha_hex(&format!(
+            "{}:{}:RETRY:{}",
+            binding.binding_id, binding.project_id, expected_revision
+        ))
+    );
+    let resulting = expected_revision + 1;
+    insert_control_receipt(
+        store,
+        &binding.binding_id,
+        &binding.project_id,
+        "RETRY",
+        expected_revision,
+        resulting,
+        "CREATED",
+        &receipt_id,
+        now_ms,
+    )?;
+    if fault == ControlApplyFault::FailAfterReceiptInsert {
+        return Err("control_transaction_fault".to_string());
+    }
+    let mut next = head.clone();
+    next.control_revision = resulting;
+    next.last_action = Some("RETRY".to_string());
+    next.last_receipt_id = Some(receipt_id.clone());
+    next.durable_state = Some("CREATED".to_string());
+    next.stop_intent = false;
+    next.checkpoint_json = None;
+    next.effect_id = Some(new_chain.dispatch.effect_id.clone());
+    next.operation_id = None;
+    persist_control_head_cas(
+        store,
+        &binding.binding_id,
+        &binding.project_id,
+        expected_revision,
+        &next,
+        now_ms,
+    )?;
+    let new_pointer = load_formal_progress_pointer(store, &binding.project_id)?;
+    let new_joined =
+        join_execution_control_chain(store, binding, session, Some(worker), &new_pointer, now_ms)?;
+    Ok(derive_control_view(
+        &next,
+        new_joined.as_ref(),
+        false,
+        Some(receipt_id),
+    ))
+}
+
 pub(crate) fn apply_execution_control(
     store: &M5OrchestrationStore,
     binding: &SupervisorBinding,
@@ -1178,15 +1378,29 @@ pub(crate) fn apply_execution_control_with_fault(
             .unwrap_or_else(|| format!("cannot_{}", action.to_lowercase())));
     }
     let joined = joined.ok_or_else(|| "no_formal_progress_pointer".to_string())?;
-    let next_state = match action {
-        "STOP" => DurableOperationState::Cancelled,
-        "RESUME" => DurableOperationState::Leased,
-        _ => return Err("cannot_retry".to_string()),
-    };
-    let from_state = DurableOperationState::parse(&view.durable_state)?;
     let uow = M5SqliteUnitOfWork::new();
     uow.begin(store.connection())?;
     let applied = (|| {
+        if action == "RETRY" {
+            return apply_retry_lineage(
+                store,
+                binding,
+                session,
+                worker,
+                &pointer,
+                &joined,
+                &head,
+                expected_revision,
+                now_ms,
+                fault,
+            );
+        }
+        let next_state = match action {
+            "STOP" => DurableOperationState::Cancelled,
+            "RESUME" => DurableOperationState::Leased,
+            _ => return Err("cannot_retry".to_string()),
+        };
+        let from_state = DurableOperationState::parse(&view.durable_state)?;
         if let Some(op) = joined.operation.as_ref() {
             update_durable_operation_state(
                 store,

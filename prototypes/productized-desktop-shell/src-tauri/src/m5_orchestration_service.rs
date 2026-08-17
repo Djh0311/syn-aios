@@ -403,6 +403,282 @@ pub(crate) fn prepare_and_dispatch(
     result
 }
 
+/// Prepare a new Attempt/Grant/Dispatch/effect on the current active Plan.
+/// Caller owns the transaction. Never executes runtime and never mutates the
+/// parent Attempt/Grant/Dispatch/outbox/readback/operation.
+pub(crate) fn prepare_retry_lineage_on_active_plan(
+    store: &M5OrchestrationStore,
+    plan: &PlanAuthorizationRecord,
+    parent: &JoinedDispatchChain,
+    worker_role_session_id: &str,
+    principal_actor_id: &str,
+    deciding_actor_id: &str,
+    policy_decision_ref: &str,
+    now_ms: i64,
+) -> Result<AuthorizedExecutionResult, String> {
+    if plan.status != "ACTIVE" || plan.revoked_at_ms.is_some() {
+        return Err("plan_authorization_not_active".to_string());
+    }
+    if now_ms >= plan.expires_at_ms {
+        return Err("plan_authorization_expired".to_string());
+    }
+    if worker_role_session_id.trim().is_empty()
+        || principal_actor_id.trim().is_empty()
+        || deciding_actor_id.trim().is_empty()
+        || policy_decision_ref.trim().is_empty()
+    {
+        return Err("retry_lineage_request_incomplete".to_string());
+    }
+    if plan.authorization_id != parent.plan.authorization_id
+        || plan.authorization_revision != parent.plan.authorization_revision
+        || plan.project_id != parent.grant.project_id
+        || plan.orchestration_id != parent.grant.orchestration_id.as_str()
+        || parent.attempt.orchestration_id.as_str() != parent.grant.orchestration_id.as_str()
+        || parent.attempt.workflow_run_id.as_str() != parent.grant.workflow_run_id.as_str()
+        || parent.attempt.work_item_id.as_str() != parent.grant.work_item_id.as_str()
+        || parent.attempt.node_id.as_str() != parent.dispatch.node_id
+        || parent.dispatch.workflow_run_id != parent.grant.workflow_run_id.as_str()
+        || parent.dispatch.work_item_id != parent.grant.work_item_id.as_str()
+    {
+        return Err("retry_parent_plan_join_failed".to_string());
+    }
+    persist_granted_attempt_and_pending_dispatch(
+        store,
+        plan,
+        parent.grant.orchestration_id.as_str(),
+        parent.grant.workflow_run_id.as_str(),
+        parent.grant.work_item_id.as_str(),
+        parent.dispatch.node_id.as_str(),
+        worker_role_session_id,
+        principal_actor_id,
+        deciding_actor_id,
+        policy_decision_ref,
+        now_ms,
+        ChainFault::None,
+    )
+}
+
+fn persist_granted_attempt_and_pending_dispatch(
+    store: &M5OrchestrationStore,
+    plan: &PlanAuthorizationRecord,
+    orchestration_id: &str,
+    workflow_run_id: &str,
+    work_item_id: &str,
+    node_id: &str,
+    worker_role_session_id: &str,
+    principal_actor_id: &str,
+    deciding_actor_id: &str,
+    policy_decision_ref: &str,
+    now_ms: i64,
+    fault: ChainFault,
+) -> Result<AuthorizedExecutionResult, String> {
+    let now_iso = format_ms(now_ms);
+    let correlation_id = uuid::Uuid::new_v4().to_string();
+    let attempt_id = uuid::Uuid::new_v4().to_string();
+    let mut attempt = PreparedAttempt::new(
+        AttemptId::new(attempt_id.clone()),
+        plan.project_id.clone(),
+        OrchestrationId::new(orchestration_id.to_string()),
+        WorkflowRunId::new(workflow_run_id.to_string()),
+        WorkItemId::new(work_item_id.to_string()),
+        NodeId::new(node_id.to_string()),
+        worker_role_session_id.to_string(),
+        AuthorizationId::new(plan.authorization_id.clone()),
+        plan.authorization_revision,
+        now_ms,
+    );
+    store.persist_binding(&WorkerBindingRecord {
+        binding_id: uuid::Uuid::new_v4().to_string(),
+        project_id: plan.project_id.clone(),
+        orchestration_id: orchestration_id.to_string(),
+        workflow_run_id: workflow_run_id.to_string(),
+        work_item_id: work_item_id.to_string(),
+        attempt_id: attempt_id.clone(),
+        worker_role_session_id: worker_role_session_id.to_string(),
+        principal_actor_id: principal_actor_id.to_string(),
+        created_at_ms: now_ms,
+    })?;
+    store.persist_attempt(&attempt)?;
+
+    attempt
+        .begin_grant_binding(now_ms + 1)
+        .map_err(|e| e.to_string())?;
+    store.persist_attempt(&attempt)?;
+
+    let mint_receipt = committed_receipt(
+        "MintAttemptScopedGrant",
+        deciding_actor_id,
+        &plan.project_id,
+        &correlation_id,
+        &now_iso,
+        policy_decision_ref,
+    );
+    store.persist_receipt(&mint_receipt)?;
+    let mut grant = ExecutionGrant::mint(GrantMintInput {
+        project_id: plan.project_id.clone(),
+        orchestration_id: OrchestrationId::new(orchestration_id.to_string()),
+        workflow_run_id: WorkflowRunId::new(workflow_run_id.to_string()),
+        work_item_id: WorkItemId::new(work_item_id.to_string()),
+        attempt_id: AttemptId::new(attempt_id.clone()),
+        authorization_id: AuthorizationId::new(plan.authorization_id.clone()),
+        authorization_revision: plan.authorization_revision,
+        principal_actor_id: principal_actor_id.to_string(),
+        worker_role_session_id: worker_role_session_id.to_string(),
+        scope_fingerprint: plan.authorized_scope_ref.clone(),
+        allowed_commands: plan.allowed_commands.clone(),
+        cwd_ref: plan.cwd_ref.clone(),
+        write_root_refs: plan.write_root_refs.clone(),
+        object_refs: plan.allowed_object_refs.clone(),
+        policy_decision_ref: policy_decision_ref.to_string(),
+        issued_at_ms: now_ms,
+        expires_at_ms: plan.expires_at_ms,
+        idempotency_key: format!("grant-{}", uuid::Uuid::new_v4()),
+        effect_key: format!("effect-{}", uuid::Uuid::new_v4()),
+        created_by_command_receipt_ref: mint_receipt.receipt_id.clone(),
+    })?;
+
+    if fault == ChainFault::FailPersistGrant {
+        grant.revoke(now_ms + 2);
+        store.persist_grant(&grant)?;
+        attempt
+            .recover_grant_failure(now_ms + 2)
+            .map_err(|e| e.to_string())?;
+        store.persist_attempt(&attempt)?;
+        return Err("grant_persist_failed".to_string());
+    }
+
+    store.persist_grant(&grant)?;
+    attempt
+        .attach_minted_grant(grant.grant_id.clone(), now_ms + 2)
+        .map_err(|e| e.to_string())?;
+    store.persist_attempt(&attempt)?;
+
+    if fault == ChainFault::FailReadback {
+        grant.revoke(now_ms + 3);
+        store.persist_grant(&grant)?;
+        attempt
+            .recover_grant_failure(now_ms + 3)
+            .map_err(|e| e.to_string())?;
+        store.persist_attempt(&attempt)?;
+        return Err("grant_readback_failed".to_string());
+    }
+
+    let expected_hash = grant.grant_hash.clone();
+    let loaded = store
+        .load_grant(grant.grant_id.as_str())?
+        .ok_or_else(|| "grant_missing_after_persist".to_string())?;
+    if loaded.grant_hash != expected_hash {
+        grant.revoke(now_ms + 3);
+        store.persist_grant(&grant)?;
+        attempt
+            .recover_grant_failure(now_ms + 3)
+            .map_err(|e| e.to_string())?;
+        store.persist_attempt(&attempt)?;
+        return Err("grant_readback_hash_mismatch".to_string());
+    }
+    grant
+        .confirm_readback(&expected_hash, now_ms + 3)
+        .map_err(|e| e.to_string())?;
+    store.persist_grant(&grant)?;
+    attempt
+        .confirm_grant_ready(&grant.grant_id, now_ms + 3)
+        .map_err(|e| e.to_string())?;
+    store.persist_attempt(&attempt)?;
+
+    if fault == ChainFault::FailDispatch {
+        grant.revoke(now_ms + 4);
+        store.persist_grant(&grant)?;
+        attempt.cancel(now_ms + 4).map_err(|e| e.to_string())?;
+        store.persist_attempt(&attempt)?;
+        return Err("dispatch_failed".to_string());
+    }
+
+    let dispatch_id = uuid::Uuid::new_v4().to_string();
+    let mut dispatch_receipt = committed_receipt(
+        "DispatchGrantedAttempt",
+        deciding_actor_id,
+        &plan.project_id,
+        &correlation_id,
+        &now_iso,
+        policy_decision_ref,
+    );
+    dispatch_receipt.actor_id = principal_actor_id.to_string();
+    dispatch_receipt.current_object_ref = Some(format!("attempt:{}", attempt.attempt_id.as_str()));
+    dispatch_receipt.result_ref = Some(format!("dispatch:{dispatch_id}"));
+    dispatch_receipt.result_hash = Some(grant.grant_hash.clone());
+    store.persist_receipt(&dispatch_receipt)?;
+    let outbox_item_id = uuid::Uuid::new_v4().to_string();
+    let effect_id = grant.effect_key.clone();
+    let outbox = OutboxItemDto {
+        outbox_item_id: outbox_item_id.clone(),
+        owning_command_id: dispatch_receipt.command_id.clone(),
+        owning_command_receipt_ref: dispatch_receipt.receipt_id.clone(),
+        effect_id: effect_id.clone(),
+        capability_id: "m5.dispatch.granted-attempt".to_string(),
+        scope_ref: plan.project_id.clone(),
+        subject_ref: Some(attempt.attempt_id.as_str().to_string()),
+        payload_ref: Some(format!("grant:{}", grant.grant_id.as_str())),
+        payload_hash: Some(grant.grant_hash.clone()),
+        result_command_type: "RecordDispatchReadback".to_string(),
+        idempotency_key: dispatch_receipt.idempotency_key.clone(),
+        correlation_id: Some(correlation_id.clone()),
+        status: OutboxItemStatus::Available,
+        created_at: now_iso.clone(),
+        expires_at: None,
+        lease_token: None,
+        claimer_id: None,
+        acquired_at: None,
+        attempt_count: Some(0),
+        next_retry_not_before: None,
+    };
+    M5OutboxRepository.create(store.connection(), &outbox)?;
+    store.persist_dispatch(&DispatchRecord {
+        dispatch_id: dispatch_id.clone(),
+        project_id: plan.project_id.clone(),
+        orchestration_id: orchestration_id.to_string(),
+        workflow_run_id: workflow_run_id.to_string(),
+        work_item_id: work_item_id.to_string(),
+        node_id: node_id.to_string(),
+        attempt_id: attempt_id.clone(),
+        grant_id: grant.grant_id.as_str().to_string(),
+        grant_revision: grant.revision,
+        worker_role_session_id: worker_role_session_id.to_string(),
+        outbox_item_id: outbox_item_id.clone(),
+        effect_id,
+        state: "PENDING_DELIVERY".to_string(),
+        revision: 1,
+        created_by_command_receipt_ref: dispatch_receipt.receipt_id.clone(),
+        created_at_ms: now_ms + 4,
+    })?;
+    store.persist_event(&scrubbed_event(
+        "ExecutionAttemptDispatchRequested",
+        deciding_actor_id,
+        &plan.project_id,
+        &dispatch_receipt.command_id,
+        &correlation_id,
+        &now_iso,
+    ))?;
+    store.persist_audit(&scrubbed_audit(
+        "DISPATCHED",
+        deciding_actor_id,
+        &plan.project_id,
+        grant.grant_id.as_str(),
+        &dispatch_receipt.command_id,
+        &correlation_id,
+        &now_iso,
+    ))?;
+
+    Ok(AuthorizedExecutionResult {
+        authorization_id: AuthorizationId::new(plan.authorization_id.clone()),
+        workflow_run_id: WorkflowRunId::new(workflow_run_id.to_string()),
+        work_item_id: WorkItemId::new(work_item_id.to_string()),
+        attempt_id: AttemptId::new(attempt_id),
+        grant_id: Some(grant.grant_id),
+        dispatch_id: Some(DispatchId::new(dispatch_id)),
+        outbox_item_id: Some(outbox_item_id),
+    })
+}
+
 pub(crate) enum DispatchReadbackSource<'a> {
     Admitted(&'a AdmittedRuntimeCapability),
     #[cfg(test)]

@@ -2573,4 +2573,557 @@ mod tests {
         assert_eq!(runtime_owned_snapshot(&state, &opened.project_id), before);
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct LineageSnapshot {
+        attempt_id: String,
+        attempt_state: String,
+        attempt_revision: i64,
+        grant_id: String,
+        grant_hash: String,
+        grant_revision: i64,
+        grant_status: String,
+        grant_effect: String,
+        dispatch_id: String,
+        dispatch_state: String,
+        dispatch_revision: i64,
+        dispatch_effect: String,
+        outbox_id: String,
+        outbox_status: String,
+        operation_id: Option<String>,
+        operation_state: Option<String>,
+        operation_retry: Option<u32>,
+        readback_id: Option<String>,
+        readback_outcome: Option<String>,
+        readback_hash: Option<String>,
+    }
+
+    fn count_sql(state: &crate::AppState, sql: &str) -> i64 {
+        store_from_state(state)
+            .expect("m5 store")
+            .connection()
+            .query_row(sql, [], |row| row.get(0))
+            .unwrap_or(0)
+    }
+
+    fn lineage_counts(state: &crate::AppState) -> (i64, i64, i64, i64) {
+        (
+            count_sql(state, "SELECT COUNT(*) FROM m5_prepared_attempts"),
+            count_sql(state, "SELECT COUNT(*) FROM m5_execution_grants"),
+            count_sql(state, "SELECT COUNT(*) FROM m5_dispatches"),
+            count_sql(state, "SELECT COUNT(DISTINCT effect_id) FROM m5_dispatches"),
+        )
+    }
+
+    fn snapshot_lineage(
+        state: &crate::AppState,
+        grant_id: &str,
+        dispatch_id: &str,
+    ) -> LineageSnapshot {
+        let store = store_from_state(state).expect("m5 store");
+        let grant = store.load_grant(grant_id).expect("load").expect("grant");
+        let dispatch = store
+            .load_dispatch(dispatch_id)
+            .expect("load dispatch")
+            .expect("dispatch");
+        let attempt = store
+            .load_attempt(&dispatch.attempt_id)
+            .expect("load attempt")
+            .expect("attempt");
+        let outbox_status: String = store
+            .connection()
+            .query_row(
+                "SELECT status FROM m5_outbox_items WHERE outbox_item_id=?1",
+                [&dispatch.outbox_item_id],
+                |row| row.get(0),
+            )
+            .expect("outbox");
+        let operation =
+            crate::m5_controlled_execution::load_operation_by_effect(&store, &dispatch.effect_id)
+                .expect("load op");
+        let readback = store
+            .connection()
+            .query_row(
+                "SELECT receipt_id, outcome, canonical_readback_hash
+                 FROM m5_execution_attempt_readbacks
+                 WHERE attempt_id=?1 AND grant_id=?2 AND dispatch_id=?3",
+                [
+                    attempt.attempt_id.as_str(),
+                    grant.grant_id.as_str(),
+                    dispatch.dispatch_id.as_str(),
+                ],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .expect("readback query");
+        LineageSnapshot {
+            attempt_id: attempt.attempt_id.as_str().to_string(),
+            attempt_state: attempt.state.as_m1_str().to_string(),
+            attempt_revision: attempt.revision,
+            grant_id: grant.grant_id.as_str().to_string(),
+            grant_hash: grant.grant_hash,
+            grant_revision: grant.revision,
+            grant_status: grant.status.as_m1_str().to_string(),
+            grant_effect: grant.effect_key,
+            dispatch_id: dispatch.dispatch_id,
+            dispatch_state: dispatch.state,
+            dispatch_revision: dispatch.revision,
+            dispatch_effect: dispatch.effect_id,
+            outbox_id: dispatch.outbox_item_id,
+            outbox_status,
+            operation_id: operation.as_ref().map(|op| op.operation_id.clone()),
+            operation_state: operation.as_ref().map(|op| op.state.as_str().to_string()),
+            operation_retry: operation.as_ref().map(|op| op.retry_count),
+            readback_id: readback.as_ref().map(|row| row.0.clone()),
+            readback_outcome: readback.as_ref().map(|row| row.1.clone()),
+            readback_hash: readback.as_ref().map(|row| row.2.clone()),
+        }
+    }
+
+    fn formal_downstream_refs(
+        state: &crate::AppState,
+        project_id: &str,
+    ) -> (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) {
+        load_formal_progress(&store_from_state(state).expect("m5 store"), project_id)
+            .expect("progress")
+    }
+
+    fn seed_known_no_effect_terminal(
+        state: &crate::AppState,
+        opened: &crate::m5_dto::M5SupervisorOpenResponse,
+        outcome: &str,
+        operation_id: &str,
+    ) {
+        let store = store_from_state(state).expect("m5 store");
+        let grant_id = formal_grant_id(state, &opened.project_id);
+        let dispatch_id = formal_dispatch_id(state, &opened.project_id);
+        crate::m5_orchestration_service::complete_dispatch_readback(
+            &store,
+            crate::m5_orchestration_service::DispatchReadbackSource::ExactStoredDispatch(
+                &dispatch_id,
+            ),
+            m5_now_ms(),
+        )
+        .expect("dispatch readback");
+        let grant = store.load_grant(&grant_id).expect("load").expect("grant");
+        let dispatch = store
+            .load_dispatch(&dispatch_id)
+            .expect("load dispatch")
+            .expect("dispatch");
+        let attempt = store
+            .load_attempt(&dispatch.attempt_id)
+            .expect("load attempt")
+            .expect("attempt");
+        let op_state = match outcome {
+            "TIMED_OUT" => crate::m5_controlled_execution::DurableOperationState::TimedOut,
+            _ => crate::m5_controlled_execution::DurableOperationState::Failed,
+        };
+        let receipt = crate::m5_runtime_receipt::RuntimeReceipt {
+            receipt_id: crate::m5_orchestration_identity::RuntimeReceiptId::new(format!(
+                "rr-no-effect-{}",
+                opened.project_id
+            )),
+            grant_id: grant.grant_id.clone(),
+            attempt_id: grant.attempt_id.clone(),
+            dispatch_id: dispatch.dispatch_id.clone(),
+            effect_id: dispatch.effect_id.clone(),
+            trace_hash: format!("trace-no-effect-{}", opened.project_id),
+            actor_binding: grant.worker_role_session_id.clone(),
+            enforcement_status: crate::m5_runtime_receipt::EnforcementStatus::Ok,
+            outcome: outcome.to_string(),
+        };
+        crate::m5_controlled_execution::persist_operation(
+            &store,
+            &crate::m5_controlled_execution::DurableOperation {
+                operation_id: operation_id.into(),
+                attempt_id: grant.attempt_id.clone(),
+                project_id: opened.project_id.clone(),
+                orchestration_id: grant.orchestration_id.as_str().to_string(),
+                workflow_run_id: grant.workflow_run_id.as_str().to_string(),
+                grant_id: grant.grant_id.as_str().to_string(),
+                dispatch_id: dispatch.dispatch_id.clone(),
+                effect_id: dispatch.effect_id.clone(),
+                state: op_state,
+                retry_count: 0,
+                max_retries: 2,
+                last_receipt_id: Some(receipt.receipt_id.as_str().to_string()),
+                error: Some(outcome.to_string()),
+                updated_at_ms: m5_now_ms(),
+            },
+        )
+        .expect("persist failed op");
+        crate::m5_orchestration_service::record_execution_attempt_readback(
+            &store,
+            receipt.clone(),
+            attempt.revision,
+            m5_now_ms(),
+        )
+        .expect("record failed readback");
+        persist_formal_progress(
+            &store,
+            &opened.project_id,
+            Some(grant.grant_id.as_str()),
+            Some(&dispatch.dispatch_id),
+            Some(&serde_json::to_string(&receipt).expect("receipt json")),
+            None,
+            None,
+        )
+        .expect("persist failed progress");
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_formal_progress
+                 SET claim_id=?1, review_id=?2
+                 WHERE project_id=?3",
+                rusqlite::params![
+                    format!("old-claim-{}", opened.project_id),
+                    format!("old-review-{}", opened.project_id),
+                    opened.project_id
+                ],
+            )
+            .expect("seed downstream refs");
+    }
+
+    #[test]
+    fn execution_control_terminal_retry_known_no_effect_creates_one_new_lineage() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-retry-a");
+        seed_known_no_effect_terminal(&state, &opened, "FAILED", "op-retry-a");
+        let old_grant = formal_grant_id(&state, &opened.project_id);
+        let old_dispatch = formal_dispatch_id(&state, &opened.project_id);
+        let before_lineage = snapshot_lineage(&state, &old_grant, &old_dispatch);
+        let before_counts = lineage_counts(&state);
+        let before_downstream = formal_downstream_refs(&state, &opened.project_id);
+        assert!(before_downstream.2.is_some());
+        assert!(before_downstream.3.is_some());
+        assert!(before_downstream.4.is_some());
+        let loaded = load_control(&state, &opened);
+        assert_eq!(loaded.attempt_state.as_deref(), Some("FAILED"));
+        assert!(loaded.can_retry);
+        assert!(!loaded.can_stop);
+        assert!(!loaded.can_resume);
+        let retried = apply_control(&state, &opened, "RETRY", 0).expect("retry");
+        assert!(!retried.replayed);
+        assert_eq!(retried.control_revision, 1);
+        assert_eq!(retried.durable_state, "CREATED");
+        assert_eq!(
+            retried.attempt_state.as_deref(),
+            Some("GRANT_READY_NON_RUNNABLE")
+        );
+        assert!(!retried.can_retry);
+        assert!(retried.can_stop);
+        let after_counts = lineage_counts(&state);
+        assert_eq!(after_counts.0, before_counts.0 + 1);
+        assert_eq!(after_counts.1, before_counts.1 + 1);
+        assert_eq!(after_counts.2, before_counts.2 + 1);
+        assert_eq!(after_counts.3, before_counts.3 + 1);
+        assert_eq!(
+            snapshot_lineage(&state, &old_grant, &old_dispatch),
+            before_lineage
+        );
+        let progress = formal_downstream_refs(&state, &opened.project_id);
+        assert_ne!(progress.0.as_deref(), Some(old_grant.as_str()));
+        assert_ne!(progress.1.as_deref(), Some(old_dispatch.as_str()));
+        assert!(progress.2.is_none());
+        assert!(progress.3.is_none());
+        assert!(progress.4.is_none());
+        assert_eq!(control_operation_state(&state, "op-retry-a"), "FAILED");
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_terminal_retry_exact_replay_and_stale() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-retry-b");
+        seed_known_no_effect_terminal(&state, &opened, "FAILED", "op-retry-b");
+        let first = apply_control(&state, &opened, "RETRY", 0).expect("first retry");
+        let store = store_from_state(&state).expect("m5 store");
+        let receipts = crate::m5_controlled_execution::control_receipt_count(&store);
+        let counts = lineage_counts(&state);
+        let progress = formal_downstream_refs(&state, &opened.project_id);
+        let replayed = apply_control(&state, &opened, "RETRY", 0).expect("exact replay");
+        assert!(replayed.replayed);
+        assert_eq!(replayed.last_receipt_id, first.last_receipt_id);
+        assert_eq!(replayed.control_revision, first.control_revision);
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(&store),
+            receipts
+        );
+        assert_eq!(lineage_counts(&state), counts);
+        assert_eq!(formal_downstream_refs(&state, &opened.project_id), progress);
+        let stale = apply_control(&state, &opened, "RETRY", 99).expect_err("stale");
+        assert_eq!(stale, "control_revision_stale_or_forged");
+        let divergent = apply_control(&state, &opened, "STOP", 0).expect_err("divergent");
+        assert_eq!(divergent, "control_revision_stale_or_forged");
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(&store),
+            receipts
+        );
+        assert_eq!(lineage_counts(&state), counts);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_terminal_retry_runtime_once_and_no_double_execute() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-retry-c");
+        seed_known_no_effect_terminal(&state, &opened, "FAILED", "op-retry-c");
+        apply_control(&state, &opened, "RETRY", 0).expect("retry");
+        assert_eq!(
+            count_sql(
+                &state,
+                "SELECT COUNT(*) FROM m5_execution_attempt_readbacks WHERE outcome='SUCCEEDED'"
+            ),
+            0
+        );
+        assert_eq!(
+            count_sql(
+                &state,
+                "SELECT COUNT(*) FROM m5_durable_operations WHERE state='COMPLETED'"
+            ),
+            0
+        );
+        let runtime = run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("new lineage runtime");
+        assert!(runtime.receipt_id.is_some());
+        assert_eq!(
+            count_sql(
+                &state,
+                "SELECT COUNT(*) FROM m5_execution_attempt_readbacks WHERE outcome='SUCCEEDED'"
+            ),
+            1
+        );
+        assert_eq!(
+            count_sql(
+                &state,
+                "SELECT COUNT(*) FROM m5_durable_operations WHERE state='COMPLETED'"
+            ),
+            1
+        );
+        assert_eq!(
+            count_sql(
+                &state,
+                "SELECT COUNT(*) FROM m5_durable_operations WHERE state='FAILED'"
+            ),
+            1
+        );
+        let repeat = run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect_err("repeat runtime");
+        assert!(
+            repeat == "attempt_not_dispatched"
+                || repeat == "dispatch_not_pending_delivery"
+                || repeat.contains("not_dispatched")
+                || repeat.contains("already")
+                || repeat.contains("terminal"),
+            "{repeat}"
+        );
+        assert_eq!(
+            count_sql(
+                &state,
+                "SELECT COUNT(*) FROM m5_execution_attempt_readbacks WHERE outcome='SUCCEEDED'"
+            ),
+            1
+        );
+        assert_eq!(
+            count_sql(
+                &state,
+                "SELECT COUNT(*) FROM m5_durable_operations WHERE state='COMPLETED'"
+            ),
+            1
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_terminal_retry_refusals_unknown_succeeded_effect_tamper() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-retry-d-unknown");
+        persist_limited_control_operation(
+            &state,
+            &opened.project_id,
+            "op-retry-d-unknown",
+            crate::m5_controlled_execution::DurableOperationState::OutcomeUnknown,
+        );
+        let loaded = load_control(&state, &opened);
+        assert!(!loaded.can_retry);
+        let receipts = crate::m5_controlled_execution::control_receipt_count(
+            &store_from_state(&state).expect("m5 store"),
+        );
+        let denied = apply_control(&state, &opened, "RETRY", 0).expect_err("unknown");
+        assert_eq!(denied, "outcome_unknown_requires_same_effect_reconcile");
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(
+                &store_from_state(&state).expect("m5 store")
+            ),
+            receipts
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-retry-d-succeeded");
+        run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("runtime");
+        let loaded = load_control(&state, &opened);
+        assert!(!loaded.can_retry);
+        assert_eq!(
+            loaded.blocked_reason.as_deref(),
+            Some("terminal_attempt_no_new_lineage")
+        );
+        let counts = lineage_counts(&state);
+        let denied = apply_control(&state, &opened, "RETRY", 0).expect_err("succeeded");
+        assert_eq!(denied, "terminal_attempt_no_new_lineage");
+        assert_eq!(lineage_counts(&state), counts);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-retry-d-effect");
+        seed_known_no_effect_terminal(&state, &opened, "FAILED", "op-retry-d-effect");
+        let store = store_from_state(&state).expect("m5 store");
+        let mut op = crate::m5_controlled_execution::load_operation(&store, "op-retry-d-effect")
+            .expect("load")
+            .expect("op");
+        op.state = crate::m5_controlled_execution::DurableOperationState::Completed;
+        crate::m5_controlled_execution::persist_operation(&store, &op).expect("mark effect");
+        let loaded = load_control(&state, &opened);
+        assert!(!loaded.can_retry);
+        assert_eq!(
+            loaded.blocked_reason.as_deref(),
+            Some("terminal_failure_has_external_effect")
+        );
+        let counts = lineage_counts(&state);
+        let receipts = crate::m5_controlled_execution::control_receipt_count(&store);
+        let denied = apply_control(&state, &opened, "RETRY", 0).expect_err("has effect");
+        assert_eq!(denied, "terminal_failure_has_external_effect");
+        assert_eq!(lineage_counts(&state), counts);
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(&store),
+            receipts
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-retry-d-tamper");
+        seed_known_no_effect_terminal(&state, &opened, "FAILED", "op-retry-d-tamper");
+        let store = store_from_state(&state).expect("m5 store");
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_execution_attempt_readbacks SET outcome='SUCCEEDED'
+                 WHERE attempt_id IN (
+                    SELECT attempt_id FROM m5_dispatches WHERE dispatch_id=?1
+                 )",
+                [formal_dispatch_id(&state, &opened.project_id)],
+            )
+            .expect("tamper readback");
+        let counts = lineage_counts(&state);
+        let receipts = crate::m5_controlled_execution::control_receipt_count(&store);
+        let denied = apply_control(&state, &opened, "RETRY", 0).expect_err("tamper");
+        assert!(
+            denied.contains("readback") || denied.contains("integrity") || denied.contains("hash"),
+            "{denied}"
+        );
+        assert_eq!(lineage_counts(&state), counts);
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(&store),
+            receipts
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_terminal_retry_transaction_fault_rolls_back() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-retry-e");
+        seed_known_no_effect_terminal(&state, &opened, "FAILED", "op-retry-e");
+        let old_grant = formal_grant_id(&state, &opened.project_id);
+        let old_dispatch = formal_dispatch_id(&state, &opened.project_id);
+        let before_lineage = snapshot_lineage(&state, &old_grant, &old_dispatch);
+        let before_counts = lineage_counts(&state);
+        let before_progress = formal_downstream_refs(&state, &opened.project_id);
+        let err = apply_m5_execution_control_with_fault(
+            &state,
+            M5ExecutionControlApplyRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+                action: "RETRY".into(),
+                expected_control_revision: 0,
+            },
+            crate::m5_controlled_execution::ControlApplyFault::FailAfterReceiptInsert,
+        )
+        .expect_err("fault");
+        assert_eq!(err, "control_transaction_fault");
+        let loaded = load_control(&state, &opened);
+        assert_eq!(loaded.control_revision, 0);
+        assert!(loaded.can_retry);
+        assert_eq!(
+            snapshot_lineage(&state, &old_grant, &old_dispatch),
+            before_lineage
+        );
+        assert_eq!(lineage_counts(&state), before_counts);
+        assert_eq!(
+            formal_downstream_refs(&state, &opened.project_id),
+            before_progress
+        );
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(
+                &store_from_state(&state).expect("m5 store")
+            ),
+            0
+        );
+        drop(state);
+        let resumed = ordinary_app_state(&root);
+        let again = open_m5_project_supervisor_with_state(
+            &resumed,
+            M5SupervisorOpenRequest {
+                project_id: "syn-m5r07-retry-e".into(),
+            },
+        )
+        .expect("reopen");
+        let reloaded = load_control(&resumed, &again);
+        assert_eq!(reloaded.control_revision, 0);
+        assert!(reloaded.can_retry);
+        assert_eq!(
+            snapshot_lineage(&resumed, &old_grant, &old_dispatch),
+            before_lineage
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
 }
