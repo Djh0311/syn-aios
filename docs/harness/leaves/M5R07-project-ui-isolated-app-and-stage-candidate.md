@@ -4,26 +4,24 @@
 
 目标：用冻结 DTO 接现有项目壳，不重写 execution kernel 或页面布局；在隔离 app-data / scratch 上证明完整闭环；形成只含 M5 投影的 candidate series 后保持 `AWAITING_INDEPENDENT_ACCEPTANCE`。不自行关闭 stage-14，不宣布 M5 完成。
 
-状态：`AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的 evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3` 与 U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 已获 scoped independent PASS；三者都不是 evidence-binding / closeout。不得把上述 scoped PASS 写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
+状态：`AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的 evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`、U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 与 U02 ordinary disposable positive Tauri candidate exact `0952c83d20304cd589a8c641d6d30120d04d91f4` 已获 scoped PASS；均不是 stage closeout。不得把上述 scoped PASS 写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
 
 来源收据：用户明确把提示内剩余工作做完；M5R06 PASS（`867fd20`）。
 
-产品：正式 M5 authority → Grant → Dispatch readback → runtime → RecordExecutionAttemptReadback → terminal-gated EXECUTED claim。U01a 保持默认 `jiaoban` 与三栏布局，把左侧主工作面接到唯一正式 `ProjectSupervisorPanel`；U01b 增加 server-owned load/apply control、durable revision/CAS/replay，并只开放可证明的 STOP / RESUME；U01c 对 authoritative FAILED/TIMED_OUT 且可证明无 effect 的终态创建全新 Attempt / Grant / Dispatch / effect lineage，RETRY 本身不执行 runtime，旧链保持 immutable。ordinary M1 composition 与 M6 排除。不改 worker_report.rs / 页面布局 / execution kernel；不把定向测试数写成阶段完成。
+产品：正式 M5 authority → Grant → Dispatch readback → runtime → RecordExecutionAttemptReadback → terminal-gated EXECUTED claim。U01a 保持默认 `jiaoban` 与三栏布局，把左侧主工作面接到唯一正式 `ProjectSupervisorPanel`；U01b 增加 server-owned load/apply control、durable revision/CAS/replay，并只开放可证明的 STOP / RESUME；U01c 对 authoritative FAILED/TIMED_OUT 且可证明无 effect 的终态创建全新 Attempt / Grant / Dispatch / effect lineage，RETRY 本身不执行 runtime，旧链保持 immutable；U02 用普通 disposable AppState 的 server-only fixture 显式登记 M1 exact alias、建立 M3 三角色，并经真实 Vite + Tauri + Xvfb 走默认 `jiaoban`、拒绝零副作用、失败后新 lineage、显式 runtime、重复 runtime 零第二 effect、重启同 binding/project。U02 不等于 legacy production M1 composition。M6 排除。不改 worker_report.rs / 页面布局 / execution kernel；不把定向测试数写成阶段完成。
 
 两栏（不要混读）：
 
-1. ordinary disposable backend full-loop PASS 只是 server fixture 预登记 M1 alias + M3 authority 的后端/产品命令闭环，不是 GUI。
+1. ordinary disposable positive Tauri PASS：server fixture 预登记 M1 alias + M3 authority，真实 Vite + Tauri + Xvfb 走默认 `jiaoban` DOM 与两次进程；它不是 legacy production composition，也没有窗口截图。
 2. shared isolated 真实 Vite+Tauri/Xvfb 只证明 authority-unavailable fail-closed；`NO_UI_PASS` / `NO_WINDOW_CAPTURE`；scene / resume / second launch `NOT_EXECUTED`。
 
-当前直接 blocker（区分 owner；均不得反向写成既有 scoped candidate FAIL，也不得 close）：
+当前直接 blocker（不得反向写成既有 scoped candidate FAIL，也不得 close）：
 
-1. M1 owner。ordinary legacy `ProjectRecord` 到 M1 canonical/exact alias 的可信创建/迁移/ordinary GUI composition 缺失。必须另行适用授权；M5 不得自动登记/fallback。真正 ordinary GUI composition 与最终 positive 证据仍受本项阻塞。
-2. M5 owner。U01c 已关闭 terminal retry 新 lineage 的后端产品缺口，但 worker-blocked、terminal failure→retry→显式 runtime、duplicate operation/effect、reopen 等仍缺 server-derived ordinary positive Tauri 场景载体。
-3. M5 owner。当前 shared-isolated launcher 是 unavailable-only；scene / window / restart 均 `NOT_EXECUTED`；缺正向 ordinary-product Tauri acceptance carrier。最终 legacy positive ordinary GUI 证据仍受第 1 项 M1 owner 阻塞。
+1. M1 owner。ordinary legacy `ProjectRecord` 到 M1 canonical/exact alias 的可信创建/迁移/ordinary GUI composition 缺失。必须另行适用授权；M5 不得自动登记/fallback。真正 legacy ordinary GUI composition 与最终 stage closeout 仍受本项阻塞。
 
-证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b / U01c 尚无 fresh evidence-binding。U01a 独立复核为 exact 两文件、typecheck/build PASS；U01b 为 exact 九路径、cargo check PASS、execution_control 6/6、typecheck/build PASS；U01c 为 exact 五路径，exact candidate 上 terminal_retry 5/5 PASS，主链一次核心独立复核为 scoped PASS。下一步直接做 U02 ordinary disposable positive Tauri runner / server-owned fixture；shared-isolated 始终只作 authority-unavailable negative regression。真正 legacy ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞。不得自动进入 M1 修正、M6 或 closeout。
+证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b / U01c 尚无 fresh evidence-binding。U02 exact-base overlay 上 `cargo check --lib --offline`、ordinary fixture 4/4、typecheck、build 均 PASS；真实 Xvfb launcher exit 0，binding/project 跨重启一致且 duplicate runtime 零第二 effect。该 `/tmp` receipt 是 scoped acceptance 事实，不冒充独立 evidence-binding。下一停点是另行适用的 M1 production composition 修包；shared-isolated 始终只作 authority-unavailable negative regression。不得自动进入 M1 修正、M6 或 closeout。
 
-载体：U01a `f962038e725ba4e24b2699a46cd1a8d274f13ae6`；U01b `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`；U01c `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7`（均 scoped independent PASS；非 evidence / 非 closeout）。implementation `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`；fresh evidence final tip `0e0fcb26233dfbe618129ea05160b835f660f74b`；gateway predecessor `1433d51466e59352cc8859e1c47f176da04f25b0`。
+载体：U01a `f962038e725ba4e24b2699a46cd1a8d274f13ae6`；U01b `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`；U01c `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7`；U02 `0952c83d20304cd589a8c641d6d30120d04d91f4`（均 scoped PASS；非 stage closeout）。implementation `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`；fresh evidence final tip `0e0fcb26233dfbe618129ea05160b835f660f74b`；gateway predecessor `1433d51466e59352cc8859e1c47f176da04f25b0`。
 
 允许动（M5R07 最窄 UI/control/recovery 修包；写域只使用已列 M5/前端/main/runner/report/task 路径；不新增 M1/M6/shared-isolated authority，不改冻结合同正文；真正 ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞；不得自动进入 M1 修正、M6 或 closeout）：
 
@@ -50,6 +48,7 @@
 - prototypes/productized-desktop-shell/src-tauri/src/lib_read_model_boundary_tests.rs（同上：只补 `m5_store_path: None`，不改读模型边界）
 - prototypes/productized-desktop-shell/src/lib/tauri.ts、src/lib/m5ProjectSupervisor.ts [新增；消费 M5 control commands]
 - prototypes/productized-desktop-shell/src/views/projects/ProjectSupervisorPanel.tsx [新增；接入 stop/retry/resume 与 recovery 控制；不重画页面布局]
+- prototypes/productized-desktop-shell/src/views/projects/ProjectJiaobanPanel.tsx（U02 必要相邻：普通项目 fallback 保持原内容，但不得绕过 WorkspaceShell 的正式主管 layout）
 - prototypes/productized-desktop-shell/src/views/projects/ProjectWorkspaceShell.tsx（保持默认 `jiaoban` 与三栏布局；左侧主工作面接正式主管并移除 overview 重复实例；不重画页面）
 - prototypes/productized-desktop-shell/src/views/ProjectsView.tsx（仅证明默认/切项目保持 `jiaoban` 且该入口已接正式主管；不改 gallery/秘书路由/其它工具）
 - prototypes/productized-desktop-shell/src/main.tsx（U01 只校验默认入口；U02 只接 ordinary acceptance DOM driver；shared-isolated 逻辑保持 negative；不改其它验收桥）
@@ -63,6 +62,7 @@
 - tasks/2026-08-17-syn-m5r07-terminal-execution-readback-v1.md [新增]
 - tasks/2026-08-17-syn-m5r07-ui-control-recovery-v1.md [U01 新增]
 - tasks/2026-08-18-syn-m5r07-terminal-retry-lineage-v1.md [U01c 新增]
+- tasks/2026-08-18-syn-m5r07-ordinary-positive-tauri-v1.md [U02 新增]
 - docs/harness/plan.md、docs/current-state.md、docs/harness/audit/2026-08.jsonl、docs/harness/stages/stage-14.md（仅独立验收 closeout；当前用户边界禁止改 plan/stage/authorization）
 - docs/harness/reports/M5R07-*
 - docs/harness/leaves/M5R07-project-ui-isolated-app-and-stage-candidate.md
