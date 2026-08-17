@@ -4,11 +4,11 @@
 
 目标：用冻结 DTO 接现有项目壳，不重写 execution kernel 或页面布局；在隔离 app-data / scratch 上证明完整闭环；形成只含 M5 投影的 candidate series 后保持 `AWAITING_INDEPENDENT_ACCEPTANCE`。不自行关闭 stage-14，不宣布 M5 完成。
 
-状态：`AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的 evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6` 与 U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3` 已获产品 + Git/Harness scoped independent PASS；二者都不是 evidence-binding / closeout。不得把上述 scoped PASS 写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
+状态：`AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的 evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3` 与 U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 已获 scoped independent PASS；三者都不是 evidence-binding / closeout。不得把上述 scoped PASS 写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
 
 来源收据：用户明确把提示内剩余工作做完；M5R06 PASS（`867fd20`）。
 
-产品：正式 M5 authority → Grant → Dispatch readback → runtime → RecordExecutionAttemptReadback → terminal-gated EXECUTED claim。U01a 保持默认 `jiaoban` 与三栏布局，把左侧主工作面接到唯一正式 `ProjectSupervisorPanel`；U01b 增加 server-owned load/apply control、durable revision/CAS/replay，并只开放可证明的 STOP / RESUME，复杂 terminal retry 保持禁用。ordinary M1 composition 与 M6 排除。不改 worker_report.rs / 页面布局 / execution kernel；不把定向测试数写成阶段完成。
+产品：正式 M5 authority → Grant → Dispatch readback → runtime → RecordExecutionAttemptReadback → terminal-gated EXECUTED claim。U01a 保持默认 `jiaoban` 与三栏布局，把左侧主工作面接到唯一正式 `ProjectSupervisorPanel`；U01b 增加 server-owned load/apply control、durable revision/CAS/replay，并只开放可证明的 STOP / RESUME；U01c 对 authoritative FAILED/TIMED_OUT 且可证明无 effect 的终态创建全新 Attempt / Grant / Dispatch / effect lineage，RETRY 本身不执行 runtime，旧链保持 immutable。ordinary M1 composition 与 M6 排除。不改 worker_report.rs / 页面布局 / execution kernel；不把定向测试数写成阶段完成。
 
 两栏（不要混读）：
 
@@ -18,12 +18,12 @@
 当前直接 blocker（区分 owner；均不得反向写成既有 scoped candidate FAIL，也不得 close）：
 
 1. M1 owner。ordinary legacy `ProjectRecord` 到 M1 canonical/exact alias 的可信创建/迁移/ordinary GUI composition 缺失。必须另行适用授权；M5 不得自动登记/fallback。真正 ordinary GUI composition 与最终 positive 证据仍受本项阻塞。
-2. M5 owner。U01 已关闭默认入口与安全有限 control 产品面，但没有建立 complex terminal retry 的新 Attempt / Grant / Dispatch / effect lineage；worker-blocked、terminal failure/recovery、duplicate operation/effect 仍缺 server-derived ordinary positive 场景，不得用翻状态冒充恢复。
-3. M5 owner。当前 shared-isolated launcher 是 unavailable-only；scene / window / restart 均 `NOT_EXECUTED`；缺正向 ordinary-product Tauri acceptance carrier。最终 positive ordinary GUI 证据仍受第 1 项 M1 owner 阻塞。
+2. M5 owner。U01c 已关闭 terminal retry 新 lineage 的后端产品缺口，但 worker-blocked、terminal failure→retry→显式 runtime、duplicate operation/effect、reopen 等仍缺 server-derived ordinary positive Tauri 场景载体。
+3. M5 owner。当前 shared-isolated launcher 是 unavailable-only；scene / window / restart 均 `NOT_EXECUTED`；缺正向 ordinary-product Tauri acceptance carrier。最终 legacy positive ordinary GUI 证据仍受第 1 项 M1 owner 阻塞。
 
-证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b 尚无 fresh evidence-binding。U01a 独立复核为 exact 两文件、typecheck/build PASS；U01b 为 exact 九路径、cargo check PASS、execution_control 6/6、typecheck/build PASS。下一步先做 U01c complex terminal retry 的新 Attempt / Grant / Dispatch / effect lineage，再做 U02 ordinary disposable positive Tauri runner / server-owned fixture；shared-isolated 始终只作 authority-unavailable negative regression。真正 legacy ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞。不得自动进入 M1 修正、M6 或 closeout。
+证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b / U01c 尚无 fresh evidence-binding。U01a 独立复核为 exact 两文件、typecheck/build PASS；U01b 为 exact 九路径、cargo check PASS、execution_control 6/6、typecheck/build PASS；U01c 为 exact 五路径，exact candidate 上 terminal_retry 5/5 PASS，主链一次核心独立复核为 scoped PASS。下一步直接做 U02 ordinary disposable positive Tauri runner / server-owned fixture；shared-isolated 始终只作 authority-unavailable negative regression。真正 legacy ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞。不得自动进入 M1 修正、M6 或 closeout。
 
-载体：U01a `f962038e725ba4e24b2699a46cd1a8d274f13ae6`；U01b `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`（均 scoped independent PASS；非 evidence / 非 closeout）。implementation `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`；fresh evidence final tip `0e0fcb26233dfbe618129ea05160b835f660f74b`；gateway predecessor `1433d51466e59352cc8859e1c47f176da04f25b0`。
+载体：U01a `f962038e725ba4e24b2699a46cd1a8d274f13ae6`；U01b `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`；U01c `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7`（均 scoped independent PASS；非 evidence / 非 closeout）。implementation `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`；fresh evidence final tip `0e0fcb26233dfbe618129ea05160b835f660f74b`；gateway predecessor `1433d51466e59352cc8859e1c47f176da04f25b0`。
 
 允许动（M5R07 最窄 UI/control/recovery 修包；写域只使用已列 M5/前端/main/runner/report/task 路径；不新增 M1/M6/shared-isolated authority，不改冻结合同正文；真正 ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞；不得自动进入 M1 修正、M6 或 closeout）：
 
