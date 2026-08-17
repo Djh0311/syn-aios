@@ -1,8 +1,9 @@
-//! Server-only project_index base for M1I01R01 / M1I01R02.
+//! Server-only project_index base for M1I01R01 / M1I01R02 / M1I01R03.
 //!
 //! This owner mints opaque `project:<uuid>` values and stores exact aliases as
-//! resolver inputs. It does not create ActorId, RoleRef, ScopeRef,
-//! CurrentObjectRef, ExecutionChannel, PermissionProfile,
+//! resolver inputs. Ordinary AppState installs a server-only authority that
+//! can explicitly register and read those ids. It does not create ActorId,
+//! RoleRef, ScopeRef, CurrentObjectRef, ExecutionChannel, PermissionProfile,
 //! PermissionSnapshotRef, IdentitySnapshot, or M3 RoleSession records.
 
 #![allow(dead_code)]
@@ -16,6 +17,9 @@ use std::time::Duration;
 use uuid::Uuid;
 
 pub(crate) const M1_PROJECT_INDEX_PORT_VERSION: &str = "m1.project-index.read-port.v2";
+pub(crate) const M1_PROJECT_INDEX_AUTHORITY_PORT_VERSION: &str =
+    "m1.project-index.authority-port.v1";
+pub(crate) const M1_PROJECT_INDEX_UNAVAILABLE: &str = "m1_project_index_unavailable";
 pub(crate) const M1_PROJECT_INDEX_SCHEMA_VERSION: &str = "m1.project-index.registry.v2";
 pub(crate) const M1_ORDINARY_APP_DATA_DIR_NAME: &str = "local.codex.governance.workbench";
 pub(crate) const M1_ORDINARY_REGISTRY_RELATIVE_PATH: &str = "m1/project-index-v1.json";
@@ -32,8 +36,12 @@ pub(crate) struct M1ProjectIndexError {
 }
 
 impl M1ProjectIndexError {
-    fn new(code: impl Into<String>) -> Self {
+    pub(crate) fn new(code: impl Into<String>) -> Self {
         Self { code: code.into() }
+    }
+
+    pub(crate) fn unavailable() -> Self {
+        Self::new(M1_PROJECT_INDEX_UNAVAILABLE)
     }
 }
 
@@ -57,6 +65,11 @@ impl M1ProjectId {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct M1RegisterIsolatedProjectRequest {
     pub(crate) exact_alias: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M1RegisterExactAliasRequest {
+    pub(crate) exact_alias: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -196,6 +209,146 @@ impl M1ProjectIndexReadPort for M1ProjectIndexReadHandle {
     ) -> Result<M1ProjectId, M1ProjectIndexError> {
         self.store.resolve_project_root_ref(project_root_ref)
     }
+}
+
+pub(crate) trait M1ProjectIndexAuthorityPort {
+    fn register_exact_alias(
+        &self,
+        request: &M1RegisterExactAliasRequest,
+    ) -> Result<M1RegisteredProject, M1ProjectIndexError>;
+    fn resolve_canonical_project_id(&self, claim: &str)
+        -> Result<M1ProjectId, M1ProjectIndexError>;
+    fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError>;
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct M1ProjectIndexAuthorityHandle {
+    store: M1ProjectIndexStore,
+}
+
+impl M1ProjectIndexAuthorityHandle {
+    pub(crate) fn install_ordinary_product(
+        app_data_root: &Path,
+    ) -> Result<Self, M1ProjectIndexError> {
+        let root =
+            admit_existing_clean_root(app_data_root, "m1_ordinary_app_data_root_unavailable")?;
+        if root.file_name().and_then(|name| name.to_str()) != Some(M1_ORDINARY_APP_DATA_DIR_NAME) {
+            return Err(M1ProjectIndexError::new(
+                "m1_ordinary_app_data_root_identity_mismatch",
+            ));
+        }
+        let store = M1ProjectIndexStore::from_root(root);
+        if matches!(
+            store.classify_registry_presence()?,
+            RegistryPresence::Present
+        ) {
+            let _ = store.load_registry(LoadMode::Required)?;
+        }
+        Ok(Self { store })
+    }
+
+    fn require_readable_registry(&self) -> Result<(), M1ProjectIndexError> {
+        match self.store.classify_registry_presence()? {
+            RegistryPresence::Absent => Err(M1ProjectIndexError::unavailable()),
+            RegistryPresence::EstablishedMissing => Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_missing",
+            )),
+            RegistryPresence::Present => Ok(()),
+        }
+    }
+
+    pub(crate) fn register_exact_alias(
+        &self,
+        request: &M1RegisterExactAliasRequest,
+    ) -> Result<M1RegisteredProject, M1ProjectIndexError> {
+        if is_scratch_claim(&request.exact_alias) {
+            return Err(M1ProjectIndexError::new(
+                "m1_project_id_scratch_claim_rejected",
+            ));
+        }
+        if is_m5_helper_claim(&request.exact_alias) {
+            return Err(M1ProjectIndexError::new(
+                "m1_project_id_m5_helper_claim_rejected",
+            ));
+        }
+        self.store
+            .register_isolated_project(M1RegisterIsolatedProjectRequest {
+                exact_alias: Some(request.exact_alias.clone()),
+            })
+    }
+
+    pub(crate) fn resolve_canonical_project_id(
+        &self,
+        claim: &str,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.require_readable_registry()?;
+        self.store.resolve_canonical_project_id(claim)
+    }
+
+    pub(crate) fn resolve_exact_alias(
+        &self,
+        alias: &str,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.require_readable_registry()?;
+        self.store.resolve_exact_alias(alias)
+    }
+
+    pub(crate) fn resolve_project_root_ref(
+        &self,
+        project_root_ref: &M1ProjectRootRef,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.require_readable_registry()?;
+        self.store.resolve_project_root_ref(project_root_ref)
+    }
+}
+
+impl M1ProjectIndexAuthorityPort for M1ProjectIndexAuthorityHandle {
+    fn register_exact_alias(
+        &self,
+        request: &M1RegisterExactAliasRequest,
+    ) -> Result<M1RegisteredProject, M1ProjectIndexError> {
+        M1ProjectIndexAuthorityHandle::register_exact_alias(self, request)
+    }
+
+    fn resolve_canonical_project_id(
+        &self,
+        claim: &str,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        M1ProjectIndexAuthorityHandle::resolve_canonical_project_id(self, claim)
+    }
+
+    fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError> {
+        M1ProjectIndexAuthorityHandle::resolve_exact_alias(self, alias)
+    }
+}
+
+impl M1ProjectIndexReadPort for M1ProjectIndexAuthorityHandle {
+    fn resolve_canonical_project_id(
+        &self,
+        claim: &str,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        M1ProjectIndexAuthorityHandle::resolve_canonical_project_id(self, claim)
+    }
+
+    fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError> {
+        M1ProjectIndexAuthorityHandle::resolve_exact_alias(self, alias)
+    }
+
+    fn resolve_project_root_ref(
+        &self,
+        project_root_ref: &M1ProjectRootRef,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        M1ProjectIndexAuthorityHandle::resolve_project_root_ref(self, project_root_ref)
+    }
+}
+
+/// Server-only AppState slot boundary. A missing handle is uninstalled, not a
+/// reason to mint a ProjectId or expose the registry file.
+pub(crate) fn require_installed_authority(
+    slot: Option<&M1ProjectIndexAuthorityHandle>,
+) -> Result<&dyn M1ProjectIndexAuthorityPort, M1ProjectIndexError> {
+    slot.map(|handle| handle as &dyn M1ProjectIndexAuthorityPort)
+        .ok_or_else(M1ProjectIndexError::unavailable)
 }
 
 impl M1ProjectIndexStore {
@@ -1206,5 +1359,134 @@ mod tests {
             second_id.project_id.as_str()
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    fn ordinary_named_root() -> PathBuf {
+        let parent = std::env::temp_dir().join(format!("syn-m1i01r03-{}", Uuid::new_v4()));
+        let root = parent.join(M1_ORDINARY_APP_DATA_DIR_NAME);
+        fs::create_dir_all(&root).expect("create ordinary named root");
+        fs::canonicalize(&root).expect("canonicalize ordinary named root")
+    }
+
+    fn ordinary_app_state(app_data_root: &Path) -> crate::AppState {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        crate::AppState::try_new_with_ordinary_product_ports(
+            app_data_root,
+            &manifest_dir.join("../../index-kernel/codex-index.json"),
+            &manifest_dir.join("../../../tasks/README.md"),
+            crate::m4_secretary_conversation::M4SecretaryConversationProviderConfig::Unavailable,
+        )
+        .expect("ordinary product AppState must construct")
+    }
+
+    fn assert_unavailable(result: Result<impl Sized, M1ProjectIndexError>) {
+        assert_eq!(result.err().expect("unavailable").code, M1_PROJECT_INDEX_UNAVAILABLE);
+    }
+
+    #[test]
+    fn m1_project_index_uninstalled_app_state_authority_is_unavailable() {
+        let legacy = crate::AppState::try_new().expect("legacy AppState");
+        assert_unavailable(legacy.m1_project_index_authority().map(|_| ()));
+        let fixture = crate::AppState {
+            index_path: PathBuf::from("/m1i01r03/fixture/index.json"),
+            tasks_path: PathBuf::from("/m1i01r03/fixture/tasks.md"),
+            workflow_state_path: PathBuf::from("/m1i01r03/fixture/workflow-state.json"),
+            m3_role_session_read_runtime: Default::default(),
+            m1_project_index: None,
+            m3_project_role_session_authority: None,
+            m5_store_path: None,
+        };
+        assert_unavailable(fixture.m1_project_index_authority().map(|_| ()));
+    }
+
+    #[test]
+    fn m1_project_index_ordinary_install_does_not_auto_register() {
+        let root = ordinary_named_root();
+        let handle =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("install");
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        assert!(!root.join("m1").exists());
+        assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
+        assert_unavailable(handle.resolve_exact_alias("never-registered"));
+        assert_unavailable(
+            handle.resolve_canonical_project_id("project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        );
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m1_project_index_ordinary_authority_registers_and_survives_app_state_reconstruction() {
+        let root = ordinary_named_root();
+        let first = ordinary_app_state(&root);
+        let registered = first
+            .m1_project_index_authority()
+            .expect("ordinary authority")
+            .register_exact_alias(&M1RegisterExactAliasRequest {
+                exact_alias: "syn-m1i01r03-explicit-alias".to_string(),
+            })
+            .expect("explicit register");
+        validate_canonical_project_id(registered.project_id.as_str()).expect("uuid id");
+        assert!(registered.project_id.as_str().starts_with("project:"));
+        assert_ne!(
+            registered.project_id.as_str(),
+            "syn-m1i01r03-explicit-alias"
+        );
+        drop(first);
+
+        let reconstructed = ordinary_app_state(&root);
+        let authority = reconstructed
+            .m1_project_index_authority()
+            .expect("reconstructed authority");
+        assert_eq!(
+            authority
+                .resolve_exact_alias("syn-m1i01r03-explicit-alias")
+                .expect("alias after reconstruction")
+                .as_str(),
+            registered.project_id.as_str()
+        );
+        assert_eq!(
+            authority
+                .resolve_canonical_project_id(registered.project_id.as_str())
+                .expect("id after reconstruction")
+                .as_str(),
+            registered.project_id.as_str()
+        );
+        let persisted = fs::read_to_string(root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH))
+            .expect("read persisted registry");
+        assert!(!persisted.contains("actor_id"));
+        assert!(!persisted.contains("role_ref"));
+        assert!(!persisted.contains("identity_snapshot"));
+        assert!(!persisted.contains("permission"));
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m1_project_index_ordinary_authority_rejects_illegitimate_alias_sources() {
+        let root = ordinary_named_root();
+        let handle =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("install");
+        assert_eq!(
+            handle
+                .register_exact_alias(&M1RegisterExactAliasRequest {
+                    exact_alias: "scratch-auto".to_string(),
+                })
+                .unwrap_err()
+                .code,
+            "m1_project_id_scratch_claim_rejected"
+        );
+        assert_eq!(
+            handle
+                .register_exact_alias(&M1RegisterExactAliasRequest {
+                    exact_alias: "m5:official_project_id".to_string(),
+                })
+                .unwrap_err()
+                .code,
+            "m1_project_id_m5_helper_claim_rejected"
+        );
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
     }
 }

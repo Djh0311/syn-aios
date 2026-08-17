@@ -156,11 +156,11 @@ struct AppState {
     #[cfg(not(test))]
     m4_source_route_registry:
         Option<m4_source_route_resolver::M4RegisteredSourceOwnerRouteRegistry>,
-    // M1I01R01 installs only the server-only project_index read port.
-    // Registration/minting is not installed here. A missing registry stays
-    // uninstalled; a lost or corrupt established registry fails closed.
+    // M1I01R03 installs the server-only project_index authority on the
+    // ordinary product. Explicit register/read is available; startup does
+    // not mint. Acceptance/legacy leave the slot uninstalled.
     #[allow(dead_code)]
-    m1_project_index: Option<m1_project_index::M1ProjectIndexReadHandle>,
+    m1_project_index: Option<m1_project_index::M1ProjectIndexAuthorityHandle>,
     // M3O01 installs the server-only project-role-session authority on the
     // ordinary product. The M1 read port is not an ordinary canonical
     // ProjectId issuance source, so provision/load/restore stay fail-closed.
@@ -368,10 +368,12 @@ impl AppState {
             m4_secretary_conversation_runtime,
             #[cfg(not(test))]
             m4_source_route_registry: Some(m4_source_route_registry),
-            m1_project_index: m1_project_index::M1ProjectIndexReadHandle::open_ordinary_product(
-                app_data_root,
-            )
-            .map_err(|error| error.code)?,
+            m1_project_index: Some(
+                m1_project_index::M1ProjectIndexAuthorityHandle::install_ordinary_product(
+                    app_data_root,
+                )
+                .map_err(|error| error.code)?,
+            ),
             m3_project_role_session_authority: Some(
                 m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(),
             ),
@@ -404,6 +406,16 @@ impl AppState {
         self.m1_project_index
             .as_ref()
             .map(|handle| handle as &dyn m1_project_index::M1ProjectIndexReadPort)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn m1_project_index_authority(
+        &self,
+    ) -> Result<
+        &dyn m1_project_index::M1ProjectIndexAuthorityPort,
+        m1_project_index::M1ProjectIndexError,
+    > {
+        m1_project_index::require_installed_authority(self.m1_project_index.as_ref())
     }
 
     #[allow(dead_code)]
