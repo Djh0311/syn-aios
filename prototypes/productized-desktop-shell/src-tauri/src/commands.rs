@@ -4042,6 +4042,7 @@ mod conversation_transport_command_tests {
                     workflow_state_path,
                     m3_role_session_read_runtime: Default::default(),
                     m1_project_index: None,
+                    m3_project_role_session_authority: None,
                     m5_store_path: None,
                 },
             }

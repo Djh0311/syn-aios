@@ -31,6 +31,7 @@
             workflow_state_path: dir.join("workflow-state.v0.json"),
             m3_role_session_read_runtime: Default::default(),
             m1_project_index: None,
+            m3_project_role_session_authority: None,
             m5_store_path: None,
         };
         let index = json!({
@@ -117,6 +118,7 @@
             workflow_state_path,
             m3_role_session_read_runtime: Default::default(),
             m1_project_index: None,
+            m3_project_role_session_authority: None,
             m5_store_path: None,
         };
         fs::write(&state.tasks_path, "- `g2.md`：G2\n").expect("write tasks");
@@ -241,6 +243,7 @@
             workflow_state_path,
             m3_role_session_read_runtime: Default::default(),
             m1_project_index: None,
+            m3_project_role_session_authority: None,
             m5_store_path: None,
         };
         let index = json!({
@@ -338,6 +341,7 @@
             workflow_state_path: dir.join("missing-workflow-state.v0.json"),
             m3_role_session_read_runtime: Default::default(),
             m1_project_index: None,
+            m3_project_role_session_authority: None,
             m5_store_path: None,
         };
         let snapshot = build_snapshot_with_session_source(
@@ -773,6 +777,7 @@ fn unavailable_state() -> AppState {
         workflow_state_path: PathBuf::from("/m3c06/fixture/workflow-state.json"),
         m3_role_session_read_runtime: Default::default(),
         m1_project_index: None,
+        m3_project_role_session_authority: None,
         m5_store_path: None,
     }
 }

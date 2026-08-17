@@ -19,6 +19,7 @@ mod formal_memory_store;
 mod h4_execution_boundary;
 mod h5_project_dispatch_bridge;
 mod m1_project_index;
+mod m3_project_role_session_authority;
 mod manual_relay;
 mod mature_pattern_governance;
 mod mature_pattern_store;
@@ -160,6 +161,12 @@ struct AppState {
     // uninstalled; a lost or corrupt established registry fails closed.
     #[allow(dead_code)]
     m1_project_index: Option<m1_project_index::M1ProjectIndexReadHandle>,
+    // M3O01 installs the server-only project-role-session authority on the
+    // ordinary product. The M1 read port is not an ordinary canonical
+    // ProjectId issuance source, so provision/load/restore stay fail-closed.
+    #[allow(dead_code)]
+    m3_project_role_session_authority:
+        Option<m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle>,
     m5_store_path: Option<PathBuf>,
 }
 include!("types.rs");
@@ -199,6 +206,7 @@ impl AppState {
                     #[cfg(not(test))]
                     m4_source_route_registry: None,
                     m1_project_index: None,
+                    m3_project_role_session_authority: None,
                     m5_store_path: install_m5_store_path(
                         &paths.app_data_root.join("local.codex.governance.workbench"),
                     )
@@ -221,6 +229,7 @@ impl AppState {
                 #[cfg(not(test))]
                 m4_source_route_registry: None,
                 m1_project_index: None,
+                m3_project_role_session_authority: None,
                 m5_store_path: install_m5_store_path(
                     &paths.app_data_root.join("local.codex.governance.workbench"),
                 )
@@ -246,6 +255,7 @@ impl AppState {
             #[cfg(not(test))]
             m4_source_route_registry: None,
             m1_project_index: None,
+            m3_project_role_session_authority: None,
             m5_store_path: None,
         })
     }
@@ -362,6 +372,9 @@ impl AppState {
                 app_data_root,
             )
             .map_err(|error| error.code)?,
+            m3_project_role_session_authority: Some(
+                m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(),
+            ),
             m5_store_path: Some(install_m5_store_path(app_data_root)?),
         })
     }
@@ -391,6 +404,15 @@ impl AppState {
         self.m1_project_index
             .as_ref()
             .map(|handle| handle as &dyn m1_project_index::M1ProjectIndexReadPort)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn m3_project_role_session_authority_port(
+        &self,
+    ) -> Option<&dyn m3_project_role_session_authority::M3ProjectRoleSessionAuthorityPort> {
+        self.m3_project_role_session_authority
+            .as_ref()
+            .map(|handle| handle as &dyn m3_project_role_session_authority::M3ProjectRoleSessionAuthorityPort)
     }
 }
 
