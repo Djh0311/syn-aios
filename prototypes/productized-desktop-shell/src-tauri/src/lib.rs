@@ -19,6 +19,7 @@ mod formal_memory_store;
 mod h4_execution_boundary;
 mod h5_project_dispatch_bridge;
 mod m1_project_index;
+mod m3_project_role_identity_source;
 mod m3_project_role_session_authority;
 mod manual_relay;
 mod mature_pattern_governance;
@@ -161,9 +162,10 @@ struct AppState {
     // not mint. Isolated acceptance and legacy leave the slot uninstalled.
     #[allow(dead_code)]
     m1_project_index: Option<m1_project_index::M1ProjectIndexAuthorityHandle>,
-    // M3O02 installs the server-only project-role-session authority on the
-    // ordinary product and wires the restricted M1 typed-id verifier.
-    // Isolated acceptance and legacy leave the slot uninstalled.
+    // M3O03 installs the server-only project-role-session authority on the
+    // ordinary product, wires the restricted M1 typed-id verifier, and
+    // installs the M3-owned ProjectRoleIdentitySource. Isolated acceptance
+    // and legacy leave the slot uninstalled.
     #[allow(dead_code)]
     m3_project_role_session_authority:
         Option<m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle>,
@@ -389,7 +391,9 @@ impl AppState {
                 let m3_project_role_session_authority =
                     m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(
                         m1_project_index.restricted_typed_project_id_verifier(),
-                    );
+                        app_data_root,
+                    )
+                    .map_err(|error| error.code)?;
                 (
                     Some(m1_project_index),
                     Some(m3_project_role_session_authority),
