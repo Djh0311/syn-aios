@@ -8,4 +8,6 @@
 
 产品：`docs/contracts/m1-m3-shared-appstate-acceptance-profile-isolation-v1.md`，显式 `SharedProductAuthorityProfile`，真实隔离验收构造测试。
 
+实现 commit：`ca413a967a2f6423ef2b62b9a8605f8f3567af3f`。不声称已解阻。
+
 既有 `M1I01R03` / `M3O01R01` 报告与 unfinished note 保留为历史 candidate 证据。

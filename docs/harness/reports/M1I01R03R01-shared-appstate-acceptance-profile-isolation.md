@@ -31,4 +31,9 @@
 
 只证明离线 scoped checks。不证明真实 App、provider、网络、发布或独立验收。
 
-实现 SHA 另作 evidence binding commit。
+- 被拒绝 candidate：`061eefee9291dbeddf792af6d78dc48bb5b0f8e5`
+- 实现 commit：`ca413a967a2f6423ef2b62b9a8605f8f3567af3f`
+- `git diff --check`：clean
+- `cargo test --lib --offline -- m1_project_index -- --test-threads=1`：18 passed；0 failed
+- `cargo test --lib --offline -- m3_project_role_session_authority -- --test-threads=1`：6 passed；0 failed
+- `cargo check --lib --offline`：exit 0（既有 warning，无本包新增 error）
