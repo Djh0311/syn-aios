@@ -8,8 +8,8 @@ use crate::m5_dto::{
     M5SupervisorTurnRequest, M5SupervisorTurnResponse,
 };
 use crate::m5_m3_identity::{
-    load_project_role, provision_project_role,
-    resolve_registered_project_id, view_to_session_ref, InstalledViewPort, WHITELISTED_COMMAND,
+    load_project_role, provision_project_role, resolve_registered_project_id, view_to_session_ref,
+    InstalledViewPort, WHITELISTED_COMMAND,
 };
 use crate::m5_orchestration_store::M5OrchestrationStore;
 use crate::m5_project_summary::{
@@ -493,9 +493,7 @@ fn isolated_acceptance_requested() -> bool {
     )
 }
 
-fn isolated_composition_status(
-    state: &crate::AppState,
-) -> (bool, bool, bool, Option<String>) {
+fn isolated_composition_status(state: &crate::AppState) -> (bool, bool, bool, Option<String>) {
     let m1 = state.m1_project_index_read_port().is_some();
     let m3 = state.m3_project_role_session_authority_port().is_ok();
     if m1 && m3 {
@@ -626,11 +624,13 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
         &dispatch_id,
         now,
     )?;
-    let (dispatch, _attempt) = crate::m5_orchestration_service::complete_dispatch_readback(
-        &store,
-        crate::m5_orchestration_service::DispatchReadbackSource::Admitted(&admitted),
-        now,
-    )?;
+    let (dispatch, post_dispatch_attempt) =
+        crate::m5_orchestration_service::complete_dispatch_readback(
+            &store,
+            crate::m5_orchestration_service::DispatchReadbackSource::Admitted(&admitted),
+            now,
+        )?;
+    let expected_attempt_revision = post_dispatch_attempt.revision;
     let admitted_grant_id = admitted.grant_id().to_string();
     let workcell = crate::m5_agent_runtime::WorkcellRun {
         workcell_id: format!("wc-{}", binding.project_id),
@@ -656,6 +656,13 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
         now + 500,
         crate::m5_agent_runtime::RuntimeFault::None,
     )?;
+    let (_terminal, _readback) =
+        crate::m5_orchestration_service::record_execution_attempt_readback(
+            &store,
+            receipt.clone(),
+            expected_attempt_revision,
+            now + 600,
+        )?;
     persist_formal_progress(
         &store,
         &binding.project_id,
@@ -713,6 +720,12 @@ pub(crate) fn record_m5_worker_report_with_state(
     }
     let receipt: crate::m5_runtime_receipt::RuntimeReceipt =
         serde_json::from_str(&receipt_json).map_err(|e| format!("formal_receipt_decode:{e}"))?;
+    let persisted = store
+        .load_execution_attempt_readback(receipt.receipt_id.as_str())?
+        .ok_or_else(|| "formal_report_missing_persisted_readback".to_string())?;
+    if !crate::m5_orchestration_service::receipt_matches_readback(&receipt, &persisted) {
+        return Err("formal_report_receipt_projection_divergent".to_string());
+    }
     let now = m5_now_ms();
     let report =
         crate::worker_report::M5WorkerReport::from_base(crate::worker_report::WorkerReport {
@@ -725,7 +738,7 @@ pub(crate) fn record_m5_worker_report_with_state(
                 execution_id: receipt.receipt_id.as_str().into(),
                 started_at_ms: now,
                 completed_at_ms: Some(now + 100),
-                status: "SUCCEEDED".into(),
+                status: persisted.derived_attempt_state.clone(),
                 exit_code: Some(0),
                 output_hash: Some(receipt.trace_hash.clone()),
                 cost_tokens: None,
@@ -801,9 +814,7 @@ pub(crate) fn record_m5_independent_review_with_state(
         return Err("reviewer_project_mismatch".to_string());
     }
     let worker = load_project_role(state, &project_id, M3ProjectRole::Worker)?;
-    if reviewer.role_session_id == worker.role_session_id
-        || reviewer.actor_id == worker.actor_id
-    {
+    if reviewer.role_session_id == worker.role_session_id || reviewer.actor_id == worker.actor_id {
         return Err("reviewer_must_be_independent".to_string());
     }
     let (grant_id, dispatch_id, receipt_json, claim_id, _) =
@@ -1062,9 +1073,7 @@ mod tests {
         )
         .expect_err("path locator");
         assert!(
-            path.contains("path")
-                || path == "m1_alias_malformed"
-                || path == "m1_alias_unknown",
+            path.contains("path") || path == "m1_alias_malformed" || path == "m1_alias_unknown",
             "{path}"
         );
         let cross = submit_m5_project_supervisor_turn_with_state(
@@ -1131,7 +1140,10 @@ mod tests {
         .expect("approve");
         assert!(approved.dispatched);
         let after_approve = runtime_owned_snapshot(&first, &opened.project_id);
-        assert_eq!(after_approve.dispatch_state.as_deref(), Some("PENDING_DELIVERY"));
+        assert_eq!(
+            after_approve.dispatch_state.as_deref(),
+            Some("PENDING_DELIVERY")
+        );
         assert_eq!(
             after_approve.attempt_state.as_deref(),
             Some("GRANT_READY_NON_RUNNABLE")
@@ -1149,22 +1161,20 @@ mod tests {
         .expect("runtime");
         let after_runtime = runtime_owned_snapshot(&first, &opened.project_id);
         assert_eq!(after_runtime.dispatch_state.as_deref(), Some("DISPATCHED"));
-        assert_eq!(after_runtime.attempt_state.as_deref(), Some("DISPATCHED"));
+        assert_eq!(after_runtime.attempt_state.as_deref(), Some("SUCCEEDED"));
         assert_eq!(after_runtime.outbox_status.as_deref(), Some("DELIVERED"));
         assert_eq!(after_runtime.durable_ops, 1);
         assert_eq!(after_runtime.formal_receipts, 1);
-        crate::m5_orchestration_service::assert_dispatch_readback_carriers(
-            &store_from_state(&first).expect("m5 store"),
-            after_runtime.formal_dispatch.as_deref().expect("dispatch"),
-            store_from_state(&first)
-                .expect("m5 store")
-                .load_dispatch(after_runtime.formal_dispatch.as_deref().expect("dispatch"))
-                .expect("load")
-                .expect("dispatch")
-                .attempt_id
-                .as_str(),
+        let store = store_from_state(&first).expect("m5 store");
+        let persisted = store
+            .load_execution_attempt_readback(runtime.receipt_id.as_deref().expect("receipt"))
+            .expect("load readback")
+            .expect("readback");
+        assert_eq!(persisted.derived_attempt_state, "SUCCEEDED");
+        crate::m5_orchestration_service::assert_execution_attempt_readback_carriers(
+            &store, &persisted,
         )
-        .expect("readback carriers");
+        .expect("execution readback carriers");
         let report = record_m5_worker_report_with_state(
             &first,
             M5FormalStepRequest {
@@ -1273,7 +1283,8 @@ mod tests {
 
     fn m3_db(app_data_root: &Path) -> rusqlite::Connection {
         rusqlite::Connection::open(
-            app_data_root.join(crate::m3_role_session_repository::M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH),
+            app_data_root
+                .join(crate::m3_role_session_repository::M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH),
         )
         .expect("open m3 db")
     }
@@ -2006,10 +2017,9 @@ mod tests {
                     .persist_authorization(&second)
                     .expect("persist second plan");
                 mutate_loaded_grant(state, grant_id, |grant| {
-                    grant.authorization_id =
-                        crate::m5_orchestration_identity::AuthorizationId::new(
-                            second.authorization_id.clone(),
-                        );
+                    grant.authorization_id = crate::m5_orchestration_identity::AuthorizationId::new(
+                        second.authorization_id.clone(),
+                    );
                     recompute_grant_hash(grant);
                 });
             },

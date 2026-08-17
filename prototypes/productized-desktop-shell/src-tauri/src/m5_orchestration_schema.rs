@@ -19,6 +19,7 @@ const M5_TABLES: &[&str] = &[
     "m5_events",
     "m5_audit_records",
     "m5_outbox_items",
+    "m5_execution_attempt_readbacks",
 ];
 
 pub(crate) fn ensure_m5_orchestration_schema(conn: &Connection) -> Result<(), String> {
@@ -247,6 +248,24 @@ pub(crate) fn ensure_m5_orchestration_schema(conn: &Connection) -> Result<(), St
             next_retry_not_before TEXT,
             UNIQUE(owning_command_id, effect_id),
             UNIQUE(effect_id, idempotency_key)
+        );
+
+        CREATE TABLE IF NOT EXISTS m5_execution_attempt_readbacks (
+            receipt_id TEXT PRIMARY KEY,
+            grant_id TEXT NOT NULL,
+            attempt_id TEXT NOT NULL,
+            dispatch_id TEXT NOT NULL,
+            effect_id TEXT NOT NULL,
+            trace_hash TEXT NOT NULL,
+            actor_binding TEXT NOT NULL,
+            enforcement_status TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            derived_attempt_state TEXT NOT NULL,
+            source_attempt_revision INTEGER NOT NULL,
+            committed_attempt_revision INTEGER NOT NULL,
+            canonical_readback_hash TEXT NOT NULL,
+            recording_command_receipt_ref TEXT NOT NULL,
+            recorded_at_ms INTEGER NOT NULL
         );
         "#,
     )

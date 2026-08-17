@@ -316,6 +316,37 @@ impl PreparedAttempt {
         self.bump(now_ms);
         Ok(())
     }
+
+    /// DISPATCHED|RUNNING -> RUNNING|terminal. RecordExecutionAttemptReadback only.
+    pub(crate) fn apply_execution_readback(
+        &mut self,
+        target: AttemptState,
+        now_ms: i64,
+    ) -> Result<(), AttemptTransitionError> {
+        if !matches!(self.state, AttemptState::Dispatched | AttemptState::Running) {
+            return Err(AttemptTransitionError::InvalidTransition {
+                from: self.state.clone(),
+                to: target,
+            });
+        }
+        if !matches!(
+            target,
+            AttemptState::Running
+                | AttemptState::Succeeded
+                | AttemptState::Failed
+                | AttemptState::Cancelled
+                | AttemptState::TimedOut
+                | AttemptState::UnknownReadback
+        ) {
+            return Err(AttemptTransitionError::InvalidTransition {
+                from: self.state.clone(),
+                to: target,
+            });
+        }
+        self.state = target;
+        self.bump(now_ms);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -442,5 +473,19 @@ mod tests {
             AttemptState::GrantReadyNonRunnable.to_string(),
             "GRANT_READY_NON_RUNNABLE"
         );
+    }
+
+    #[test]
+    fn execution_readback_from_dispatched() {
+        let mut a = attempt();
+        let gid = GrantId::new("g-1".into());
+        a.begin_grant_binding(1100).unwrap();
+        a.attach_minted_grant(gid.clone(), 1200).unwrap();
+        a.confirm_grant_ready(&gid, 1300).unwrap();
+        a.mark_dispatched(1400).unwrap();
+        a.apply_execution_readback(AttemptState::Succeeded, 1500)
+            .unwrap();
+        assert_eq!(a.state(), &AttemptState::Succeeded);
+        assert!(a.is_completed());
     }
 }

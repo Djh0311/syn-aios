@@ -6,17 +6,17 @@ use crate::m2_dto::{
     EventSensitivity, OutboxItemDto, OutboxItemStatus, WorkbenchEventEnvelopeDto,
 };
 use crate::m2_ports::{OutboxRepository, UnitOfWork};
+use crate::m5_controlled_execution::{load_operation_by_effect, DurableOperationState};
 use crate::m5_execution_grant::{ExecutionGrant, GrantMintInput};
 use crate::m5_orchestration_identity::*;
 use crate::m5_orchestration_store::{
     committed_receipt, scrubbed_audit, scrubbed_event, AuthorizationDecisionRecord, DispatchRecord,
-    M5OrchestrationStore, M5OutboxRepository, M5SqliteUnitOfWork, PlanAuthorizationRecord,
-    WorkItemRecord, WorkerBindingRecord, WorkflowRunRecord,
+    ExecutionAttemptReadbackRecord, M5OrchestrationStore, M5OutboxRepository, M5SqliteUnitOfWork,
+    PlanAuthorizationRecord, WorkItemRecord, WorkerBindingRecord, WorkflowRunRecord,
 };
 use crate::m5_prepared_attempt::{AttemptState, PreparedAttempt};
-use crate::m5_runtime_admission::{
-    join_stored_plan_grant_dispatch, AdmittedRuntimeCapability,
-};
+use crate::m5_runtime_admission::{join_stored_plan_grant_dispatch, AdmittedRuntimeCapability};
+use crate::m5_runtime_receipt::{EnforcementStatus, RuntimeReceipt};
 use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -484,9 +484,7 @@ pub(crate) fn complete_dispatch_readback_with_fault(
             (admission.dispatch_id().to_string(), Some(admission))
         }
         #[cfg(test)]
-        DispatchReadbackSource::ExactStoredDispatch(dispatch_id) => {
-            (dispatch_id.to_string(), None)
-        }
+        DispatchReadbackSource::ExactStoredDispatch(dispatch_id) => (dispatch_id.to_string(), None),
     };
 
     let uow = M5SqliteUnitOfWork::new();
@@ -505,9 +503,7 @@ pub(crate) fn complete_dispatch_readback_with_fault(
             .load_receipt(&chain.dispatch.created_by_command_receipt_ref)?
             .ok_or_else(|| "dispatch_origin_receipt_missing".to_string())?;
         let correlation_id = assert_dispatch_origin_exact(&origin, &chain)?;
-        if chain.dispatch.state == "DISPATCHED"
-            && chain.attempt.state == AttemptState::Dispatched
-        {
+        if chain.dispatch.state == "DISPATCHED" && chain.attempt.state == AttemptState::Dispatched {
             assert_dispatch_readback_substrate(
                 store,
                 &chain.dispatch.dispatch_id,
@@ -525,13 +521,7 @@ pub(crate) fn complete_dispatch_readback_with_fault(
             return Err("outbox_not_available".to_string());
         }
 
-        persist_dispatch_readback_carriers(
-            store,
-            &chain,
-            &origin,
-            &correlation_id,
-            now_ms,
-        )?;
+        persist_dispatch_readback_carriers(store, &chain, &origin, &correlation_id, now_ms)?;
         if fault == DispatchReadbackFault::FailAfterDispatchCarriers {
             return Err("readback_fault_after_dispatch_carriers".to_string());
         }
@@ -547,20 +537,12 @@ pub(crate) fn complete_dispatch_readback_with_fault(
         if fault == DispatchReadbackFault::FailAfterDispatchTransition {
             return Err("readback_fault_after_dispatch_transition".to_string());
         }
-        persist_attempt_dispatched_carriers(
-            store,
-            &chain,
-            &origin,
-            &correlation_id,
-            now_ms,
-        )?;
+        persist_attempt_dispatched_carriers(store, &chain, &origin, &correlation_id, now_ms)?;
         if fault == DispatchReadbackFault::FailAfterAttemptCarriers {
             return Err("readback_fault_after_attempt_carriers".to_string());
         }
         let mut attempt = chain.attempt.clone();
-        attempt
-            .mark_dispatched(now_ms)
-            .map_err(|e| e.to_string())?;
+        attempt.mark_dispatched(now_ms).map_err(|e| e.to_string())?;
         store.persist_attempt(&attempt)?;
         Ok((dispatch, attempt))
     })();
@@ -678,7 +660,10 @@ struct DispatchReadbackCarriers {
 
 impl DispatchReadbackCarriers {
     fn from_chain(chain: &JoinedDispatchChain) -> Self {
-        Self::from_ids(&chain.dispatch.dispatch_id, chain.attempt.attempt_id.as_str())
+        Self::from_ids(
+            &chain.dispatch.dispatch_id,
+            chain.attempt.attempt_id.as_str(),
+        )
     }
 
     fn from_ids(dispatch_id: &str, attempt_id: &str) -> Self {
@@ -853,8 +838,7 @@ impl DispatchReadbackCarriers {
         let attempt_ref = Self::attempt_object_ref(attempt.attempt_id.as_str());
         let dispatch_revision = Self::post_dispatch_revision(dispatch);
         let attempt_revision = Self::post_attempt_revision(attempt);
-        let dispatch_receipt =
-            self.dispatch_receipt(dispatch, grant, correlation_id, now_iso);
+        let dispatch_receipt = self.dispatch_receipt(dispatch, grant, correlation_id, now_iso);
         let attempt_receipt = self.attempt_receipt(attempt, grant, correlation_id, now_iso);
         let dispatch_event = self.bound_event(
             &self.dispatch_event_id,
@@ -1095,6 +1079,427 @@ pub(crate) fn assert_dispatch_readback_substrate(
     )
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ExecutionReadbackFault {
+    None,
+    FailAfterReadbackRecord,
+    FailAfterCarriers,
+}
+
+pub(crate) fn record_execution_attempt_readback(
+    store: &M5OrchestrationStore,
+    receipt: RuntimeReceipt,
+    expected_attempt_revision: i64,
+    now_ms: i64,
+) -> Result<(PreparedAttempt, ExecutionAttemptReadbackRecord), String> {
+    record_execution_attempt_readback_with_fault(
+        store,
+        receipt,
+        expected_attempt_revision,
+        now_ms,
+        ExecutionReadbackFault::None,
+    )
+}
+
+pub(crate) fn record_execution_attempt_readback_with_fault(
+    store: &M5OrchestrationStore,
+    receipt: RuntimeReceipt,
+    expected_attempt_revision: i64,
+    now_ms: i64,
+    fault: ExecutionReadbackFault,
+) -> Result<(PreparedAttempt, ExecutionAttemptReadbackRecord), String> {
+    let uow = M5SqliteUnitOfWork::new();
+    uow.begin(store.connection())?;
+    let result = (|| {
+        if let Some(existing) =
+            store.load_execution_attempt_readback(receipt.receipt_id.as_str())?
+        {
+            return replay_execution_attempt_readback(store, &receipt, &existing);
+        }
+        first_record_execution_attempt_readback(
+            store,
+            receipt,
+            expected_attempt_revision,
+            now_ms,
+            fault,
+        )
+    })();
+    match &result {
+        Ok(_) => uow.commit(store.connection())?,
+        Err(_) => {
+            let _ = uow.rollback(store.connection());
+        }
+    }
+    result
+}
+
+fn replay_execution_attempt_readback(
+    store: &M5OrchestrationStore,
+    receipt: &RuntimeReceipt,
+    existing: &ExecutionAttemptReadbackRecord,
+) -> Result<(PreparedAttempt, ExecutionAttemptReadbackRecord), String> {
+    if !receipt_matches_readback(receipt, existing) {
+        return Err("execution_readback_replay_divergent".to_string());
+    }
+    let attempt = store
+        .load_attempt(&existing.attempt_id)?
+        .ok_or_else(|| "execution_readback_attempt_missing".to_string())?;
+    if attempt.state.as_m1_str() != existing.derived_attempt_state
+        || attempt.revision != existing.committed_attempt_revision
+    {
+        return Err("execution_readback_terminal_mismatch".to_string());
+    }
+    assert_execution_attempt_readback_carriers(store, existing)?;
+    Ok((attempt, existing.clone()))
+}
+
+fn first_record_execution_attempt_readback(
+    store: &M5OrchestrationStore,
+    receipt: RuntimeReceipt,
+    expected_attempt_revision: i64,
+    now_ms: i64,
+    fault: ExecutionReadbackFault,
+) -> Result<(PreparedAttempt, ExecutionAttemptReadbackRecord), String> {
+    let derived = derive_attempt_state_from_receipt(&receipt)?;
+    let attempt = store
+        .load_attempt(receipt.attempt_id.as_str())?
+        .ok_or_else(|| "execution_readback_attempt_missing".to_string())?;
+    if !matches!(
+        attempt.state,
+        AttemptState::Dispatched | AttemptState::Running
+    ) {
+        return Err("execution_readback_attempt_not_runnable".to_string());
+    }
+    if attempt.revision != expected_attempt_revision {
+        return Err("execution_readback_attempt_revision_mismatch".to_string());
+    }
+    let dispatch = store
+        .load_dispatch(&receipt.dispatch_id)?
+        .ok_or_else(|| "execution_readback_dispatch_missing".to_string())?;
+    if dispatch.state != "DISPATCHED" {
+        return Err("execution_readback_dispatch_not_dispatched".to_string());
+    }
+    let grant = store
+        .load_grant(receipt.grant_id.as_str())?
+        .ok_or_else(|| "execution_readback_grant_missing".to_string())?;
+    if !grant.is_active(now_ms) {
+        return Err("execution_readback_grant_not_active".to_string());
+    }
+    if grant.revision != dispatch.grant_revision {
+        return Err("execution_readback_grant_revision_mismatch".to_string());
+    }
+    let binding = store
+        .load_binding_for_attempt(attempt.attempt_id.as_str())?
+        .ok_or_else(|| "execution_readback_binding_missing".to_string())?;
+    let outbox = M5OutboxRepository
+        .get_by_id(store.connection(), &dispatch.outbox_item_id)?
+        .ok_or_else(|| "execution_readback_outbox_missing".to_string())?;
+    if outbox.status != OutboxItemStatus::Delivered {
+        return Err("execution_readback_outbox_not_delivered".to_string());
+    }
+    let op = load_operation_by_effect(store, &receipt.effect_id)?
+        .ok_or_else(|| "execution_readback_durable_op_missing".to_string())?;
+    assert_execution_readback_chain_exact(
+        &receipt, &attempt, &dispatch, &grant, &binding, &outbox, &op,
+    )?;
+    let committed_revision = expected_attempt_revision + 1;
+    let receipt_id = receipt.receipt_id.as_str().to_string();
+    let command_receipt_id = format!("rcpt-record-execution-attempt-readback-{receipt_id}");
+    let canonical = canonical_execution_readback_hash(
+        &receipt,
+        derived.as_m1_str(),
+        expected_attempt_revision,
+        committed_revision,
+    );
+    let record = ExecutionAttemptReadbackRecord {
+        receipt_id: receipt_id.clone(),
+        grant_id: receipt.grant_id.as_str().to_string(),
+        attempt_id: receipt.attempt_id.as_str().to_string(),
+        dispatch_id: receipt.dispatch_id.clone(),
+        effect_id: receipt.effect_id.clone(),
+        trace_hash: receipt.trace_hash.clone(),
+        actor_binding: receipt.actor_binding.clone(),
+        enforcement_status: receipt.enforcement_status.as_str().to_string(),
+        outcome: receipt.outcome.clone(),
+        derived_attempt_state: derived.as_m1_str().to_string(),
+        source_attempt_revision: expected_attempt_revision,
+        committed_attempt_revision: committed_revision,
+        canonical_readback_hash: canonical.clone(),
+        recording_command_receipt_ref: command_receipt_id,
+        recorded_at_ms: now_ms,
+    };
+    let mut next = attempt.clone();
+    next.apply_execution_readback(derived.clone(), now_ms)
+        .map_err(|e| e.to_string())?;
+    store.persist_execution_attempt_readback(&record)?;
+    if fault == ExecutionReadbackFault::FailAfterReadbackRecord {
+        return Err("execution_readback_fault_after_record".to_string());
+    }
+    persist_execution_attempt_readback_carriers(store, &record, &grant, &dispatch, now_ms)?;
+    if fault == ExecutionReadbackFault::FailAfterCarriers {
+        return Err("execution_readback_fault_after_carriers".to_string());
+    }
+    let updated = store.cas_attempt_execution_readback(
+        attempt.attempt_id.as_str(),
+        expected_attempt_revision,
+        &next.state,
+        now_ms,
+    )?;
+    Ok((updated, record))
+}
+
+fn derive_attempt_state_from_receipt(receipt: &RuntimeReceipt) -> Result<AttemptState, String> {
+    match receipt.enforcement_status {
+        EnforcementStatus::Degraded | EnforcementStatus::OutcomeUnknown => {
+            Ok(AttemptState::UnknownReadback)
+        }
+        EnforcementStatus::Ok => match receipt.outcome.as_str() {
+            "SUCCEEDED" => Ok(AttemptState::Succeeded),
+            "FAILED" => Ok(AttemptState::Failed),
+            "CANCELLED" => Ok(AttemptState::Cancelled),
+            "TIMED_OUT" => Ok(AttemptState::TimedOut),
+            "RUNNING" => Ok(AttemptState::Running),
+            "UNKNOWN" | "UNKNOWN_READBACK" | "OUTCOME_UNKNOWN" => Ok(AttemptState::UnknownReadback),
+            other => Err(format!("execution_readback_outcome_rejected:{other}")),
+        },
+    }
+}
+
+fn durable_state_from_receipt(receipt: &RuntimeReceipt) -> DurableOperationState {
+    match receipt.enforcement_status {
+        EnforcementStatus::OutcomeUnknown => DurableOperationState::OutcomeUnknown,
+        _ => match receipt.outcome.as_str() {
+            "SUCCEEDED" => DurableOperationState::Completed,
+            "FAILED" => DurableOperationState::Failed,
+            "TIMED_OUT" => DurableOperationState::TimedOut,
+            "CANCELLED" => DurableOperationState::Cancelled,
+            "RUNNING" => DurableOperationState::Running,
+            _ => DurableOperationState::OutcomeUnknown,
+        },
+    }
+}
+
+fn assert_execution_readback_chain_exact(
+    receipt: &RuntimeReceipt,
+    attempt: &PreparedAttempt,
+    dispatch: &DispatchRecord,
+    grant: &crate::m5_execution_grant::ExecutionGrant,
+    binding: &WorkerBindingRecord,
+    outbox: &OutboxItemDto,
+    op: &crate::m5_controlled_execution::DurableOperation,
+) -> Result<(), String> {
+    if receipt.grant_id.as_str() != grant.grant_id.as_str()
+        || receipt.attempt_id.as_str() != attempt.attempt_id.as_str()
+        || receipt.dispatch_id != dispatch.dispatch_id
+        || receipt.effect_id != dispatch.effect_id
+        || receipt.effect_id != grant.effect_key
+        || receipt.effect_id != outbox.effect_id
+        || receipt.actor_binding != grant.worker_role_session_id
+        || receipt.actor_binding != attempt.worker_role_session_id
+        || receipt.actor_binding != dispatch.worker_role_session_id
+        || receipt.actor_binding != binding.worker_role_session_id
+    {
+        return Err("execution_readback_join_mismatch".to_string());
+    }
+    if dispatch.attempt_id != attempt.attempt_id.as_str()
+        || dispatch.grant_id != grant.grant_id.as_str()
+        || attempt.grant_id.as_ref().map(|g| g.as_str()) != Some(grant.grant_id.as_str())
+        || binding.attempt_id != attempt.attempt_id.as_str()
+        || binding.project_id != attempt.project_id
+        || grant.project_id != attempt.project_id
+        || dispatch.project_id != attempt.project_id
+    {
+        return Err("execution_readback_join_mismatch".to_string());
+    }
+    if op.effect_id != receipt.effect_id
+        || op.attempt_id.as_str() != receipt.attempt_id.as_str()
+        || op.dispatch_id != receipt.dispatch_id
+        || op.grant_id != receipt.grant_id.as_str()
+        || op.last_receipt_id.as_deref() != Some(receipt.receipt_id.as_str())
+        || op.state != durable_state_from_receipt(receipt)
+    {
+        return Err("execution_readback_durable_mismatch".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn receipt_matches_readback(
+    receipt: &RuntimeReceipt,
+    record: &ExecutionAttemptReadbackRecord,
+) -> bool {
+    receipt.receipt_id.as_str() == record.receipt_id
+        && receipt.grant_id.as_str() == record.grant_id
+        && receipt.attempt_id.as_str() == record.attempt_id
+        && receipt.dispatch_id == record.dispatch_id
+        && receipt.effect_id == record.effect_id
+        && receipt.trace_hash == record.trace_hash
+        && receipt.actor_binding == record.actor_binding
+        && receipt.enforcement_status.as_str() == record.enforcement_status
+        && receipt.outcome == record.outcome
+}
+
+fn canonical_execution_readback_hash(
+    receipt: &RuntimeReceipt,
+    derived: &str,
+    source_revision: i64,
+    committed_revision: i64,
+) -> String {
+    sha_hex(&format!(
+        "{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}:{}",
+        receipt.receipt_id.as_str(),
+        receipt.grant_id.as_str(),
+        receipt.attempt_id.as_str(),
+        receipt.dispatch_id,
+        receipt.effect_id,
+        receipt.trace_hash,
+        receipt.actor_binding,
+        receipt.enforcement_status.as_str(),
+        receipt.outcome,
+        derived,
+        source_revision,
+        committed_revision
+    ))
+}
+
+fn persist_execution_attempt_readback_carriers(
+    store: &M5OrchestrationStore,
+    record: &ExecutionAttemptReadbackRecord,
+    grant: &crate::m5_execution_grant::ExecutionGrant,
+    dispatch: &DispatchRecord,
+    now_ms: i64,
+) -> Result<(), String> {
+    let expected = expected_execution_readback_carriers(store, record, grant, dispatch, now_ms)?;
+    store.persist_receipt_once(&expected.receipt)?;
+    store.persist_event(&expected.event)?;
+    store.persist_audit(&expected.audit)?;
+    Ok(())
+}
+
+pub(crate) fn assert_execution_attempt_readback_carriers(
+    store: &M5OrchestrationStore,
+    record: &ExecutionAttemptReadbackRecord,
+) -> Result<(), String> {
+    let grant = store
+        .load_grant(&record.grant_id)?
+        .ok_or_else(|| "execution_readback_grant_missing".to_string())?;
+    let dispatch = store
+        .load_dispatch(&record.dispatch_id)?
+        .ok_or_else(|| "execution_readback_dispatch_missing".to_string())?;
+    let expected = expected_execution_readback_carriers(
+        store,
+        record,
+        &grant,
+        &dispatch,
+        record.recorded_at_ms,
+    )?;
+    let receipt = store
+        .load_receipt(&record.recording_command_receipt_ref)?
+        .ok_or_else(|| "execution_readback_carriers_missing".to_string())?;
+    let event = store
+        .load_event(&format!(
+            "evt-execution-attempt-readback-{}",
+            record.receipt_id
+        ))?
+        .ok_or_else(|| "execution_readback_carriers_missing".to_string())?;
+    let audit = store
+        .load_audit(&format!(
+            "aud-execution-attempt-readback-{}",
+            record.receipt_id
+        ))?
+        .ok_or_else(|| "execution_readback_carriers_missing".to_string())?;
+    if receipt != expected.receipt || event != expected.event || audit != expected.audit {
+        return Err("execution_readback_carriers_divergent".to_string());
+    }
+    Ok(())
+}
+
+struct ExpectedExecutionReadbackCarriers {
+    receipt: CommandReceiptDto,
+    event: WorkbenchEventEnvelopeDto,
+    audit: AuditRecordDto,
+}
+
+fn expected_execution_readback_carriers(
+    store: &M5OrchestrationStore,
+    record: &ExecutionAttemptReadbackRecord,
+    grant: &crate::m5_execution_grant::ExecutionGrant,
+    dispatch: &DispatchRecord,
+    now_ms: i64,
+) -> Result<ExpectedExecutionReadbackCarriers, String> {
+    let origin = store
+        .load_receipt(&dispatch.created_by_command_receipt_ref)?
+        .ok_or_else(|| "execution_readback_origin_missing".to_string())?;
+    let correlation_id = origin
+        .correlation_id
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "execution_readback_origin_correlation_missing".to_string())?;
+    let now_iso = format_ms(now_ms);
+    let object_ref = format!("attempt:{}", record.attempt_id);
+    let result_ref = format!("receipt:{}", record.receipt_id);
+    let receipt = stable_committed_receipt(
+        &record.recording_command_receipt_ref,
+        &format!(
+            "cmd-record-execution-attempt-readback-{}",
+            record.receipt_id
+        ),
+        &format!("idem-RecordExecutionAttemptReadback-{}", record.receipt_id),
+        "RecordExecutionAttemptReadback",
+        &grant.principal_actor_id,
+        &grant.project_id,
+        &correlation_id,
+        &grant.policy_decision_ref,
+        Some(object_ref.clone()),
+        Some(result_ref),
+        Some(record.canonical_readback_hash.clone()),
+        record.committed_attempt_revision,
+        &now_iso,
+    );
+    let event = WorkbenchEventEnvelopeDto {
+        event_id: format!("evt-execution-attempt-readback-{}", record.receipt_id),
+        event_type: "ExecutionAttemptReadbackRecorded".to_string(),
+        occurred_at: now_iso.clone(),
+        actor_id: grant.principal_actor_id.clone(),
+        scope_ref: grant.project_id.clone(),
+        source_ref: object_ref.clone(),
+        source_revision: Some(record.committed_attempt_revision.to_string()),
+        command_id: Some(receipt.command_id.clone()),
+        correlation_id: Some(correlation_id.clone()),
+        causation_id: Some(origin.command_id.clone()),
+        trace_context: Some(format!("m5:{object_ref}:{correlation_id}")),
+        schema_version: "m5-orchestration.v1".to_string(),
+        sensitivity: EventSensitivity::Internal,
+        summary_ref: Some(object_ref.clone()),
+        payload_ref: Some(object_ref.clone()),
+        payload_hash: Some(record.canonical_readback_hash.clone()),
+        created_at: now_iso.clone(),
+    };
+    let audit = AuditRecordDto {
+        audit_id: format!("aud-execution-attempt-readback-{}", record.receipt_id),
+        action: AuditAction::Committed,
+        decision: "SCRUBBED_ATTEMPT_RECORD".to_string(),
+        reason_code: None,
+        actor_id: grant.principal_actor_id.clone(),
+        scope_ref: grant.project_id.clone(),
+        subject_ref: Some(object_ref.clone()),
+        command_id: Some(receipt.command_id.clone()),
+        correlation_id: Some(correlation_id),
+        occurred_at: now_iso.clone(),
+        sensitivity: AuditSensitivity::Internal,
+        scrub_result: Some("SCRUBBED".to_string()),
+        source_refs: Some(format!(
+            "{object_ref};grant:{};dispatch:{};receipt:{}",
+            record.grant_id, record.dispatch_id, record.receipt_id
+        )),
+        created_at: now_iso,
+    };
+    Ok(ExpectedExecutionReadbackCarriers {
+        receipt,
+        event,
+        audit,
+    })
+}
+
 fn is_handled_recovery(err: &str) -> bool {
     matches!(
         err,
@@ -1256,7 +1661,10 @@ mod tests {
                 attempt.attempt_id.as_str(),
             )
             .unwrap();
-            (dispatch.dispatch_id, attempt.attempt_id.as_str().to_string())
+            (
+                dispatch.dispatch_id,
+                attempt.attempt_id.as_str().to_string(),
+            )
         };
         let store = M5OrchestrationStore::open(&path).unwrap();
         let dispatch = store.load_dispatch(&dispatch_id).unwrap().unwrap();
@@ -1284,7 +1692,9 @@ mod tests {
             .unwrap();
         let before_audits: i64 = store
             .connection()
-            .query_row("SELECT COUNT(*) FROM m5_audit_records", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM m5_audit_records", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         for fault in [
             DispatchReadbackFault::FailAfterDispatchCarriers,
@@ -1452,8 +1862,12 @@ mod tests {
         assert_eq!(second_again.state, "DISPATCHED");
         assert_eq!(first_attempt_again.state, AttemptState::Dispatched);
         assert_eq!(second_attempt_again.state, AttemptState::Dispatched);
-        assert_dispatch_readback_carriers(&store, &first_id, first_attempt_again.attempt_id.as_str())
-            .unwrap();
+        assert_dispatch_readback_carriers(
+            &store,
+            &first_id,
+            first_attempt_again.attempt_id.as_str(),
+        )
+        .unwrap();
         assert_dispatch_readback_carriers(
             &store,
             &second_id,
@@ -1504,7 +1918,9 @@ mod tests {
             .unwrap();
         let audits: i64 = store
             .connection()
-            .query_row("SELECT COUNT(*) FROM m5_audit_records", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM m5_audit_records", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         let dispatch_states: String = store
             .connection()
@@ -1811,10 +2227,7 @@ mod tests {
         let dispatch_id = result.dispatch_id.as_ref().unwrap().as_str().to_string();
         let grant_id = result.grant_id.as_ref().unwrap().as_str().to_string();
         let dispatch = store.load_dispatch(&dispatch_id).unwrap().unwrap();
-        let attempt_before = store
-            .load_attempt(&dispatch.attempt_id)
-            .unwrap()
-            .unwrap();
+        let attempt_before = store.load_attempt(&dispatch.attempt_id).unwrap().unwrap();
         let outbox_before = M5OutboxRepository
             .get_by_id(store.connection(), &dispatch.outbox_item_id)
             .unwrap()
@@ -1837,10 +2250,7 @@ mod tests {
         assert_eq!(err, "dispatch_origin_receipt_divergent");
         assert_eq!(carrier_snapshot(&store), before);
         let after = store.load_dispatch(&dispatch_id).unwrap().unwrap();
-        let attempt_after = store
-            .load_attempt(&dispatch.attempt_id)
-            .unwrap()
-            .unwrap();
+        let attempt_after = store.load_attempt(&dispatch.attempt_id).unwrap().unwrap();
         let outbox_after = M5OutboxRepository
             .get_by_id(store.connection(), &dispatch.outbox_item_id)
             .unwrap()
@@ -1864,10 +2274,7 @@ mod tests {
             let result = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
             let dispatch_id = result.dispatch_id.as_ref().unwrap().as_str().to_string();
             let dispatch = store.load_dispatch(&dispatch_id).unwrap().unwrap();
-            let attempt_before = store
-                .load_attempt(&dispatch.attempt_id)
-                .unwrap()
-                .unwrap();
+            let attempt_before = store.load_attempt(&dispatch.attempt_id).unwrap().unwrap();
             let outbox_before = M5OutboxRepository
                 .get_by_id(store.connection(), &dispatch.outbox_item_id)
                 .unwrap()
@@ -1886,10 +2293,7 @@ mod tests {
             assert_eq!(err, "dispatch_origin_receipt_divergent", "{sql}");
             assert_eq!(carrier_snapshot(&store), before, "{sql}");
             let after = store.load_dispatch(&dispatch_id).unwrap().unwrap();
-            let attempt_after = store
-                .load_attempt(&dispatch.attempt_id)
-                .unwrap()
-                .unwrap();
+            let attempt_after = store.load_attempt(&dispatch.attempt_id).unwrap().unwrap();
             let outbox_after = M5OutboxRepository
                 .get_by_id(store.connection(), &dispatch.outbox_item_id)
                 .unwrap()
@@ -1925,10 +2329,7 @@ mod tests {
             3_000,
         )
         .unwrap_err();
-        assert!(
-            err.starts_with("unknown_receipt_status:"),
-            "{err}"
-        );
+        assert!(err.starts_with("unknown_receipt_status:"), "{err}");
 
         store
             .connection()
@@ -1950,10 +2351,7 @@ mod tests {
             3_000,
         )
         .unwrap_err();
-        assert!(
-            err.starts_with("unknown_event_sensitivity:"),
-            "{err}"
-        );
+        assert!(err.starts_with("unknown_event_sensitivity:"), "{err}");
 
         store
             .connection()
@@ -1976,5 +2374,314 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.starts_with("unknown_audit_action:"), "{err}");
+    }
+
+    fn seed_dispatched_receipt(
+        store: &M5OrchestrationStore,
+        receipt_id: &str,
+        enforcement: EnforcementStatus,
+        outcome: &str,
+        now_ms: i64,
+    ) -> (PreparedAttempt, RuntimeReceipt) {
+        use crate::m5_controlled_execution::{persist_operation, DurableOperation};
+        use crate::m5_orchestration_identity::RuntimeReceiptId;
+
+        let result = prepare_and_dispatch(store, req(), ChainFault::None).unwrap();
+        let dispatch_id = result.dispatch_id.as_ref().unwrap().as_str().to_string();
+        let (dispatch, attempt) = complete_dispatch_readback(
+            store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            now_ms,
+        )
+        .unwrap();
+        let grant = store
+            .load_grant(result.grant_id.as_ref().unwrap().as_str())
+            .unwrap()
+            .unwrap();
+        let receipt = RuntimeReceipt {
+            receipt_id: RuntimeReceiptId::new(receipt_id.into()),
+            grant_id: grant.grant_id.clone(),
+            attempt_id: attempt.attempt_id.clone(),
+            dispatch_id: dispatch.dispatch_id.clone(),
+            effect_id: dispatch.effect_id.clone(),
+            trace_hash: format!("trace-{receipt_id}"),
+            actor_binding: grant.worker_role_session_id.clone(),
+            enforcement_status: enforcement.clone(),
+            outcome: outcome.to_string(),
+        };
+        persist_operation(
+            store,
+            &DurableOperation {
+                operation_id: format!("op-{receipt_id}"),
+                attempt_id: attempt.attempt_id.clone(),
+                project_id: grant.project_id.clone(),
+                orchestration_id: grant.orchestration_id.as_str().to_string(),
+                workflow_run_id: grant.workflow_run_id.as_str().to_string(),
+                grant_id: grant.grant_id.as_str().to_string(),
+                dispatch_id: dispatch.dispatch_id,
+                effect_id: dispatch.effect_id,
+                state: durable_state_from_receipt(&receipt),
+                retry_count: 0,
+                max_retries: 2,
+                last_receipt_id: Some(receipt.receipt_id.as_str().to_string()),
+                error: None,
+                updated_at_ms: now_ms,
+            },
+        )
+        .unwrap();
+        (attempt, receipt)
+    }
+
+    fn execution_counts(store: &M5OrchestrationStore) -> (i64, i64, i64, i64, i64) {
+        let readbacks: i64 = store
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM m5_execution_attempt_readbacks",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let receipts = store
+            .count_command_receipts_with_hash("hash-RecordExecutionAttemptReadback")
+            .unwrap();
+        let events = store
+            .count_events_of_type("ExecutionAttemptReadbackRecorded")
+            .unwrap();
+        let audits: i64 = store
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM m5_audit_records WHERE decision='SCRUBBED_ATTEMPT_RECORD'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let attempt_rev: i64 = store
+            .connection()
+            .query_row(
+                "SELECT MAX(revision) FROM m5_prepared_attempts",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        (readbacks, receipts, events, audits, attempt_rev)
+    }
+
+    #[test]
+    fn execution_readback_success_survives_reopen() {
+        let dir = std::env::temp_dir().join(format!("m5r07-exec-rb-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("orch.sqlite");
+        let (receipt_id, attempt_id, expected_rev) = {
+            let store = M5OrchestrationStore::open(&path).unwrap();
+            let (attempt, receipt) =
+                seed_dispatched_receipt(&store, "rr-ok", EnforcementStatus::Ok, "SUCCEEDED", 2_000);
+            let expected = attempt.revision;
+            let (updated, record) =
+                record_execution_attempt_readback(&store, receipt, expected, 2_500).unwrap();
+            assert_eq!(updated.state, AttemptState::Succeeded);
+            assert_eq!(updated.revision, expected + 1);
+            assert_eq!(record.derived_attempt_state, "SUCCEEDED");
+            assert_execution_attempt_readback_carriers(&store, &record).unwrap();
+            (
+                record.receipt_id,
+                updated.attempt_id.as_str().to_string(),
+                expected,
+            )
+        };
+        let store = M5OrchestrationStore::open(&path).unwrap();
+        let attempt = store.load_attempt(&attempt_id).unwrap().unwrap();
+        assert_eq!(attempt.state, AttemptState::Succeeded);
+        assert_eq!(attempt.revision, expected_rev + 1);
+        let record = store
+            .load_execution_attempt_readback(&receipt_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.derived_attempt_state, "SUCCEEDED");
+        assert_execution_attempt_readback_carriers(&store, &record).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn execution_readback_exact_replay_is_idempotent() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (attempt, receipt) = seed_dispatched_receipt(
+            &store,
+            "rr-replay",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+            2_000,
+        );
+        let expected = attempt.revision;
+        let (first, record) =
+            record_execution_attempt_readback(&store, receipt.clone(), expected, 2_500).unwrap();
+        let before = execution_counts(&store);
+        let (again, again_record) =
+            record_execution_attempt_readback(&store, receipt, expected, 3_000).unwrap();
+        assert_eq!(again.state, first.state);
+        assert_eq!(again.revision, first.revision);
+        assert_eq!(again_record, record);
+        assert_eq!(execution_counts(&store), before);
+    }
+
+    #[test]
+    fn execution_readback_maps_failed_cancelled_timed_out() {
+        for outcome in ["FAILED", "CANCELLED", "TIMED_OUT"] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let (attempt, receipt) = seed_dispatched_receipt(
+                &store,
+                &format!("rr-{outcome}"),
+                EnforcementStatus::Ok,
+                outcome,
+                2_000,
+            );
+            let (updated, record) =
+                record_execution_attempt_readback(&store, receipt, attempt.revision, 2_500)
+                    .unwrap();
+            assert_eq!(updated.state.as_m1_str(), outcome);
+            assert_eq!(record.derived_attempt_state, outcome);
+        }
+    }
+
+    #[test]
+    fn execution_readback_degraded_or_unknown_becomes_unknown_readback() {
+        for (enforcement, outcome) in [
+            (EnforcementStatus::Degraded, "SUCCEEDED"),
+            (EnforcementStatus::OutcomeUnknown, "UNKNOWN"),
+        ] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let (attempt, receipt) =
+                seed_dispatched_receipt(&store, "rr-unk", enforcement, outcome, 2_000);
+            let (updated, record) =
+                record_execution_attempt_readback(&store, receipt, attempt.revision, 2_500)
+                    .unwrap();
+            assert_eq!(updated.state, AttemptState::UnknownReadback);
+            assert_eq!(record.derived_attempt_state, "UNKNOWN_READBACK");
+        }
+    }
+
+    #[test]
+    fn execution_readback_mismatch_is_zero_write() {
+        let cases: Vec<(&str, Box<dyn Fn(&mut RuntimeReceipt)>)> = vec![
+            (
+                "grant",
+                Box::new(|r| {
+                    r.grant_id = crate::m5_orchestration_identity::GrantId::new("g-forged".into());
+                }),
+            ),
+            (
+                "attempt",
+                Box::new(|r| {
+                    r.attempt_id =
+                        crate::m5_orchestration_identity::AttemptId::new("a-forged".into());
+                }),
+            ),
+            ("dispatch", Box::new(|r| r.dispatch_id = "d-forged".into())),
+            ("effect", Box::new(|r| r.effect_id = "e-forged".into())),
+            (
+                "worker",
+                Box::new(|r| r.actor_binding = "role-forged".into()),
+            ),
+        ];
+        for (label, mutate) in cases {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let (attempt, mut receipt) = seed_dispatched_receipt(
+                &store,
+                "rr-mismatch",
+                EnforcementStatus::Ok,
+                "SUCCEEDED",
+                2_000,
+            );
+            mutate(&mut receipt);
+            let before = execution_counts(&store);
+            let before_state = store
+                .load_attempt(attempt.attempt_id.as_str())
+                .unwrap()
+                .unwrap();
+            let err = record_execution_attempt_readback(&store, receipt, attempt.revision, 2_500)
+                .unwrap_err();
+            assert!(
+                err.contains("mismatch") || err.contains("missing"),
+                "{label} -> {err}"
+            );
+            assert_eq!(execution_counts(&store), before, "{label}");
+            let after = store
+                .load_attempt(attempt.attempt_id.as_str())
+                .unwrap()
+                .unwrap();
+            assert_eq!(after.state, before_state.state, "{label}");
+            assert_eq!(after.revision, before_state.revision, "{label}");
+        }
+    }
+
+    #[test]
+    fn execution_readback_fault_rolls_back() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (attempt, receipt) = seed_dispatched_receipt(
+            &store,
+            "rr-fault",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+            2_000,
+        );
+        let before = execution_counts(&store);
+        for fault in [
+            ExecutionReadbackFault::FailAfterReadbackRecord,
+            ExecutionReadbackFault::FailAfterCarriers,
+        ] {
+            let err = record_execution_attempt_readback_with_fault(
+                &store,
+                receipt.clone(),
+                attempt.revision,
+                2_500,
+                fault,
+            )
+            .unwrap_err();
+            assert!(err.starts_with("execution_readback_fault_"), "{err}");
+            assert_eq!(execution_counts(&store), before);
+            let loaded = store
+                .load_attempt(attempt.attempt_id.as_str())
+                .unwrap()
+                .unwrap();
+            assert_eq!(loaded.state, AttemptState::Dispatched);
+            assert_eq!(loaded.revision, attempt.revision);
+        }
+    }
+
+    #[test]
+    fn execution_readback_replay_after_grant_expiry_returns_existing() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (attempt, receipt) =
+            seed_dispatched_receipt(&store, "rr-exp", EnforcementStatus::Ok, "SUCCEEDED", 2_000);
+        let (first, _) =
+            record_execution_attempt_readback(&store, receipt.clone(), attempt.revision, 2_500)
+                .unwrap();
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_execution_grants SET expires_at_ms=1 WHERE grant_id=?1",
+                [receipt.grant_id.as_str()],
+            )
+            .unwrap();
+        let before = execution_counts(&store);
+        let (again, _) =
+            record_execution_attempt_readback(&store, receipt, attempt.revision, 9_000).unwrap();
+        assert_eq!(again.state, first.state);
+        assert_eq!(again.revision, first.revision);
+        assert_eq!(execution_counts(&store), before);
+    }
+
+    #[test]
+    fn unknown_attempt_state_fails_closed() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let result = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_prepared_attempts SET state='NOT_A_STATE' WHERE attempt_id=?1",
+                [result.attempt_id.as_str()],
+            )
+            .unwrap();
+        let err = store.load_attempt(result.attempt_id.as_str()).unwrap_err();
+        assert!(err.starts_with("unknown_attempt_state:"), "{err}");
     }
 }

@@ -1,9 +1,9 @@
 // M5R03 claim ledger, independent review, and fact promotion.
 
+use crate::m5_orchestration_service::receipt_matches_readback;
 use crate::m5_orchestration_store::M5OrchestrationStore;
-use crate::m5_runtime_receipt::{
-    EnforcementStatus, IndependentRuntimeReceiptVerifier, RuntimeReceipt, RuntimeReceiptVerifier,
-};
+use crate::m5_prepared_attempt::AttemptState;
+use crate::m5_runtime_receipt::{EnforcementStatus, RuntimeReceipt};
 use crate::worker_report::{M5WorkerReport, ReportKind};
 use rusqlite::{params, OptionalExtension};
 use sha2::{Digest, Sha256};
@@ -125,22 +125,63 @@ pub(crate) fn record_claim(
         .report_hash
         .clone()
         .unwrap_or_else(|| sha_hex(&format!("{report:?}")));
-    if let Some(existing) = load_claim_by_hash(store, &report_hash)? {
-        return Ok(existing);
-    }
 
     let mut status = "RECORDED_UNVERIFIED".to_string();
     match report.kind {
         ReportKind::Execution => {
-            let receipt =
-                receipt.ok_or_else(|| "executed_claim_missing_runtime_receipt".to_string())?;
-            if report.authoritative_receipt_ref.as_deref() != Some(receipt.receipt_id.as_str()) {
-                return Err("receipt_ref_mismatch".to_string());
+            let receipt_ref = report
+                .authoritative_receipt_ref
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "executed_claim_missing_receipt_ref".to_string())?;
+            let persisted = store
+                .load_execution_attempt_readback(receipt_ref)?
+                .ok_or_else(|| "executed_claim_missing_persisted_readback".to_string())?;
+            if let Some(receipt) = receipt {
+                if report.authoritative_receipt_ref.as_deref() != Some(receipt.receipt_id.as_str())
+                {
+                    return Err("receipt_ref_mismatch".to_string());
+                }
+                if !receipt_matches_readback(receipt, &persisted) {
+                    return Err("executed_claim_receipt_divergent".to_string());
+                }
             }
-            IndependentRuntimeReceiptVerifier.verify(store, receipt)?;
+            let attempt = store
+                .load_attempt(&persisted.attempt_id)?
+                .ok_or_else(|| "claim_attempt_missing".to_string())?;
+            if matches!(
+                attempt.state,
+                AttemptState::Dispatched | AttemptState::Running
+            ) {
+                return Err("executed_claim_non_terminal_attempt".to_string());
+            }
+            if !matches!(
+                attempt.state,
+                AttemptState::Succeeded
+                    | AttemptState::Failed
+                    | AttemptState::Cancelled
+                    | AttemptState::TimedOut
+                    | AttemptState::UnknownReadback
+            ) {
+                return Err("executed_claim_non_terminal_attempt".to_string());
+            }
+            let observed = report
+                .execution_receipt
+                .as_ref()
+                .map(|item| item.status.as_str())
+                .unwrap_or("");
+            if attempt.state.as_m1_str() != persisted.derived_attempt_state
+                || observed != persisted.derived_attempt_state
+                || observed != attempt.state.as_m1_str()
+            {
+                return Err("executed_claim_observed_state_mismatch".to_string());
+            }
             let grant = store
                 .load_grant(report.grant_id.as_deref().unwrap_or(""))?
                 .ok_or_else(|| "claim_grant_missing".to_string())?;
+            let dispatch = store
+                .load_dispatch(report.dispatch_id.as_deref().unwrap_or(""))?
+                .ok_or_else(|| "claim_dispatch_missing".to_string())?;
             if grant.project_id != report.project_id.clone().unwrap_or_default()
                 || grant.orchestration_id.as_str()
                     != report.orchestration_id.clone().unwrap_or_default()
@@ -148,16 +189,31 @@ pub(crate) fn record_claim(
                     != report.workflow_run_id.clone().unwrap_or_default()
                 || grant.work_item_id.as_str() != report.work_item_id.clone().unwrap_or_default()
                 || grant.attempt_id.as_str() != report.attempt_id.clone().unwrap_or_default()
+                || grant.grant_id.as_str() != persisted.grant_id
+                || attempt.attempt_id.as_str() != persisted.attempt_id
+                || dispatch.dispatch_id != persisted.dispatch_id
+                || dispatch.attempt_id != attempt.attempt_id.as_str()
+                || dispatch.grant_id != grant.grant_id.as_str()
+                || dispatch.node_id != report.node_id.clone().unwrap_or_default()
+                || dispatch.project_id != grant.project_id
             {
                 return Err("claim_store_join_mismatch".to_string());
             }
             if grant.worker_role_session_id
                 != report.worker_role_session_id.clone().unwrap_or_default()
+                || grant.worker_role_session_id != persisted.actor_binding
+                || grant.worker_role_session_id != attempt.worker_role_session_id
+                || grant.worker_role_session_id != dispatch.worker_role_session_id
             {
                 return Err("claim_actor_binding_mismatch".to_string());
             }
-            if !receipt.enforcement_status.allows_fact_promotion() {
+            if persisted.derived_attempt_state == "UNKNOWN_READBACK"
+                || persisted.enforcement_status == EnforcementStatus::Degraded.as_str()
+                || persisted.enforcement_status == EnforcementStatus::OutcomeUnknown.as_str()
+            {
                 status = "QUARANTINED".to_string();
+            } else if persisted.enforcement_status != EnforcementStatus::Ok.as_str() {
+                return Err("executed_claim_enforcement_rejected".to_string());
             }
         }
         ReportKind::Manual | ReportKind::Offline => {
@@ -165,6 +221,10 @@ pub(crate) fn record_claim(
                 return Err("manual_offline_cannot_carry_runtime_receipt".to_string());
             }
         }
+    }
+
+    if let Some(existing) = load_claim_by_hash(store, &report_hash)? {
+        return Ok(existing);
     }
 
     let claim_id = format!("claim-{}", uuid::Uuid::new_v4());
@@ -459,7 +519,8 @@ mod tests {
     use super::*;
     use crate::m5_orchestration_identity::{AttemptId, GrantId, RuntimeReceiptId};
     use crate::m5_orchestration_service::{
-        prepare_and_dispatch, AuthorizedExecutionRequest, ChainFault,
+        complete_dispatch_readback, prepare_and_dispatch, record_execution_attempt_readback,
+        AuthorizedExecutionRequest, ChainFault, DispatchReadbackSource,
     };
     use crate::worker_report::{ExecutionReceipt, TrustedActor, WorkerReport};
 
@@ -483,20 +544,82 @@ mod tests {
         }
     }
 
-    fn executed_report(
-        chain: &crate::m5_orchestration_service::AuthorizedExecutionResult,
+    fn executed_terminal(
         store: &M5OrchestrationStore,
         receipt_id: &str,
         hash: &str,
+        enforcement: EnforcementStatus,
+        outcome: &str,
     ) -> (M5WorkerReport, RuntimeReceipt) {
-        let dispatch = store
-            .load_dispatch(chain.dispatch_id.as_ref().unwrap().as_str())
-            .unwrap()
-            .unwrap();
+        use crate::m5_controlled_execution::{persist_operation, DurableOperation};
+
+        let chain = prepare_and_dispatch(store, req(), ChainFault::None).unwrap();
+        let dispatch_id = chain.dispatch_id.as_ref().unwrap().as_str().to_string();
+        let (dispatch, attempt) = complete_dispatch_readback(
+            store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            2_000,
+        )
+        .unwrap();
         let grant = store
             .load_grant(chain.grant_id.as_ref().unwrap().as_str())
             .unwrap()
             .unwrap();
+        let receipt = RuntimeReceipt {
+            receipt_id: RuntimeReceiptId::new(receipt_id.into()),
+            grant_id: GrantId::new(grant.grant_id.as_str().into()),
+            attempt_id: AttemptId::new(grant.attempt_id.as_str().into()),
+            dispatch_id: dispatch.dispatch_id.clone(),
+            effect_id: dispatch.effect_id.clone(),
+            trace_hash: hash.into(),
+            actor_binding: grant.worker_role_session_id.clone(),
+            enforcement_status: enforcement,
+            outcome: outcome.to_string(),
+        };
+        persist_operation(
+            store,
+            &DurableOperation {
+                operation_id: format!("op-{receipt_id}"),
+                attempt_id: attempt.attempt_id.clone(),
+                project_id: grant.project_id.clone(),
+                orchestration_id: grant.orchestration_id.as_str().to_string(),
+                workflow_run_id: grant.workflow_run_id.as_str().to_string(),
+                grant_id: grant.grant_id.as_str().to_string(),
+                dispatch_id: dispatch.dispatch_id.clone(),
+                effect_id: dispatch.effect_id.clone(),
+                state: match receipt.enforcement_status {
+                    EnforcementStatus::OutcomeUnknown => {
+                        crate::m5_controlled_execution::DurableOperationState::OutcomeUnknown
+                    }
+                    _ => match receipt.outcome.as_str() {
+                        "SUCCEEDED" => {
+                            crate::m5_controlled_execution::DurableOperationState::Completed
+                        }
+                        "FAILED" => crate::m5_controlled_execution::DurableOperationState::Failed,
+                        "TIMED_OUT" => {
+                            crate::m5_controlled_execution::DurableOperationState::TimedOut
+                        }
+                        "CANCELLED" => {
+                            crate::m5_controlled_execution::DurableOperationState::Cancelled
+                        }
+                        "RUNNING" => crate::m5_controlled_execution::DurableOperationState::Running,
+                        _ => crate::m5_controlled_execution::DurableOperationState::OutcomeUnknown,
+                    },
+                },
+                retry_count: 0,
+                max_retries: 2,
+                last_receipt_id: Some(receipt.receipt_id.as_str().to_string()),
+                error: None,
+                updated_at_ms: 2_000,
+            },
+        )
+        .unwrap();
+        record_execution_attempt_readback(store, receipt.clone(), attempt.revision, 2_500).unwrap();
+        let derived = store
+            .load_execution_attempt_readback(receipt_id)
+            .unwrap()
+            .unwrap()
+            .derived_attempt_state;
         let report = M5WorkerReport::from_base(WorkerReport {
             status: "ok".into(),
             did: "done".into(),
@@ -507,7 +630,7 @@ mod tests {
                 execution_id: receipt_id.into(),
                 started_at_ms: 1000,
                 completed_at_ms: Some(2000),
-                status: "SUCCEEDED".into(),
+                status: derived,
                 exit_code: Some(0),
                 output_hash: Some(hash.into()),
                 cost_tokens: None,
@@ -531,25 +654,19 @@ mod tests {
             receipt_id,
             hash,
         );
-        let receipt = RuntimeReceipt {
-            receipt_id: RuntimeReceiptId::new(receipt_id.into()),
-            grant_id: GrantId::new(grant.grant_id.as_str().into()),
-            attempt_id: AttemptId::new(grant.attempt_id.as_str().into()),
-            dispatch_id: dispatch.dispatch_id,
-            effect_id: dispatch.effect_id,
-            trace_hash: hash.into(),
-            actor_binding: grant.worker_role_session_id,
-            enforcement_status: EnforcementStatus::Ok,
-            outcome: "SUCCEEDED".into(),
-        };
         (report, receipt)
     }
 
     #[test]
     fn executed_claim_needs_independent_review_before_fact() {
         let store = M5OrchestrationStore::open_in_memory().unwrap();
-        let chain = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
-        let (report, receipt) = executed_report(&chain, &store, "rr-ok", "hash-ok");
+        let (report, receipt) = executed_terminal(
+            &store,
+            "rr-ok",
+            "hash-ok",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
         let claim = record_claim(&store, &report, Some(&receipt), 3000).unwrap();
         assert_eq!(claim.claim_status, "RECORDED_UNVERIFIED");
         assert!(load_fact_by_claim(&store, &claim.claim_id)
@@ -582,8 +699,13 @@ mod tests {
     #[test]
     fn replay_does_not_create_second_claim_or_fact() {
         let store = M5OrchestrationStore::open_in_memory().unwrap();
-        let chain = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
-        let (report, receipt) = executed_report(&chain, &store, "rr-ok", "hash-replay");
+        let (report, receipt) = executed_terminal(
+            &store,
+            "rr-ok",
+            "hash-replay",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
         let first = record_claim(&store, &report, Some(&receipt), 3000).unwrap();
         let second = record_claim(&store, &report, Some(&receipt), 3100).unwrap();
         assert_eq!(first.claim_id, second.claim_id);
@@ -627,8 +749,13 @@ mod tests {
     #[test]
     fn reviewer_cannot_be_the_worker() {
         let store = M5OrchestrationStore::open_in_memory().unwrap();
-        let chain = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
-        let (report, receipt) = executed_report(&chain, &store, "rr-ok", "hash-indep");
+        let (report, receipt) = executed_terminal(
+            &store,
+            "rr-ok",
+            "hash-indep",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
         let claim = record_claim(&store, &report, Some(&receipt), 3000).unwrap();
         let err = record_review(
             &store,
@@ -645,9 +772,13 @@ mod tests {
     #[test]
     fn unverified_or_unknown_receipt_cannot_become_fact() {
         let store = M5OrchestrationStore::open_in_memory().unwrap();
-        let chain = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
-        let (mut report, mut receipt) = executed_report(&chain, &store, "rr-unk", "hash-unk");
-        receipt.enforcement_status = EnforcementStatus::OutcomeUnknown;
+        let (mut report, receipt) = executed_terminal(
+            &store,
+            "rr-unk",
+            "hash-unk",
+            EnforcementStatus::OutcomeUnknown,
+            "UNKNOWN",
+        );
         report.report_hash = Some("hash-unk".into());
         let claim = record_claim(&store, &report, Some(&receipt), 3000).unwrap();
         assert_eq!(claim.claim_status, "QUARANTINED");
@@ -666,8 +797,13 @@ mod tests {
     #[test]
     fn cannot_reuse_authorization_decision_id() {
         let store = M5OrchestrationStore::open_in_memory().unwrap();
-        let chain = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
-        let (report, receipt) = executed_report(&chain, &store, "rr-ok", "hash-auth");
+        let (report, receipt) = executed_terminal(
+            &store,
+            "rr-ok",
+            "hash-auth",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
         let claim = record_claim(&store, &report, Some(&receipt), 3000).unwrap();
         let review = record_review(
             &store,
@@ -683,7 +819,7 @@ mod tests {
             &review.review_id,
             "user-1",
             "ACCEPTED_RESULT",
-            Some(chain.authorization_id.as_str()),
+            Some("auth-decision-must-not-reuse"),
             5000,
         )
         .unwrap_err();
@@ -719,11 +855,101 @@ mod tests {
     #[test]
     fn forged_receipt_is_rejected_with_no_claim() {
         let store = M5OrchestrationStore::open_in_memory().unwrap();
-        let chain = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
-        let (report, mut receipt) = executed_report(&chain, &store, "rr-fake", "hash-fake");
+        let (report, mut receipt) = executed_terminal(
+            &store,
+            "rr-fake",
+            "hash-fake",
+            EnforcementStatus::Ok,
+            "SUCCEEDED",
+        );
         receipt.effect_id = "forged".into();
         let err = record_claim(&store, &report, Some(&receipt), 3000).unwrap_err();
-        assert_eq!(err, "receipt_effect_or_dispatch_mismatch");
+        assert_eq!(err, "executed_claim_receipt_divergent");
+        let count: i64 = store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_claims", [], |row| row.get(0))
+            .unwrap_or(0);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn dispatched_or_running_claim_is_zero_write() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let chain = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
+        let dispatch_id = chain.dispatch_id.as_ref().unwrap().as_str().to_string();
+        complete_dispatch_readback(
+            &store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            2_000,
+        )
+        .unwrap();
+        let grant = store
+            .load_grant(chain.grant_id.as_ref().unwrap().as_str())
+            .unwrap()
+            .unwrap();
+        let dispatch = store.load_dispatch(&dispatch_id).unwrap().unwrap();
+        let receipt = RuntimeReceipt {
+            receipt_id: RuntimeReceiptId::new("rr-running".into()),
+            grant_id: grant.grant_id.clone(),
+            attempt_id: grant.attempt_id.clone(),
+            dispatch_id: dispatch.dispatch_id.clone(),
+            effect_id: dispatch.effect_id.clone(),
+            trace_hash: "hash-running".into(),
+            actor_binding: grant.worker_role_session_id.clone(),
+            enforcement_status: EnforcementStatus::Ok,
+            outcome: "SUCCEEDED".into(),
+        };
+        let report = M5WorkerReport::from_base(WorkerReport {
+            status: "ok".into(),
+            did: "done".into(),
+            ..WorkerReport::default()
+        })
+        .as_execution(
+            ExecutionReceipt {
+                execution_id: "rr-running".into(),
+                started_at_ms: 1000,
+                completed_at_ms: Some(2000),
+                status: "SUCCEEDED".into(),
+                exit_code: Some(0),
+                output_hash: Some("hash-running".into()),
+                cost_tokens: None,
+            },
+            TrustedActor {
+                actor_id: "actor-1".into(),
+                role: "worker".into(),
+                actor_type: "codex".into(),
+                authentication_method: "role-session".into(),
+            },
+        )
+        .bind_project(&grant.project_id, grant.orchestration_id.as_str())
+        .bind_execution_join(
+            grant.workflow_run_id.as_str(),
+            grant.work_item_id.as_str(),
+            &dispatch.node_id,
+            &dispatch.dispatch_id,
+            grant.attempt_id.as_str(),
+            grant.grant_id.as_str(),
+            &grant.worker_role_session_id,
+            "rr-running",
+            "hash-running",
+        );
+        let err = record_claim(&store, &report, Some(&receipt), 3000).unwrap_err();
+        assert_eq!(err, "executed_claim_missing_persisted_readback");
+        let count: i64 = store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_claims", [], |row| row.get(0))
+            .unwrap_or(0);
+        assert_eq!(count, 0);
+
+        let (running_report, running_receipt) = executed_terminal(
+            &store,
+            "rr-ok-run",
+            "hash-ok-run",
+            EnforcementStatus::Ok,
+            "RUNNING",
+        );
+        let err = record_claim(&store, &running_report, Some(&running_receipt), 3100).unwrap_err();
+        assert_eq!(err, "executed_claim_non_terminal_attempt");
         let count: i64 = store
             .connection()
             .query_row("SELECT COUNT(*) FROM m5_claims", [], |row| row.get(0))

@@ -75,7 +75,7 @@ pub(crate) fn run_authorized_followthrough(
     if pending.grant_id != grant_id || pending.project_id != project_id {
         return Err("followthrough_dispatch_join_failed".into());
     }
-    let (dispatch, _attempt) = complete_dispatch_readback(
+    let (dispatch, post_dispatch_attempt) = complete_dispatch_readback(
         store,
         crate::m5_orchestration_service::DispatchReadbackSource::ExactStoredDispatch(dispatch_id),
         now_ms,
@@ -103,6 +103,12 @@ pub(crate) fn run_authorized_followthrough(
         now_ms + 500,
         RuntimeFault::None,
     )?;
+    let (_terminal, readback) = crate::m5_orchestration_service::record_execution_attempt_readback(
+        store,
+        receipt.clone(),
+        post_dispatch_attempt.revision,
+        now_ms + 600,
+    )?;
     let report = M5WorkerReport::from_base(WorkerReport {
         status: "ok".into(),
         did: "echoed".into(),
@@ -113,7 +119,7 @@ pub(crate) fn run_authorized_followthrough(
             execution_id: receipt.receipt_id.as_str().into(),
             started_at_ms: now_ms + 500,
             completed_at_ms: Some(now_ms + 600),
-            status: "SUCCEEDED".into(),
+            status: readback.derived_attempt_state,
             exit_code: Some(0),
             output_hash: Some(receipt.trace_hash.clone()),
             cost_tokens: None,

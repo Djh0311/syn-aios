@@ -111,6 +111,25 @@ pub(crate) struct DispatchRecord {
     pub created_at_ms: i64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct ExecutionAttemptReadbackRecord {
+    pub receipt_id: String,
+    pub grant_id: String,
+    pub attempt_id: String,
+    pub dispatch_id: String,
+    pub effect_id: String,
+    pub trace_hash: String,
+    pub actor_binding: String,
+    pub enforcement_status: String,
+    pub outcome: String,
+    pub derived_attempt_state: String,
+    pub source_attempt_revision: i64,
+    pub committed_attempt_revision: i64,
+    pub canonical_readback_hash: String,
+    pub recording_command_receipt_ref: String,
+    pub recorded_at_ms: i64,
+}
+
 pub(crate) struct M5OrchestrationStore {
     conn: Connection,
 }
@@ -379,10 +398,11 @@ impl M5OrchestrationStore {
                 [attempt_id],
                 |row| {
                     let grant: Option<String> = row.get(10)?;
+                    let raw_state: String = row.get(1)?;
                     Ok(PreparedAttempt {
                         attempt_id: AttemptId::new(row.get(0)?),
-                        state: AttemptState::parse(&row.get::<_, String>(1)?)
-                            .unwrap_or(AttemptState::Cancelled),
+                        state: AttemptState::parse(&raw_state)
+                            .map_err(|e| closed_enum_sql(1, e))?,
                         project_id: row.get(2)?,
                         orchestration_id: OrchestrationId::new(row.get(3)?),
                         workflow_run_id: WorkflowRunId::new(row.get(4)?),
@@ -399,7 +419,107 @@ impl M5OrchestrationStore {
                 },
             )
             .optional()
-            .map_err(|e| format!("load_attempt:{e}"))
+            .map_err(|e| map_closed_enum_error("load_attempt", e))
+    }
+
+    pub(crate) fn cas_attempt_execution_readback(
+        &self,
+        attempt_id: &str,
+        expected_revision: i64,
+        next_state: &AttemptState,
+        now_ms: i64,
+    ) -> Result<PreparedAttempt, String> {
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE m5_prepared_attempts
+                 SET state = ?1, revision = revision + 1, updated_at_ms = ?2
+                 WHERE attempt_id = ?3
+                   AND state IN ('DISPATCHED', 'RUNNING')
+                   AND revision = ?4",
+                params![
+                    next_state.as_m1_str(),
+                    now_ms,
+                    attempt_id,
+                    expected_revision
+                ],
+            )
+            .map_err(|e| format!("cas_attempt_execution_readback:{e}"))?;
+        if changed != 1 {
+            return Err("execution_readback_attempt_cas_rejected".to_string());
+        }
+        self.load_attempt(attempt_id)?
+            .ok_or_else(|| "attempt_missing_after_execution_readback".to_string())
+    }
+
+    pub(crate) fn persist_execution_attempt_readback(
+        &self,
+        rec: &ExecutionAttemptReadbackRecord,
+    ) -> Result<(), String> {
+        self.conn
+            .execute(
+                "INSERT INTO m5_execution_attempt_readbacks (
+                    receipt_id, grant_id, attempt_id, dispatch_id, effect_id, trace_hash,
+                    actor_binding, enforcement_status, outcome, derived_attempt_state,
+                    source_attempt_revision, committed_attempt_revision,
+                    canonical_readback_hash, recording_command_receipt_ref, recorded_at_ms
+                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+                params![
+                    rec.receipt_id,
+                    rec.grant_id,
+                    rec.attempt_id,
+                    rec.dispatch_id,
+                    rec.effect_id,
+                    rec.trace_hash,
+                    rec.actor_binding,
+                    rec.enforcement_status,
+                    rec.outcome,
+                    rec.derived_attempt_state,
+                    rec.source_attempt_revision,
+                    rec.committed_attempt_revision,
+                    rec.canonical_readback_hash,
+                    rec.recording_command_receipt_ref,
+                    rec.recorded_at_ms
+                ],
+            )
+            .map_err(|e| format!("persist_execution_attempt_readback:{e}"))?;
+        Ok(())
+    }
+
+    pub(crate) fn load_execution_attempt_readback(
+        &self,
+        receipt_id: &str,
+    ) -> Result<Option<ExecutionAttemptReadbackRecord>, String> {
+        self.conn
+            .query_row(
+                "SELECT receipt_id, grant_id, attempt_id, dispatch_id, effect_id, trace_hash,
+                        actor_binding, enforcement_status, outcome, derived_attempt_state,
+                        source_attempt_revision, committed_attempt_revision,
+                        canonical_readback_hash, recording_command_receipt_ref, recorded_at_ms
+                 FROM m5_execution_attempt_readbacks WHERE receipt_id = ?1",
+                [receipt_id],
+                |row| {
+                    Ok(ExecutionAttemptReadbackRecord {
+                        receipt_id: row.get(0)?,
+                        grant_id: row.get(1)?,
+                        attempt_id: row.get(2)?,
+                        dispatch_id: row.get(3)?,
+                        effect_id: row.get(4)?,
+                        trace_hash: row.get(5)?,
+                        actor_binding: row.get(6)?,
+                        enforcement_status: row.get(7)?,
+                        outcome: row.get(8)?,
+                        derived_attempt_state: row.get(9)?,
+                        source_attempt_revision: row.get(10)?,
+                        committed_attempt_revision: row.get(11)?,
+                        canonical_readback_hash: row.get(12)?,
+                        recording_command_receipt_ref: row.get(13)?,
+                        recorded_at_ms: row.get(14)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|e| format!("load_execution_attempt_readback:{e}"))
     }
 
     pub(crate) fn persist_grant(&self, grant: &ExecutionGrant) -> Result<(), String> {
@@ -592,11 +712,7 @@ impl M5OrchestrationStore {
         self.insert_receipt(receipt, false)
     }
 
-    fn insert_receipt(
-        &self,
-        receipt: &CommandReceiptDto,
-        replace: bool,
-    ) -> Result<(), String> {
+    fn insert_receipt(&self, receipt: &CommandReceiptDto, replace: bool) -> Result<(), String> {
         let sql = if replace {
             "INSERT OR REPLACE INTO m5_command_receipts (
                     receipt_id, command_id, idempotency_key, request_hash, actor_id, scope_ref,
@@ -672,7 +788,10 @@ impl M5OrchestrationStore {
             .map_err(|e| map_closed_enum_error("load_receipt", e))
     }
 
-    pub(crate) fn count_command_receipts_with_hash(&self, request_hash: &str) -> Result<i64, String> {
+    pub(crate) fn count_command_receipts_with_hash(
+        &self,
+        request_hash: &str,
+    ) -> Result<i64, String> {
         self.conn
             .query_row(
                 "SELECT COUNT(*) FROM m5_command_receipts WHERE request_hash = ?1",
@@ -1119,6 +1238,7 @@ fn map_closed_enum_error(prefix: &str, e: rusqlite::Error) -> String {
             "unknown_audit_action:",
             "unknown_audit_sensitivity:",
             "unknown_outbox_status:",
+            "unknown_attempt_state:",
         ] {
             if let Some(idx) = text.find(marker) {
                 return Some(text[idx..].to_string());
@@ -1148,7 +1268,10 @@ fn parse_receipt_status(value: &str) -> rusqlite::Result<CommandReceiptStatus> {
         "EXTERNAL_RESULT" => Ok(CommandReceiptStatus::ExternalResult),
         "PROJECTION_DEGRADED" => Ok(CommandReceiptStatus::ProjectionDegraded),
         "FAILED" => Ok(CommandReceiptStatus::Failed),
-        other => Err(closed_enum_sql(8, format!("unknown_receipt_status:{other}"))),
+        other => Err(closed_enum_sql(
+            8,
+            format!("unknown_receipt_status:{other}"),
+        )),
     }
 }
 
@@ -1199,7 +1322,10 @@ fn parse_outbox_status(value: &str) -> rusqlite::Result<OutboxItemStatus> {
         "POISON" => Ok(OutboxItemStatus::Poison),
         "CANCELLED" => Ok(OutboxItemStatus::Cancelled),
         "RESULT_RECEIVED" => Ok(OutboxItemStatus::ResultReceived),
-        other => Err(closed_enum_sql(12, format!("unknown_outbox_status:{other}"))),
+        other => Err(closed_enum_sql(
+            12,
+            format!("unknown_outbox_status:{other}"),
+        )),
     }
 }
 
