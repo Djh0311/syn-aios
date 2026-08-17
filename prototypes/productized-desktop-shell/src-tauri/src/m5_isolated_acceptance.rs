@@ -1,23 +1,23 @@
 // M5R07 isolated scratch acceptance. Scenes go through product commands only.
 
-use crate::m5_agent_runtime::{RuntimeFault, SynNativeAgentRuntime, WorkcellRun};
-use crate::m5_claim_ledger::{
-    load_fact_by_claim, record_claim, record_result_decision, record_review,
-};
-use crate::m5_controlled_execution::{retry_operation, run_authorized_workcell};
-use crate::m5_dto::{legacy_execution_manifest, M5GlobalAdviceFixture, M5SupervisorOpenRequest};
 use crate::m5_orchestration_store::M5OrchestrationStore;
-use crate::m5_product_commands::{
-    open_project_supervisor_command, open_source_deep_link_command, read_project_summary_command,
-    record_authorization_decision_command, supervisor_turn_command,
-};
-use crate::m5_project_summary::{rebuild_project_summary, SummaryConsumer};
-use crate::m5_project_supervisor::ProjectSupervisorRoleSessionPort;
-use crate::worker_report::{ExecutionReceipt, M5WorkerReport, TrustedActor, WorkerReport};
+use crate::m5_product_commands::{open_source_deep_link_command, read_project_summary_command};
+use crate::m5_project_summary::SummaryConsumer;
 use rusqlite::OptionalExtension;
-use serde::Serialize;
 use std::path::Path;
 
+#[cfg(test)]
+use crate::m5_dto::{M5GlobalAdviceFixture, M5SupervisorOpenRequest};
+#[cfg(test)]
+use crate::m5_product_commands::{
+    open_project_supervisor_command, record_authorization_decision_command, supervisor_turn_command,
+};
+#[cfg(test)]
+use crate::m5_project_supervisor::ProjectSupervisorRoleSessionPort;
+#[cfg(test)]
+use serde::Serialize;
+
+#[cfg(test)]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct IsolatedSceneResult {
     pub scene: String,
@@ -25,6 +25,7 @@ pub(crate) struct IsolatedSceneResult {
     pub notes: Vec<String>,
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct IsolatedAcceptanceReport {
     pub schema: String,
@@ -34,6 +35,7 @@ pub(crate) struct IsolatedAcceptanceReport {
     pub legacy_paths_physically_deleted: bool,
 }
 
+#[cfg(test)]
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct AuthorizedFollowthroughResult {
     pub claim_id: String,
@@ -42,8 +44,8 @@ pub(crate) struct AuthorizedFollowthroughResult {
     pub review_id: String,
 }
 
-/// Post-dispatch isolated followthrough. Callers must already have gone through
-/// AuthorizationDecision → Grant → Dispatch. This never calls prepare_and_dispatch.
+/// Test-only post-dispatch followthrough. Not a product entry.
+#[cfg(test)]
 pub(crate) fn run_authorized_followthrough(
     store: &M5OrchestrationStore,
     project_id: &str,
@@ -54,40 +56,27 @@ pub(crate) fn run_authorized_followthrough(
     reviewer_role_session_id: &str,
     now_ms: i64,
 ) -> Result<AuthorizedFollowthroughResult, String> {
+    use crate::m5_agent_runtime::{RuntimeFault, SynNativeAgentRuntime, WorkcellRun};
+    use crate::m5_claim_ledger::{
+        load_fact_by_claim, record_claim, record_result_decision, record_review,
+    };
+    use crate::m5_controlled_execution::run_authorized_workcell;
+    use crate::m5_orchestration_service::complete_dispatch_readback;
+    use crate::m5_project_summary::rebuild_project_summary;
+    use crate::worker_report::{ExecutionReceipt, M5WorkerReport, TrustedActor, WorkerReport};
+
     let grant = store.load_grant(grant_id)?.ok_or("missing_grant")?;
     if grant.project_id != project_id {
         return Err("followthrough_grant_project_mismatch".into());
     }
-    let dispatch = store
+    let pending = store
         .load_dispatch(dispatch_id)?
         .ok_or("missing_dispatch")?;
-    if dispatch.grant_id != grant_id || dispatch.project_id != project_id {
+    if pending.grant_id != grant_id || pending.project_id != project_id {
         return Err("followthrough_dispatch_join_failed".into());
     }
+    let (dispatch, _attempt) = complete_dispatch_readback(store, dispatch_id, now_ms)?;
     let mut runtime = SynNativeAgentRuntime::new();
-    let fail_cell = WorkcellRun {
-        workcell_id: format!("wc-{project_id}-fail"),
-        profile_digest: "profile:syn-native:v1".into(),
-        session_ref: format!("rt-{project_id}"),
-        parent_grant_id: grant.grant_id.as_str().into(),
-        attempt_id: grant.attempt_id.as_str().into(),
-        dispatch_id: dispatch.dispatch_id.clone(),
-        effect_id: format!("{}-fail", dispatch.effect_id),
-        actor_binding: grant.worker_role_session_id.clone(),
-        command: "echo".into(),
-        child_depth: 0,
-        budget_tokens: 8,
-        stop_conditions: vec!["max_tokens".into()],
-        dynamic_package_enabled: false,
-    };
-    run_authorized_workcell(
-        store,
-        &mut runtime,
-        &fail_cell,
-        now_ms,
-        RuntimeFault::Timeout,
-    )?;
-    retry_operation(store, &format!("op-wc-{project_id}-fail"), now_ms + 100)?;
     let workcell = WorkcellRun {
         workcell_id: format!("wc-{project_id}"),
         profile_digest: "profile:syn-native:v1".into(),
@@ -181,7 +170,9 @@ pub(crate) fn run_authorized_followthrough(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn run_isolated_acceptance(app_data: &Path) -> Result<IsolatedAcceptanceReport, String> {
+    use crate::m5_dto::legacy_execution_manifest;
     std::fs::create_dir_all(app_data).map_err(|e| e.to_string())?;
     let a = run_scene_a(&app_data.join("scratch-a.sqlite"))?;
     let b = run_scene_b(&app_data.join("scratch-b.sqlite"))?;
@@ -196,10 +187,12 @@ pub(crate) fn run_isolated_acceptance(app_data: &Path) -> Result<IsolatedAccepta
     })
 }
 
+#[cfg(test)]
 struct TestSessions {
     session: crate::m5_project_supervisor::SupervisorSessionRef,
 }
 
+#[cfg(test)]
 impl ProjectSupervisorRoleSessionPort for TestSessions {
     fn load(
         &self,
@@ -212,6 +205,7 @@ impl ProjectSupervisorRoleSessionPort for TestSessions {
     }
 }
 
+#[cfg(test)]
 fn test_sessions(project_id: &str) -> TestSessions {
     TestSessions {
         session: crate::m5_project_supervisor::SupervisorSessionRef {
@@ -224,6 +218,7 @@ fn test_sessions(project_id: &str) -> TestSessions {
     }
 }
 
+#[cfg(test)]
 fn open(
     store: &M5OrchestrationStore,
     project_id: &str,
@@ -240,6 +235,7 @@ fn open(
     )
 }
 
+#[cfg(test)]
 fn run_scene_a(path: &Path) -> Result<IsolatedSceneResult, String> {
     let store = M5OrchestrationStore::open(path)?;
     let sessions = test_sessions("scratch-a");
@@ -298,6 +294,7 @@ fn run_scene_a(path: &Path) -> Result<IsolatedSceneResult, String> {
     })
 }
 
+#[cfg(test)]
 fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
     let store = M5OrchestrationStore::open(path)?;
     let sessions = test_sessions("scratch-b");
@@ -413,7 +410,7 @@ fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
         passed,
         notes: vec![
             "authorization_decision_then_grant".into(),
-            "timeout_then_retry".into(),
+            "single_exact_effect_after_dispatch_readback".into(),
             "independent_review".into(),
             "summary_source_refs_and_stale".into(),
             format!("deep_link={deep_link}"),

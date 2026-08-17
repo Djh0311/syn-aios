@@ -523,6 +523,30 @@ impl M5OrchestrationStore {
         Ok(())
     }
 
+    /// Narrow PENDING_DELIVERY -> DISPATCHED update. Never re-inserts.
+    pub(crate) fn transition_dispatch_to_dispatched(
+        &self,
+        dispatch_id: &str,
+        expected_revision: i64,
+    ) -> Result<DispatchRecord, String> {
+        let changed = self
+            .conn
+            .execute(
+                "UPDATE m5_dispatches
+                 SET state = 'DISPATCHED', revision = revision + 1
+                 WHERE dispatch_id = ?1
+                   AND state = 'PENDING_DELIVERY'
+                   AND revision = ?2",
+                params![dispatch_id, expected_revision],
+            )
+            .map_err(|e| format!("transition_dispatch:{e}"))?;
+        if changed != 1 {
+            return Err("dispatch_readback_transition_rejected".to_string());
+        }
+        self.load_dispatch(dispatch_id)?
+            .ok_or_else(|| "dispatch_missing_after_transition".to_string())
+    }
+
     pub(crate) fn load_dispatch(
         &self,
         dispatch_id: &str,

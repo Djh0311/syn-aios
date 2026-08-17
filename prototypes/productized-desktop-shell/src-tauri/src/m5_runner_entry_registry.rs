@@ -23,7 +23,7 @@ const ENTRIES: &[RunnerEntry] = &[
     },
     RunnerEntry {
         id: "M5-SE-002",
-        source_symbol: "run_m5_authorized_runtime",
+        source_symbol: "admit_current_granted_runtime",
         class: RunnerEntryClass::NewGrant,
     },
     RunnerEntry {
@@ -123,6 +123,11 @@ const ENTRIES: &[RunnerEntry] = &[
     },
 ];
 
+const REQUIRED_M5_ENTRY_IDS: &[(&str, &str)] = &[
+    ("M5-SE-001", "admit_granted_side_effect"),
+    ("M5-SE-002", "admit_current_granted_runtime"),
+];
+
 const INVENTORY_IDS: &[&str] = &[
     "RUN-001", "RUN-002", "RUN-003", "RUN-004", "RUN-005", "RUN-006", "RUN-007", "RUN-008",
     "RUN-009", "RUN-010", "RUN-011", "RUN-012", "BG-001", "BG-002", "BG-003", "BG-004", "BG-005",
@@ -169,6 +174,71 @@ mod tests {
         assert_eq!(classify("RUN-006"), Some(RunnerEntryClass::Blocked));
         assert!(new_grant_entries().contains(&"M5-SE-001"));
         assert!(new_grant_entries().contains(&"M5-SE-002"));
+    }
+
+    #[test]
+    fn required_m5_entries_bind_real_admission_symbols() {
+        for (id, symbol) in REQUIRED_M5_ENTRY_IDS {
+            let entry = ENTRIES
+                .iter()
+                .find(|entry| entry.id == *id)
+                .unwrap_or_else(|| panic!("missing required M5 entry {id}"));
+            assert_eq!(entry.source_symbol, *symbol);
+            assert_eq!(entry.class, RunnerEntryClass::NewGrant);
+        }
+        let product = include_str!("m5_product_commands.rs");
+        let gateway = include_str!("m5_side_effect_entry.rs");
+        assert!(product.contains("fn admit_current_granted_runtime("));
+        assert!(gateway.contains("fn admit_granted_side_effect("));
+        assert!(product.contains("fn run_m5_authorized_runtime("));
+        let wrapper = product
+            .split("pub(crate) fn run_m5_authorized_runtime(")
+            .nth(1)
+            .expect("wrapper");
+        assert!(wrapper.contains("run_m5_authorized_runtime_with_state(&state, request)"));
+    }
+
+    #[test]
+    fn product_workcell_has_no_unregistered_bypass() {
+        let product = include_str!("m5_product_commands.rs");
+        let isolated = include_str!("m5_isolated_acceptance.rs");
+        assert_eq!(
+            product.matches("run_authorized_workcell").count(),
+            1,
+            "formal runtime must have exactly one workcell callsite"
+        );
+        let admit = product
+            .find("fn admit_current_granted_runtime(")
+            .expect("admission symbol");
+        let admit_call = product
+            .find("let admitted = admit_current_granted_runtime(")
+            .expect("admission call");
+        let readback = product
+            .find("complete_dispatch_readback")
+            .expect("dispatch readback");
+        let workcell = product
+            .find("run_authorized_workcell")
+            .expect("workcell callsite");
+        assert!(admit < admit_call);
+        assert!(admit_call < readback);
+        assert!(readback < workcell);
+        assert!(!product.contains("fail_cell"));
+        assert!(!product.contains("-fail"));
+        let follow = isolated
+            .find("pub(crate) fn run_authorized_followthrough")
+            .expect("followthrough");
+        let prefix = &isolated[..follow];
+        let attr = prefix.rfind("#[").expect("followthrough attribute");
+        assert!(
+            prefix[attr..].starts_with("#[cfg(test)]"),
+            "isolated followthrough must stay test-only"
+        );
+        assert_eq!(
+            isolated.matches("run_authorized_workcell(").count(),
+            1,
+            "isolated product surface must not expose extra workcell callers"
+        );
+        assert!(!isolated.contains("fail_cell"));
     }
 
     #[test]

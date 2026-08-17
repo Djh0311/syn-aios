@@ -8,8 +8,8 @@ use crate::m5_dto::{
     M5SupervisorTurnRequest, M5SupervisorTurnResponse,
 };
 use crate::m5_m3_identity::{
-    load_project_role, provision_project_role, resolve_registered_project_id, view_to_session_ref,
-    InstalledViewPort, WHITELISTED_COMMAND,
+    load_project_role, policy_decision_ref_for_action, provision_project_role,
+    resolve_registered_project_id, view_to_session_ref, InstalledViewPort, WHITELISTED_COMMAND,
 };
 use crate::m5_gateway_traits::{
     GrantUseRequest, PersistentExecutionGrantGateway, ExecutionGrantGateway,
@@ -17,6 +17,7 @@ use crate::m5_gateway_traits::{
 use crate::m5_orchestration_identity::GrantId;
 use crate::m5_orchestration_store::{DispatchRecord, M5OrchestrationStore, PlanAuthorizationRecord};
 use crate::m5_execution_grant::ExecutionGrant;
+use crate::m5_prepared_attempt::{AttemptState, PreparedAttempt};
 use crate::m5_project_summary::{
     PersistentProjectSummaryPort, ProjectSummaryQueryPort, SummaryConsumer,
 };
@@ -612,6 +613,13 @@ pub(crate) struct M5FormalStepResponse {
     pub worker_role_session_id: Option<String>,
 }
 
+struct AdmittedGrantedRuntime {
+    grant: ExecutionGrant,
+    dispatch: DispatchRecord,
+    attempt: PreparedAttempt,
+    worker_role_session_id: String,
+}
+
 fn grant_use_request_from_current_authority(
     binding: &crate::m5_project_supervisor::SupervisorBinding,
     worker: &crate::m3_project_role_session_authority::M3ProjectRoleSessionView,
@@ -634,43 +642,113 @@ fn grant_use_request_from_current_authority(
     }
 }
 
-fn join_current_authorization_and_dispatch(
+fn join_independent_authorization_chain(
+    binding: &crate::m5_project_supervisor::SupervisorBinding,
+    worker: &crate::m3_project_role_session_authority::M3ProjectRoleSessionView,
+    plan: &PlanAuthorizationRecord,
+    attempt: &PreparedAttempt,
     grant: &ExecutionGrant,
     dispatch: &DispatchRecord,
-    plan: &PlanAuthorizationRecord,
+    formal_grant_id: &str,
     now_ms: i64,
 ) -> Result<(), String> {
+    if dispatch.state != "PENDING_DELIVERY" {
+        return Err("dispatch_not_pending_delivery".to_string());
+    }
+    if attempt.state != AttemptState::GrantReadyNonRunnable {
+        return Err("attempt_not_grant_ready".to_string());
+    }
+    if plan.revoked_at_ms.is_some() || plan.status == "REVOKED" {
+        return Err("plan_authorization_revoked".to_string());
+    }
+    if now_ms >= plan.expires_at_ms || plan.status == "EXPIRED" {
+        return Err("plan_authorization_expired".to_string());
+    }
     if plan.status != "ACTIVE" {
         return Err("plan_authorization_not_active".to_string());
     }
-    if plan.revoked_at_ms.is_some() {
-        return Err("plan_authorization_revoked".to_string());
+    if grant.revoked_at_ms.is_some() || grant.status.as_m1_str() == "REVOKED" {
+        return Err("grant revoked".to_string());
     }
-    if now_ms >= plan.expires_at_ms {
-        return Err("plan_authorization_expired".to_string());
+    if now_ms >= grant.expires_at_ms || grant.status.as_m1_str() == "EXPIRED" {
+        return Err("grant expired".to_string());
     }
-    if plan.authorization_id != grant.authorization_id.as_str()
-        || plan.authorization_revision != grant.authorization_revision
+    if binding.project_id != worker.project_id
+        || binding.project_id != plan.project_id
+        || binding.project_id != attempt.project_id
+        || binding.project_id != grant.project_id
+        || binding.project_id != dispatch.project_id
+    {
+        return Err("formal_runtime_project_join_failed".to_string());
+    }
+    if plan.orchestration_id != attempt.orchestration_id.as_str()
+        || plan.orchestration_id != grant.orchestration_id.as_str()
+        || plan.orchestration_id != dispatch.orchestration_id
+    {
+        return Err("formal_runtime_orchestration_join_failed".to_string());
+    }
+    if attempt.workflow_run_id.as_str() != grant.workflow_run_id.as_str()
+        || attempt.workflow_run_id.as_str() != dispatch.workflow_run_id
+        || attempt.work_item_id.as_str() != grant.work_item_id.as_str()
+        || attempt.work_item_id.as_str() != dispatch.work_item_id
+    {
+        return Err("formal_runtime_run_item_join_failed".to_string());
+    }
+    if attempt.node_id.as_str() != dispatch.node_id {
+        return Err("formal_runtime_node_join_failed".to_string());
+    }
+    if dispatch.attempt_id != attempt.attempt_id.as_str()
+        || dispatch.attempt_id != grant.attempt_id.as_str()
+    {
+        return Err("dispatch_attempt_join_failed".to_string());
+    }
+    if attempt.authorization_id.as_str() != plan.authorization_id
+        || grant.authorization_id.as_str() != plan.authorization_id
+        || grant.authorization_id.as_str() != attempt.authorization_id.as_str()
+    {
+        return Err("grant_plan_self_selection_rejected".to_string());
+    }
+    if attempt.authorization_revision != plan.authorization_revision
+        || grant.authorization_revision != plan.authorization_revision
     {
         return Err(format!(
             "wrong revision: grant={} request={}",
             grant.authorization_revision, plan.authorization_revision
         ));
     }
-    if plan.project_id != grant.project_id || dispatch.project_id != grant.project_id {
-        return Err("formal_runtime_project_join_failed".to_string());
-    }
-    if dispatch.grant_id != grant.grant_id.as_str() {
+    let bound_grant = attempt
+        .grant_id
+        .as_ref()
+        .ok_or_else(|| "attempt_missing_bound_grant".to_string())?;
+    if formal_grant_id != dispatch.grant_id
+        || formal_grant_id != grant.grant_id.as_str()
+        || bound_grant.as_str() != grant.grant_id.as_str()
+        || bound_grant.as_str() != dispatch.grant_id
+    {
         return Err("dispatch_grant_join_failed".to_string());
     }
     if dispatch.grant_revision != grant.revision {
         return Err("dispatch_grant_revision_join_failed".to_string());
     }
-    if dispatch.effect_id != grant.effect_key || dispatch.effect_id.trim().is_empty() {
+    if worker.role_session_id != attempt.worker_role_session_id
+        || worker.role_session_id != grant.worker_role_session_id
+        || worker.role_session_id != dispatch.worker_role_session_id
+    {
+        return Err("worker_session_join_failed".to_string());
+    }
+    if grant.principal_actor_id != binding.actor_id {
+        return Err("principal_actor_join_failed".to_string());
+    }
+    if dispatch.effect_id.trim().is_empty() || dispatch.effect_id != grant.effect_key {
         return Err("dispatch_effect_join_failed".to_string());
     }
-    if dispatch.attempt_id != grant.attempt_id.as_str() {
-        return Err("dispatch_attempt_join_failed".to_string());
+    if plan.authorized_scope_ref != grant.scope_fingerprint
+        || plan.allowed_commands != grant.allowed_commands
+        || plan.cwd_ref != grant.cwd_ref
+        || plan.write_root_refs != grant.write_root_refs
+        || plan.allowed_object_refs != grant.object_refs
+    {
+        return Err("plan_grant_scope_not_exact".to_string());
     }
     Ok(())
 }
@@ -679,10 +757,10 @@ fn admit_current_granted_runtime(
     store: &M5OrchestrationStore,
     binding: &crate::m5_project_supervisor::SupervisorBinding,
     worker: &crate::m3_project_role_session_authority::M3ProjectRoleSessionView,
-    grant_id: &str,
-    dispatch: &DispatchRecord,
+    formal_grant_id: &str,
+    formal_dispatch_id: &str,
     now_ms: i64,
-) -> Result<ExecutionGrant, String> {
+) -> Result<AdmittedGrantedRuntime, String> {
     if worker.role != M3ProjectRole::Worker {
         return Err("worker_role_mismatch".to_string());
     }
@@ -692,23 +770,53 @@ fn admit_current_granted_runtime(
     if worker.project_id != binding.project_id {
         return Err("worker_project_mismatch".to_string());
     }
-    let typed_grant_id = GrantId::new(grant_id.to_string());
-    let gateway = PersistentExecutionGrantGateway::new(store);
-    let lookup = gateway
-        .load_grant(&typed_grant_id)
-        .map_err(|error| error.to_string())?;
+    let dispatch = store
+        .load_dispatch(formal_dispatch_id)?
+        .ok_or_else(|| "formal_runtime_dispatch_not_found".to_string())?;
+    if formal_grant_id != dispatch.grant_id {
+        return Err("formal_progress_grant_dispatch_join_failed".to_string());
+    }
+    let attempt = store
+        .load_attempt(&dispatch.attempt_id)?
+        .ok_or_else(|| "formal_runtime_attempt_not_found".to_string())?;
     let plan = store
-        .load_authorization(lookup.authorization_id.as_str())?
+        .load_authorization(attempt.authorization_id.as_str())?
         .ok_or_else(|| "plan_authorization_missing".to_string())?;
-    let use_request =
-        grant_use_request_from_current_authority(binding, worker, dispatch, &plan, now_ms);
-    crate::m5_side_effect_entry::admit_granted_side_effect(store, &typed_grant_id, use_request)
-        .map_err(|error| error.to_string())?;
+    let typed_grant_id = GrantId::new(dispatch.grant_id.clone());
+    let gateway = PersistentExecutionGrantGateway::new(store);
     let grant = gateway
         .load_grant(&typed_grant_id)
         .map_err(|error| error.to_string())?;
-    join_current_authorization_and_dispatch(&grant, dispatch, &plan, now_ms)?;
-    Ok(grant)
+    join_independent_authorization_chain(
+        binding,
+        worker,
+        &plan,
+        &attempt,
+        &grant,
+        &dispatch,
+        formal_grant_id,
+        now_ms,
+    )?;
+    let proposal = load_supervisor_proposal(
+        store,
+        &plan.proposal_id,
+        &binding.project_id,
+        &binding.binding_id,
+    )?;
+    let expected_policy = policy_decision_ref_for_action(&proposal.authorized_action);
+    if grant.policy_decision_ref != expected_policy {
+        return Err("policy_decision_ref_mismatch".to_string());
+    }
+    let use_request =
+        grant_use_request_from_current_authority(binding, worker, &dispatch, &plan, now_ms);
+    crate::m5_side_effect_entry::admit_granted_side_effect(store, &typed_grant_id, use_request)
+        .map_err(|error| error.to_string())?;
+    Ok(AdmittedGrantedRuntime {
+        grant,
+        dispatch,
+        attempt,
+        worker_role_session_id: worker.role_session_id.clone(),
+    })
 }
 
 pub(crate) fn run_m5_authorized_runtime_with_state(
@@ -721,54 +829,36 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
     let (grant_id, dispatch_id, _, _, _) = load_formal_progress(&store, &binding.project_id)?;
     let grant_id = grant_id.ok_or_else(|| "formal_runtime_missing_grant".to_string())?;
     let dispatch_id = dispatch_id.ok_or_else(|| "formal_runtime_missing_dispatch".to_string())?;
-    let dispatch = store
-        .load_dispatch(&dispatch_id)?
-        .ok_or_else(|| "formal_runtime_dispatch_not_found".to_string())?;
     let now = m5_now_ms();
-    let grant = admit_current_granted_runtime(&store, &binding, &worker, &grant_id, &dispatch, now)?;
-    let mut runtime = crate::m5_agent_runtime::SynNativeAgentRuntime::new();
-    let fail_cell = crate::m5_agent_runtime::WorkcellRun {
-        workcell_id: format!("wc-{}-fail", binding.project_id),
-        profile_digest: "profile:syn-native:v1".into(),
-        session_ref: format!("rt-{}", binding.project_id),
-        parent_grant_id: grant.grant_id.as_str().into(),
-        attempt_id: grant.attempt_id.as_str().into(),
-        dispatch_id: dispatch.dispatch_id.clone(),
-        effect_id: format!("{}-fail", dispatch.effect_id),
-        actor_binding: worker.role_session_id.clone(),
-        command: WHITELISTED_COMMAND.into(),
-        child_depth: 0,
-        budget_tokens: 8,
-        stop_conditions: vec!["max_tokens".into()],
-        dynamic_package_enabled: false,
-    };
-    crate::m5_controlled_execution::run_authorized_workcell(
+    let admitted = admit_current_granted_runtime(
         &store,
-        &mut runtime,
-        &fail_cell,
+        &binding,
+        &worker,
+        &grant_id,
+        &dispatch_id,
         now,
-        crate::m5_agent_runtime::RuntimeFault::Timeout,
     )?;
-    crate::m5_controlled_execution::retry_operation(
+    let (dispatch, _attempt) = crate::m5_orchestration_service::complete_dispatch_readback(
         &store,
-        &format!("op-wc-{}-fail", binding.project_id),
-        now + 100,
+        &admitted.dispatch.dispatch_id,
+        now,
     )?;
     let workcell = crate::m5_agent_runtime::WorkcellRun {
         workcell_id: format!("wc-{}", binding.project_id),
         profile_digest: "profile:syn-native:v1".into(),
         session_ref: format!("rt-{}", binding.project_id),
-        parent_grant_id: grant.grant_id.as_str().into(),
-        attempt_id: grant.attempt_id.as_str().into(),
+        parent_grant_id: admitted.grant.grant_id.as_str().into(),
+        attempt_id: admitted.attempt.attempt_id.as_str().into(),
         dispatch_id: dispatch.dispatch_id.clone(),
         effect_id: dispatch.effect_id.clone(),
-        actor_binding: worker.role_session_id.clone(),
+        actor_binding: admitted.worker_role_session_id.clone(),
         command: WHITELISTED_COMMAND.into(),
         child_depth: 0,
         budget_tokens: 8,
         stop_conditions: vec!["max_tokens".into()],
         dynamic_package_enabled: false,
     };
+    let mut runtime = crate::m5_agent_runtime::SynNativeAgentRuntime::new();
     let receipt = crate::m5_controlled_execution::run_authorized_workcell(
         &store,
         &mut runtime,
@@ -779,7 +869,7 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
     persist_formal_progress(
         &store,
         &binding.project_id,
-        Some(grant.grant_id.as_str()),
+        Some(admitted.grant.grant_id.as_str()),
         Some(&dispatch.dispatch_id),
         Some(&serde_json::to_string(&receipt).map_err(|e| e.to_string())?),
         None,
@@ -787,7 +877,7 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
     )?;
     Ok(M5FormalStepResponse {
         step: "runtime".into(),
-        grant_id: Some(grant.grant_id.as_str().to_string()),
+        grant_id: Some(admitted.grant.grant_id.as_str().to_string()),
         dispatch_id: Some(dispatch.dispatch_id),
         receipt_id: Some(receipt.receipt_id.as_str().to_string()),
         claim_id: None,
@@ -1250,6 +1340,15 @@ mod tests {
         )
         .expect("approve");
         assert!(approved.dispatched);
+        let after_approve = runtime_owned_snapshot(&first, &opened.project_id);
+        assert_eq!(after_approve.dispatch_state.as_deref(), Some("PENDING_DELIVERY"));
+        assert_eq!(
+            after_approve.attempt_state.as_deref(),
+            Some("GRANT_READY_NON_RUNNABLE")
+        );
+        assert_eq!(after_approve.outbox_status.as_deref(), Some("AVAILABLE"));
+        assert_eq!(after_approve.durable_ops, 0);
+        assert_eq!(after_approve.formal_receipts, 0);
         let runtime = run_m5_authorized_runtime_with_state(
             &first,
             M5FormalStepRequest {
@@ -1258,6 +1357,12 @@ mod tests {
             },
         )
         .expect("runtime");
+        let after_runtime = runtime_owned_snapshot(&first, &opened.project_id);
+        assert_eq!(after_runtime.dispatch_state.as_deref(), Some("DISPATCHED"));
+        assert_eq!(after_runtime.attempt_state.as_deref(), Some("DISPATCHED"));
+        assert_eq!(after_runtime.outbox_status.as_deref(), Some("DELIVERED"));
+        assert_eq!(after_runtime.durable_ops, 1);
+        assert_eq!(after_runtime.formal_receipts, 1);
         let report = record_m5_worker_report_with_state(
             &first,
             M5FormalStepRequest {
@@ -1371,7 +1476,21 @@ mod tests {
         .expect("open m3 db")
     }
 
-    fn durable_runtime_snapshot(state: &crate::AppState) -> (i64, i64, i64) {
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct RuntimeOwnedSnapshot {
+        durable_ops: i64,
+        command_receipts: i64,
+        formal_receipts: i64,
+        dispatch_state: Option<String>,
+        dispatch_revision: Option<i64>,
+        outbox_status: Option<String>,
+        attempt_state: Option<String>,
+        formal_grant: Option<String>,
+        formal_dispatch: Option<String>,
+        formal_receipt_json: Option<String>,
+    }
+
+    fn runtime_owned_snapshot(state: &crate::AppState, project_id: &str) -> RuntimeOwnedSnapshot {
         let store = store_from_state(state).expect("m5 store");
         let count = |sql: &str| {
             store
@@ -1379,11 +1498,38 @@ mod tests {
                 .query_row(sql, [], |row| row.get::<_, i64>(0))
                 .unwrap_or(0)
         };
-        (
-            count("SELECT COUNT(*) FROM m5_durable_operations"),
-            count("SELECT COUNT(*) FROM m5_command_receipts"),
-            count("SELECT COUNT(*) FROM m5_formal_progress WHERE receipt_json IS NOT NULL"),
-        )
+        let progress = load_formal_progress(&store, project_id).expect("progress");
+        let dispatch = progress
+            .1
+            .as_ref()
+            .and_then(|id| store.load_dispatch(id).ok().flatten());
+        let attempt = dispatch
+            .as_ref()
+            .and_then(|d| store.load_attempt(&d.attempt_id).ok().flatten());
+        let outbox_status = dispatch.as_ref().and_then(|d| {
+            store
+                .connection()
+                .query_row(
+                    "SELECT status FROM m5_outbox_items WHERE outbox_item_id=?1",
+                    [&d.outbox_item_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .ok()
+        });
+        RuntimeOwnedSnapshot {
+            durable_ops: count("SELECT COUNT(*) FROM m5_durable_operations"),
+            command_receipts: count("SELECT COUNT(*) FROM m5_command_receipts"),
+            formal_receipts: count(
+                "SELECT COUNT(*) FROM m5_formal_progress WHERE receipt_json IS NOT NULL",
+            ),
+            dispatch_state: dispatch.as_ref().map(|d| d.state.clone()),
+            dispatch_revision: dispatch.as_ref().map(|d| d.revision),
+            outbox_status,
+            attempt_state: attempt.as_ref().map(|a| a.state.as_m1_str().to_string()),
+            formal_grant: progress.0,
+            formal_dispatch: progress.1,
+            formal_receipt_json: progress.2,
+        }
     }
 
     #[test]
@@ -1392,7 +1538,7 @@ mod tests {
         let state = ordinary_app_state(&root);
         let opened = approve_echo(&state, "syn-m5r07-inactive-worker");
         let worker_session = worker_role_session_id(&state, "syn-m5r07-inactive-worker");
-        let before = durable_runtime_snapshot(&state);
+        let before = runtime_owned_snapshot(&state, &opened.project_id);
         m3_db(&root)
             .execute(
                 "UPDATE m3_role_sessions SET state = 'SUSPENDED', resolution_reason = 'PERMISSION_MISMATCH_OR_UNKNOWN' WHERE role_session_id = ?1",
@@ -1403,12 +1549,12 @@ mod tests {
             &state,
             M5FormalStepRequest {
                 binding_id: opened.binding_id,
-                project_id: opened.project_id,
+                project_id: opened.project_id.clone(),
             },
         )
         .expect_err("inactive worker must fail closed");
         assert_eq!(err, "m3_project_role_session_inactive");
-        assert_eq!(durable_runtime_snapshot(&state), before);
+        assert_eq!(runtime_owned_snapshot(&state, &opened.project_id), before);
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }
 
@@ -1418,7 +1564,7 @@ mod tests {
         let state = ordinary_app_state(&root);
         let opened = approve_echo(&state, "syn-m5r07-drift-worker");
         let worker_session = worker_role_session_id(&state, "syn-m5r07-drift-worker");
-        let before = durable_runtime_snapshot(&state);
+        let before = runtime_owned_snapshot(&state, &opened.project_id);
         m3_db(&root)
             .execute(
                 "UPDATE m3_role_sessions SET state = 'ACTIVE', resolution_reason = NULL, permission_snapshot_ref = ?1 WHERE role_session_id = ?2",
@@ -1432,12 +1578,12 @@ mod tests {
             &state,
             M5FormalStepRequest {
                 binding_id: opened.binding_id,
-                project_id: opened.project_id,
+                project_id: opened.project_id.clone(),
             },
         )
         .expect_err("permission drift must fail closed");
         assert_eq!(err, "m3_project_role_session_permission_drift");
-        assert_eq!(durable_runtime_snapshot(&state), before);
+        assert_eq!(runtime_owned_snapshot(&state, &opened.project_id), before);
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }
 
@@ -1447,6 +1593,14 @@ mod tests {
             .expect("progress")
             .0
             .expect("grant id")
+    }
+
+    fn formal_dispatch_id(state: &crate::AppState, project_id: &str) -> String {
+        let store = store_from_state(state).expect("m5 store");
+        load_formal_progress(&store, project_id)
+            .expect("progress")
+            .1
+            .expect("dispatch id")
     }
 
     fn mutate_loaded_grant(
@@ -1460,22 +1614,27 @@ mod tests {
         store.persist_grant(&grant).expect("persist mutated grant");
     }
 
+    fn recompute_grant_hash(grant: &mut crate::m5_execution_grant::ExecutionGrant) {
+        grant.grant_hash = crate::m5_execution_grant::compute_grant_hash(grant);
+    }
+
     fn run_after_approve_expecting(
         alias: &str,
-        mutate: impl FnOnce(&crate::AppState, &str),
+        mutate: impl FnOnce(&crate::AppState, &str, &str),
         expected: &str,
     ) {
         let root = ordinary_named_root();
         let state = ordinary_app_state(&root);
         let opened = approve_echo(&state, alias);
         let grant_id = formal_grant_id(&state, &opened.project_id);
-        mutate(&state, &grant_id);
-        let before = durable_runtime_snapshot(&state);
+        let dispatch_id = formal_dispatch_id(&state, &opened.project_id);
+        mutate(&state, &grant_id, &dispatch_id);
+        let before = runtime_owned_snapshot(&state, &opened.project_id);
         let err = run_m5_authorized_runtime_with_state(
             &state,
             M5FormalStepRequest {
                 binding_id: opened.binding_id,
-                project_id: opened.project_id,
+                project_id: opened.project_id.clone(),
             },
         )
         .expect_err("formal runtime must fail closed");
@@ -1483,7 +1642,7 @@ mod tests {
             err == expected || err.contains(expected),
             "expected {expected}, got {err}"
         );
-        assert_eq!(durable_runtime_snapshot(&state), before);
+        assert_eq!(runtime_owned_snapshot(&state, &opened.project_id), before);
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }
 
@@ -1491,9 +1650,10 @@ mod tests {
     fn runtime_rejects_expired_grant_without_durable_writes() {
         run_after_approve_expecting(
             "syn-m5r07-expired-grant",
-            |state, grant_id| {
+            |state, grant_id, _| {
                 mutate_loaded_grant(state, grant_id, |grant| {
                     grant.expires_at_ms = 1;
+                    recompute_grant_hash(grant);
                 });
             },
             "grant expired",
@@ -1504,7 +1664,7 @@ mod tests {
     fn runtime_rejects_revoked_grant_without_durable_writes() {
         run_after_approve_expecting(
             "syn-m5r07-revoked-grant",
-            |state, grant_id| {
+            |state, grant_id, _| {
                 mutate_loaded_grant(state, grant_id, |grant| {
                     grant.revoke(m5_now_ms());
                 });
@@ -1517,7 +1677,7 @@ mod tests {
     fn runtime_rejects_grant_hash_drift_without_durable_writes() {
         run_after_approve_expecting(
             "syn-m5r07-hash-drift-grant",
-            |state, grant_id| {
+            |state, grant_id, _| {
                 mutate_loaded_grant(state, grant_id, |grant| {
                     grant.grant_hash =
                         "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
@@ -1532,7 +1692,7 @@ mod tests {
     fn runtime_rejects_authorization_revision_drift_without_durable_writes() {
         run_after_approve_expecting(
             "syn-m5r07-auth-revision-drift",
-            |state, grant_id| {
+            |state, grant_id, _| {
                 let store = store_from_state(state).expect("m5 store");
                 let grant = store.load_grant(grant_id).expect("load").expect("grant");
                 store
@@ -1544,6 +1704,173 @@ mod tests {
                     .expect("drift plan authorization revision");
             },
             "wrong revision",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_revoked_plan_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-revoked-plan",
+            |state, grant_id, _| {
+                let store = store_from_state(state).expect("m5 store");
+                let grant = store.load_grant(grant_id).expect("load").expect("grant");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_plan_authorizations SET status='REVOKED', revoked_at_ms=1 WHERE authorization_id=?1",
+                        [grant.authorization_id.as_str()],
+                    )
+                    .expect("revoke plan");
+            },
+            "plan_authorization_revoked",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_expired_plan_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-expired-plan",
+            |state, grant_id, _| {
+                let store = store_from_state(state).expect("m5 store");
+                let grant = store.load_grant(grant_id).expect("load").expect("grant");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_plan_authorizations SET expires_at_ms=1 WHERE authorization_id=?1",
+                        [grant.authorization_id.as_str()],
+                    )
+                    .expect("expire plan");
+            },
+            "plan_authorization_expired",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_grant_extra_command_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-grant-extra-command",
+            |state, grant_id, _| {
+                mutate_loaded_grant(state, grant_id, |grant| {
+                    grant.allowed_commands.push("rm".into());
+                    recompute_grant_hash(grant);
+                });
+            },
+            "plan_grant_scope_not_exact",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_grant_extra_root_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-grant-extra-root",
+            |state, grant_id, _| {
+                mutate_loaded_grant(state, grant_id, |grant| {
+                    grant.write_root_refs.push("/tmp/extra".into());
+                    recompute_grant_hash(grant);
+                });
+            },
+            "plan_grant_scope_not_exact",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_dispatch_grant_drift_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-dispatch-grant-drift",
+            |state, _, dispatch_id| {
+                let store = store_from_state(state).expect("m5 store");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_dispatches SET grant_id='forged-grant' WHERE dispatch_id=?1",
+                        [dispatch_id],
+                    )
+                    .expect("drift dispatch grant");
+            },
+            "formal_progress_grant_dispatch_join_failed",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_dispatch_revision_drift_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-dispatch-revision-drift",
+            |state, _, dispatch_id| {
+                let store = store_from_state(state).expect("m5 store");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_dispatches SET grant_revision=99 WHERE dispatch_id=?1",
+                        [dispatch_id],
+                    )
+                    .expect("drift dispatch revision");
+            },
+            "dispatch_grant_revision_join_failed",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_dispatch_effect_drift_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-dispatch-effect-drift",
+            |state, _, dispatch_id| {
+                let store = store_from_state(state).expect("m5 store");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_dispatches SET effect_id='forged-effect' WHERE dispatch_id=?1",
+                        [dispatch_id],
+                    )
+                    .expect("drift dispatch effect");
+            },
+            "dispatch_effect_join_failed",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_dispatch_attempt_drift_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-dispatch-attempt-drift",
+            |state, _, dispatch_id| {
+                let store = store_from_state(state).expect("m5 store");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_dispatches SET attempt_id='forged-attempt' WHERE dispatch_id=?1",
+                        [dispatch_id],
+                    )
+                    .expect("drift dispatch attempt");
+            },
+            "formal_runtime_attempt_not_found",
+        );
+    }
+
+    #[test]
+    fn runtime_rejects_grant_self_selected_plan_without_durable_writes() {
+        run_after_approve_expecting(
+            "syn-m5r07-grant-self-select-plan",
+            |state, grant_id, _| {
+                let store = store_from_state(state).expect("m5 store");
+                let grant = store.load_grant(grant_id).expect("load").expect("grant");
+                let original = store
+                    .load_authorization(grant.authorization_id.as_str())
+                    .expect("load plan")
+                    .expect("plan");
+                let mut second = original.clone();
+                second.authorization_id = format!("forged-plan-{}", uuid::Uuid::new_v4());
+                second.proposal_id = "forged-proposal".into();
+                store
+                    .persist_authorization(&second)
+                    .expect("persist second plan");
+                mutate_loaded_grant(state, grant_id, |grant| {
+                    grant.authorization_id =
+                        crate::m5_orchestration_identity::AuthorizationId::new(
+                            second.authorization_id.clone(),
+                        );
+                    recompute_grant_hash(grant);
+                });
+            },
+            "grant_plan_self_selection_rejected",
         );
     }
 }

@@ -294,6 +294,41 @@ pub(crate) fn run_authorized_workcell(
     let grant = store
         .load_grant(&workcell.parent_grant_id)?
         .ok_or_else(|| "workcell_grant_missing".to_string())?;
+    let dispatch = store
+        .load_dispatch(&workcell.dispatch_id)?
+        .ok_or_else(|| "workcell_dispatch_missing".to_string())?;
+    let attempt = store
+        .load_attempt(&workcell.attempt_id)?
+        .ok_or_else(|| "workcell_attempt_missing".to_string())?;
+    if dispatch.state != "DISPATCHED" {
+        return Err("dispatch_readback_required".to_string());
+    }
+    if attempt.state != crate::m5_prepared_attempt::AttemptState::Dispatched {
+        return Err("attempt_not_dispatched".to_string());
+    }
+    if workcell.effect_id.trim().is_empty()
+        || workcell.effect_id != dispatch.effect_id
+        || workcell.effect_id != grant.effect_key
+        || dispatch.effect_id != grant.effect_key
+    {
+        return Err("workcell_effect_not_bound_to_dispatch".to_string());
+    }
+    if workcell.parent_grant_id != grant.grant_id.as_str()
+        || workcell.parent_grant_id != dispatch.grant_id
+        || attempt
+            .grant_id
+            .as_ref()
+            .map(|id| id.as_str())
+            != Some(grant.grant_id.as_str())
+    {
+        return Err("workcell_grant_join_failed".to_string());
+    }
+    if workcell.attempt_id != grant.attempt_id.as_str()
+        || workcell.attempt_id != dispatch.attempt_id
+        || workcell.attempt_id != attempt.attempt_id.as_str()
+    {
+        return Err("workcell_attempt_join_failed".to_string());
+    }
     let mut op = DurableOperation {
         operation_id: format!("op-{}", workcell.workcell_id),
         attempt_id: AttemptId::new(workcell.attempt_id.clone()),
@@ -336,7 +371,7 @@ pub(crate) fn run_authorized_workcell(
 mod tests {
     use super::*;
     use crate::m5_orchestration_service::{
-        prepare_and_dispatch, AuthorizedExecutionRequest, ChainFault,
+        complete_dispatch_readback, prepare_and_dispatch, AuthorizedExecutionRequest, ChainFault,
     };
 
     fn req() -> AuthorizedExecutionRequest {
@@ -361,14 +396,13 @@ mod tests {
 
     fn cell(store: &M5OrchestrationStore, suffix: &str) -> WorkcellRun {
         let chain = prepare_and_dispatch(store, req(), ChainFault::None).unwrap();
+        let dispatch_id = chain.dispatch_id.as_ref().unwrap().as_str().to_string();
+        complete_dispatch_readback(store, &dispatch_id, 2_000).unwrap();
         let grant = store
             .load_grant(chain.grant_id.as_ref().unwrap().as_str())
             .unwrap()
             .unwrap();
-        let dispatch = store
-            .load_dispatch(chain.dispatch_id.as_ref().unwrap().as_str())
-            .unwrap()
-            .unwrap();
+        let dispatch = store.load_dispatch(&dispatch_id).unwrap().unwrap();
         WorkcellRun {
             workcell_id: format!("wc-{suffix}"),
             profile_digest: "profile:syn-native:v1".into(),
@@ -376,7 +410,7 @@ mod tests {
             parent_grant_id: grant.grant_id.as_str().into(),
             attempt_id: grant.attempt_id.as_str().into(),
             dispatch_id: dispatch.dispatch_id,
-            effect_id: format!("{}-{suffix}", dispatch.effect_id),
+            effect_id: dispatch.effect_id,
             actor_binding: grant.worker_role_session_id,
             command: "echo".into(),
             child_depth: 0,
@@ -384,6 +418,24 @@ mod tests {
             stop_conditions: vec!["max_tokens".into()],
             dynamic_package_enabled: false,
         }
+    }
+
+    #[test]
+    fn forged_second_effect_is_rejected() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let mut cell = cell(&store, "forge");
+        cell.effect_id = format!("{}-fail", cell.effect_id);
+        let mut runtime = SynNativeAgentRuntime::new();
+        let err = run_authorized_workcell(&store, &mut runtime, &cell, 3000, RuntimeFault::None)
+            .unwrap_err();
+        assert_eq!(err, "workcell_effect_not_bound_to_dispatch");
+        let ops: i64 = store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_durable_operations", [], |row| {
+                row.get(0)
+            })
+            .unwrap_or(0);
+        assert_eq!(ops, 0);
     }
 
     #[test]

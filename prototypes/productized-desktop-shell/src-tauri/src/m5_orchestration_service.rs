@@ -343,10 +343,6 @@ pub(crate) fn prepare_and_dispatch(
             created_by_command_receipt_ref: dispatch_receipt.receipt_id.clone(),
             created_at_ms: request.now_ms + 4,
         })?;
-        attempt
-            .mark_dispatched(request.now_ms + 4)
-            .map_err(|e| e.to_string())?;
-        store.persist_attempt(&attempt)?;
         store.persist_event(&scrubbed_event(
             "ExecutionAttemptDispatchRequested",
             &request.deciding_actor_id,
@@ -382,6 +378,69 @@ pub(crate) fn prepare_and_dispatch(
             // Keep revoked grant + non-runnable attempt as the durable recovery.
             uow.commit(store.connection())?;
         }
+        Err(_) => {
+            let _ = uow.rollback(store.connection());
+        }
+    }
+    result
+}
+
+/// After read-only admission PASSes: one UoW marks Dispatch DISPATCHED,
+/// delivers the matching outbox item, and only then marks Attempt DISPATCHED.
+pub(crate) fn complete_dispatch_readback(
+    store: &M5OrchestrationStore,
+    dispatch_id: &str,
+    now_ms: i64,
+) -> Result<(DispatchRecord, PreparedAttempt), String> {
+    let dispatch = store
+        .load_dispatch(dispatch_id)?
+        .ok_or_else(|| "dispatch_not_found".to_string())?;
+    if dispatch.state != "PENDING_DELIVERY" {
+        return Err("dispatch_not_pending_delivery".to_string());
+    }
+    let mut attempt = store
+        .load_attempt(&dispatch.attempt_id)?
+        .ok_or_else(|| "attempt_not_found".to_string())?;
+    if attempt.state != crate::m5_prepared_attempt::AttemptState::GrantReadyNonRunnable {
+        return Err("attempt_not_grant_ready".to_string());
+    }
+    let bound_grant = attempt
+        .grant_id
+        .as_ref()
+        .ok_or_else(|| "attempt_missing_bound_grant".to_string())?;
+    if bound_grant.as_str() != dispatch.grant_id {
+        return Err("attempt_dispatch_grant_join_failed".to_string());
+    }
+    let outbox = M5OutboxRepository
+        .get_by_id(store.connection(), &dispatch.outbox_item_id)?
+        .ok_or_else(|| "outbox_not_found".to_string())?;
+    if outbox.status != OutboxItemStatus::Available {
+        return Err("outbox_not_available".to_string());
+    }
+    if outbox.effect_id != dispatch.effect_id {
+        return Err("outbox_effect_join_failed".to_string());
+    }
+
+    let uow = M5SqliteUnitOfWork::new();
+    uow.begin(store.connection())?;
+    let result = (|| {
+        let dispatch = store.transition_dispatch_to_dispatched(
+            &dispatch.dispatch_id,
+            dispatch.revision,
+        )?;
+        M5OutboxRepository.update_status(
+            store.connection(),
+            &dispatch.outbox_item_id,
+            OutboxItemStatus::Delivered,
+        )?;
+        attempt
+            .mark_dispatched(now_ms)
+            .map_err(|e| e.to_string())?;
+        store.persist_attempt(&attempt)?;
+        Ok((dispatch, attempt))
+    })();
+    match &result {
+        Ok(_) => uow.commit(store.connection())?,
         Err(_) => {
             let _ = uow.rollback(store.connection());
         }
@@ -458,8 +517,8 @@ mod tests {
             .load_dispatch(result.dispatch_id.as_ref().unwrap().as_str())
             .unwrap()
             .unwrap();
-        assert_eq!(attempt.state, AttemptState::Dispatched);
-        assert!(attempt.is_runnable());
+        assert_eq!(attempt.state, AttemptState::GrantReadyNonRunnable);
+        assert!(!attempt.is_runnable());
         assert_eq!(grant.status, GrantStatus::Active);
         assert_eq!(dispatch.state, "PENDING_DELIVERY");
         let outbox = M5OutboxRepository
@@ -467,7 +526,36 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(outbox.status, OutboxItemStatus::Available);
+        let (dispatched, runnable) = complete_dispatch_readback(
+            &store,
+            result.dispatch_id.as_ref().unwrap().as_str(),
+            2_000,
+        )
+        .unwrap();
+        assert_eq!(dispatched.state, "DISPATCHED");
+        assert_eq!(runnable.state, AttemptState::Dispatched);
+        assert!(runnable.is_runnable());
+        let delivered = M5OutboxRepository
+            .get_by_id(store.connection(), result.outbox_item_id.as_ref().unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(delivered.status, OutboxItemStatus::Delivered);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dispatch_readback_does_not_reinsert() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let result = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
+        let dispatch_id = result.dispatch_id.as_ref().unwrap().as_str().to_string();
+        complete_dispatch_readback(&store, &dispatch_id, 2_000).unwrap();
+        let err = complete_dispatch_readback(&store, &dispatch_id, 3_000).unwrap_err();
+        assert_eq!(err, "dispatch_not_pending_delivery");
+        let count: i64 = store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_dispatches", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
     }
 
     #[test]
