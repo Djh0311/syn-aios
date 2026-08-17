@@ -67,7 +67,7 @@
 ## 叶子
 
 - [x] REC-00 事实恢复门：R0 恢复载体、分层归责、Harness 重建、前置矩阵与路由
-- [ ] M5R00 前置实现与 adapter 修正（2026-08-18 按真实 M1 缺口重开，唯一 current leaf；原 `NOT_NEEDED` 判定作废，见下节修订）
+- [ ] M5R00 前置实现与 adapter 修正（2026-08-18 按真实 M1 缺口重开；内容候选 `99a5afc` / tree `08669b0` 已完成本叶直接标准，当前 `AWAITING_INDEPENDENT_ACCEPTANCE`，未归档、非 closeout）
 - [x] M5R01 执行合同矫正与旧数据映射
 - [x] M5R02 持久编排核心与 ExecutionGrant
 - [x] M5R03 WorkerReport、独立审查与事实提升

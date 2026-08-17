@@ -4,7 +4,7 @@
 
 目标：给老项目一条可信的"真实身份"路径——在普通产品启动路径上真实取得 M1 正式项目身份，不靠测试 fixture 预登记、不靠 `project_id()` 的路径字符串派生。本叶只补前置，不做 M5R07 收尾，不改 execution kernel。
 
-状态：`CURRENT` / `NOT_ACCEPTED` / `NOT_CLOSEOUT`。M5R07 已挂起在 unfinished，其已有 scoped PASS 全部保留。stage-14 仍开；authorization closed；M6 与壳采纳未激活。
+状态：`CURRENT` / `CANDIDATE_READY` / `AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_CLOSEOUT`。内容候选 `99a5afc678949de50abd63876c57732024e53b18`（tree `08669b04e8a899e42bad53b7b8cecee95554bfaf`）已满足本叶直接完成标准并形成 disposable 证据；尚未经独立验收，因此本叶不归档。M5R07 已挂起在 unfinished，其已有 scoped PASS 全部保留。stage-14 仍开；authorization closed；M6 与壳采纳未激活。
 
 来源收据：用户 2026-08-18 明确"M1 纳入验收前置"，并批准 M5R07 只砍界面类证据的降级标准。交接见 `handoffs/2026-08-18-syn-new-bus-director-m1-prerequisite-and-reduced-m5r07-standard-v1.md`。
 
@@ -25,6 +25,13 @@
 证据：本叶只在 disposable checkout 上产出定向证据，绑定候选 SHA。不做 GUI、不做窗口截图、不做 computer use。
 
 载体：本叶新增的合同、`m1_project_index.rs`、`lib.rs` 登记调用点、任务包与本叶报告；一次独立内容提交加一次记账提交。
+
+候选结果（2026-08-18）：
+
+- 新增 `m1-ordinary-project-identity-source-replay-addendum-v1.md`；普通 Tauri 构造在产品组合前重放固定 app-data 身份来源，来源/registry 缺失或损坏时 fail-closed，不 fallback、不 path 派生、不自动 legacy import；首次登记铸造 opaque UUID v4，重复与重启保持同一身份且无重复改写。
+- 内容提交仅含 6 个允许路径；`git diff --check` exit 0，M1–M4 冻结合同 hash 未变，既有混合 WIP 未暂存或归责。
+- disposable checkout 定向测试 `25 passed / 0 failed / 1997 filtered`，`cargo check --lib --offline` exit 0；证据根 `/home/synadmin/workspace/.syn-gates/evidence/M5R00-99a5afc/`，报告 `docs/harness/reports/M5R00-m1-ordinary-project-identity-prerequisite.md`。
+- 证据只到离线合成产品构造路径，不含 GUI、真实资料/provider/账号/外部业务写或发布。下一动作仅为独立验收本候选；不得由此进入 M5R07、closeout、M6 或壳采纳。
 
 允许动：
 

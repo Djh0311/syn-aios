@@ -1,15 +1,17 @@
 # 当前状态
 
-截至 2026-08-16，M1–M3 已完成各自具名主线范围。M3 内容提交 `fa8e392`，状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4C01–M4C10 已进入主线，`stage-06` 已程序性关闭；2026-08-11 独立总线复核发现的五项普通产品 P1 已由 M4R01–M4R06 修正，M4R07 的 v2 可携带 receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。M4R01–M4R07 均已完成并归档，`stage-07` 已关闭，当前状态是 `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`。
+截至 2026-08-18，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 的本地内容已推进，但 stage-14 尚未独立验收或关闭；M6 与壳采纳未激活。当前节点是 M5R00 内容候选等待独立验收，不是 M5 完成。
 
-## 2026-08-16 M5 事实重整启动（当前状态）
+## 2026-08-18 M5 当前状态
 
-- M5 与 M6 现有实现统一定级为 `M5/M6 CANDIDATE WIP / UNIT-LEVEL PROTOTYPE / NOT_ACCEPTED / NOT_MAINLINE`；57（M5 定向）/ 33（M6 定向）单测只作为候选原型单测基线，不绑定阶段退出。此前 `docs/harness/plan.md` 手工勾选的 stage-14/15 完成标记已撤销，不构成阶段历史。
-- 用户 2026-08-16 明确按实际继续完成剩余 M5；`docs/plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` 为现行实施计划。真实 `stage-14` 已建立，REC-00 / M5R01 已归档，`M5R00=NOT_NEEDED`，唯一 current leaf 为 M5R07（2026-08-17 返修实现 candidate `faa6ed1`，仍为 AWAITING_INDEPENDENT_ACCEPTANCE，未 closeout），`authorization.json` 为精确 closed 两字段。
-- 本地 `main` 已从 `9103c3b` 推进到 M5R01 内容提交 `7cb8ac0` 及后续 M5R02 工作树；R0 恢复载体仍在。M5/M6 仍为 `CANDIDATE WIP / NOT_ACCEPTED / NOT_MAINLINE`。
-- M6 保持未激活：须在 M5 独立验收后才另建真实 stage-15。M7–M11、Headless Core、Primary/epoch 继续 `PLANNED / NOT_ACTIVE`。
+- 唯一 current leaf 是 M5R00；M1 普通项目身份前置的内容候选为 `99a5afc678949de50abd63876c57732024e53b18`，tree `08669b04e8a899e42bad53b7b8cecee95554bfaf`，状态 `CANDIDATE_READY / AWAITING_INDEPENDENT_ACCEPTANCE / NOT_CLOSEOUT`。`authorization.json` 为精确 closed 两字段。
+- 候选新增显式、可重放、幂等的 ordinary M1 身份来源，在普通 Tauri `AppState` 构造前真实调用；来源或 registry 不可用时 fail-closed，不 fallback、不从 path 派生、不自动导入 legacy index。disposable checkout 上 M1 定向测试 25/25、`cargo check --lib --offline` exit 0。
+- 上述证据仅为离线合成产品构造路径；没有 GUI、窗口截图、computer use、真实个人资料/项目、真实 provider/账号/凭据、外部网络业务写、部署或发布。它尚未获得独立验收。
+- M5R07 已挂起在 unfinished；其 implementation/evidence/U01a/U01b/U01c/U02 的 scoped PASS 全部保留，均不是 evidence-binding 或 closeout。本轮没有进入 M5R07 收尾。
+- 本地 `main` 已包含 M5 既有提交与 M5R00 独立内容候选，但 stage-14 仍为 `OPEN / NOT_ACCEPTED / NOT_CLOSEOUT`。M6、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
+- 开始时既有的未归属 Rust、usage、M6 与 `linux-schema.json` WIP 继续保全；没有 reset、stash、clean、覆盖、归责或混入 M5R00 提交。
 
-当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。D0D01 只证明 `main@9103c3b26b060e854be119a8cedaa856a2a900ce` 与冻结 WIP 的 `SOURCE_BYTES_MATCH`；它不证明依赖安装、产品运行、Headless Core、Primary / Edge、部署或发布。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；本轮文档校准 `stage-13` 已完成并归档，当前无 current leaf，`authorization.json` 保持 closed。
+当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。D0D01 的历史 `SOURCE_BYTES_MATCH` 不证明依赖安装、产品运行、Headless Core、Primary / Edge、部署或发布。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 已完成并归档。stage-14 的唯一 current leaf 为 M5R00，且 authorization closed。
 
 ## 现在分别看哪里
 
@@ -77,7 +79,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 尚未成立或未进入
 
-- M5 ProjectSummary 合同和 owner 尚未激活，M4 项目摘要来源保持 `HOLD / UNAVAILABLE`；不得据此声称“全部用户相关 open loops”已经接入。
+- M5R06 的 ProjectSummary 具名投影已有 scoped 完成记录；但 M5R00 尚待独立验收、M5R07 尚未按 2026-08-18 降级标准完成组合类收口，因此 M5/stage-14 整体仍未验收或关闭。不得把局部 scoped PASS 写成 M5 完成。
 - M6 Global Supervisor 成功 consult 未实现；M4 只持 M3 Handoff 请求/回执边界，普通产品 recipient 显式 unavailable。
 - M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M4 只产出 source-backed event/ref，不写 M7 对象。
 - M8 真实 connector、credential 与外部 source 未进入；M9 旧路 command unregister/物理退役、M10 全日真实试点与发布硬化、M11 受治理自升级也未进入。
@@ -88,9 +90,9 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M4 / stage-06 已程序性关闭；M4R01–M4R07 已完成并归档，M4R07 v2 产品链证据为 PASS，`stage-07` 已关闭。WSL 迁移 `stage-12` 仍开着但没有 current leaf，D0C04 / D0C05 不因本轮文档收口恢复；文档校准 `stage-13` 已归档。`USER-SYN-M4-AUTONOMOUS-STAGE-06-20260810` 只作为历史授权记录，不延续到 M5 或其他工作。
+M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13` 已归档。stage-14 仍开，当前必须停在 M5R00 节点：内容候选与记账载体形成后，authorization 保持 closed，仓库外写节点请求，等待独立验收。
 
-后续任何实现都需要新的当前用户指令和匹配的 Harness 工作投影。若需要真实数据 / 模型 / provider / connector / 设备写 / 发布，或要进入 M5–M11，必须停在该事实，不扩大本次 M4R07 v2、D0D01 或文档校准结论。
+独立验收前不得归档 M5R00、拉回或收尾 M5R07、关闭 stage-14、激活 M6 或壳采纳。真实数据 / 模型 / provider / connector / 账号凭据 / 外部业务写 / 发布仍未获授权，也没有发生。
 
 ## 保全
 
