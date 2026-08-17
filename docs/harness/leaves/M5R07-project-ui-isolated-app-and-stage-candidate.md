@@ -22,7 +22,7 @@
 3. M5 owner。M5 stop/retry/resume 底层持久函数虽有，但没有正式 production caller / Tauri command / registry / DTO / TS / UI；worker-blocked、execution failure/recovery、duplicate operation/effect 没有 server-derived 正式产品场景。
 4. M5 owner。当前 shared-isolated launcher 是 unavailable-only；scene / window / restart 均 `NOT_EXECUTED`；缺正向 ordinary-product Tauri acceptance carrier。最终 positive ordinary GUI 证据仍受第 1 项 M1 owner 阻塞。
 
-证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b`；evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。当前 `docs/harness/reports/M5R07-project-ui-isolated-app-and-stage-candidate.md` 与 `docs/harness/reports/M5R07-isolated-acceptance-receipt.json` 绑定 implementation exact `f51c3f64` / tree `dbdeaeda`。旧 `faa6ed1` 证据只在 `docs/harness/reports/M5R07-history/faa6ed1/manifest.json`，非 current。`1433d51` 与 `f51c3f64` 是 predecessor / implementation，不是 evidence tip。不得把 implementation 或 evidence scoped PASS 写成 M5 / stage 完成。下一步允许在当前 M5R07 目标内继续最窄 M5 UI/control/recovery 修包：默认入口、server-owned operation read/control commands 消费既有 durable funcs、DTO/registry/TS/panel、isolated-only server-selected failure fixtures、driver/runner/evidence。真正 ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞。不得自动进入 M1 修正、M6 或 closeout。
+证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b`；evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。当前 `docs/harness/reports/M5R07-project-ui-isolated-app-and-stage-candidate.md` 与 `docs/harness/reports/M5R07-isolated-acceptance-receipt.json` 绑定 implementation exact `f51c3f64` / tree `dbdeaeda`。旧 `faa6ed1` 证据只在 `docs/harness/reports/M5R07-history/faa6ed1/manifest.json`，非 current。`1433d51` 与 `f51c3f64` 是 predecessor / implementation，不是 evidence tip。不得把 implementation 或 evidence scoped PASS 写成 M5 / stage 完成。下一步在当前 M5R07 目标内分两包继续：U01 只完成默认 `jiaoban` 左侧正式主管接线与 server-owned operation read/control commands、DTO/registry/TS/panel；U02 另建 ordinary disposable positive Tauri runner 与 server-owned fixture。shared-isolated profile / runner 始终只作 authority-unavailable negative regression，不承载 failure/recovery positive 场景。真正 legacy ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞。不得自动进入 M1 修正、M6 或 closeout。
 
 载体：implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`；产品 + Git/Harness scoped independent PASS；非 evidence tip / 非 closeout）。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b`（evidence 内容/载体 + Git/Harness scoped independent PASS；非 closeout）。gateway/Dispatch predecessor `1433d51466e59352cc8859e1c47f176da04f25b0`。
 
@@ -32,7 +32,7 @@
 - prototypes/productized-desktop-shell/src-tauri/src/m5_dto.rs（仅 M5 operation read/control DTO）
 - prototypes/productized-desktop-shell/src-tauri/src/m5_product_commands.rs（server-owned operation read/control commands 消费既有 durable funcs；不改 execution kernel）
 - prototypes/productized-desktop-shell/src-tauri/src/m5_m3_identity.rs [新增：只消费 M3 RoleSession]
-- prototypes/productized-desktop-shell/src-tauri/src/m5_isolated_acceptance.rs（isolated-only server-selected failure fixtures；不新增 shared-isolated authority）
+- prototypes/productized-desktop-shell/src-tauri/src/m5_isolated_acceptance.rs（只维护 shared-isolated authority-unavailable negative regression；不得安装 authority 或承载 positive failure/recovery 场景）
 - prototypes/productized-desktop-shell/src-tauri/src/m5_project_supervisor.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m5_project_summary.rs
 - prototypes/productized-desktop-shell/src-tauri/src/m5_orchestration_service.rs（正式授权入口接线；独立锚链 admission；Dispatch readback 同事务与 truth carriers；不泛化为任意编排改写）
@@ -51,15 +51,18 @@
 - prototypes/productized-desktop-shell/src-tauri/src/lib_read_model_boundary_tests.rs（同上：只补 `m5_store_path: None`，不改读模型边界）
 - prototypes/productized-desktop-shell/src/lib/tauri.ts、src/lib/m5ProjectSupervisor.ts [新增；消费 M5 control commands]
 - prototypes/productized-desktop-shell/src/views/projects/ProjectSupervisorPanel.tsx [新增；接入 stop/retry/resume 与 recovery 控制；不重画页面布局]
-- prototypes/productized-desktop-shell/src/views/projects/ProjectWorkspaceShell.tsx（默认入口接到主管；保持主管面板接入；不重画页面布局）
-- prototypes/productized-desktop-shell/src/views/ProjectsView.tsx（仅默认入口/切项目到主管；不改 gallery/秘书路由/其它工具）
-- prototypes/productized-desktop-shell/src/main.tsx（仅 M5 隔离 DOM 驱动：默认入口、recovery 场景；不改其它验收桥）
-- prototypes/productized-desktop-shell/scripts/run-m5-isolated-app-acceptance.mjs [新增；isolated-only failure/recovery/evidence；不把 unavailable-only 写成 positive GUI]
+- prototypes/productized-desktop-shell/src/views/projects/ProjectWorkspaceShell.tsx（保持默认 `jiaoban` 与三栏布局；左侧主工作面接正式主管并移除 overview 重复实例；不重画页面）
+- prototypes/productized-desktop-shell/src/views/ProjectsView.tsx（仅证明默认/切项目保持 `jiaoban` 且该入口已接正式主管；不改 gallery/秘书路由/其它工具）
+- prototypes/productized-desktop-shell/src/main.tsx（U01 只校验默认入口；U02 只接 ordinary acceptance DOM driver；shared-isolated 逻辑保持 negative；不改其它验收桥）
+- prototypes/productized-desktop-shell/scripts/run-m5-isolated-app-acceptance.mjs [新增；只维护 shared-isolated authority-unavailable negative evidence；不得升级为 positive GUI]
+- prototypes/productized-desktop-shell/src-tauri/src/m5_ordinary_control_acceptance.rs [U02 新增；只用 ordinary disposable AppState 与 server-only fixture，不改 production startup]
+- prototypes/productized-desktop-shell/scripts/run-m5-ordinary-control-acceptance.mjs [U02 新增；独立 ordinary positive Tauri runner，不复用 shared-isolated profile]
 - prototypes/productized-desktop-shell/scripts/m5-x11-screenshot.py [新增]
 - tasks/2026-08-16-syn-m5r07-narrow-acceptance-fix-v1.md [新增]
 - tasks/2026-08-17-syn-m5r07-gateway-dispatch-readback-v1.md [新增]
 - tasks/2026-08-17-syn-m5r07-dispatch-readback-consumption-repair-v1.md [新增]
 - tasks/2026-08-17-syn-m5r07-terminal-execution-readback-v1.md [新增]
+- tasks/2026-08-17-syn-m5r07-ui-control-recovery-v1.md [U01 新增]
 - docs/harness/plan.md、docs/current-state.md、docs/harness/audit/2026-08.jsonl、docs/harness/stages/stage-14.md（仅独立验收 closeout；当前用户边界禁止改 plan/stage/authorization）
 - docs/harness/reports/M5R07-*
 - docs/harness/leaves/M5R07-project-ui-isolated-app-and-stage-candidate.md
