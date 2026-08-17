@@ -160,8 +160,8 @@ struct AppState {
     m4_source_route_registry:
         Option<m4_source_route_resolver::M4RegisteredSourceOwnerRouteRegistry>,
     // M1I01R03 installs the server-only project_index authority on the
-    // ordinary product. Explicit register/read is available; startup does
-    // not mint. Isolated acceptance and legacy leave the slot uninstalled.
+    // ordinary product. The real Tauri constructor replays an explicit
+    // identity source before shared composition; isolated/legacy do not.
     #[allow(dead_code)]
     m1_project_index: Option<m1_project_index::M1ProjectIndexAuthorityHandle>,
     // M3O03 installs the server-only project-role-session authority on the
@@ -273,14 +273,30 @@ impl AppState {
     }
 
     fn try_new_with_tauri_app_data_root(app_data_root: &Path) -> Result<Self, String> {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        Self::try_new_with_tauri_ordinary_product_seeds(
+            app_data_root,
+            &manifest_dir.join("../../index-kernel/codex-index.json"),
+            &manifest_dir.join("../../../tasks/README.md"),
+        )
+    }
+
+    fn try_new_with_tauri_ordinary_product_seeds(
+        app_data_root: &Path,
+        product_index_seed: &Path,
+        product_tasks_seed: &Path,
+    ) -> Result<Self, String> {
         if acceptance_runtime_profile::active_paths()?.is_some() {
             return Err("m4_secretary_ordinary_constructor_rejects_acceptance_profile".to_string());
         }
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        m1_project_index::M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source(
+            app_data_root,
+        )
+        .map_err(|error| error.code)?;
         Self::try_new_with_ordinary_product_ports(
             app_data_root,
-            &manifest_dir.join("../../index-kernel/codex-index.json"),
-            &manifest_dir.join("../../tasks/README.md"),
+            product_index_seed,
+            product_tasks_seed,
             m4_secretary_conversation::M4SecretaryConversationProviderConfig::Unavailable,
         )
     }

@@ -1,11 +1,13 @@
-//! Server-only project_index base for M1I01R01 / M1I01R02 / M1I01R03 / M3O02.
+//! Server-only project_index base for M1I01R01 / M1I01R02 / M1I01R03 / M3O02 / M5R00.
 //!
 //! This owner mints opaque `project:<uuid>` values and stores exact aliases as
 //! resolver inputs. Ordinary AppState installs a server-only authority that
-//! can explicitly register and read those ids. M3O02 adds a restricted
-//! typed-id verifier that only revalidates an already-typed `M1ProjectId`
-//! against the same ordinary app-data root. It does not create ActorId,
-//! RoleRef, ScopeRef, CurrentObjectRef, ExecutionChannel, PermissionProfile,
+//! can explicitly register and read those ids. The real ordinary Tauri
+//! constructor replays a pre-provisioned identity source before shared
+//! product composition. M3O02 adds a restricted typed-id verifier that only
+//! revalidates an already-typed `M1ProjectId` against the same ordinary
+//! app-data root. It does not create ActorId, RoleRef, ScopeRef,
+//! CurrentObjectRef, ExecutionChannel, PermissionProfile,
 //! PermissionSnapshotRef, IdentitySnapshot, or M3 RoleSession records.
 
 #![allow(dead_code)]
@@ -28,6 +30,18 @@ pub(crate) const M1_PROJECT_ID_FOREIGN_ROOT: &str = "m1_project_id_foreign_root"
 pub(crate) const M1_PROJECT_INDEX_SCHEMA_VERSION: &str = "m1.project-index.registry.v2";
 pub(crate) const M1_ORDINARY_APP_DATA_DIR_NAME: &str = "local.codex.governance.workbench";
 pub(crate) const M1_ORDINARY_REGISTRY_RELATIVE_PATH: &str = "m1/project-index-v1.json";
+pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME: &str =
+    "m1-ordinary-project-identity-source-v1.json";
+pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_SCHEMA_VERSION: &str =
+    "m1.ordinary-project-identity-source.v1";
+pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_MISSING: &str =
+    "m1_ordinary_project_identity_source_missing";
+pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE: &str =
+    "m1_ordinary_project_identity_source_unreadable";
+pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_MALFORMED: &str =
+    "m1_ordinary_project_identity_source_malformed";
+pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_UNSUPPORTED: &str =
+    "m1_ordinary_project_identity_source_unsupported";
 const M1_LOCK_RELATIVE_PATH: &str = ".m1-project-index-v1.lock";
 const M1_ESTABLISHED_MARKER_RELATIVE_PATH: &str = ".m1-project-index.established";
 const M1_ESTABLISHED_MARKER_VALUE: &[u8] = b"m1.project-index.established.v1\n";
@@ -133,6 +147,32 @@ struct M1StoredProject {
     #[serde(default)]
     exact_alias: Option<String>,
     resolver_revision: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct M1OrdinaryIdentitySourceDocument {
+    schema_version: String,
+    source_id: String,
+    source_revision: u64,
+    projects: Vec<M1OrdinaryIdentitySourceEntry>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct M1OrdinaryIdentitySourceEntry {
+    entry_id: String,
+    mode: M1OrdinaryIdentitySourceMode,
+    source_ref: String,
+    exact_alias: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+enum M1OrdinaryIdentitySourceMode {
+    #[serde(rename = "create")]
+    Create,
+    #[serde(rename = "migrate_legacy_project")]
+    MigrateLegacyProject,
 }
 
 struct ExclusiveRegistryLock {
@@ -253,6 +293,15 @@ impl M1ProjectIndexAuthorityHandle {
             let _ = store.load_registry(LoadMode::Required)?;
         }
         Ok(Self { store })
+    }
+
+    pub(crate) fn replay_ordinary_identity_source(
+        app_data_root: &Path,
+    ) -> Result<(), M1ProjectIndexError> {
+        let root = admit_ordinary_root_for_identity_source(app_data_root)?;
+        let source = load_ordinary_identity_source(&root)?;
+        let store = M1ProjectIndexStore::from_root(root);
+        store.replay_ordinary_identity_source(&source)
     }
 
     fn require_readable_registry(&self) -> Result<(), M1ProjectIndexError> {
@@ -571,6 +620,56 @@ impl M1ProjectIndexStore {
         })
     }
 
+    fn replay_ordinary_identity_source(
+        &self,
+        source: &M1OrdinaryIdentitySourceDocument,
+    ) -> Result<(), M1ProjectIndexError> {
+        let _lock = ExclusiveRegistryLock::acquire(&self.lock_path)?;
+        let mut registry = match self.classify_registry_presence()? {
+            RegistryPresence::Absent => empty_registry(),
+            RegistryPresence::EstablishedMissing => {
+                return Err(M1ProjectIndexError::new(
+                    "m1_project_index_registry_missing",
+                ));
+            }
+            RegistryPresence::Present => self.load_registry(LoadMode::Required)?,
+        };
+        let mut added = false;
+        for entry in &source.projects {
+            let matches = registry
+                .projects
+                .iter()
+                .filter(|project| project.exact_alias.as_deref() == Some(entry.exact_alias.as_str()))
+                .count();
+            match matches {
+                1 => {}
+                0 => {
+                    let project_id = format!("project:{}", Uuid::new_v4());
+                    validate_canonical_project_id(&project_id)?;
+                    let next_revision = registry.registry_revision.checked_add(1).ok_or_else(
+                        || M1ProjectIndexError::new("m1_project_index_revision_overflow"),
+                    )?;
+                    registry.registry_revision = next_revision;
+                    registry.projects.push(M1StoredProject {
+                        project_id,
+                        exact_alias: Some(entry.exact_alias.clone()),
+                        resolver_revision: M1_RESOLVER_REVISION,
+                    });
+                    added = true;
+                }
+                _ => {
+                    return Err(M1ProjectIndexError::new(
+                        "m1_project_index_registry_malformed",
+                    ));
+                }
+            }
+        }
+        if added {
+            self.persist_registry(&registry)?;
+        }
+        Ok(())
+    }
+
     fn load_registry(&self, mode: LoadMode) -> Result<M1ProjectIndexRegistry, M1ProjectIndexError> {
         if !self.registry_path.exists() {
             return match mode {
@@ -819,6 +918,129 @@ fn is_path_claim(value: &str) -> bool {
         || value.contains('\\')
         || value.starts_with('.')
         || Path::new(value).is_absolute()
+}
+
+fn admit_ordinary_root_for_identity_source(
+    app_data_root: &Path,
+) -> Result<PathBuf, M1ProjectIndexError> {
+    if !app_data_root.is_absolute()
+        || app_data_root
+            .components()
+            .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
+        return Err(M1ProjectIndexError::new(
+            "m1_project_index_clean_absolute_root_required",
+        ));
+    }
+    if app_data_root.file_name().and_then(|name| name.to_str())
+        != Some(M1_ORDINARY_APP_DATA_DIR_NAME)
+    {
+        return Err(M1ProjectIndexError::new(
+            "m1_ordinary_app_data_root_identity_mismatch",
+        ));
+    }
+    match fs::symlink_metadata(app_data_root) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => Err(
+            M1ProjectIndexError::new("m1_project_index_regular_root_required"),
+        ),
+        Ok(_) => {
+            let canonical = fs::canonicalize(app_data_root).map_err(|_| {
+                M1ProjectIndexError::new("m1_ordinary_app_data_root_unavailable")
+            })?;
+            if canonical != app_data_root {
+                return Err(M1ProjectIndexError::new(
+                    "m1_project_index_root_identity_changed",
+                ));
+            }
+            Ok(canonical)
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            Err(M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MISSING))
+        }
+        Err(_) => Err(M1ProjectIndexError::new(
+            "m1_ordinary_app_data_root_unavailable",
+        )),
+    }
+}
+
+fn load_ordinary_identity_source(
+    root: &Path,
+) -> Result<M1OrdinaryIdentitySourceDocument, M1ProjectIndexError> {
+    let path = root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return Err(M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MISSING));
+        }
+        Err(_) => {
+            return Err(M1ProjectIndexError::new(
+                M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE,
+            ));
+        }
+    };
+    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+        return Err(M1ProjectIndexError::new(
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
+        ));
+    }
+    let bytes = fs::read(&path).map_err(|_| {
+        M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE)
+    })?;
+    let document: M1OrdinaryIdentitySourceDocument = serde_json::from_slice(&bytes)
+        .map_err(|_| M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MALFORMED))?;
+    if document.schema_version != M1_ORDINARY_IDENTITY_SOURCE_SCHEMA_VERSION {
+        return Err(M1ProjectIndexError::new(
+            M1_ORDINARY_IDENTITY_SOURCE_UNSUPPORTED,
+        ));
+    }
+    validate_ordinary_identity_source(&document)?;
+    Ok(document)
+}
+
+fn validate_source_token(value: &str) -> Result<(), M1ProjectIndexError> {
+    if value.is_empty() || value.chars().any(char::is_control) {
+        return Err(M1ProjectIndexError::new(
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
+        ));
+    }
+    Ok(())
+}
+
+fn validate_ordinary_identity_source(
+    document: &M1OrdinaryIdentitySourceDocument,
+) -> Result<(), M1ProjectIndexError> {
+    validate_source_token(&document.source_id)?;
+    if document.source_revision == 0 || document.projects.is_empty() {
+        return Err(M1ProjectIndexError::new(
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
+        ));
+    }
+    let mut entry_ids = Vec::new();
+    let mut aliases = Vec::new();
+    for entry in &document.projects {
+        validate_source_token(&entry.entry_id)?;
+        validate_source_token(&entry.source_ref)?;
+        if validate_alias_shape(&entry.exact_alias).is_err()
+            || is_scratch_claim(&entry.exact_alias)
+            || is_m5_helper_claim(&entry.exact_alias)
+        {
+            return Err(M1ProjectIndexError::new(
+                M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
+            ));
+        }
+        if entry_ids.iter().any(|item: &String| item == &entry.entry_id)
+            || aliases
+                .iter()
+                .any(|item: &String| item == &entry.exact_alias)
+        {
+            return Err(M1ProjectIndexError::new(
+                M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
+            ));
+        }
+        entry_ids.push(entry.entry_id.clone());
+        aliases.push(entry.exact_alias.clone());
+    }
+    Ok(())
 }
 
 fn admit_existing_clean_root(
@@ -1703,5 +1925,294 @@ mod tests {
         );
         let parent = root.parent().expect("parent").to_path_buf();
         let _ = fs::remove_dir_all(parent);
+    }
+
+    const M5R00_SOURCE_ALIAS: &str = "syn-m5r00-ordinary-alias";
+    const M5R00_SOURCE_REF: &str = "synthetic-legacy-ref";
+
+    fn ordinary_identity_source_json(alias: &str, mode: &str) -> String {
+        format!(
+            r#"{{
+              "schema_version": "m1.ordinary-project-identity-source.v1",
+              "source_id": "syn-m5r00-synthetic-source",
+              "source_revision": 1,
+              "projects": [{{
+                "entry_id": "entry-1",
+                "mode": "{mode}",
+                "source_ref": "{M5R00_SOURCE_REF}",
+                "exact_alias": "{alias}"
+              }}]
+            }}"#
+        )
+    }
+
+    fn write_ordinary_identity_source(root: &Path, alias: &str) {
+        fs::write(
+            root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            ordinary_identity_source_json(alias, "create"),
+        )
+        .expect("write ordinary identity source");
+    }
+
+    fn registry_revision_and_bytes(root: &Path) -> (u64, Vec<u8>) {
+        let bytes = fs::read(root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH))
+            .expect("read persisted registry");
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("parse persisted registry");
+        let revision = value
+            .get("registry_revision")
+            .and_then(serde_json::Value::as_u64)
+            .expect("registry revision");
+        (revision, bytes)
+    }
+
+    fn write_synthetic_ordinary_product_seeds(root: &Path) -> (PathBuf, PathBuf) {
+        let seed_dir = root
+            .parent()
+            .expect("ordinary named root parent")
+            .join("synthetic-ordinary-product-seeds");
+        fs::create_dir_all(&seed_dir).expect("create synthetic seed dir");
+        let index_path = seed_dir.join("codex-index.json");
+        let tasks_path = seed_dir.join("README.md");
+        fs::write(&index_path, r#"{"projects":[]}"#).expect("write synthetic index seed");
+        fs::write(&tasks_path, "# synthetic ordinary tasks\n").expect("write synthetic tasks seed");
+        (index_path, tasks_path)
+    }
+
+    fn invoke_ordinary_tauri_constructor(root: &Path) -> Result<crate::AppState, String> {
+        let (index_seed, tasks_seed) = write_synthetic_ordinary_product_seeds(root);
+        crate::AppState::try_new_with_tauri_ordinary_product_seeds(
+            root,
+            &index_seed,
+            &tasks_seed,
+        )
+    }
+
+    fn ordinary_tauri_constructor_error(root: &Path) -> String {
+        match invoke_ordinary_tauri_constructor(root) {
+            Ok(_) => panic!("ordinary Tauri constructor must fail closed"),
+            Err(error) => error,
+        }
+    }
+
+    fn app_state_after_ordinary_tauri_constructor(root: &Path) -> crate::AppState {
+        invoke_ordinary_tauri_constructor(root)
+            .expect("ordinary Tauri constructor must return Ok")
+    }
+
+    #[test]
+    fn m1_ordinary_identity_source_first_tauri_constructor_registers_opaque_id() {
+        let root = ordinary_named_root();
+        write_ordinary_identity_source(&root, M5R00_SOURCE_ALIAS);
+        fs::write(
+            root.join("codex-index.json"),
+            r#"{"projects":[{"project_root":"/legacy/never-imported"}]}"#,
+        )
+        .expect("write unused legacy index");
+
+        let state = app_state_after_ordinary_tauri_constructor(&root);
+        let project_id = state
+            .m1_project_index_authority()
+            .expect("ordinary authority")
+            .resolve_exact_alias(M5R00_SOURCE_ALIAS)
+            .expect("registered alias");
+        validate_canonical_project_id(project_id.as_str()).expect("opaque uuid");
+        assert!(project_id.as_str().starts_with("project:"));
+        assert_ne!(project_id.as_str(), M5R00_SOURCE_ALIAS);
+        assert_ne!(project_id.as_str(), slug_like_id(M5R00_SOURCE_ALIAS));
+        assert!(!project_id.as_str().contains(M5R00_SOURCE_REF));
+        assert!(!project_id.as_str().contains("entry-1"));
+        assert_eq!(
+            state
+                .m1_project_index_authority()
+                .expect("ordinary authority")
+                .resolve_exact_alias("/legacy/never-imported")
+                .unwrap_err()
+                .code,
+            "m1_alias_unknown"
+        );
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m1_ordinary_identity_source_replay_is_idempotent_and_survives_app_state_rebuild() {
+        let root = ordinary_named_root();
+        write_ordinary_identity_source(&root, M5R00_SOURCE_ALIAS);
+        let first = app_state_after_ordinary_tauri_constructor(&root);
+        let first_id = first
+            .m1_project_index_authority()
+            .expect("ordinary authority")
+            .resolve_exact_alias(M5R00_SOURCE_ALIAS)
+            .expect("first resolve")
+            .as_str()
+            .to_string();
+        let (first_revision, first_bytes) = registry_revision_and_bytes(&root);
+        drop(first);
+
+        let _second = app_state_after_ordinary_tauri_constructor(&root);
+        let (second_revision, second_bytes) = registry_revision_and_bytes(&root);
+        assert_eq!(first_revision, second_revision);
+        assert_eq!(first_bytes, second_bytes);
+
+        let rebuilt = app_state_after_ordinary_tauri_constructor(&root);
+        let rebuilt_id = rebuilt
+            .m1_project_index_authority()
+            .expect("rebuilt authority")
+            .resolve_exact_alias(M5R00_SOURCE_ALIAS)
+            .expect("rebuilt resolve");
+        assert_eq!(rebuilt_id.as_str(), first_id);
+        assert_eq!(
+            rebuilt
+                .m1_project_index_authority()
+                .expect("rebuilt authority")
+                .resolve_canonical_project_id(&first_id)
+                .expect("canonical after rebuild")
+                .as_str(),
+            first_id
+        );
+        let (third_revision, third_bytes) = registry_revision_and_bytes(&root);
+        assert_eq!(first_revision, third_revision);
+        assert_eq!(first_bytes, third_bytes);
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m1_ordinary_identity_source_missing_and_corrupt_fail_closed_without_registry_write() {
+        let root = ordinary_named_root();
+        fs::write(
+            root.join("codex-index.json"),
+            r#"{"projects":[{"project_root":"/legacy/never-imported"}]}"#,
+        )
+        .expect("write unused legacy index");
+        assert_eq!(
+            ordinary_tauri_constructor_error(&root),
+            M1_ORDINARY_IDENTITY_SOURCE_MISSING
+        );
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        assert!(!root.join("m1").exists());
+        assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
+
+        fs::write(root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME), "{not-json")
+            .expect("write corrupt source");
+        assert_eq!(
+            ordinary_tauri_constructor_error(&root),
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+
+        fs::write(
+            root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            ordinary_identity_source_json(M5R00_SOURCE_ALIAS, "create").replace(
+                M1_ORDINARY_IDENTITY_SOURCE_SCHEMA_VERSION,
+                "m1.ordinary-project-identity-source.v0",
+            ),
+        )
+        .expect("write unsupported source");
+        assert_eq!(
+            ordinary_tauri_constructor_error(&root),
+            M1_ORDINARY_IDENTITY_SOURCE_UNSUPPORTED
+        );
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+
+        fs::write(
+            root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            ordinary_identity_source_json(M5R00_SOURCE_ALIAS, "import_legacy"),
+        )
+        .expect("write invalid mode");
+        assert_eq!(
+            ordinary_tauri_constructor_error(&root),
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m1_ordinary_identity_source_registry_missing_and_corrupt_fail_closed() {
+        let root = ordinary_named_root();
+        write_ordinary_identity_source(&root, M5R00_SOURCE_ALIAS);
+        fs::create_dir_all(root.join("m1")).expect("create established m1 dir");
+        assert_eq!(
+            ordinary_tauri_constructor_error(&root),
+            "m1_project_index_registry_missing"
+        );
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+
+        fs::write(root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH), "{not-json")
+            .expect("write corrupt registry");
+        assert_eq!(
+            ordinary_tauri_constructor_error(&root),
+            "m1_project_index_registry_malformed"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH))
+                .expect("retain corrupt registry"),
+            "{not-json"
+        );
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m1_ordinary_identity_source_replay_has_tauri_caller_and_skips_legacy_index() {
+        let lib = include_str!("lib.rs");
+        let tauri = lib
+            .find("fn try_new_with_tauri_app_data_root(app_data_root: &Path)")
+            .expect("ordinary Tauri constructor");
+        let helper = lib
+            .find("fn try_new_with_tauri_ordinary_product_seeds(")
+            .expect("shared ordinary Tauri helper");
+        let replay = lib
+            .find("replay_ordinary_identity_source")
+            .expect("identity source replay caller");
+        let ordinary = lib
+            .find("fn try_new_with_ordinary_product_ports")
+            .expect("shared ordinary ports");
+        assert!(tauri < helper);
+        assert!(helper < replay);
+        assert!(replay < ordinary);
+        assert_eq!(lib.matches("replay_ordinary_identity_source").count(), 1);
+        let wrapper = &lib[tauri..helper];
+        assert!(wrapper.contains("try_new_with_tauri_ordinary_product_seeds"));
+        assert!(wrapper.contains("../../index-kernel/codex-index.json"));
+        assert!(wrapper.contains("../../../tasks/README.md"));
+        assert!(!wrapper.contains("#[cfg(test)]"));
+        let helper_src = &lib[helper..ordinary];
+        assert!(!helper_src.contains("#[cfg(test)]"));
+        assert!(helper_src.contains("replay_ordinary_identity_source"));
+        assert!(helper_src.contains("try_new_with_ordinary_product_ports"));
+
+        let production = include_str!("m1_project_index.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production owner");
+        assert!(production.contains("fn replay_ordinary_identity_source"));
+        assert!(production.contains("deny_unknown_fields"));
+        assert!(!production.contains("codex-index.json"));
+        assert!(!production.contains("fn project_id("));
+
+        let tests = include_str!("m1_project_index.rs");
+        let seed_helper = tests
+            .find("fn write_synthetic_ordinary_product_seeds")
+            .expect("synthetic seed helper");
+        let invoke = tests
+            .find("fn invoke_ordinary_tauri_constructor")
+            .expect("m5r00 constructor helper");
+        let invoke_end = tests[invoke..]
+            .find("fn ordinary_tauri_constructor_error")
+            .map(|offset| invoke + offset)
+            .expect("constructor helper bound");
+        let seed_src = &tests[seed_helper..invoke];
+        let invoke_src = &tests[invoke..invoke_end];
+        assert!(seed_src.contains(r#"{"projects":[]}"#));
+        assert!(seed_src.contains("# synthetic ordinary tasks\\n"));
+        assert!(!seed_src.contains("../../index-kernel/codex-index.json"));
+        assert!(!seed_src.contains("fs::read"));
+        assert!(invoke_src.contains("try_new_with_tauri_ordinary_product_seeds"));
+        assert!(!invoke_src.contains("../../index-kernel/codex-index.json"));
+        assert!(!invoke_src.contains("try_new_with_tauri_app_data_root("));
     }
 }
