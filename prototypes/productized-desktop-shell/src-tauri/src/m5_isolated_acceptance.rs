@@ -75,7 +75,11 @@ pub(crate) fn run_authorized_followthrough(
     if pending.grant_id != grant_id || pending.project_id != project_id {
         return Err("followthrough_dispatch_join_failed".into());
     }
-    let (dispatch, _attempt) = complete_dispatch_readback(store, dispatch_id, now_ms)?;
+    let (dispatch, _attempt) = complete_dispatch_readback(
+        store,
+        crate::m5_orchestration_service::DispatchReadbackSource::ExactStoredDispatch(dispatch_id),
+        now_ms,
+    )?;
     let mut runtime = SynNativeAgentRuntime::new();
     let workcell = WorkcellRun {
         workcell_id: format!("wc-{project_id}"),

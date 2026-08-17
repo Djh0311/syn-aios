@@ -23,7 +23,7 @@ const ENTRIES: &[RunnerEntry] = &[
     },
     RunnerEntry {
         id: "M5-SE-002",
-        source_symbol: "admit_current_granted_runtime",
+        source_symbol: "run_m5_authorized_runtime_with_state",
         class: RunnerEntryClass::NewGrant,
     },
     RunnerEntry {
@@ -123,11 +123,6 @@ const ENTRIES: &[RunnerEntry] = &[
     },
 ];
 
-const REQUIRED_M5_ENTRY_IDS: &[(&str, &str)] = &[
-    ("M5-SE-001", "admit_granted_side_effect"),
-    ("M5-SE-002", "admit_current_granted_runtime"),
-];
-
 const INVENTORY_IDS: &[&str] = &[
     "RUN-001", "RUN-002", "RUN-003", "RUN-004", "RUN-005", "RUN-006", "RUN-007", "RUN-008",
     "RUN-009", "RUN-010", "RUN-011", "RUN-012", "BG-001", "BG-002", "BG-003", "BG-004", "BG-005",
@@ -177,51 +172,79 @@ mod tests {
     }
 
     #[test]
-    fn required_m5_entries_bind_real_admission_symbols() {
-        for (id, symbol) in REQUIRED_M5_ENTRY_IDS {
-            let entry = ENTRIES
-                .iter()
-                .find(|entry| entry.id == *id)
-                .unwrap_or_else(|| panic!("missing required M5 entry {id}"));
-            assert_eq!(entry.source_symbol, *symbol);
-            assert_eq!(entry.class, RunnerEntryClass::NewGrant);
-        }
-        let product = include_str!("m5_product_commands.rs");
-        let gateway = include_str!("m5_side_effect_entry.rs");
-        assert!(product.contains("fn admit_current_granted_runtime("));
-        assert!(gateway.contains("fn admit_granted_side_effect("));
-        assert!(product.contains("fn run_m5_authorized_runtime("));
-        let wrapper = product
-            .split("pub(crate) fn run_m5_authorized_runtime(")
-            .nth(1)
-            .expect("wrapper");
-        assert!(wrapper.contains("run_m5_authorized_runtime_with_state(&state, request)"));
+    fn required_m5_se_002_binds_product_runtime_symbol() {
+        let entry = ENTRIES
+            .iter()
+            .find(|entry| entry.id == "M5-SE-002")
+            .expect("missing required M5-SE-002");
+        assert_eq!(entry.source_symbol, "run_m5_authorized_runtime_with_state");
+        assert_eq!(entry.class, RunnerEntryClass::NewGrant);
+        let _bound: fn(
+            &crate::AppState,
+            crate::m5_product_commands::M5FormalStepRequest,
+        ) -> Result<crate::m5_product_commands::M5FormalStepResponse, String> =
+            crate::m5_product_commands::run_m5_authorized_runtime_with_state;
+        assert_eq!(
+            entry.source_symbol,
+            stringify!(run_m5_authorized_runtime_with_state)
+        );
+        let se001 = ENTRIES
+            .iter()
+            .find(|entry| entry.id == "M5-SE-001")
+            .expect("missing required M5-SE-001");
+        assert_eq!(se001.source_symbol, "admit_granted_side_effect");
+        let _gateway: fn(
+            &crate::m5_orchestration_store::M5OrchestrationStore,
+            &crate::m5_orchestration_identity::GrantId,
+            crate::m5_gateway_traits::GrantUseRequest,
+        ) -> Result<
+            crate::m5_side_effect_entry::SideEffectAdmission,
+            crate::m5_gateway_traits::GatewayError,
+        > = crate::m5_side_effect_entry::admit_granted_side_effect;
+    }
+
+    #[test]
+    fn tauri_runtime_wrapper_is_pure_delegate() {
+        let src = include_str!("m5_product_commands.rs");
+        let start = src
+            .find("pub(crate) fn run_m5_authorized_runtime(")
+            .expect("tauri wrapper");
+        let next = src[start + 1..]
+            .find("\npub(crate) fn ")
+            .map(|idx| start + 1 + idx)
+            .expect("next product fn");
+        let wrapper = &src[start..next];
+        assert!(
+            wrapper.contains("run_m5_authorized_runtime_with_state(&state, request)"),
+            "tauri wrapper must be a pure delegate"
+        );
+        assert!(!wrapper.contains("admit_current_granted_runtime"));
+        assert!(!wrapper.contains("complete_dispatch_readback"));
+        assert!(!wrapper.contains("run_admitted_workcell"));
+        assert!(!wrapper.contains("run_authorized_workcell"));
     }
 
     #[test]
     fn product_workcell_has_no_unregistered_bypass() {
         let product = include_str!("m5_product_commands.rs");
         let isolated = include_str!("m5_isolated_acceptance.rs");
+        let formal_start = product
+            .find("pub(crate) fn run_m5_authorized_runtime_with_state(")
+            .expect("formal runtime");
+        let formal_end = product[formal_start + 1..]
+            .find("\npub(crate) fn ")
+            .map(|idx| formal_start + 1 + idx)
+            .expect("next product fn");
+        let formal = &product[formal_start..formal_end];
         assert_eq!(
-            product.matches("run_authorized_workcell").count(),
+            formal.matches("run_admitted_workcell").count(),
             1,
-            "formal runtime must have exactly one workcell callsite"
+            "formal runtime must have exactly one admitted workcell callsite"
         );
-        let admit = product
-            .find("fn admit_current_granted_runtime(")
-            .expect("admission symbol");
-        let admit_call = product
-            .find("let admitted = admit_current_granted_runtime(")
-            .expect("admission call");
-        let readback = product
-            .find("complete_dispatch_readback")
-            .expect("dispatch readback");
-        let workcell = product
-            .find("run_authorized_workcell")
-            .expect("workcell callsite");
-        assert!(admit < admit_call);
-        assert!(admit_call < readback);
-        assert!(readback < workcell);
+        assert!(
+            !product.contains("run_authorized_workcell"),
+            "production runtime must not call the test-only workcell helper"
+        );
         assert!(!product.contains("fail_cell"));
         assert!(!product.contains("-fail"));
         let follow = isolated

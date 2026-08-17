@@ -5,7 +5,10 @@ use crate::m5_agent_runtime::{
     AgentRuntimeAdapter, RuntimeFault, SynNativeAgentRuntime, WorkcellRun,
 };
 use crate::m5_orchestration_identity::{AttemptId, OrchestrationId, WorkflowRunId};
+use crate::m5_orchestration_service::load_joined_dispatch_chain;
 use crate::m5_orchestration_store::M5OrchestrationStore;
+use crate::m5_prepared_attempt::AttemptState;
+use crate::m5_runtime_admission::AdmittedRuntimeCapability;
 use crate::m5_runtime_receipt::{EnforcementStatus, RuntimeReceipt};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -284,6 +287,48 @@ pub(crate) fn resume_operation(
     Ok(op.state)
 }
 
+pub(crate) fn run_admitted_workcell(
+    store: &M5OrchestrationStore,
+    admission: AdmittedRuntimeCapability,
+    runtime: &mut dyn AgentRuntimeAdapter,
+    workcell: &WorkcellRun,
+    now_ms: i64,
+    fault: RuntimeFault,
+) -> Result<RuntimeReceipt, String> {
+    let dispatch_id = admission.dispatch_id().to_string();
+    let effect_id = admission.effect_id().to_string();
+    let command = admission.command().to_string();
+    let chain = load_joined_dispatch_chain(store, &dispatch_id, now_ms)?;
+    admission.consume_matching_stored(
+        &chain.grant,
+        &chain.dispatch,
+        &chain.attempt,
+        workcell,
+        now_ms,
+    )?;
+    if chain.dispatch.state != "DISPATCHED" {
+        return Err("dispatch_readback_required".to_string());
+    }
+    if chain.attempt.state != AttemptState::Dispatched {
+        return Err("attempt_not_dispatched".to_string());
+    }
+    if workcell.effect_id.trim().is_empty()
+        || workcell.effect_id != chain.dispatch.effect_id
+        || workcell.effect_id != chain.grant.effect_key
+        || workcell.effect_id != effect_id
+        || workcell.parent_grant_id != chain.grant.grant_id.as_str()
+        || workcell.attempt_id != chain.attempt.attempt_id.as_str()
+        || workcell.dispatch_id != chain.dispatch.dispatch_id
+        || workcell.actor_binding != chain.grant.worker_role_session_id
+        || workcell.command != command
+        || !chain.grant.allows_command(&workcell.command)
+    {
+        return Err("workcell_admission_join_failed".to_string());
+    }
+    persist_and_execute_workcell(store, runtime, workcell, &chain.grant, now_ms, fault)
+}
+
+#[cfg(test)]
 pub(crate) fn run_authorized_workcell(
     store: &M5OrchestrationStore,
     runtime: &mut dyn AgentRuntimeAdapter,
@@ -303,7 +348,7 @@ pub(crate) fn run_authorized_workcell(
     if dispatch.state != "DISPATCHED" {
         return Err("dispatch_readback_required".to_string());
     }
-    if attempt.state != crate::m5_prepared_attempt::AttemptState::Dispatched {
+    if attempt.state != AttemptState::Dispatched {
         return Err("attempt_not_dispatched".to_string());
     }
     if workcell.effect_id.trim().is_empty()
@@ -329,6 +374,17 @@ pub(crate) fn run_authorized_workcell(
     {
         return Err("workcell_attempt_join_failed".to_string());
     }
+    persist_and_execute_workcell(store, runtime, workcell, &grant, now_ms, fault)
+}
+
+fn persist_and_execute_workcell(
+    store: &M5OrchestrationStore,
+    runtime: &mut dyn AgentRuntimeAdapter,
+    workcell: &WorkcellRun,
+    grant: &crate::m5_execution_grant::ExecutionGrant,
+    now_ms: i64,
+    fault: RuntimeFault,
+) -> Result<RuntimeReceipt, String> {
     let mut op = DurableOperation {
         operation_id: format!("op-{}", workcell.workcell_id),
         attempt_id: AttemptId::new(workcell.attempt_id.clone()),
@@ -372,6 +428,7 @@ mod tests {
     use super::*;
     use crate::m5_orchestration_service::{
         complete_dispatch_readback, prepare_and_dispatch, AuthorizedExecutionRequest, ChainFault,
+        DispatchReadbackSource,
     };
 
     fn req() -> AuthorizedExecutionRequest {
@@ -397,7 +454,12 @@ mod tests {
     fn cell(store: &M5OrchestrationStore, suffix: &str) -> WorkcellRun {
         let chain = prepare_and_dispatch(store, req(), ChainFault::None).unwrap();
         let dispatch_id = chain.dispatch_id.as_ref().unwrap().as_str().to_string();
-        complete_dispatch_readback(store, &dispatch_id, 2_000).unwrap();
+        complete_dispatch_readback(
+            store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            2_000,
+        )
+        .unwrap();
         let grant = store
             .load_grant(chain.grant_id.as_ref().unwrap().as_str())
             .unwrap()

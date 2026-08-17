@@ -77,6 +77,7 @@ mod m5_product_commands;
 mod m5_project_summary;
 mod m5_project_supervisor;
 mod m5_runner_entry_registry;
+mod m5_runtime_admission;
 mod m5_runtime_receipt;
 mod m5_side_effect_entry;
 // Historical generic candidate traits are deliberately crate-private.  The

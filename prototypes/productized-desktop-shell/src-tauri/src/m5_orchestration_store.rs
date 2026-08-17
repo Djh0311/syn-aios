@@ -585,13 +585,34 @@ impl M5OrchestrationStore {
     }
 
     pub(crate) fn persist_receipt(&self, receipt: &CommandReceiptDto) -> Result<(), String> {
-        self.conn
-            .execute(
-                "INSERT OR REPLACE INTO m5_command_receipts (
+        self.insert_receipt(receipt, true)
+    }
+
+    pub(crate) fn persist_receipt_once(&self, receipt: &CommandReceiptDto) -> Result<(), String> {
+        self.insert_receipt(receipt, false)
+    }
+
+    fn insert_receipt(
+        &self,
+        receipt: &CommandReceiptDto,
+        replace: bool,
+    ) -> Result<(), String> {
+        let sql = if replace {
+            "INSERT OR REPLACE INTO m5_command_receipts (
                     receipt_id, command_id, idempotency_key, request_hash, actor_id, scope_ref,
                     current_object_ref, policy_decision_ref, status, correlation_id, accepted_at,
                     result_ref, result_hash, committed_revision, error_code, created_at
-                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
+                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)"
+        } else {
+            "INSERT INTO m5_command_receipts (
+                    receipt_id, command_id, idempotency_key, request_hash, actor_id, scope_ref,
+                    current_object_ref, policy_decision_ref, status, correlation_id, accepted_at,
+                    result_ref, result_hash, committed_revision, error_code, created_at
+                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)"
+        };
+        self.conn
+            .execute(
+                sql,
                 params![
                     receipt.receipt_id,
                     receipt.command_id,
@@ -613,6 +634,163 @@ impl M5OrchestrationStore {
             )
             .map_err(|e| format!("persist_receipt:{e}"))?;
         Ok(())
+    }
+
+    pub(crate) fn load_receipt(
+        &self,
+        receipt_id: &str,
+    ) -> Result<Option<CommandReceiptDto>, String> {
+        self.conn
+            .query_row(
+                "SELECT receipt_id, command_id, idempotency_key, request_hash, actor_id, scope_ref,
+                        current_object_ref, policy_decision_ref, status, correlation_id, accepted_at,
+                        result_ref, result_hash, committed_revision, error_code, created_at
+                 FROM m5_command_receipts WHERE receipt_id = ?1",
+                [receipt_id],
+                |row| {
+                    Ok(CommandReceiptDto {
+                        receipt_id: row.get(0)?,
+                        command_id: row.get(1)?,
+                        idempotency_key: row.get(2)?,
+                        request_hash: row.get(3)?,
+                        actor_id: row.get(4)?,
+                        scope_ref: row.get(5)?,
+                        current_object_ref: row.get(6)?,
+                        policy_decision_ref: row.get(7)?,
+                        status: parse_receipt_status(&row.get::<_, String>(8)?),
+                        correlation_id: row.get(9)?,
+                        accepted_at: row.get(10)?,
+                        result_ref: row.get(11)?,
+                        result_hash: row.get(12)?,
+                        committed_revision: row.get(13)?,
+                        error_code: row.get(14)?,
+                        created_at: row.get(15)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|e| format!("load_receipt:{e}"))
+    }
+
+    pub(crate) fn count_command_receipts_with_hash(&self, request_hash: &str) -> Result<i64, String> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM m5_command_receipts WHERE request_hash = ?1",
+                [request_hash],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("count_receipts:{e}"))
+    }
+
+    pub(crate) fn count_events_of_type(&self, event_type: &str) -> Result<i64, String> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM m5_events WHERE event_type = ?1",
+                [event_type],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("count_events:{e}"))
+    }
+
+    pub(crate) fn count_audits_with_decision(&self, decision: &str) -> Result<i64, String> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM m5_audit_records WHERE decision = ?1",
+                [decision],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("count_audits:{e}"))
+    }
+
+    pub(crate) fn has_event(&self, event_id: &str) -> Result<bool, String> {
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM m5_events WHERE event_id = ?1",
+                [event_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("has_event:{e}"))?;
+        Ok(count == 1)
+    }
+
+    pub(crate) fn has_audit(&self, audit_id: &str) -> Result<bool, String> {
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM m5_audit_records WHERE audit_id = ?1",
+                [audit_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("has_audit:{e}"))?;
+        Ok(count == 1)
+    }
+
+    pub(crate) fn load_event(
+        &self,
+        event_id: &str,
+    ) -> Result<Option<WorkbenchEventEnvelopeDto>, String> {
+        self.conn
+            .query_row(
+                "SELECT event_id, event_type, occurred_at, actor_id, scope_ref, source_ref,
+                        source_revision, command_id, correlation_id, causation_id, schema_version,
+                        sensitivity, payload_hash, created_at
+                 FROM m5_events WHERE event_id = ?1",
+                [event_id],
+                |row| {
+                    Ok(WorkbenchEventEnvelopeDto {
+                        event_id: row.get(0)?,
+                        event_type: row.get(1)?,
+                        occurred_at: row.get(2)?,
+                        actor_id: row.get(3)?,
+                        scope_ref: row.get(4)?,
+                        source_ref: row.get(5)?,
+                        source_revision: row.get(6)?,
+                        command_id: row.get(7)?,
+                        correlation_id: row.get(8)?,
+                        causation_id: row.get(9)?,
+                        trace_context: None,
+                        schema_version: row.get(10)?,
+                        sensitivity: parse_event_sensitivity(&row.get::<_, String>(11)?),
+                        summary_ref: None,
+                        payload_ref: None,
+                        payload_hash: row.get(12)?,
+                        created_at: row.get(13)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|e| format!("load_event:{e}"))
+    }
+
+    pub(crate) fn load_audit(&self, audit_id: &str) -> Result<Option<AuditRecordDto>, String> {
+        self.conn
+            .query_row(
+                "SELECT audit_id, action, decision, reason_code, actor_id, scope_ref, subject_ref,
+                        command_id, correlation_id, occurred_at, sensitivity, created_at
+                 FROM m5_audit_records WHERE audit_id = ?1",
+                [audit_id],
+                |row| {
+                    Ok(AuditRecordDto {
+                        audit_id: row.get(0)?,
+                        action: parse_audit_action(&row.get::<_, String>(1)?),
+                        decision: row.get(2)?,
+                        reason_code: row.get(3)?,
+                        actor_id: row.get(4)?,
+                        scope_ref: row.get(5)?,
+                        subject_ref: row.get(6)?,
+                        command_id: row.get(7)?,
+                        correlation_id: row.get(8)?,
+                        occurred_at: row.get(9)?,
+                        sensitivity: parse_audit_sensitivity(&row.get::<_, String>(10)?),
+                        scrub_result: None,
+                        source_refs: None,
+                        created_at: row.get(11)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|e| format!("load_audit:{e}"))
     }
 
     pub(crate) fn persist_event(&self, event: &WorkbenchEventEnvelopeDto) -> Result<(), String> {
@@ -903,6 +1081,50 @@ fn map_outbox_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OutboxItemDto> {
         attempt_count: row.get(18)?,
         next_retry_not_before: row.get(19)?,
     })
+}
+
+fn parse_receipt_status(value: &str) -> CommandReceiptStatus {
+    match value {
+        "DENIED" => CommandReceiptStatus::Denied,
+        "NEEDS_CONFIRMATION" => CommandReceiptStatus::NeedsConfirmation,
+        "COMMITTED" => CommandReceiptStatus::Committed,
+        "EXTERNAL_PENDING" => CommandReceiptStatus::ExternalPending,
+        "EXTERNAL_RESULT" => CommandReceiptStatus::ExternalResult,
+        "PROJECTION_DEGRADED" => CommandReceiptStatus::ProjectionDegraded,
+        "FAILED" => CommandReceiptStatus::Failed,
+        _ => CommandReceiptStatus::Failed,
+    }
+}
+
+fn parse_event_sensitivity(value: &str) -> EventSensitivity {
+    match value {
+        "PUBLIC" => EventSensitivity::Public,
+        "INTERNAL" => EventSensitivity::Internal,
+        "RESTRICTED" => EventSensitivity::Restricted,
+        "SECRET" => EventSensitivity::Secret,
+        _ => EventSensitivity::Internal,
+    }
+}
+
+fn parse_audit_action(value: &str) -> AuditAction {
+    match value {
+        "ALLOWED" => AuditAction::Allowed,
+        "DENIED" => AuditAction::Denied,
+        "COMMITTED" => AuditAction::Committed,
+        "DEGRADED" => AuditAction::Degraded,
+        "QUARANTINED" => AuditAction::Quarantined,
+        _ => AuditAction::Committed,
+    }
+}
+
+fn parse_audit_sensitivity(value: &str) -> AuditSensitivity {
+    match value {
+        "PUBLIC" => AuditSensitivity::Public,
+        "INTERNAL" => AuditSensitivity::Internal,
+        "RESTRICTED" => AuditSensitivity::Restricted,
+        "SECRET" => AuditSensitivity::Secret,
+        _ => AuditSensitivity::Internal,
+    }
 }
 
 fn parse_outbox_status(value: &str) -> OutboxItemStatus {
