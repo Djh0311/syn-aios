@@ -18,6 +18,7 @@ mod formal_memory_lifecycle;
 mod formal_memory_store;
 mod h4_execution_boundary;
 mod h5_project_dispatch_bridge;
+mod m1_project_index;
 mod manual_relay;
 mod mature_pattern_governance;
 mod mature_pattern_store;
@@ -33,8 +34,6 @@ mod memory_lint_store;
 mod observation_store;
 mod operation_control;
 mod ordinary_product_storage_bootstrap;
-mod m1_project_index;
-mod m1_project_role_identity;
 mod page_read_model;
 mod plan_authorization_store;
 mod project_consultation_proposal_store;
@@ -156,12 +155,11 @@ struct AppState {
     #[cfg(not(test))]
     m4_source_route_registry:
         Option<m4_source_route_resolver::M4RegisteredSourceOwnerRouteRegistry>,
-    // M1I01 owns the server-only project_index registry and project-role
-    // identity authority. Ordinary product composition installs it; legacy
-    // and acceptance hosts keep it unavailable. Renderer/Tauri never see
-    // the raw registry.
+    // M1I01R01 installs only the server-only project_index read port.
+    // Registration/minting is not installed here. A missing registry stays
+    // uninstalled; a lost or corrupt established registry fails closed.
     #[allow(dead_code)]
-    m1_project_index: Option<m1_project_index::M1ProjectIndexAuthority>,
+    m1_project_index: Option<m1_project_index::M1ProjectIndexReadHandle>,
     m5_store_path: Option<PathBuf>,
 }
 include!("types.rs");
@@ -360,10 +358,10 @@ impl AppState {
             m4_secretary_conversation_runtime,
             #[cfg(not(test))]
             m4_source_route_registry: Some(m4_source_route_registry),
-            m1_project_index: Some(
-                m1_project_index::M1ProjectIndexAuthority::open_ordinary_product(app_data_root)
-                    .map_err(|error| error.code)?,
-            ),
+            m1_project_index: m1_project_index::M1ProjectIndexReadHandle::open_ordinary_product(
+                app_data_root,
+            )
+            .map_err(|error| error.code)?,
             m5_store_path: Some(install_m5_store_path(app_data_root)?),
         })
     }
@@ -387,10 +385,12 @@ impl AppState {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn m1_project_index(
+    pub(crate) fn m1_project_index_read_port(
         &self,
-    ) -> Option<&m1_project_index::M1ProjectIndexAuthority> {
-        self.m1_project_index.as_ref()
+    ) -> Option<&dyn m1_project_index::M1ProjectIndexReadPort> {
+        self.m1_project_index
+            .as_ref()
+            .map(|handle| handle as &dyn m1_project_index::M1ProjectIndexReadPort)
     }
 }
 

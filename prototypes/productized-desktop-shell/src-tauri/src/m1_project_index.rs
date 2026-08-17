@@ -1,27 +1,28 @@
-//! Server-only project_index owner for M1I01.
+//! Server-only project_index base for M1I01R01.
 //!
-//! Explicit isolated-project registration mints an opaque random
-//! `project:<uuid>` and three distinct role identities. Roots, locators,
-//! slugs, scratch tokens, caller booleans, and M5 helpers are alias or
-//! resolver inputs only. Legacy index records are never imported.
+//! This owner mints opaque `project:<uuid>` values and stores exact aliases as
+//! resolver inputs. It does not create ActorId, RoleRef, ScopeRef,
+//! CurrentObjectRef, ExecutionChannel, PermissionProfile,
+//! PermissionSnapshotRef, IdentitySnapshot, or M3 RoleSession records.
 
 #![allow(dead_code)]
 
-use crate::m1_project_role_identity::{
-    mint_prefixed_uuid, mint_project_role_identities, project_role_identity_snapshot,
-    M1ProjectIdentityContext, M1ProjectRole, M1ProjectRoleIdentitySnapshot, M1StoredRoleIdentity,
-};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::io::Write;
+use std::fs::{self, File, OpenOptions};
+use std::io::{ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::Duration;
 use uuid::Uuid;
 
-pub(crate) const M1_PROJECT_INDEX_PORT_VERSION: &str = "m1.project-index.authority.v1";
-pub(crate) const M1_PROJECT_INDEX_SCHEMA_VERSION: &str = "m1.project-index.registry.v1";
+pub(crate) const M1_PROJECT_INDEX_PORT_VERSION: &str = "m1.project-index.read-port.v2";
+pub(crate) const M1_PROJECT_INDEX_SCHEMA_VERSION: &str = "m1.project-index.registry.v2";
 pub(crate) const M1_ORDINARY_APP_DATA_DIR_NAME: &str = "local.codex.governance.workbench";
 pub(crate) const M1_ORDINARY_REGISTRY_RELATIVE_PATH: &str = "m1/project-index-v1.json";
+const M1_LOCK_RELATIVE_PATH: &str = ".m1-project-index-v1.lock";
+const M1_RESOLVER_REVISION: u64 = 1;
+const M1_LOCK_RETRY_LIMIT: usize = 256;
+const M1_LOCK_RETRY_DELAY: Duration = Duration::from_millis(5);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct M1ProjectIndexError {
@@ -41,12 +42,6 @@ impl std::fmt::Display for M1ProjectIndexError {
 }
 
 impl std::error::Error for M1ProjectIndexError {}
-
-impl From<String> for M1ProjectIndexError {
-    fn from(code: String) -> Self {
-        Self { code }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct M1ProjectId(String);
@@ -77,13 +72,30 @@ pub(crate) struct M1ProjectRootRef {
     pub(crate) resolver_revision: u64,
 }
 
+pub(crate) trait M1ProjectIndexReadPort {
+    fn resolve_canonical_project_id(&self, claim: &str)
+        -> Result<M1ProjectId, M1ProjectIndexError>;
+    fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError>;
+    fn resolve_project_root_ref(
+        &self,
+        project_root_ref: &M1ProjectRootRef,
+    ) -> Result<M1ProjectId, M1ProjectIndexError>;
+}
+
 #[derive(Clone, Debug)]
-pub(crate) struct M1ProjectIndexAuthority {
+pub(crate) struct M1ProjectIndexReadHandle {
+    store: M1ProjectIndexStore,
+}
+
+#[derive(Clone, Debug)]
+struct M1ProjectIndexStore {
     canonical_app_data_root: PathBuf,
     registry_path: PathBuf,
+    lock_path: PathBuf,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct M1ProjectIndexRegistry {
     schema_version: String,
     registry_revision: u64,
@@ -91,31 +103,51 @@ struct M1ProjectIndexRegistry {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct M1StoredProject {
     project_id: String,
+    #[serde(default)]
     exact_alias: Option<String>,
     resolver_revision: u64,
-    project_revision: u64,
-    scope_id: String,
-    scope_revision: u64,
-    current_object_id: String,
-    binding_revision: u64,
-    issued_at: String,
-    roles: Vec<M1StoredRoleIdentity>,
 }
 
-impl Default for M1ProjectIndexRegistry {
-    fn default() -> Self {
-        Self {
-            schema_version: M1_PROJECT_INDEX_SCHEMA_VERSION.to_string(),
-            registry_revision: 0,
-            projects: Vec::new(),
+struct ExclusiveRegistryLock {
+    path: PathBuf,
+}
+
+impl ExclusiveRegistryLock {
+    fn acquire(path: &Path) -> Result<Self, M1ProjectIndexError> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|_| M1ProjectIndexError::new("m1_project_index_lock_dir_create_failed"))?;
         }
+        for _ in 0..M1_LOCK_RETRY_LIMIT {
+            match OpenOptions::new().write(true).create_new(true).open(path) {
+                Ok(_file) => {
+                    return Ok(Self {
+                        path: path.to_path_buf(),
+                    });
+                }
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => {
+                    thread::sleep(M1_LOCK_RETRY_DELAY);
+                }
+                Err(_) => return Err(M1ProjectIndexError::new("m1_project_index_lock_failed")),
+            }
+        }
+        Err(M1ProjectIndexError::new("m1_project_index_lock_timeout"))
     }
 }
 
-impl M1ProjectIndexAuthority {
-    pub(crate) fn open_ordinary_product(app_data_root: &Path) -> Result<Self, M1ProjectIndexError> {
+impl Drop for ExclusiveRegistryLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+impl M1ProjectIndexReadHandle {
+    pub(crate) fn open_ordinary_product(
+        app_data_root: &Path,
+    ) -> Result<Option<Self>, M1ProjectIndexError> {
         let root =
             admit_existing_clean_root(app_data_root, "m1_ordinary_app_data_root_unavailable")?;
         if root.file_name().and_then(|name| name.to_str()) != Some(M1_ORDINARY_APP_DATA_DIR_NAME) {
@@ -123,116 +155,83 @@ impl M1ProjectIndexAuthority {
                 "m1_ordinary_app_data_root_identity_mismatch",
             ));
         }
-        Self::finish_open(root)
+        Self::open_from_root(root)
     }
 
-    #[cfg(test)]
-    pub(crate) fn open_isolated_fixture(root: &Path) -> Result<Self, M1ProjectIndexError> {
-        let canonical_temp = fs::canonicalize(std::env::temp_dir())
-            .map_err(|_| M1ProjectIndexError::new("m1_isolated_temp_root_unavailable"))?;
-        let canonical_root =
-            admit_existing_clean_root(root, "m1_isolated_fixture_root_unavailable")?;
-        let admitted_name = canonical_root
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or_default();
-        if !canonical_root.starts_with(&canonical_temp) || !admitted_name.starts_with("syn-m1i01-")
-        {
-            return Err(M1ProjectIndexError::new(
-                "m1_isolated_fixture_root_not_admitted",
-            ));
-        }
-        Self::finish_open(canonical_root)
-    }
-
-    fn finish_open(canonical_app_data_root: PathBuf) -> Result<Self, M1ProjectIndexError> {
-        let registry_path = canonical_app_data_root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH);
-        if let Some(parent) = registry_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_create_failed"))?;
-            let canonical_parent = fs::canonicalize(parent)
-                .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_unavailable"))?;
-            if canonical_parent != parent {
-                return Err(M1ProjectIndexError::new(
-                    "m1_project_index_dir_identity_changed",
-                ));
+    fn open_from_root(
+        canonical_app_data_root: PathBuf,
+    ) -> Result<Option<Self>, M1ProjectIndexError> {
+        let store = M1ProjectIndexStore::from_root(canonical_app_data_root);
+        match store.classify_registry_presence()? {
+            RegistryPresence::Absent => Ok(None),
+            RegistryPresence::EstablishedMissing => Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_missing",
+            )),
+            RegistryPresence::Present => {
+                let _ = store.load_registry(LoadMode::Required)?;
+                Ok(Some(Self { store }))
             }
         }
-        let authority = Self {
+    }
+}
+
+impl M1ProjectIndexReadPort for M1ProjectIndexReadHandle {
+    fn resolve_canonical_project_id(
+        &self,
+        claim: &str,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.store.resolve_canonical_project_id(claim)
+    }
+
+    fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.store.resolve_exact_alias(alias)
+    }
+
+    fn resolve_project_root_ref(
+        &self,
+        project_root_ref: &M1ProjectRootRef,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.store.resolve_project_root_ref(project_root_ref)
+    }
+}
+
+impl M1ProjectIndexStore {
+    fn from_root(canonical_app_data_root: PathBuf) -> Self {
+        let registry_path = canonical_app_data_root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH);
+        let lock_path = canonical_app_data_root.join(M1_LOCK_RELATIVE_PATH);
+        Self {
             canonical_app_data_root,
             registry_path,
-        };
-        if authority.registry_path.exists() {
-            let _ = authority.load_registry()?;
-        } else {
-            authority.persist_registry(&M1ProjectIndexRegistry::default())?;
+            lock_path,
         }
-        Ok(authority)
     }
 
-    pub(crate) fn register_isolated_project(
-        &self,
-        request: M1RegisterIsolatedProjectRequest,
-    ) -> Result<M1RegisteredProject, M1ProjectIndexError> {
-        let exact_alias = match request.exact_alias {
-            Some(alias) => Some(validate_alias_for_registration(&alias)?),
-            None => None,
-        };
-        let mut registry = self.load_registry()?;
-        if let Some(alias) = exact_alias.as_deref() {
-            if registry
-                .projects
-                .iter()
-                .any(|project| project.exact_alias.as_deref() == Some(alias))
-            {
-                return Err(M1ProjectIndexError::new("m1_alias_duplicate"));
+    fn classify_registry_presence(&self) -> Result<RegistryPresence, M1ProjectIndexError> {
+        match fs::symlink_metadata(&self.registry_path) {
+            Ok(metadata) if metadata.file_type().is_file() => Ok(RegistryPresence::Present),
+            Ok(_) => Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_malformed",
+            )),
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                let registry_dir = self.registry_path.parent();
+                match registry_dir {
+                    Some(dir) if dir.exists() => Ok(RegistryPresence::EstablishedMissing),
+                    _ => Ok(RegistryPresence::Absent),
+                }
             }
+            Err(_) => Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_unreadable",
+            )),
         }
-
-        let project_id = mint_prefixed_uuid("project:");
-        validate_canonical_project_id(&project_id)?;
-        let issued_at = utc_rfc3339_now()?;
-        let context = M1ProjectIdentityContext {
-            project_id: project_id.clone(),
-            scope_id: mint_prefixed_uuid("scope:"),
-            scope_revision: 1,
-            current_object_id: mint_prefixed_uuid("object:"),
-            binding_revision: 1,
-            issued_at: issued_at.clone(),
-            registry_revision: registry.registry_revision.saturating_add(1),
-            project_revision: 1,
-            resolver_revision: 1,
-        };
-        let roles = mint_project_role_identities(&context)?;
-        registry.registry_revision = context.registry_revision;
-        registry.projects.push(M1StoredProject {
-            project_id: project_id.clone(),
-            exact_alias: exact_alias.clone(),
-            resolver_revision: 1,
-            project_revision: 1,
-            scope_id: context.scope_id,
-            scope_revision: context.scope_revision,
-            current_object_id: context.current_object_id,
-            binding_revision: context.binding_revision,
-            issued_at,
-            roles: roles.to_vec(),
-        });
-        self.persist_registry(&registry)?;
-        Ok(M1RegisteredProject {
-            project_id: M1ProjectId(project_id),
-            exact_alias,
-            resolver_revision: 1,
-            registry_revision: registry.registry_revision,
-        })
     }
 
-    pub(crate) fn resolve_canonical_project_id(
+    fn resolve_canonical_project_id(
         &self,
         claim: &str,
     ) -> Result<M1ProjectId, M1ProjectIndexError> {
         reject_non_canonical_project_id_claim(claim)?;
         validate_canonical_project_id(claim)?;
-        let registry = self.load_registry()?;
+        let registry = self.load_registry(LoadMode::Required)?;
         registry
             .projects
             .iter()
@@ -241,12 +240,9 @@ impl M1ProjectIndexAuthority {
             .ok_or_else(|| M1ProjectIndexError::new("m1_project_id_unknown"))
     }
 
-    pub(crate) fn resolve_exact_alias(
-        &self,
-        alias: &str,
-    ) -> Result<M1ProjectId, M1ProjectIndexError> {
-        let alias = validate_alias_for_resolution(alias)?;
-        let registry = self.load_registry()?;
+    fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError> {
+        let alias = validate_alias_shape(alias)?;
+        let registry = self.load_registry(LoadMode::Required)?;
         let matches = registry
             .projects
             .iter()
@@ -259,13 +255,13 @@ impl M1ProjectIndexAuthority {
         }
     }
 
-    pub(crate) fn resolve_project_root_ref(
+    fn resolve_project_root_ref(
         &self,
         project_root_ref: &M1ProjectRootRef,
     ) -> Result<M1ProjectId, M1ProjectIndexError> {
         let project_id = self.resolve_canonical_project_id(&project_root_ref.project_id)?;
-        let alias = validate_alias_for_resolution(&project_root_ref.normalized_root_alias)?;
-        let registry = self.load_registry()?;
+        let alias = validate_alias_shape(&project_root_ref.normalized_root_alias)?;
+        let registry = self.load_registry(LoadMode::Required)?;
         let stored = registry
             .projects
             .iter()
@@ -281,40 +277,70 @@ impl M1ProjectIndexAuthority {
         Ok(project_id)
     }
 
-    pub(crate) fn project_role_identity(
+    fn register_isolated_project(
         &self,
-        project_id: &str,
-        role: M1ProjectRole,
-    ) -> Result<M1ProjectRoleIdentitySnapshot, M1ProjectIndexError> {
-        let project_id = self.resolve_canonical_project_id(project_id)?;
-        let registry = self.load_registry()?;
-        let stored = registry
-            .projects
-            .iter()
-            .find(|project| project.project_id == project_id.as_str())
-            .ok_or_else(|| M1ProjectIndexError::new("m1_project_id_unknown"))?;
-        let stored_role = stored
-            .roles
-            .iter()
-            .find(|item| item.role == role)
-            .ok_or_else(|| M1ProjectIndexError::new("m1_project_role_identity_unavailable"))?;
-        let context = M1ProjectIdentityContext {
-            project_id: stored.project_id.clone(),
-            scope_id: stored.scope_id.clone(),
-            scope_revision: stored.scope_revision,
-            current_object_id: stored.current_object_id.clone(),
-            binding_revision: stored.binding_revision,
-            issued_at: stored.issued_at.clone(),
-            registry_revision: registry.registry_revision,
-            project_revision: stored.project_revision,
-            resolver_revision: stored.resolver_revision,
+        request: M1RegisterIsolatedProjectRequest,
+    ) -> Result<M1RegisteredProject, M1ProjectIndexError> {
+        let exact_alias = match request.exact_alias {
+            Some(alias) => Some(validate_alias_shape(&alias)?),
+            None => None,
         };
-        Ok(project_role_identity_snapshot(&context, stored_role)?)
+        let _lock = ExclusiveRegistryLock::acquire(&self.lock_path)?;
+        let mut registry = match self.classify_registry_presence()? {
+            RegistryPresence::Absent => empty_registry(),
+            RegistryPresence::EstablishedMissing => {
+                return Err(M1ProjectIndexError::new(
+                    "m1_project_index_registry_missing",
+                ));
+            }
+            RegistryPresence::Present => self.load_registry(LoadMode::Required)?,
+        };
+        if let Some(alias) = exact_alias.as_deref() {
+            if registry
+                .projects
+                .iter()
+                .any(|project| project.exact_alias.as_deref() == Some(alias))
+            {
+                return Err(M1ProjectIndexError::new("m1_alias_duplicate"));
+            }
+        }
+
+        let project_id = format!("project:{}", Uuid::new_v4());
+        validate_canonical_project_id(&project_id)?;
+        let next_revision = registry
+            .registry_revision
+            .checked_add(1)
+            .ok_or_else(|| M1ProjectIndexError::new("m1_project_index_revision_overflow"))?;
+        registry.registry_revision = next_revision;
+        registry.projects.push(M1StoredProject {
+            project_id: project_id.clone(),
+            exact_alias: exact_alias.clone(),
+            resolver_revision: M1_RESOLVER_REVISION,
+        });
+        self.persist_registry(&registry)?;
+        Ok(M1RegisteredProject {
+            project_id: M1ProjectId(project_id),
+            exact_alias,
+            resolver_revision: M1_RESOLVER_REVISION,
+            registry_revision: registry.registry_revision,
+        })
     }
 
-    fn load_registry(&self) -> Result<M1ProjectIndexRegistry, M1ProjectIndexError> {
+    fn load_registry(&self, mode: LoadMode) -> Result<M1ProjectIndexRegistry, M1ProjectIndexError> {
         if !self.registry_path.exists() {
-            return Ok(M1ProjectIndexRegistry::default());
+            return match mode {
+                LoadMode::Required => Err(M1ProjectIndexError::new(
+                    "m1_project_index_registry_missing",
+                )),
+                LoadMode::OptionalAbsent => Ok(empty_registry()),
+            };
+        }
+        let metadata = fs::symlink_metadata(&self.registry_path)
+            .map_err(|_| M1ProjectIndexError::new("m1_project_index_registry_unreadable"))?;
+        if !metadata.file_type().is_file() {
+            return Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_malformed",
+            ));
         }
         let bytes = fs::read(&self.registry_path)
             .map_err(|_| M1ProjectIndexError::new("m1_project_index_registry_unreadable"))?;
@@ -344,7 +370,7 @@ impl M1ProjectIndexAuthority {
             .map_err(|_| M1ProjectIndexError::new("m1_project_index_registry_serialize_failed"))?;
         let temp_path = parent.join(format!(".project-index-v1.{}.tmp", Uuid::new_v4().simple()));
         {
-            let mut file = fs::File::create(&temp_path)
+            let mut file = File::create(&temp_path)
                 .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_create_failed"))?;
             file.write_all(text.as_bytes())
                 .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_write_failed"))?;
@@ -353,14 +379,48 @@ impl M1ProjectIndexAuthority {
         }
         fs::rename(&temp_path, &self.registry_path)
             .map_err(|_| M1ProjectIndexError::new("m1_project_index_registry_replace_failed"))?;
-        if let Ok(dir) = fs::File::open(parent) {
-            let _ = dir.sync_all();
-        }
+        let dir = File::open(parent)
+            .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_open_failed"))?;
+        dir.sync_all()
+            .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_sync_failed"))?;
         Ok(())
     }
 }
 
+#[derive(Clone, Copy)]
+enum LoadMode {
+    Required,
+    OptionalAbsent,
+}
+
+#[derive(Clone, Copy)]
+enum RegistryPresence {
+    Absent,
+    EstablishedMissing,
+    Present,
+}
+
+fn empty_registry() -> M1ProjectIndexRegistry {
+    M1ProjectIndexRegistry {
+        schema_version: M1_PROJECT_INDEX_SCHEMA_VERSION.to_string(),
+        registry_revision: 0,
+        projects: Vec::new(),
+    }
+}
+
 fn validate_loaded_registry(registry: &M1ProjectIndexRegistry) -> Result<(), M1ProjectIndexError> {
+    if registry.schema_version != M1_PROJECT_INDEX_SCHEMA_VERSION {
+        return Err(M1ProjectIndexError::new(
+            "m1_project_index_registry_unsupported",
+        ));
+    }
+    let project_count = u64::try_from(registry.projects.len())
+        .map_err(|_| M1ProjectIndexError::new("m1_project_index_revision_overflow"))?;
+    if registry.registry_revision != project_count {
+        return Err(M1ProjectIndexError::new(
+            "m1_project_index_registry_malformed",
+        ));
+    }
     let mut seen_ids = Vec::new();
     let mut seen_aliases = Vec::new();
     for project in &registry.projects {
@@ -371,27 +431,19 @@ fn validate_loaded_registry(registry: &M1ProjectIndexRegistry) -> Result<(), M1P
             ));
         }
         seen_ids.push(project.project_id.clone());
+        if project.resolver_revision != M1_RESOLVER_REVISION {
+            return Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_malformed",
+            ));
+        }
         if let Some(alias) = project.exact_alias.as_deref() {
-            validate_alias_for_registration(alias)?;
+            validate_alias_shape(alias)?;
             if seen_aliases.iter().any(|item: &String| item == alias) {
                 return Err(M1ProjectIndexError::new(
                     "m1_project_index_registry_malformed",
                 ));
             }
             seen_aliases.push(alias.to_string());
-        }
-        if project.roles.len() != 3 {
-            return Err(M1ProjectIndexError::new(
-                "m1_project_index_registry_malformed",
-            ));
-        }
-        let expected = M1ProjectRole::all();
-        for (index, role) in expected.into_iter().enumerate() {
-            if project.roles[index].role != role {
-                return Err(M1ProjectIndexError::new(
-                    "m1_project_index_registry_malformed",
-                ));
-            }
         }
     }
     Ok(())
@@ -416,15 +468,7 @@ fn parse_prefixed_uuid(prefix: &str, value: &str) -> Option<Uuid> {
     }
 }
 
-fn validate_alias_for_registration(alias: &str) -> Result<String, M1ProjectIndexError> {
-    validate_alias_shape(alias, "m1_alias_malformed")
-}
-
-fn validate_alias_for_resolution(alias: &str) -> Result<String, M1ProjectIndexError> {
-    validate_alias_shape(alias, "m1_alias_malformed")
-}
-
-fn validate_alias_shape(alias: &str, malformed_code: &str) -> Result<String, M1ProjectIndexError> {
+fn validate_alias_shape(alias: &str) -> Result<String, M1ProjectIndexError> {
     if alias.is_empty()
         || alias.len() > 1024
         || alias
@@ -432,10 +476,10 @@ fn validate_alias_shape(alias: &str, malformed_code: &str) -> Result<String, M1P
             .any(|character| character.is_control() || character.is_whitespace())
         || is_caller_boolean(alias)
     {
-        return Err(M1ProjectIndexError::new(malformed_code));
+        return Err(M1ProjectIndexError::new("m1_alias_malformed"));
     }
     if parse_prefixed_uuid("project:", alias).is_some() {
-        return Err(M1ProjectIndexError::new(malformed_code));
+        return Err(M1ProjectIndexError::new("m1_alias_malformed"));
     }
     Ok(alias.to_string())
 }
@@ -532,53 +576,85 @@ fn admit_existing_clean_root(
     Ok(canonical)
 }
 
-fn utc_rfc3339_now() -> Result<String, M1ProjectIndexError> {
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|_| M1ProjectIndexError::new("m1_project_index_clock_before_epoch"))?
-        .as_secs();
-    Ok(unix_secs_to_rfc3339(seconds))
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(crate) struct M1ProjectIndexRegistrar {
+    store: M1ProjectIndexStore,
 }
 
-fn unix_secs_to_rfc3339(seconds: u64) -> String {
-    let days = seconds / 86_400;
-    let day_seconds = seconds % 86_400;
-    let hour = day_seconds / 3_600;
-    let minute = (day_seconds % 3_600) / 60;
-    let second = day_seconds % 60;
-    let (year, month, day) = civil_from_days(days as i64);
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z")
+#[cfg(test)]
+impl M1ProjectIndexRegistrar {
+    pub(crate) fn open_isolated_fixture(root: &Path) -> Result<Self, M1ProjectIndexError> {
+        let canonical_temp = fs::canonicalize(std::env::temp_dir())
+            .map_err(|_| M1ProjectIndexError::new("m1_isolated_temp_root_unavailable"))?;
+        let canonical_root =
+            admit_existing_clean_root(root, "m1_isolated_fixture_root_unavailable")?;
+        let admitted_name = canonical_root
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        if !canonical_root.starts_with(&canonical_temp)
+            || !admitted_name.starts_with("syn-m1i01r01-")
+        {
+            return Err(M1ProjectIndexError::new(
+                "m1_isolated_fixture_root_not_admitted",
+            ));
+        }
+        Ok(Self {
+            store: M1ProjectIndexStore::from_root(canonical_root),
+        })
+    }
+
+    pub(crate) fn register_isolated_project(
+        &self,
+        request: M1RegisterIsolatedProjectRequest,
+    ) -> Result<M1RegisteredProject, M1ProjectIndexError> {
+        self.store.register_isolated_project(request)
+    }
+
+    pub(crate) fn read_handle(&self) -> Result<M1ProjectIndexReadHandle, M1ProjectIndexError> {
+        M1ProjectIndexReadHandle::open_from_root(self.store.canonical_app_data_root.clone())?
+            .ok_or_else(|| M1ProjectIndexError::new("m1_project_index_unavailable"))
+    }
 }
 
-fn civil_from_days(days: i64) -> (i32, u32, u32) {
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let year = if month <= 2 { y + 1 } else { y } as i32;
-    (year, month, day)
+#[cfg(test)]
+impl M1ProjectIndexReadPort for M1ProjectIndexRegistrar {
+    fn resolve_canonical_project_id(
+        &self,
+        claim: &str,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.store.resolve_canonical_project_id(claim)
+    }
+
+    fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.store.resolve_exact_alias(alias)
+    }
+
+    fn resolve_project_root_ref(
+        &self,
+        project_root_ref: &M1ProjectRootRef,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        self.store.resolve_project_root_ref(project_root_ref)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
-    fn isolated_authority() -> (M1ProjectIndexAuthority, PathBuf) {
-        let root = std::env::temp_dir().join(format!("syn-m1i01-{}", Uuid::new_v4()));
+    fn isolated_root() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("syn-m1i01r01-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create isolated root");
-        let canonical = fs::canonicalize(&root).expect("canonicalize isolated root");
-        let authority =
-            M1ProjectIndexAuthority::open_isolated_fixture(&canonical).expect("open fixture");
-        (authority, canonical)
+        fs::canonicalize(&root).expect("canonicalize isolated root")
     }
 
-    fn path_derived_project_id(project_root: &str) -> String {
-        format!("project:{:x}", project_root.len())
+    fn isolated_registrar() -> (M1ProjectIndexRegistrar, PathBuf) {
+        let root = isolated_root();
+        let registrar =
+            M1ProjectIndexRegistrar::open_isolated_fixture(&root).expect("open registrar");
+        (registrar, root)
     }
 
     fn slug_like_id(project_root: &str) -> String {
@@ -602,70 +678,63 @@ mod tests {
 
     #[test]
     fn m1_project_index_register_mints_opaque_uuid_not_path_derived() {
-        let (authority, root) = isolated_authority();
+        let (registrar, root) = isolated_registrar();
         let alias = format!("{}/isolated-project", root.display());
-        let registered = authority
+        let registered = registrar
             .register_isolated_project(M1RegisterIsolatedProjectRequest {
                 exact_alias: Some(alias.clone()),
             })
             .expect("register");
         assert!(registered.project_id.as_str().starts_with("project:"));
         validate_canonical_project_id(registered.project_id.as_str()).expect("uuid id");
-        assert_ne!(
-            registered.project_id.as_str(),
-            path_derived_project_id(&alias)
-        );
         assert_ne!(registered.project_id.as_str(), slug_like_id(&alias));
+        assert!(!registered.project_id.as_str().contains(&alias));
         assert!(!registered.project_id.as_str().contains('/'));
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
-    fn m1_project_index_restart_restores_same_ids_and_identities() {
-        let (authority, root) = isolated_authority();
-        let registered = authority
+    fn m1_project_index_restart_restores_same_project_id() {
+        let (registrar, root) = isolated_registrar();
+        let registered = registrar
             .register_isolated_project(M1RegisterIsolatedProjectRequest {
-                exact_alias: Some("/tmp/syn-m1i01-restart-alias".to_string()),
+                exact_alias: Some("/tmp/syn-m1i01r01-restart-alias".to_string()),
             })
             .expect("register");
-        let before = M1ProjectRole::all().map(|role| {
-            authority
-                .project_role_identity(registered.project_id.as_str(), role)
-                .expect("identity before restart")
-        });
-        drop(authority);
+        drop(registrar);
 
-        let reopened = M1ProjectIndexAuthority::open_isolated_fixture(&root).expect("reopen");
+        let reopened = M1ProjectIndexRegistrar::open_isolated_fixture(&root).expect("reopen");
         let after_id = reopened
-            .resolve_exact_alias("/tmp/syn-m1i01-restart-alias")
+            .resolve_exact_alias("/tmp/syn-m1i01r01-restart-alias")
             .expect("alias after restart");
         assert_eq!(after_id.as_str(), registered.project_id.as_str());
-        for (role, expected) in M1ProjectRole::all().into_iter().zip(before.iter()) {
-            let actual = reopened
-                .project_role_identity(after_id.as_str(), role)
-                .expect("identity after restart");
-            assert_eq!(actual, *expected);
-        }
+        let read = reopened.read_handle().expect("read after restart");
+        assert_eq!(
+            read.resolve_canonical_project_id(registered.project_id.as_str())
+                .expect("id after restart")
+                .as_str(),
+            registered.project_id.as_str()
+        );
         let _ = fs::remove_dir_all(root);
     }
 
     #[test]
     fn m1_project_index_exact_alias_resolves_only_when_pre_registered() {
-        let (authority, root) = isolated_authority();
-        let registered = authority
+        let (registrar, root) = isolated_registrar();
+        let registered = registrar
             .register_isolated_project(M1RegisterIsolatedProjectRequest {
                 exact_alias: Some("/exact/alias/one".to_string()),
             })
             .expect("register");
         assert_eq!(
-            authority
+            registrar
                 .resolve_exact_alias("/exact/alias/one")
                 .expect("exact hit")
                 .as_str(),
             registered.project_id.as_str()
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_exact_alias("/exact/alias/ONE")
                 .unwrap_err()
                 .code,
@@ -675,23 +744,23 @@ mod tests {
     }
 
     #[test]
-    fn m1_project_index_rejects_unknown_duplicate_malformed_stale_and_mismatch() {
-        let (authority, root) = isolated_authority();
-        let registered = authority
+    fn m1_project_index_rejects_unknown_malformed_stale_and_mismatch() {
+        let (registrar, root) = isolated_registrar();
+        let registered = registrar
             .register_isolated_project(M1RegisterIsolatedProjectRequest {
                 exact_alias: Some("/exact/alias/keep".to_string()),
             })
             .expect("register");
 
         assert_eq!(
-            authority
+            registrar
                 .resolve_exact_alias("/exact/alias/missing")
                 .unwrap_err()
                 .code,
             "m1_alias_unknown"
         );
         assert_eq!(
-            authority
+            registrar
                 .register_isolated_project(M1RegisterIsolatedProjectRequest {
                     exact_alias: Some("/exact/alias/keep".to_string()),
                 })
@@ -700,22 +769,22 @@ mod tests {
             "m1_alias_duplicate"
         );
         assert_eq!(
-            authority.resolve_exact_alias("").unwrap_err().code,
+            registrar.resolve_exact_alias("").unwrap_err().code,
             "m1_alias_malformed"
         );
         assert_eq!(
-            authority.resolve_exact_alias("true").unwrap_err().code,
+            registrar.resolve_exact_alias("true").unwrap_err().code,
             "m1_alias_malformed"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_canonical_project_id("project:00000000-0000-4000-8000-000000000000")
                 .unwrap_err()
                 .code,
             "m1_project_id_unknown"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_project_root_ref(&M1ProjectRootRef {
                     project_id: registered.project_id.as_str().to_string(),
                     normalized_root_alias: "/exact/alias/other".to_string(),
@@ -726,7 +795,7 @@ mod tests {
             "m1_alias_mismatch"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_project_root_ref(&M1ProjectRootRef {
                     project_id: registered.project_id.as_str().to_string(),
                     normalized_root_alias: "/exact/alias/keep".to_string(),
@@ -741,57 +810,57 @@ mod tests {
 
     #[test]
     fn m1_project_index_rejects_path_locator_scratch_m5_and_boolean_as_project_id() {
-        let (authority, root) = isolated_authority();
-        let _ = authority
+        let (registrar, root) = isolated_registrar();
+        let _ = registrar
             .register_isolated_project(M1RegisterIsolatedProjectRequest {
-                exact_alias: Some("/tmp/syn-m1i01-bound".to_string()),
+                exact_alias: Some("/tmp/syn-m1i01r01-bound".to_string()),
             })
             .expect("register");
 
         assert_eq!(
-            authority
-                .resolve_canonical_project_id("/tmp/syn-m1i01-bound")
+            registrar
+                .resolve_canonical_project_id("/tmp/syn-m1i01r01-bound")
                 .unwrap_err()
                 .code,
             "m1_project_id_path_claim_rejected"
         );
         assert_eq!(
-            authority
-                .resolve_canonical_project_id(&slug_like_id("/tmp/syn-m1i01-bound"))
+            registrar
+                .resolve_canonical_project_id(&slug_like_id("/tmp/syn-m1i01r01-bound"))
                 .unwrap_err()
                 .code,
             "m1_project_id_path_claim_rejected"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_canonical_project_id("mario-test")
                 .unwrap_err()
                 .code,
             "m1_project_id_index_locator_claim_rejected"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_canonical_project_id("scratch-isolated")
                 .unwrap_err()
                 .code,
             "m1_project_id_scratch_claim_rejected"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_canonical_project_id("project:scratch-isolated")
                 .unwrap_err()
                 .code,
             "m1_project_id_scratch_claim_rejected"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_canonical_project_id("m5:official_project_id")
                 .unwrap_err()
                 .code,
             "m1_project_id_m5_helper_claim_rejected"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_canonical_project_id("true")
                 .unwrap_err()
                 .code,
@@ -802,22 +871,26 @@ mod tests {
 
     #[test]
     fn m1_project_index_does_not_import_legacy_index_records() {
-        let (authority, root) = isolated_authority();
-        let legacy_index = root.join("codex-index.json");
+        let (registrar, root) = isolated_registrar();
+        let _ = registrar
+            .register_isolated_project(M1RegisterIsolatedProjectRequest {
+                exact_alias: Some("/registered/only".to_string()),
+            })
+            .expect("register");
         fs::write(
-            &legacy_index,
+            root.join("codex-index.json"),
             r#"{"projects":[{"project_root":"/legacy/never-imported"}]}"#,
         )
         .expect("write legacy index");
         assert_eq!(
-            authority
+            registrar
                 .resolve_exact_alias("/legacy/never-imported")
                 .unwrap_err()
                 .code,
             "m1_alias_unknown"
         );
         assert_eq!(
-            authority
+            registrar
                 .resolve_canonical_project_id("/legacy/never-imported")
                 .unwrap_err()
                 .code,
@@ -827,37 +900,221 @@ mod tests {
     }
 
     #[test]
-    fn m1_project_index_reviewer_is_distinct_and_no_capability() {
-        let (authority, root) = isolated_authority();
-        let registered = authority
-            .register_isolated_project(M1RegisterIsolatedProjectRequest { exact_alias: None })
+    fn m1_project_index_read_open_does_not_create_blank_registry() {
+        let root = isolated_root();
+        let opened = M1ProjectIndexReadHandle::open_from_root(root.clone()).expect("open read");
+        assert!(opened.is_none());
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        assert!(!root.join("m1").exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn m1_project_index_rejects_corrupt_and_missing_established_registry() {
+        let (registrar, root) = isolated_registrar();
+        registrar
+            .register_isolated_project(M1RegisterIsolatedProjectRequest {
+                exact_alias: Some("/exact/alias/established".to_string()),
+            })
             .expect("register");
-        let supervisor = authority
-            .project_role_identity(
-                registered.project_id.as_str(),
-                M1ProjectRole::ProjectSupervisor,
-            )
-            .expect("supervisor");
-        let worker = authority
-            .project_role_identity(registered.project_id.as_str(), M1ProjectRole::Worker)
-            .expect("worker");
-        let reviewer = authority
-            .project_role_identity(
-                registered.project_id.as_str(),
-                M1ProjectRole::IndependentReviewer,
-            )
-            .expect("reviewer");
-        assert_eq!(reviewer.role, M1ProjectRole::IndependentReviewer);
-        assert_ne!(reviewer.actor_id, supervisor.actor_id);
-        assert_ne!(reviewer.actor_id, worker.actor_id);
-        assert_ne!(reviewer.session_identity_id, supervisor.session_identity_id);
-        assert_ne!(reviewer.owner_fingerprint, supervisor.owner_fingerprint);
-        assert!(reviewer.permission_snapshot.allow_capabilities.is_empty());
-        assert!(reviewer
-            .permission_snapshot
-            .deny_capabilities
-            .contains(&"issue_execution_grant".to_string()));
-        assert_eq!(reviewer.current_object.source_owner_ref, "project_index");
+        let registry_path = root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH);
+
+        fs::write(&registry_path, "{not-json").expect("corrupt registry");
+        assert_eq!(
+            M1ProjectIndexReadHandle::open_from_root(root.clone())
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_malformed"
+        );
+        assert_eq!(
+            registrar
+                .register_isolated_project(M1RegisterIsolatedProjectRequest {
+                    exact_alias: Some("/exact/alias/after-corrupt".to_string()),
+                })
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_malformed"
+        );
+        assert_eq!(
+            fs::read_to_string(&registry_path).expect("retain corrupt bytes"),
+            "{not-json"
+        );
+
+        fs::remove_file(&registry_path).expect("delete established registry");
+        assert!(root.join("m1").exists());
+        assert_eq!(
+            M1ProjectIndexReadHandle::open_from_root(root.clone())
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_missing"
+        );
+        assert_eq!(
+            registrar
+                .register_isolated_project(M1RegisterIsolatedProjectRequest {
+                    exact_alias: Some("/exact/alias/after-missing".to_string()),
+                })
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_missing"
+        );
+        assert!(!registry_path.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn m1_project_index_rejects_unsupported_v1_identity_registry() {
+        let (registrar, root) = isolated_registrar();
+        let registry_dir = root.join("m1");
+        fs::create_dir_all(&registry_dir).expect("create registry dir");
+        fs::write(
+            root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH),
+            r#"{
+              "schema_version": "m1.project-index.registry.v1",
+              "registry_revision": 1,
+              "projects": [{
+                "project_id": "project:11111111-1111-4111-8111-111111111111",
+                "exact_alias": "/legacy-v1",
+                "resolver_revision": 1
+              }]
+            }"#,
+        )
+        .expect("write unsupported v1 registry");
+        assert_eq!(
+            M1ProjectIndexReadHandle::open_from_root(root.clone())
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_unsupported"
+        );
+        assert_eq!(
+            registrar
+                .register_isolated_project(M1RegisterIsolatedProjectRequest {
+                    exact_alias: Some("/should-not-import-v1".to_string()),
+                })
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_unsupported"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn m1_project_index_rejects_v1_identity_fields_without_import() {
+        let root = isolated_root();
+        let registry_dir = root.join("m1");
+        fs::create_dir_all(&registry_dir).expect("create registry dir");
+        fs::write(
+            root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH),
+            r#"{
+              "schema_version": "m1.project-index.registry.v2",
+              "registry_revision": 1,
+              "projects": [{
+                "project_id": "project:11111111-1111-4111-8111-111111111111",
+                "exact_alias": "/must-not-import",
+                "resolver_revision": 1,
+                "actor_id": "actor:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "role_ref": "role:project_supervisor",
+                "scope_ref": "scope:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                "identity_snapshot": {"kind":"identity"}
+              }]
+            }"#,
+        )
+        .expect("write identity-bearing registry");
+        assert_eq!(
+            M1ProjectIndexReadHandle::open_from_root(root.clone())
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_malformed"
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn m1_project_index_two_authorities_same_alias_only_one_succeeds() {
+        let root = isolated_root();
+        let first = M1ProjectIndexRegistrar::open_isolated_fixture(&root).expect("first");
+        let second = M1ProjectIndexRegistrar::open_isolated_fixture(&root).expect("second");
+        let first = Arc::new(first);
+        let second = Arc::new(second);
+        let left = Arc::clone(&first);
+        let right = Arc::clone(&second);
+        let handle_one = thread::spawn(move || {
+            left.register_isolated_project(M1RegisterIsolatedProjectRequest {
+                exact_alias: Some("/shared/alias".to_string()),
+            })
+        });
+        let handle_two = thread::spawn(move || {
+            right.register_isolated_project(M1RegisterIsolatedProjectRequest {
+                exact_alias: Some("/shared/alias".to_string()),
+            })
+        });
+        let first_result = handle_one.join().expect("first join");
+        let second_result = handle_two.join().expect("second join");
+        let successes = [&first_result, &second_result]
+            .iter()
+            .filter(|result| result.is_ok())
+            .count();
+        let duplicates = [&first_result, &second_result]
+            .iter()
+            .filter(|result| {
+                result
+                    .as_ref()
+                    .err()
+                    .is_some_and(|error| error.code == "m1_alias_duplicate")
+            })
+            .count();
+        assert_eq!(successes, 1);
+        assert_eq!(duplicates, 1);
+        let winner = first_result
+            .as_ref()
+            .ok()
+            .or(second_result.as_ref().ok())
+            .expect("one winner");
+        assert_eq!(
+            first
+                .resolve_exact_alias("/shared/alias")
+                .expect("stored alias")
+                .as_str(),
+            winner.project_id.as_str()
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn m1_project_index_two_authorities_different_aliases_keep_both_updates() {
+        let root = isolated_root();
+        let first = M1ProjectIndexRegistrar::open_isolated_fixture(&root).expect("first");
+        let second = M1ProjectIndexRegistrar::open_isolated_fixture(&root).expect("second");
+        let first = Arc::new(first);
+        let second = Arc::new(second);
+        let left = Arc::clone(&first);
+        let right = Arc::clone(&second);
+        let handle_one = thread::spawn(move || {
+            left.register_isolated_project(M1RegisterIsolatedProjectRequest {
+                exact_alias: Some("/alias/alpha".to_string()),
+            })
+        });
+        let handle_two = thread::spawn(move || {
+            right.register_isolated_project(M1RegisterIsolatedProjectRequest {
+                exact_alias: Some("/alias/beta".to_string()),
+            })
+        });
+        let first_id = handle_one.join().expect("first join").expect("alpha");
+        let second_id = handle_two.join().expect("second join").expect("beta");
+        assert_ne!(first_id.project_id.as_str(), second_id.project_id.as_str());
+        assert_eq!(
+            first
+                .resolve_exact_alias("/alias/alpha")
+                .expect("alpha kept")
+                .as_str(),
+            first_id.project_id.as_str()
+        );
+        assert_eq!(
+            first
+                .resolve_exact_alias("/alias/beta")
+                .expect("beta kept")
+                .as_str(),
+            second_id.project_id.as_str()
+        );
         let _ = fs::remove_dir_all(root);
     }
 }
