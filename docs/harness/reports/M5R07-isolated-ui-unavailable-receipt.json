@@ -1,0 +1,10 @@
+{
+  "composition_gap": "shared isolated product profile leaves M1/M3 authority uninstalled; M5 open fail-closed; full-loop not claimed",
+  "derived_from": "installed_authority_slots",
+  "full_loop_claimed": false,
+  "m1_authority_installed": false,
+  "m3_authority_installed": false,
+  "open_available": false,
+  "phase": "unavailable",
+  "schema": "syn.m5r07.isolated-ui-receipt.v3-unavailable"
+}

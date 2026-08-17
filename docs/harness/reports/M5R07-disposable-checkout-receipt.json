@@ -1,74 +1,16 @@
 {
-  "schema": "syn.m5r07.disposable-checkout.behavior-receipt.v1",
-  "candidate_sha": "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd",
-  "disposable_checkout": "/tmp/m5r07-disposable-faa6ed1",
-  "verified_at": "2026-08-16T19:36:45Z",
-  "authorization": {
-    "schemaVersion": 1,
-    "authorized": false
-  },
-  "environment": {
-    "cwd": "/tmp/m5r07-disposable-faa6ed1/prototypes/productized-desktop-shell/src-tauri",
-    "PATH": "/home/synadmin/.local/bin:/home/synadmin/.codex/packages/standalone/releases/0.147.0-x86_64-unknown-linux-musl/codex-path:/home/synadmin/.cargo/bin:/home/synadmin/.codex/tmp/arg0/codex-arg0E3Nm5w:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin",
-    "HOME": "/home/synadmin",
-    "USER": "synadmin",
-    "DISPLAY": ":0",
-    "CARGO_HOME": null,
-    "RUSTUP_HOME": null,
-    "offline_flag": "--offline",
-    "uname": "Linux DESKTOP-FRK8K62 6.18.33.2-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Thu Jun 18 21:54:43 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux",
-    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
-    "cargo": "cargo 1.97.1 (c980f4866 2026-06-30)",
-    "node": "v22.23.2",
-    "npm": "10.9.8"
-  },
-  "opening_hash": "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd",
-  "final_hash": "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd",
-  "opening_equals_final": true,
-  "candidate_contains_m6": false,
-  "commands": [
-    {
-      "command": "cargo check --lib --offline",
-      "cwd": "/tmp/m5r07-disposable-faa6ed1/prototypes/productized-desktop-shell/src-tauri",
-      "exit_code": 0,
-      "result": "PASS",
-      "log": "/tmp/m5r07-disp-check.log"
-    },
-    {
-      "command": "cargo test --lib --offline -- m5_ -- --test-threads=1",
-      "cwd": "/tmp/m5r07-disposable-faa6ed1/prototypes/productized-desktop-shell/src-tauri",
-      "exit_code": 0,
-      "result": "PASS",
-      "passed": 83,
-      "failed": 0,
-      "filtered_out": 1809,
-      "log": "/tmp/m5r07-disp-m5.log"
-    },
-    {
-      "command": "npm run typecheck",
-      "cwd": "/tmp/m5r07-disposable-faa6ed1/prototypes/productized-desktop-shell",
-      "exit_code": 0,
-      "result": "PASS",
-      "log": "/tmp/m5r07-disp-typecheck.log"
-    },
-    {
-      "command": "npm run build",
-      "cwd": "/tmp/m5r07-disposable-faa6ed1/prototypes/productized-desktop-shell",
-      "exit_code": 0,
-      "result": "PASS",
-      "modules": 310,
-      "log": "/tmp/m5r07-disp-build.log"
-    }
-  ],
-  "isolated_tauri": {
-    "command": "node scripts/run-m5-isolated-app-acceptance.mjs",
-    "cwd": "/tmp/m5r07-disposable-faa6ed1/prototypes/productized-desktop-shell",
-    "exit_code": 0,
-    "profile_root": "/tmp/syn-r4-acceptance-dwRa2Y",
-    "launcher_receipt_sha256": "00c9f1c0fabf1ae4e186c1532b05de6957a1e2c6d95b7063ef3d47b5a98608b0",
-    "note": "actual isolated Tauri interaction executed in exact disposable checkout of candidate after implementation commit"
-  },
-  "stage": "stage-14",
-  "leaf": "M5R07",
-  "status": "AWAITING_INDEPENDENT_ACCEPTANCE"
+  "schema": "syn.m5r07.disposable-checkout.v1",
+  "opening_sha": "df11a4a3fa19c6d91c8aaa006e395f83c155e772",
+  "final_sha": "df11a4a3fa19c6d91c8aaa006e395f83c155e772",
+  "checkout": "/tmp/m5r07-disposable-df11a4a",
+  "cargo_check_lib_offline": "PASS",
+  "cargo_test_lib_offline_m5_": "90 passed / 0 failed",
+  "npm_typecheck": "PASS",
+  "npm_build": "PASS (310 modules)",
+  "isolated_launcher_exit": 0,
+  "isolated_authority_unavailable": true,
+  "isolated_full_loop_claimed": false,
+  "rejected_predecessor": "d31885ec878aca64fb98dfe00550419501b91e2a",
+  "profile_root": "/tmp/syn-r4-acceptance-0abhHq",
+  "launcher_receipt_schema": "syn.m5r07.isolated-app-launcher.v1"
 }

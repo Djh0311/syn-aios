@@ -11,3 +11,5 @@
 - `src-tauri/src/lib_read_model_boundary_tests.rs`
 
 原因：`AppState` 增加 `m5_store_path` 后，既有测试字面量缺字段无法编译（E0063）。这两处只补 `m5_store_path: None`，不改 command 语义或读模型边界。不 closeout，不激活 M6。
+
+2026-08-17 总线 REJECT `d31885e` 后的最窄 correction（`df11a4a`）：runtime 在任何 durable effect 前 load 当前 M3 Worker view；删除 `m5_role_sessions` 的 CREATE（不 DROP）。isolated shared profile 只证明 unavailable。不 closeout。
