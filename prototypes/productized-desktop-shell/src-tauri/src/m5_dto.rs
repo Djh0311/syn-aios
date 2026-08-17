@@ -80,6 +80,47 @@ pub(crate) struct M5LegacyPathManifest {
     pub physically_deleted: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct M5ExecutionControlLoadRequest {
+    pub binding_id: String,
+    pub project_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct M5ExecutionControlApplyRequest {
+    pub binding_id: String,
+    pub project_id: String,
+    pub action: String,
+    pub expected_control_revision: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub(crate) struct M5ExecutionControlResponse {
+    pub control_revision: u64,
+    pub phase: String,
+    pub durable_state: String,
+    pub attempt_state: Option<String>,
+    pub retry_count: u32,
+    pub max_retries: u32,
+    pub can_stop: bool,
+    pub can_retry: bool,
+    pub can_resume: bool,
+    pub blocked_reason: Option<String>,
+    pub last_receipt_id: Option<String>,
+    pub replayed: bool,
+}
+
+pub(crate) fn parse_execution_control_action(action: &str) -> Result<&'static str, String> {
+    match action {
+        "STOP" => Ok("STOP"),
+        "RETRY" => Ok("RETRY"),
+        "RESUME" => Ok("RESUME"),
+        other => Err(format!("unknown_control_action:{other}")),
+    }
+}
+
 pub(crate) fn legacy_execution_manifest() -> Vec<M5LegacyPathManifest> {
     vec![
         M5LegacyPathManifest {

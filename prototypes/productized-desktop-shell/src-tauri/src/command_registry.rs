@@ -261,7 +261,9 @@ macro_rules! workbench_command_handler {
             crate::m5_product_commands::open_m5_source_deep_link,
             crate::m5_product_commands::load_m5_isolated_acceptance_status,
             crate::m5_product_commands::write_m5_isolated_ui_receipt,
-            crate::m5_product_commands::load_m5_global_advice_fixture
+            crate::m5_product_commands::load_m5_global_advice_fixture,
+            crate::m5_product_commands::load_m5_execution_control,
+            crate::m5_product_commands::apply_m5_execution_control
         ];
         move |invoke| {
             let command = invoke.message.command().to_owned();

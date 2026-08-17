@@ -3,7 +3,11 @@
 
 use crate::m1_project_index::M1ProjectId;
 use crate::m3_project_role_session_authority::M3ProjectRole;
+use crate::m3_project_role_session_authority::{
+    M3_PERMISSION_DRIFT, M3_SESSION_INACTIVE, M3_SESSION_UNAVAILABLE,
+};
 use crate::m5_dto::{
+    M5ExecutionControlApplyRequest, M5ExecutionControlLoadRequest, M5ExecutionControlResponse,
     M5ProjectSummaryRead, M5SupervisorOpenRequest, M5SupervisorOpenResponse,
     M5SupervisorTurnRequest, M5SupervisorTurnResponse,
 };
@@ -896,6 +900,98 @@ pub(crate) fn record_m5_result_decision(
     request: M5FormalStepRequest,
 ) -> Result<M5FormalStepResponse, String> {
     record_m5_result_decision_with_state(&state, request)
+}
+
+fn load_control_worker(
+    state: &crate::AppState,
+    project_id: &M1ProjectId,
+    require_worker: bool,
+) -> Result<Option<crate::m3_project_role_session_authority::M3ProjectRoleSessionView>, String> {
+    match load_project_role(state, project_id, M3ProjectRole::Worker) {
+        Ok(view) => Ok(Some(view)),
+        Err(error)
+            if !require_worker
+                && (error == M3_SESSION_UNAVAILABLE
+                    || error == "m3_project_role_identity_source_not_readable") =>
+        {
+            Ok(None)
+        }
+        Err(error) if error == M3_SESSION_INACTIVE || error == M3_PERMISSION_DRIFT => Err(error),
+        Err(error) => {
+            if require_worker {
+                Err(error)
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
+pub(crate) fn load_m5_execution_control_with_state(
+    state: &crate::AppState,
+    request: M5ExecutionControlLoadRequest,
+) -> Result<M5ExecutionControlResponse, String> {
+    let (store, binding, session, project_id) =
+        require_binding(state, &request.binding_id, &request.project_id)?;
+    let pointer =
+        crate::m5_controlled_execution::load_formal_progress_pointer(&store, &binding.project_id)?;
+    let worker = load_control_worker(state, &project_id, pointer.grant_id.is_some())?;
+    crate::m5_controlled_execution::load_execution_control(
+        &store,
+        &binding,
+        &session,
+        worker.as_ref(),
+        m5_now_ms(),
+    )
+}
+
+#[tauri::command]
+pub(crate) fn load_m5_execution_control(
+    state: tauri::State<'_, crate::AppState>,
+    request: M5ExecutionControlLoadRequest,
+) -> Result<M5ExecutionControlResponse, String> {
+    load_m5_execution_control_with_state(&state, request)
+}
+
+pub(crate) fn apply_m5_execution_control_with_state(
+    state: &crate::AppState,
+    request: M5ExecutionControlApplyRequest,
+) -> Result<M5ExecutionControlResponse, String> {
+    apply_m5_execution_control_with_fault(
+        state,
+        request,
+        crate::m5_controlled_execution::ControlApplyFault::None,
+    )
+}
+
+pub(crate) fn apply_m5_execution_control_with_fault(
+    state: &crate::AppState,
+    request: M5ExecutionControlApplyRequest,
+    fault: crate::m5_controlled_execution::ControlApplyFault,
+) -> Result<M5ExecutionControlResponse, String> {
+    let (store, binding, session, project_id) =
+        require_binding(state, &request.binding_id, &request.project_id)?;
+    let pointer =
+        crate::m5_controlled_execution::load_formal_progress_pointer(&store, &binding.project_id)?;
+    let worker = load_control_worker(state, &project_id, pointer.grant_id.is_some())?;
+    crate::m5_controlled_execution::apply_execution_control_with_fault(
+        &store,
+        &binding,
+        &session,
+        worker.as_ref(),
+        &request.action,
+        request.expected_control_revision,
+        m5_now_ms(),
+        fault,
+    )
+}
+
+#[tauri::command]
+pub(crate) fn apply_m5_execution_control(
+    state: tauri::State<'_, crate::AppState>,
+    request: M5ExecutionControlApplyRequest,
+) -> Result<M5ExecutionControlResponse, String> {
+    apply_m5_execution_control_with_state(&state, request)
 }
 
 #[tauri::command]
@@ -2025,5 +2121,456 @@ mod tests {
             },
             "grant_plan_self_selection_rejected",
         );
+    }
+
+    fn persist_limited_control_operation(
+        state: &crate::AppState,
+        project_id: &str,
+        operation_id: &str,
+        op_state: crate::m5_controlled_execution::DurableOperationState,
+    ) {
+        let store = store_from_state(state).expect("m5 store");
+        let grant_id = formal_grant_id(state, project_id);
+        let dispatch_id = formal_dispatch_id(state, project_id);
+        let grant = store.load_grant(&grant_id).expect("load").expect("grant");
+        let dispatch = store
+            .load_dispatch(&dispatch_id)
+            .expect("load dispatch")
+            .expect("dispatch");
+        crate::m5_controlled_execution::persist_operation(
+            &store,
+            &crate::m5_controlled_execution::DurableOperation {
+                operation_id: operation_id.into(),
+                attempt_id: grant.attempt_id.clone(),
+                project_id: project_id.to_string(),
+                orchestration_id: grant.orchestration_id.as_str().to_string(),
+                workflow_run_id: grant.workflow_run_id.as_str().to_string(),
+                grant_id: grant.grant_id.as_str().to_string(),
+                dispatch_id: dispatch.dispatch_id,
+                effect_id: dispatch.effect_id,
+                state: op_state,
+                retry_count: 0,
+                max_retries: 2,
+                last_receipt_id: None,
+                error: None,
+                updated_at_ms: m5_now_ms(),
+            },
+        )
+        .expect("persist limited control operation");
+    }
+
+    fn control_operation_state(state: &crate::AppState, operation_id: &str) -> String {
+        let store = store_from_state(state).expect("m5 store");
+        crate::m5_controlled_execution::load_operation(&store, operation_id)
+            .expect("load op")
+            .expect("op")
+            .state
+            .as_str()
+            .to_string()
+    }
+
+    fn load_control(
+        state: &crate::AppState,
+        opened: &crate::m5_dto::M5SupervisorOpenResponse,
+    ) -> crate::m5_dto::M5ExecutionControlResponse {
+        load_m5_execution_control_with_state(
+            state,
+            M5ExecutionControlLoadRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("load control")
+    }
+
+    fn apply_control(
+        state: &crate::AppState,
+        opened: &crate::m5_dto::M5SupervisorOpenResponse,
+        action: &str,
+        expected_control_revision: u64,
+    ) -> Result<crate::m5_dto::M5ExecutionControlResponse, String> {
+        apply_m5_execution_control_with_state(
+            state,
+            M5ExecutionControlApplyRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+                action: action.to_string(),
+                expected_control_revision,
+            },
+        )
+    }
+
+    #[test]
+    fn execution_control_happy_load_stop_created_and_reopen() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-ctrl-created");
+        persist_limited_control_operation(
+            &state,
+            &opened.project_id,
+            "op-ctrl-created",
+            crate::m5_controlled_execution::DurableOperationState::Created,
+        );
+        let before = runtime_owned_snapshot(&state, &opened.project_id);
+        let loaded = load_control(&state, &opened);
+        assert_eq!(loaded.durable_state, "CREATED");
+        assert!(loaded.can_stop);
+        assert!(!loaded.can_retry);
+        assert!(!loaded.can_resume);
+        assert_eq!(loaded.replayed, false);
+        assert_eq!(loaded.control_revision, 0);
+        let stopped = apply_control(&state, &opened, "STOP", 0).expect("stop created");
+        assert_eq!(stopped.durable_state, "CANCELLED");
+        assert_eq!(stopped.phase, "CANCELLED");
+        assert!(!stopped.can_stop);
+        assert!(!stopped.can_retry);
+        assert!(!stopped.can_resume);
+        assert_eq!(stopped.replayed, false);
+        assert_eq!(stopped.control_revision, 1);
+        assert!(stopped.last_receipt_id.is_some());
+        assert_eq!(
+            control_operation_state(&state, "op-ctrl-created"),
+            "CANCELLED"
+        );
+        let after = runtime_owned_snapshot(&state, &opened.project_id);
+        assert_eq!(after.command_receipts, before.command_receipts);
+        assert_eq!(after.formal_receipts, before.formal_receipts);
+        assert_eq!(after.outbox_status, before.outbox_status);
+        assert_eq!(after.attempt_state, before.attempt_state);
+        drop(state);
+        let resumed = ordinary_app_state(&root);
+        let again = open_m5_project_supervisor_with_state(
+            &resumed,
+            M5SupervisorOpenRequest {
+                project_id: "syn-m5r07-ctrl-created".into(),
+            },
+        )
+        .expect("reopen");
+        let reloaded = load_control(&resumed, &again);
+        assert_eq!(reloaded.control_revision, 1);
+        assert_eq!(reloaded.durable_state, "CANCELLED");
+        assert_eq!(reloaded.last_receipt_id, stopped.last_receipt_id);
+        assert_eq!(
+            control_operation_state(&resumed, "op-ctrl-created"),
+            "CANCELLED"
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_paused_stop_and_checkpoint_resume() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-ctrl-paused-stop");
+        persist_limited_control_operation(
+            &state,
+            &opened.project_id,
+            "op-ctrl-paused-stop",
+            crate::m5_controlled_execution::DurableOperationState::Paused,
+        );
+        let store = store_from_state(&state).expect("m5 store");
+        let dispatch = store
+            .load_dispatch(&formal_dispatch_id(&state, &opened.project_id))
+            .expect("load")
+            .expect("dispatch");
+        crate::m5_controlled_execution::seed_control_checkpoint(
+            &store,
+            &opened.binding_id,
+            &opened.project_id,
+            r#"{"cursor":1}"#,
+            "PAUSED",
+            Some(&dispatch.effect_id),
+            Some("op-ctrl-paused-stop"),
+            m5_now_ms(),
+        )
+        .expect("seed checkpoint");
+        let loaded = load_control(&state, &opened);
+        assert_eq!(loaded.durable_state, "PAUSED");
+        assert!(loaded.can_stop);
+        assert!(loaded.can_resume);
+        assert!(!loaded.can_retry);
+        let stopped = apply_control(&state, &opened, "STOP", 0).expect("stop paused");
+        assert_eq!(stopped.durable_state, "CANCELLED");
+        assert_eq!(
+            control_operation_state(&state, "op-ctrl-paused-stop"),
+            "CANCELLED"
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-ctrl-paused-resume");
+        persist_limited_control_operation(
+            &state,
+            &opened.project_id,
+            "op-ctrl-paused-resume",
+            crate::m5_controlled_execution::DurableOperationState::Paused,
+        );
+        let store = store_from_state(&state).expect("m5 store");
+        let dispatch = store
+            .load_dispatch(&formal_dispatch_id(&state, &opened.project_id))
+            .expect("load")
+            .expect("dispatch");
+        crate::m5_controlled_execution::seed_control_checkpoint(
+            &store,
+            &opened.binding_id,
+            &opened.project_id,
+            r#"{"cursor":2}"#,
+            "PAUSED",
+            Some(&dispatch.effect_id),
+            Some("op-ctrl-paused-resume"),
+            m5_now_ms(),
+        )
+        .expect("seed checkpoint");
+        let resumed = apply_control(&state, &opened, "RESUME", 0).expect("resume paused");
+        assert_eq!(resumed.durable_state, "LEASED");
+        assert!(!resumed.can_resume);
+        assert!(!resumed.can_stop);
+        assert_eq!(
+            resumed.blocked_reason.as_deref(),
+            Some("running_requires_authoritative_cancel_readback")
+        );
+        assert_eq!(
+            control_operation_state(&state, "op-ctrl-paused-resume"),
+            "LEASED"
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_exact_replay_and_stale_revision() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-ctrl-replay");
+        persist_limited_control_operation(
+            &state,
+            &opened.project_id,
+            "op-ctrl-replay",
+            crate::m5_controlled_execution::DurableOperationState::Created,
+        );
+        let first = apply_control(&state, &opened, "STOP", 0).expect("first stop");
+        let store = store_from_state(&state).expect("m5 store");
+        let receipts = crate::m5_controlled_execution::control_receipt_count(&store);
+        let replayed = apply_control(&state, &opened, "STOP", 0).expect("exact replay");
+        assert!(replayed.replayed);
+        assert_eq!(replayed.last_receipt_id, first.last_receipt_id);
+        assert_eq!(replayed.control_revision, first.control_revision);
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(&store),
+            receipts
+        );
+        let stale = apply_control(&state, &opened, "STOP", 99).expect_err("stale");
+        assert_eq!(stale, "control_revision_stale_or_forged");
+        let divergent = apply_control(&state, &opened, "RESUME", 0).expect_err("divergent");
+        assert_eq!(divergent, "control_revision_stale_or_forged");
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(&store),
+            receipts
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_rejects_cross_project_and_authority_before_write() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-ctrl-auth");
+        persist_limited_control_operation(
+            &state,
+            &opened.project_id,
+            "op-ctrl-auth",
+            crate::m5_controlled_execution::DurableOperationState::Created,
+        );
+        let other = register_alias(&state, "syn-m5r07-ctrl-other");
+        let before = runtime_owned_snapshot(&state, &opened.project_id);
+        let receipts = crate::m5_controlled_execution::control_receipt_count(
+            &store_from_state(&state).expect("m5 store"),
+        );
+        let cross = apply_m5_execution_control_with_state(
+            &state,
+            M5ExecutionControlApplyRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: other,
+                action: "STOP".into(),
+                expected_control_revision: 0,
+            },
+        )
+        .expect_err("cross-project");
+        assert!(
+            cross == "m3_project_role_identity_source_missing"
+                || cross.contains("mismatch")
+                || cross.contains("binding")
+                || cross.contains("not_found")
+                || cross.contains("unavailable"),
+            "{cross}"
+        );
+
+        let worker_session = worker_role_session_id(&state, "syn-m5r07-ctrl-auth");
+        let original_perm: String = m3_db(&root)
+            .query_row(
+                "SELECT permission_snapshot_ref FROM m3_role_sessions WHERE role_session_id = ?1",
+                rusqlite::params![worker_session],
+                |row| row.get(0),
+            )
+            .expect("original permission");
+        m3_db(&root)
+            .execute(
+                "UPDATE m3_role_sessions SET state = 'SUSPENDED', resolution_reason = 'PERMISSION_MISMATCH_OR_UNKNOWN' WHERE role_session_id = ?1",
+                rusqlite::params![worker_session],
+            )
+            .expect("suspend worker");
+        let inactive = apply_control(&state, &opened, "STOP", 0).expect_err("inactive");
+        assert_eq!(inactive, "m3_project_role_session_inactive");
+        m3_db(&root)
+            .execute(
+                "UPDATE m3_role_sessions SET state = 'ACTIVE', resolution_reason = NULL, permission_snapshot_ref = ?1 WHERE role_session_id = ?2",
+                rusqlite::params![original_perm, worker_session],
+            )
+            .expect("restore worker");
+        m3_db(&root)
+            .execute(
+                "UPDATE m3_role_sessions SET permission_snapshot_ref = ?1 WHERE role_session_id = ?2",
+                rusqlite::params![
+                    "permission:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                    worker_session
+                ],
+            )
+            .expect("drift worker");
+        let drift = apply_control(&state, &opened, "STOP", 0).expect_err("drift");
+        assert_eq!(drift, "m3_project_role_session_permission_drift");
+        m3_db(&root)
+            .execute(
+                "UPDATE m3_role_sessions SET permission_snapshot_ref = ?1 WHERE role_session_id = ?2",
+                rusqlite::params![original_perm, worker_session],
+            )
+            .expect("restore permission");
+        let grant_id = formal_grant_id(&state, &opened.project_id);
+        mutate_loaded_grant(&state, &grant_id, |grant| {
+            grant.revoke(m5_now_ms());
+        });
+        let revoked = apply_control(&state, &opened, "STOP", 0).expect_err("revoked");
+        assert_eq!(revoked, "grant revoked");
+        assert_eq!(
+            runtime_owned_snapshot(&state, &opened.project_id).command_receipts,
+            before.command_receipts
+        );
+        assert_eq!(control_operation_state(&state, "op-ctrl-auth"), "CREATED");
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(
+                &store_from_state(&state).expect("m5 store")
+            ),
+            receipts
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_outcome_unknown_and_terminal_attempt_cannot_retry() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-ctrl-unknown");
+        persist_limited_control_operation(
+            &state,
+            &opened.project_id,
+            "op-ctrl-unknown",
+            crate::m5_controlled_execution::DurableOperationState::OutcomeUnknown,
+        );
+        let loaded = load_control(&state, &opened);
+        assert!(!loaded.can_retry);
+        assert!(!loaded.can_stop);
+        assert!(!loaded.can_resume);
+        assert_eq!(
+            loaded.blocked_reason.as_deref(),
+            Some("outcome_unknown_requires_same_effect_reconcile")
+        );
+        let receipts = crate::m5_controlled_execution::control_receipt_count(
+            &store_from_state(&state).expect("m5 store"),
+        );
+        let denied = apply_control(&state, &opened, "RETRY", 0).expect_err("unknown retry");
+        assert_eq!(denied, "outcome_unknown_requires_same_effect_reconcile");
+        assert_eq!(
+            control_operation_state(&state, "op-ctrl-unknown"),
+            "OUTCOME_UNKNOWN"
+        );
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(
+                &store_from_state(&state).expect("m5 store")
+            ),
+            receipts
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-ctrl-terminal");
+        run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("runtime");
+        let loaded = load_control(&state, &opened);
+        assert!(!loaded.can_retry);
+        assert!(!loaded.can_stop);
+        assert!(!loaded.can_resume);
+        assert_eq!(
+            loaded.blocked_reason.as_deref(),
+            Some("terminal_attempt_no_new_lineage")
+        );
+        let receipts = crate::m5_controlled_execution::control_receipt_count(
+            &store_from_state(&state).expect("m5 store"),
+        );
+        let denied = apply_control(&state, &opened, "RETRY", 0).expect_err("terminal retry");
+        assert_eq!(denied, "terminal_attempt_no_new_lineage");
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(
+                &store_from_state(&state).expect("m5 store")
+            ),
+            receipts
+        );
+        let after = runtime_owned_snapshot(&state, &opened.project_id);
+        assert_eq!(after.attempt_state.as_deref(), Some("SUCCEEDED"));
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn execution_control_transaction_fault_rolls_back() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r07-ctrl-fault");
+        persist_limited_control_operation(
+            &state,
+            &opened.project_id,
+            "op-ctrl-fault",
+            crate::m5_controlled_execution::DurableOperationState::Created,
+        );
+        let before = runtime_owned_snapshot(&state, &opened.project_id);
+        let err = apply_m5_execution_control_with_fault(
+            &state,
+            M5ExecutionControlApplyRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+                action: "STOP".into(),
+                expected_control_revision: 0,
+            },
+            crate::m5_controlled_execution::ControlApplyFault::FailAfterReceiptInsert,
+        )
+        .expect_err("fault");
+        assert_eq!(err, "control_transaction_fault");
+        let loaded = load_control(&state, &opened);
+        assert_eq!(loaded.control_revision, 0);
+        assert_eq!(loaded.durable_state, "CREATED");
+        assert!(loaded.can_stop);
+        assert_eq!(control_operation_state(&state, "op-ctrl-fault"), "CREATED");
+        assert_eq!(
+            crate::m5_controlled_execution::control_receipt_count(
+                &store_from_state(&state).expect("m5 store")
+            ),
+            0
+        );
+        assert_eq!(runtime_owned_snapshot(&state, &opened.project_id), before);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }
 }

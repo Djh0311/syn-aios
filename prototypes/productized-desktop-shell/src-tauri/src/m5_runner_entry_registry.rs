@@ -182,7 +182,8 @@ mod tests {
         let _bound: fn(
             &crate::AppState,
             crate::m5_product_commands::M5FormalStepRequest,
-        ) -> Result<crate::m5_product_commands::M5FormalStepResponse, String> =
+        )
+            -> Result<crate::m5_product_commands::M5FormalStepResponse, String> =
             crate::m5_product_commands::run_m5_authorized_runtime_with_state;
         assert_eq!(
             entry.source_symbol,
@@ -410,6 +411,66 @@ mod tests {
                 .matches("run_conformance_suite(")
                 .count(),
             0
+        );
+    }
+
+    #[test]
+    fn control_commands_do_not_call_runtime_and_are_registered() {
+        let product = include_str!("m5_product_commands.rs");
+        let controlled = include_str!("m5_controlled_execution.rs");
+        let registry = include_str!("command_registry.rs");
+        let load_start = product
+            .find("pub(crate) fn load_m5_execution_control_with_state(")
+            .expect("load control");
+        let apply_start = product
+            .find("pub(crate) fn apply_m5_execution_control_with_state(")
+            .expect("apply control");
+        let load_end = product[load_start + 1..]
+            .find("\npub(crate) fn ")
+            .map(|idx| load_start + 1 + idx)
+            .expect("next after load");
+        let apply_end = product[apply_start + 1..]
+            .find("\n#[tauri::command]")
+            .map(|idx| apply_start + 1 + idx)
+            .expect("tauri apply wrapper");
+        let load = &product[load_start..load_end];
+        let apply = &product[apply_start..apply_end];
+        for src in [load, apply, production_prefix(controlled)] {
+            assert!(!src.contains("run_admitted_workcell"));
+            assert!(!src.contains("run_authorized_workcell"));
+            assert!(!src.contains("run_m5_authorized_runtime_with_state"));
+            assert!(!src.contains(".execute(workcell"));
+        }
+        assert!(registry.contains("crate::m5_product_commands::load_m5_execution_control"));
+        assert!(registry.contains("crate::m5_product_commands::apply_m5_execution_control"));
+        let _load: fn(
+            &crate::AppState,
+            crate::m5_dto::M5ExecutionControlLoadRequest,
+        ) -> Result<crate::m5_dto::M5ExecutionControlResponse, String> =
+            crate::m5_product_commands::load_m5_execution_control_with_state;
+        let _apply: fn(
+            &crate::AppState,
+            crate::m5_dto::M5ExecutionControlApplyRequest,
+        ) -> Result<crate::m5_dto::M5ExecutionControlResponse, String> =
+            crate::m5_product_commands::apply_m5_execution_control_with_state;
+        assert_eq!(
+            ENTRIES
+                .iter()
+                .filter(
+                    |entry| entry.source_symbol == "load_m5_execution_control_with_state"
+                        || entry.source_symbol == "apply_m5_execution_control_with_state"
+                )
+                .count(),
+            0,
+            "control commands must not become runtime entries"
+        );
+        assert_eq!(classify("M5-SE-002"), Some(RunnerEntryClass::NewGrant));
+        assert_eq!(
+            ENTRIES
+                .iter()
+                .find(|entry| entry.id == "M5-SE-002")
+                .map(|entry| entry.source_symbol),
+            Some("run_m5_authorized_runtime_with_state")
         );
     }
 }

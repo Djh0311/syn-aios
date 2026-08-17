@@ -166,3 +166,44 @@ export async function openM5SourceDeepLink(
 ): Promise<string> {
   return invoke("open_m5_source_deep_link", { bindingId, projectId, sourceId });
 }
+
+export type M5ExecutionControlAction = "STOP" | "RETRY" | "RESUME";
+
+export type M5ExecutionControlLoadRequest = {
+  binding_id: string;
+  project_id: string;
+};
+
+export type M5ExecutionControlApplyRequest = {
+  binding_id: string;
+  project_id: string;
+  action: M5ExecutionControlAction;
+  expected_control_revision: number;
+};
+
+export type M5ExecutionControlResponse = {
+  control_revision: number;
+  phase: string;
+  durable_state: string;
+  attempt_state: string | null;
+  retry_count: number;
+  max_retries: number;
+  can_stop: boolean;
+  can_retry: boolean;
+  can_resume: boolean;
+  blocked_reason: string | null;
+  last_receipt_id: string | null;
+  replayed: boolean;
+};
+
+export async function loadM5ExecutionControl(
+  request: M5ExecutionControlLoadRequest,
+): Promise<M5ExecutionControlResponse> {
+  return invoke("load_m5_execution_control", { request });
+}
+
+export async function applyM5ExecutionControl(
+  request: M5ExecutionControlApplyRequest,
+): Promise<M5ExecutionControlResponse> {
+  return invoke("apply_m5_execution_control", { request });
+}

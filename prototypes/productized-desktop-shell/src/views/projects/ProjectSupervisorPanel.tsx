@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import {
+  applyM5ExecutionControl,
+  loadM5ExecutionControl,
   loadM5GlobalAdviceFixture,
   loadM5ProjectSummary,
   openM5ProjectSupervisor,
@@ -10,6 +12,8 @@ import {
   recordM5WorkerReport,
   runM5AuthorizedRuntime,
   submitM5SupervisorTurn,
+  type M5ExecutionControlAction,
+  type M5ExecutionControlResponse,
   type M5ProjectSummaryRead,
   type M5SupervisorOpenResponse,
 } from "../../lib/m5ProjectSupervisor";
@@ -25,12 +29,23 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
   const [grantId, setGrantId] = useState<string | null>(null);
   const [dispatchId, setDispatchId] = useState<string | null>(null);
   const [adviceWritable, setAdviceWritable] = useState<string | null>(null);
+  const [control, setControl] = useState<M5ExecutionControlResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     openM5ProjectSupervisor(projectId)
-      .then((opened) => {
-        if (!cancelled) setSession(opened);
+      .then(async (opened) => {
+        if (cancelled) return;
+        setSession(opened);
+        try {
+          const next = await loadM5ExecutionControl({
+            binding_id: opened.binding_id,
+            project_id: opened.project_id,
+          });
+          if (!cancelled) setControl(next);
+        } catch (reason: unknown) {
+          if (!cancelled) setError(String(reason));
+        }
       })
       .catch((reason: unknown) => {
         if (!cancelled) setError(String(reason));
@@ -112,6 +127,30 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
     if (outcome.result_decision_recorded) {
       await loadSummary();
     }
+    const next = await loadM5ExecutionControl(input);
+    setControl(next);
+  }
+
+  async function applyControl(action: M5ExecutionControlAction) {
+    if (!session || !control) return;
+    const allowed =
+      action === "STOP" ? control.can_stop : action === "RETRY" ? control.can_retry : control.can_resume;
+    if (!allowed) return;
+    try {
+      const next = await applyM5ExecutionControl({
+        binding_id: session.binding_id,
+        project_id: session.project_id,
+        action,
+        expected_control_revision: control.control_revision,
+      });
+      setControl(next);
+      setLog((rows) => [
+        ...rows,
+        `${action} replayed=${String(next.replayed)} receipt=${next.last_receipt_id ?? "none"} blocked=${next.blocked_reason ?? "none"}`,
+      ]);
+    } catch (reason: unknown) {
+      setError(String(reason));
+    }
   }
 
   return (
@@ -128,6 +167,16 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
       data-m5-grant-id={grantId ?? ""}
       data-m5-dispatch-id={dispatchId ?? ""}
       data-m5-advice-writable={adviceWritable ?? ""}
+      data-m5-control-revision={control ? String(control.control_revision) : ""}
+      data-m5-control-phase={control?.phase ?? ""}
+      data-m5-control-state={control?.durable_state ?? ""}
+      data-m5-control-attempt={control?.attempt_state ?? ""}
+      data-m5-can-stop={control ? String(control.can_stop) : ""}
+      data-m5-can-retry={control ? String(control.can_retry) : ""}
+      data-m5-can-resume={control ? String(control.can_resume) : ""}
+      data-m5-blocked-reason={control?.blocked_reason ?? ""}
+      data-m5-control-receipt={control?.last_receipt_id ?? ""}
+      data-m5-control-replayed={control ? String(control.replayed) : ""}
     >
       <h2>项目主管</h2>
       {error ? <p data-m5-supervisor-error={error}>{error}</p> : null}
@@ -181,7 +230,43 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
         >
           只读建议
         </button>
+        <button
+          type="button"
+          data-m5-action="stop"
+          disabled={!control?.can_stop}
+          onClick={() => void applyControl("STOP")}
+        >
+          停止
+        </button>
+        <button
+          type="button"
+          data-m5-action="retry"
+          disabled={!control?.can_retry}
+          onClick={() => void applyControl("RETRY")}
+        >
+          重试
+        </button>
+        <button
+          type="button"
+          data-m5-action="resume"
+          disabled={!control?.can_resume}
+          onClick={() => void applyControl("RESUME")}
+        >
+          恢复
+        </button>
       </div>
+      {control ? (
+        <aside data-m5-execution-control="1">
+          <p>
+            控制 {control.phase} / {control.durable_state} rev={control.control_revision}
+          </p>
+          <p>attempt {control.attempt_state ?? "none"}</p>
+          <p>blocked {control.blocked_reason ?? "none"}</p>
+          <p>
+            receipt {control.last_receipt_id ?? "none"} replayed={String(control.replayed)}
+          </p>
+        </aside>
+      ) : null}
       <pre data-m5-supervisor-log="1">{log.join("\n")}</pre>
       {summary ? (
         <aside data-m5-summary-stale={summary.stale ? "true" : "false"}>
