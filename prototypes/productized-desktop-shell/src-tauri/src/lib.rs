@@ -438,7 +438,6 @@ impl AppState {
         &self.index_path
     }
 
-    #[allow(dead_code)]
     pub(crate) fn m1_project_index_read_port(
         &self,
     ) -> Option<&dyn m1_project_index::M1ProjectIndexReadPort> {
@@ -447,7 +446,6 @@ impl AppState {
             .map(|handle| handle as &dyn m1_project_index::M1ProjectIndexReadPort)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn m1_project_index_authority(
         &self,
     ) -> Result<
@@ -457,7 +455,6 @@ impl AppState {
         m1_project_index::require_installed_authority(self.m1_project_index.as_ref())
     }
 
-    #[allow(dead_code)]
     pub(crate) fn m3_project_role_session_authority_port(
         &self,
     ) -> Result<

@@ -1,13 +1,15 @@
 // Non-test product callers for the existing project shell. UI must not
 // invent Grant, RoleSession, allowed command, or consumer identity.
 
+use crate::m1_project_index::M1ProjectId;
+use crate::m3_project_role_session_authority::M3ProjectRole;
 use crate::m5_dto::{
     M5ProjectSummaryRead, M5SupervisorOpenRequest, M5SupervisorOpenResponse,
     M5SupervisorTurnRequest, M5SupervisorTurnResponse,
 };
 use crate::m5_m3_identity::{
-    app_data_root_from_m5_store, open_ordinary_m3_repository, resolve_project_id_from_index,
-    M3OwnedSupervisorSessionPort, WHITELISTED_COMMAND,
+    load_project_role, provision_project_role, resolve_registered_project_id, view_to_session_ref,
+    InstalledViewPort, WHITELISTED_COMMAND,
 };
 use crate::m5_orchestration_store::M5OrchestrationStore;
 use crate::m5_project_summary::{
@@ -26,10 +28,7 @@ pub(crate) fn open_project_supervisor_command(
     request: M5SupervisorOpenRequest,
     now_ms: i64,
 ) -> Result<M5SupervisorOpenResponse, String> {
-    let session = sessions.load(&request.role_session_id)?;
-    if !request.role_session_id.is_empty() && request.role_session_id != session.role_session_id {
-        return Err("caller_invented_role_session_rejected".to_string());
-    }
+    let session = sessions.load("")?;
     if session.project_id != request.project_id {
         return Err("role_session_project_mismatch".to_string());
     }
@@ -175,36 +174,6 @@ fn store_from_state(state: &crate::AppState) -> Result<M5OrchestrationStore, Str
     state.open_m5_store()
 }
 
-fn resolve_product_project_id(state: &crate::AppState, locator: &str) -> Result<String, String> {
-    resolve_project_id_from_index(state.product_index_path(), locator).or_else(|error| {
-        if locator.starts_with("scratch-") || locator.starts_with("project:") {
-            Ok(locator.to_string())
-        } else if error == "m5_index_unreadable" || error.starts_with("m5_index_") {
-            Ok(crate::m5_m3_identity::official_project_id(locator))
-        } else {
-            Err(error)
-        }
-    })
-}
-
-fn m3_context(
-    state: &crate::AppState,
-    locator: &str,
-) -> Result<
-    (
-        crate::m3_role_session_repository::M3RoleSessionSqliteRepository,
-        String,
-    ),
-    String,
-> {
-    let store_path = state
-        .m5_store_path()
-        .ok_or_else(|| "m5_runtime_unavailable".to_string())?;
-    let app_data = app_data_root_from_m5_store(store_path)?;
-    let project_id = resolve_product_project_id(state, locator)?;
-    Ok((open_ordinary_m3_repository(&app_data)?, project_id))
-}
-
 fn persist_formal_progress(
     store: &M5OrchestrationStore,
     project_id: &str,
@@ -330,17 +299,30 @@ fn require_binding(
         M5OrchestrationStore,
         crate::m5_project_supervisor::SupervisorBinding,
         SupervisorSessionRef,
-        crate::m3_role_session_repository::M3RoleSessionSqliteRepository,
+        M1ProjectId,
     ),
     String,
 > {
+    let project_id = resolve_registered_project_id(state, locator)?;
     let store = store_from_state(state)?;
-    let (repository, project_id) = m3_context(state, locator)?;
-    let (_, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
-    let binding = load_binding_by_id(&store, binding_id, &session.project_id)
-        .or_else(|_| load_binding_by_id(&store, binding_id, locator))?;
+    let view = load_project_role(state, &project_id, M3ProjectRole::ProjectSupervisor)?;
+    let session = view_to_session_ref(&view);
+    let binding = load_binding_by_id(&store, binding_id, session.project_id.as_str())?;
     verify_binding_against_session(&binding, &session)?;
-    Ok((store, binding, session, repository))
+    Ok((store, binding, session, project_id))
+}
+
+pub(crate) fn open_m5_project_supervisor_with_state(
+    state: &crate::AppState,
+    request: M5SupervisorOpenRequest,
+) -> Result<M5SupervisorOpenResponse, String> {
+    let project_id = resolve_registered_project_id(state, &request.project_id)?;
+    let view = provision_project_role(state, &project_id, M3ProjectRole::ProjectSupervisor)?;
+    let port = InstalledViewPort::from_view(&view);
+    let store = store_from_state(state)?;
+    let mut request = request;
+    request.project_id = port.session().project_id.clone();
+    open_project_supervisor_command(&store, &port, request, m5_now_ms())
 }
 
 #[tauri::command]
@@ -348,12 +330,21 @@ pub(crate) fn open_m5_project_supervisor(
     state: tauri::State<'_, crate::AppState>,
     request: M5SupervisorOpenRequest,
 ) -> Result<M5SupervisorOpenResponse, String> {
-    let store = store_from_state(&state)?;
-    let (repository, project_id) = m3_context(&state, &request.project_id)?;
-    let (port, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
-    let mut request = request;
-    request.project_id = session.project_id.clone();
-    open_project_supervisor_command(&store, &port, request, m5_now_ms())
+    open_m5_project_supervisor_with_state(&state, request)
+}
+
+pub(crate) fn submit_m5_project_supervisor_turn_with_state(
+    state: &crate::AppState,
+    request: M5SupervisorTurnRequest,
+) -> Result<M5SupervisorTurnResponse, String> {
+    let project_id = resolve_registered_project_id(state, &request.project_id)?;
+    let view = load_project_role(state, &project_id, M3ProjectRole::ProjectSupervisor)?;
+    let port = InstalledViewPort::from_view(&view);
+    if port.session().project_id != request.project_id {
+        return Err("command_project_mismatch".to_string());
+    }
+    let store = store_from_state(state)?;
+    supervisor_turn_command(&store, &port, request, m5_now_ms())
 }
 
 #[tauri::command]
@@ -361,17 +352,7 @@ pub(crate) fn submit_m5_project_supervisor_turn(
     state: tauri::State<'_, crate::AppState>,
     request: M5SupervisorTurnRequest,
 ) -> Result<M5SupervisorTurnResponse, String> {
-    let store = store_from_state(&state)?;
-    let (repository, project_id) = m3_context(&state, &request.project_id)?;
-    if project_id != request.project_id && request.project_id != project_id {
-        let binding = load_binding_by_id(&store, &request.binding_id, &request.project_id);
-        if binding.is_err() {
-            return Err("command_project_mismatch".to_string());
-        }
-    }
-    let (port, _) =
-        M3OwnedSupervisorSessionPort::open_for_project(&repository, &request.project_id)?;
-    supervisor_turn_command(&store, &port, request, m5_now_ms())
+    submit_m5_project_supervisor_turn_with_state(&state, request)
 }
 
 #[derive(Clone, Debug, serde::Deserialize)]
@@ -390,18 +371,12 @@ pub(crate) struct M5AuthorizationDecisionResponse {
     pub dispatch_id: Option<String>,
 }
 
-#[tauri::command]
-pub(crate) fn record_m5_authorization_decision(
-    state: tauri::State<'_, crate::AppState>,
+pub(crate) fn record_m5_authorization_decision_with_state(
+    state: &crate::AppState,
     request: M5AuthorizationDecisionRequest,
 ) -> Result<M5AuthorizationDecisionResponse, String> {
-    let store = store_from_state(&state)?;
-    let (repository, _) = m3_context(&state, &request.project_id)?;
-    let (port, session) =
-        M3OwnedSupervisorSessionPort::open_for_project(&repository, &request.project_id)?;
-    let binding = load_binding_by_id(&store, &request.binding_id, &request.project_id)?;
-    verify_binding_against_session(&binding, &session)?;
-    let _ = port;
+    let (store, binding, _, project_id) =
+        require_binding(state, &request.binding_id, &request.project_id)?;
     let exec = if request.decision == "APPROVED" {
         let proposal = load_supervisor_proposal(
             &store,
@@ -409,12 +384,12 @@ pub(crate) fn record_m5_authorization_decision(
             &binding.project_id,
             &request.binding_id,
         )?;
-        let worker = port.worker_session()?;
+        let worker = provision_project_role(state, &project_id, M3ProjectRole::Worker)?;
         Some(
             crate::m5_m3_identity::authorized_request_from_stored_proposal(
                 &binding,
                 &proposal,
-                &worker.role_session_id,
+                &worker,
                 m5_now_ms(),
             )?,
         )
@@ -453,18 +428,39 @@ pub(crate) fn record_m5_authorization_decision(
 }
 
 #[tauri::command]
+pub(crate) fn record_m5_authorization_decision(
+    state: tauri::State<'_, crate::AppState>,
+    request: M5AuthorizationDecisionRequest,
+) -> Result<M5AuthorizationDecisionResponse, String> {
+    record_m5_authorization_decision_with_state(&state, request)
+}
+
+pub(crate) fn load_m5_project_summary_with_state(
+    state: &crate::AppState,
+    binding_id: String,
+    project_id: String,
+) -> Result<M5ProjectSummaryRead, String> {
+    let (store, _, session, _) = require_binding(state, &binding_id, &project_id)?;
+    read_project_summary_command(&store, &consumer_from_session(&session), m5_now_ms())
+}
+
+#[tauri::command]
 pub(crate) fn load_m5_project_summary(
     state: tauri::State<'_, crate::AppState>,
     binding_id: String,
     project_id: String,
 ) -> Result<M5ProjectSummaryRead, String> {
-    let store = store_from_state(&state)?;
-    let (repository, _) = m3_context(&state, &project_id)?;
-    let (port, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
-    let binding = load_binding_by_id(&store, &binding_id, &project_id)?;
-    verify_binding_against_session(&binding, &session)?;
-    let _ = port;
-    read_project_summary_command(&store, &consumer_from_session(&session), m5_now_ms())
+    load_m5_project_summary_with_state(state.inner(), binding_id, project_id)
+}
+
+pub(crate) fn open_m5_source_deep_link_with_state(
+    state: &crate::AppState,
+    binding_id: String,
+    project_id: String,
+    source_id: String,
+) -> Result<String, String> {
+    let (store, _, session, _) = require_binding(state, &binding_id, &project_id)?;
+    open_source_deep_link_command(&store, &session.project_id, &source_id)
 }
 
 #[tauri::command]
@@ -474,12 +470,7 @@ pub(crate) fn open_m5_source_deep_link(
     project_id: String,
     source_id: String,
 ) -> Result<String, String> {
-    let store = store_from_state(&state)?;
-    let (repository, _) = m3_context(&state, &project_id)?;
-    let (_, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
-    let binding = load_binding_by_id(&store, &binding_id, &project_id)?;
-    verify_binding_against_session(&binding, &session)?;
-    open_source_deep_link_command(&store, &session.project_id, &source_id)
+    open_m5_source_deep_link_with_state(state.inner(), binding_id, project_id, source_id)
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -489,6 +480,10 @@ pub(crate) struct M5IsolatedAcceptanceStatus {
     pub project_id: String,
     pub launch_ordinal: u32,
     pub scene: String,
+    pub m1_authority_installed: bool,
+    pub m3_authority_installed: bool,
+    pub open_available: bool,
+    pub composition_gap: Option<String>,
 }
 
 fn isolated_acceptance_requested() -> bool {
@@ -496,6 +491,26 @@ fn isolated_acceptance_requested() -> bool {
         std::env::var("SYN_M5R07_ISOLATED_ACCEPTANCE").as_deref(),
         Ok("1")
     )
+}
+
+fn isolated_composition_status(
+    state: &crate::AppState,
+) -> (bool, bool, bool, Option<String>) {
+    let m1 = state.m1_project_index_read_port().is_some();
+    let m3 = state.m3_project_role_session_authority_port().is_ok();
+    if m1 && m3 {
+        (true, true, true, None)
+    } else {
+        (
+            m1,
+            m3,
+            false,
+            Some(
+                "shared isolated product profile leaves M1/M3 authority uninstalled; M5 open fail-closed; full-loop not claimed"
+                    .into(),
+            ),
+        )
+    }
 }
 
 #[tauri::command]
@@ -506,11 +521,7 @@ pub(crate) fn load_m5_isolated_acceptance_status(
     let locator = crate::acceptance_runtime_profile::active_paths()?
         .map(|paths| paths.project_root.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let project_id = if locator.is_empty() {
-        String::new()
-    } else {
-        resolve_product_project_id(&state, &locator).unwrap_or_else(|_| locator.clone())
-    };
+    let (m1, m3, open_available, composition_gap) = isolated_composition_status(&state);
     let launch_ordinal = std::env::var("SYN_M5R07_LAUNCH_ORDINAL")
         .ok()
         .and_then(|value| value.parse().ok())
@@ -525,9 +536,13 @@ pub(crate) fn load_m5_isolated_acceptance_status(
     Ok(M5IsolatedAcceptanceStatus {
         isolated,
         project_locator: locator,
-        project_id,
+        project_id: String::new(),
         launch_ordinal,
         scene,
+        m1_authority_installed: m1,
+        m3_authority_installed: m3,
+        open_available,
+        composition_gap,
     })
 }
 
@@ -539,12 +554,25 @@ pub(crate) fn snapshot_m5_isolated_ui_receipt(
     if !isolated_acceptance_requested() {
         return Err("m5_isolated_acceptance_inactive".into());
     }
+    let (m1, m3, open_available, composition_gap) = isolated_composition_status(&state);
+    if !open_available {
+        return crate::m5_isolated_acceptance::write_unavailable_receipt(
+            &phase,
+            m1,
+            m3,
+            composition_gap.as_deref(),
+        );
+    }
     let store = store_from_state(&state)?;
     let locator = crate::acceptance_runtime_profile::active_paths()?
         .map(|paths| paths.project_root.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let project_id = resolve_product_project_id(&state, &locator)?;
-    crate::m5_isolated_acceptance::write_backend_derived_receipt(&store, &phase, &project_id)
+    let project_id = resolve_registered_project_id(&state, &locator)?;
+    crate::m5_isolated_acceptance::write_backend_derived_receipt(
+        &store,
+        &phase,
+        project_id.as_str(),
+    )
 }
 
 #[tauri::command]
@@ -553,11 +581,7 @@ pub(crate) fn load_m5_global_advice_fixture(
     binding_id: String,
     project_id: String,
 ) -> Result<crate::m5_dto::M5GlobalAdviceFixture, String> {
-    let store = store_from_state(&state)?;
-    let (repository, _) = m3_context(&state, &project_id)?;
-    let (_, session) = M3OwnedSupervisorSessionPort::open_for_project(&repository, &project_id)?;
-    let binding = load_binding_by_id(&store, &binding_id, &project_id)?;
-    verify_binding_against_session(&binding, &session)?;
+    let (_, _, session, _) = require_binding(&state, &binding_id, &project_id)?;
     Ok(crate::m5_dto::M5GlobalAdviceFixture::frozen(
         &session.project_id,
     ))
@@ -578,14 +602,16 @@ pub(crate) struct M5FormalStepResponse {
     pub claim_id: Option<String>,
     pub review_id: Option<String>,
     pub result_decision_recorded: bool,
+    pub reviewer_actor_id: Option<String>,
+    pub worker_actor_id: Option<String>,
+    pub worker_role_session_id: Option<String>,
 }
 
-#[tauri::command]
-pub(crate) fn run_m5_authorized_runtime(
-    state: tauri::State<'_, crate::AppState>,
+pub(crate) fn run_m5_authorized_runtime_with_state(
+    state: &crate::AppState,
     request: M5FormalStepRequest,
 ) -> Result<M5FormalStepResponse, String> {
-    let (store, binding, _, _) = require_binding(&state, &request.binding_id, &request.project_id)?;
+    let (store, binding, _, _) = require_binding(state, &request.binding_id, &request.project_id)?;
     let (grant_id, dispatch_id, _, _, _) = load_formal_progress(&store, &binding.project_id)?;
     let grant_id = grant_id.ok_or_else(|| "formal_runtime_missing_grant".to_string())?;
     let dispatch_id = dispatch_id.ok_or_else(|| "formal_runtime_missing_dispatch".to_string())?;
@@ -666,15 +692,30 @@ pub(crate) fn run_m5_authorized_runtime(
         claim_id: None,
         review_id: None,
         result_decision_recorded: false,
+        reviewer_actor_id: None,
+        worker_actor_id: None,
+        worker_role_session_id: Some(grant.worker_role_session_id),
     })
 }
 
 #[tauri::command]
-pub(crate) fn record_m5_worker_report(
+pub(crate) fn run_m5_authorized_runtime(
     state: tauri::State<'_, crate::AppState>,
     request: M5FormalStepRequest,
 ) -> Result<M5FormalStepResponse, String> {
-    let (store, binding, _, _) = require_binding(&state, &request.binding_id, &request.project_id)?;
+    run_m5_authorized_runtime_with_state(&state, request)
+}
+
+pub(crate) fn record_m5_worker_report_with_state(
+    state: &crate::AppState,
+    request: M5FormalStepRequest,
+) -> Result<M5FormalStepResponse, String> {
+    let (store, binding, _, project_id) =
+        require_binding(state, &request.binding_id, &request.project_id)?;
+    let worker = load_project_role(state, &project_id, M3ProjectRole::Worker)?;
+    if worker.actor_id.trim().is_empty() || worker.role_session_id.trim().is_empty() {
+        return Err("worker_view_unbound".to_string());
+    }
     let (grant_id, dispatch_id, receipt_json, _, _) =
         load_formal_progress(&store, &binding.project_id)?;
     let grant_id = grant_id.ok_or_else(|| "formal_report_missing_grant".to_string())?;
@@ -686,6 +727,9 @@ pub(crate) fn record_m5_worker_report(
     let dispatch = store
         .load_dispatch(&dispatch_id)?
         .ok_or_else(|| "formal_report_dispatch_not_found".to_string())?;
+    if grant.worker_role_session_id != worker.role_session_id {
+        return Err("worker_session_join_failed".to_string());
+    }
     let receipt: crate::m5_runtime_receipt::RuntimeReceipt =
         serde_json::from_str(&receipt_json).map_err(|e| format!("formal_receipt_decode:{e}"))?;
     let now = m5_now_ms();
@@ -706,7 +750,7 @@ pub(crate) fn record_m5_worker_report(
                 cost_tokens: None,
             },
             crate::worker_report::TrustedActor {
-                actor_id: binding.actor_id.clone(),
+                actor_id: worker.actor_id.clone(),
                 role: "worker".into(),
                 actor_type: "syn-native".into(),
                 authentication_method: "role-session".into(),
@@ -720,7 +764,7 @@ pub(crate) fn record_m5_worker_report(
             &dispatch.dispatch_id,
             grant.attempt_id.as_str(),
             grant.grant_id.as_str(),
-            &grant.worker_role_session_id,
+            &worker.role_session_id,
             receipt.receipt_id.as_str(),
             &receipt.trace_hash,
         );
@@ -742,27 +786,52 @@ pub(crate) fn record_m5_worker_report(
         claim_id: Some(claim.claim_id),
         review_id: None,
         result_decision_recorded: false,
+        reviewer_actor_id: None,
+        worker_actor_id: Some(worker.actor_id),
+        worker_role_session_id: Some(worker.role_session_id),
     })
 }
 
 #[tauri::command]
-pub(crate) fn record_m5_independent_review(
+pub(crate) fn record_m5_worker_report(
     state: tauri::State<'_, crate::AppState>,
     request: M5FormalStepRequest,
 ) -> Result<M5FormalStepResponse, String> {
-    let (store, binding, _, repository) =
-        require_binding(&state, &request.binding_id, &request.project_id)?;
+    record_m5_worker_report_with_state(&state, request)
+}
+
+pub(crate) fn record_m5_independent_review_with_state(
+    state: &crate::AppState,
+    request: M5FormalStepRequest,
+) -> Result<M5FormalStepResponse, String> {
+    let (store, binding, _, project_id) =
+        require_binding(state, &request.binding_id, &request.project_id)?;
+    let reviewer = provision_project_role(state, &project_id, M3ProjectRole::IndependentReviewer)?;
+    if reviewer.actor_id.trim().is_empty() || reviewer.role_session_id.trim().is_empty() {
+        return Err("reviewer_view_unbound".to_string());
+    }
+    if reviewer.actor_id.starts_with("reviewer:") {
+        return Err("reviewer_actor_must_be_m3_actor".to_string());
+    }
+    if reviewer.role != M3ProjectRole::IndependentReviewer {
+        return Err("reviewer_role_mismatch".to_string());
+    }
+    if reviewer.project_id != binding.project_id {
+        return Err("reviewer_project_mismatch".to_string());
+    }
+    let worker = load_project_role(state, &project_id, M3ProjectRole::Worker)?;
+    if reviewer.role_session_id == worker.role_session_id
+        || reviewer.actor_id == worker.actor_id
+    {
+        return Err("reviewer_must_be_independent".to_string());
+    }
     let (grant_id, dispatch_id, receipt_json, claim_id, _) =
         load_formal_progress(&store, &binding.project_id)?;
     let claim_id = claim_id.ok_or_else(|| "formal_review_missing_claim".to_string())?;
-    let reviewer =
-        M3OwnedSupervisorSessionPort::open_for_project(&repository, &binding.project_id)?
-            .0
-            .reviewer_session()?;
     let review = crate::m5_claim_ledger::record_review(
         &store,
         &claim_id,
-        &format!("reviewer:{}", binding.project_id),
+        &reviewer.actor_id,
         &reviewer.role_session_id,
         "VERIFIED",
         m5_now_ms(),
@@ -784,15 +853,25 @@ pub(crate) fn record_m5_independent_review(
         claim_id: Some(claim_id),
         review_id: Some(review.review_id),
         result_decision_recorded: false,
+        reviewer_actor_id: Some(reviewer.actor_id),
+        worker_actor_id: Some(worker.actor_id),
+        worker_role_session_id: Some(worker.role_session_id),
     })
 }
 
 #[tauri::command]
-pub(crate) fn record_m5_result_decision(
+pub(crate) fn record_m5_independent_review(
     state: tauri::State<'_, crate::AppState>,
     request: M5FormalStepRequest,
 ) -> Result<M5FormalStepResponse, String> {
-    let (store, binding, _, _) = require_binding(&state, &request.binding_id, &request.project_id)?;
+    record_m5_independent_review_with_state(&state, request)
+}
+
+pub(crate) fn record_m5_result_decision_with_state(
+    state: &crate::AppState,
+    request: M5FormalStepRequest,
+) -> Result<M5FormalStepResponse, String> {
+    let (store, binding, _, _) = require_binding(state, &request.binding_id, &request.project_id)?;
     let (grant_id, dispatch_id, _, claim_id, review_id) =
         load_formal_progress(&store, &binding.project_id)?;
     let review_id = review_id.ok_or_else(|| "formal_result_missing_review".to_string())?;
@@ -813,7 +892,18 @@ pub(crate) fn record_m5_result_decision(
         claim_id,
         review_id: Some(review_id),
         result_decision_recorded: true,
+        reviewer_actor_id: None,
+        worker_actor_id: None,
+        worker_role_session_id: None,
     })
+}
+
+#[tauri::command]
+pub(crate) fn record_m5_result_decision(
+    state: tauri::State<'_, crate::AppState>,
+    request: M5FormalStepRequest,
+) -> Result<M5FormalStepResponse, String> {
+    record_m5_result_decision_with_state(&state, request)
 }
 
 #[tauri::command]
@@ -833,4 +923,297 @@ pub(crate) fn write_m5_isolated_ui_receipt(
     phase: String,
 ) -> Result<String, String> {
     snapshot_m5_isolated_ui_receipt(state, phase)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::m1_project_index::{
+        M1RegisterExactAliasRequest, M1_ORDINARY_APP_DATA_DIR_NAME, M1_PROJECT_INDEX_UNAVAILABLE,
+    };
+    use std::path::{Path, PathBuf};
+
+    fn ordinary_named_root() -> PathBuf {
+        let parent = std::env::temp_dir().join(format!(
+            "m5r07-ordinary-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let root = parent.join(M1_ORDINARY_APP_DATA_DIR_NAME);
+        std::fs::create_dir_all(&root).expect("create ordinary app-data root");
+        std::fs::canonicalize(&root).expect("canonicalize ordinary app-data root")
+    }
+
+    fn ordinary_app_state(app_data_root: &Path) -> crate::AppState {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        crate::AppState::try_new_with_ordinary_product_ports(
+            app_data_root,
+            &manifest_dir.join("../../index-kernel/codex-index.json"),
+            &manifest_dir.join("../../../tasks/README.md"),
+            crate::m4_secretary_conversation::M4SecretaryConversationProviderConfig::Unavailable,
+        )
+        .expect("ordinary product AppState must construct")
+    }
+
+    fn isolated_acceptance_app_state() -> (PathBuf, crate::AppState) {
+        let root = std::env::temp_dir().join(format!(
+            "m5r07-isolated-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(root.join("app-data")).expect("create isolated profile");
+        let root = std::fs::canonicalize(&root).expect("canonicalize isolated profile");
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let paths = crate::acceptance_runtime_profile::RuntimePaths {
+            root: root.clone(),
+            index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
+            tasks_path: manifest_dir.join("../../../tasks/README.md"),
+            project_root: root.join("project"),
+            workflow_state_path: root.join("workflow-state.json"),
+            app_data_root: root.join("app-data"),
+            vault_root: root.join("vault"),
+            recovery_backups_root: root.join("recovery"),
+            canvas_root: root.join("canvas"),
+            codex_db_path: root.join("codex.sqlite"),
+            app_log_dir: root.join("logs"),
+        };
+        let state = crate::AppState::try_new_with_isolated_product_profile(&paths)
+            .expect("isolated acceptance AppState must construct");
+        (root, state)
+    }
+
+    fn register_alias(state: &crate::AppState, alias: &str) -> String {
+        state
+            .m1_project_index_authority()
+            .expect("m1 authority")
+            .register_exact_alias(&M1RegisterExactAliasRequest {
+                exact_alias: alias.to_string(),
+            })
+            .expect("register alias")
+            .project_id
+            .as_str()
+            .to_string()
+    }
+
+    fn grant_count(state: &crate::AppState) -> i64 {
+        let Ok(store) = store_from_state(state) else {
+            return 0;
+        };
+        store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_execution_grants", [], |row| {
+                row.get(0)
+            })
+            .unwrap_or(0)
+    }
+
+    fn persisted_reviewer_actor(state: &crate::AppState, review_id: &str) -> String {
+        let store = store_from_state(state).expect("m5 store");
+        store
+            .connection()
+            .query_row(
+                "SELECT reviewer_actor_id FROM m5_reviews WHERE review_id=?1",
+                [review_id],
+                |row| row.get(0),
+            )
+            .expect("persisted reviewer")
+    }
+
+    #[test]
+    fn isolated_profile_open_fails_closed_without_m1_m3() {
+        let (root, state) = isolated_acceptance_app_state();
+        assert!(state.m1_project_index_read_port().is_none());
+        assert!(state.m3_project_role_session_authority_port().is_err());
+        let before = grant_count(&state);
+        let err = open_m5_project_supervisor_with_state(
+            &state,
+            M5SupervisorOpenRequest {
+                project_id: "syn-m5r07-isolated-alias".into(),
+            },
+        )
+        .expect_err("isolated open must fail closed");
+        assert_eq!(err, M1_PROJECT_INDEX_UNAVAILABLE);
+        assert_eq!(grant_count(&state), before);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn ordinary_open_unknown_scratch_and_cross_project_fail_with_zero_grants() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let canonical = register_alias(&state, "syn-m5r07-ordinary-alias");
+        let opened = open_m5_project_supervisor_with_state(
+            &state,
+            M5SupervisorOpenRequest {
+                project_id: "syn-m5r07-ordinary-alias".into(),
+            },
+        )
+        .expect("registered alias must open");
+        assert_eq!(opened.project_id, canonical);
+        let other = register_alias(&state, "syn-m5r07-other-alias");
+        let before = grant_count(&state);
+        let unknown = open_m5_project_supervisor_with_state(
+            &state,
+            M5SupervisorOpenRequest {
+                project_id: "syn-m5r07-unknown-alias".into(),
+            },
+        )
+        .expect_err("unknown alias");
+        assert_eq!(unknown, "m1_alias_unknown");
+        let scratch = open_m5_project_supervisor_with_state(
+            &state,
+            M5SupervisorOpenRequest {
+                project_id: "scratch-forged".into(),
+            },
+        )
+        .expect_err("scratch locator");
+        assert!(
+            scratch.contains("scratch")
+                || scratch == "m1_alias_malformed"
+                || scratch == "m1_alias_unknown",
+            "{scratch}"
+        );
+        let path = open_m5_project_supervisor_with_state(
+            &state,
+            M5SupervisorOpenRequest {
+                project_id: "/tmp/forged-root".into(),
+            },
+        )
+        .expect_err("path locator");
+        assert!(
+            path.contains("path")
+                || path == "m1_alias_malformed"
+                || path == "m1_alias_unknown",
+            "{path}"
+        );
+        let cross = submit_m5_project_supervisor_turn_with_state(
+            &state,
+            M5SupervisorTurnRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: other,
+                kind: "chat".into(),
+                text: "no".into(),
+            },
+        )
+        .expect_err("cross-project binding");
+        assert!(
+            cross.contains("mismatch")
+                || cross.contains("not_found")
+                || cross.contains("binding")
+                || cross.contains("unavailable")
+                || cross.contains("missing"),
+            "{cross}"
+        );
+        assert_eq!(grant_count(&state), before);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn ordinary_product_loop_uses_distinct_m3_views_and_survives_reopen() {
+        let root = ordinary_named_root();
+        let first = ordinary_app_state(&root);
+        register_alias(&first, "syn-m5r07-loop-alias");
+        let opened = open_m5_project_supervisor_with_state(
+            &first,
+            M5SupervisorOpenRequest {
+                project_id: "syn-m5r07-loop-alias".into(),
+            },
+        )
+        .expect("open supervisor");
+        let supervisor = load_project_role(
+            &first,
+            &resolve_registered_project_id(&first, "syn-m5r07-loop-alias").unwrap(),
+            M3ProjectRole::ProjectSupervisor,
+        )
+        .expect("load supervisor view");
+        assert_eq!(opened.role_session_id, supervisor.role_session_id);
+        assert_eq!(opened.project_id, supervisor.project_id);
+        let proposal = submit_m5_project_supervisor_turn_with_state(
+            &first,
+            M5SupervisorTurnRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+                kind: "submit_proposal".into(),
+                text: "echo hello".into(),
+            },
+        )
+        .expect("propose");
+        let approved = record_m5_authorization_decision_with_state(
+            &first,
+            M5AuthorizationDecisionRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+                proposal_id: proposal.text.clone(),
+                decision: "APPROVED".into(),
+            },
+        )
+        .expect("approve");
+        assert!(approved.dispatched);
+        let runtime = run_m5_authorized_runtime_with_state(
+            &first,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("runtime");
+        let report = record_m5_worker_report_with_state(
+            &first,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("report");
+        let worker = report
+            .worker_actor_id
+            .clone()
+            .expect("worker actor from M3 view");
+        assert_ne!(worker, supervisor.actor_id);
+        assert_eq!(
+            report.worker_role_session_id.as_deref(),
+            Some(runtime.worker_role_session_id.as_deref().unwrap_or(""))
+        );
+        let review = record_m5_independent_review_with_state(
+            &first,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("review");
+        let reviewer = review
+            .reviewer_actor_id
+            .clone()
+            .expect("reviewer actor from M3 view");
+        assert_ne!(reviewer, worker);
+        assert_ne!(reviewer, supervisor.actor_id);
+        assert!(!reviewer.starts_with("reviewer:"));
+        assert_eq!(
+            persisted_reviewer_actor(&first, review.review_id.as_ref().unwrap()),
+            reviewer
+        );
+        let result = record_m5_result_decision_with_state(
+            &first,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("result");
+        assert!(result.result_decision_recorded);
+        drop(first);
+        let resumed = ordinary_app_state(&root);
+        let again = open_m5_project_supervisor_with_state(
+            &resumed,
+            M5SupervisorOpenRequest {
+                project_id: "syn-m5r07-loop-alias".into(),
+            },
+        )
+        .expect("resume");
+        assert_eq!(again.binding_id, opened.binding_id);
+        assert_eq!(again.role_session_id, opened.role_session_id);
+        assert_eq!(again.project_id, opened.project_id);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
 }

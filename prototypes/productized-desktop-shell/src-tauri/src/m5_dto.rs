@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub(crate) struct M5SupervisorOpenRequest {
     pub project_id: String,
-    pub role_session_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

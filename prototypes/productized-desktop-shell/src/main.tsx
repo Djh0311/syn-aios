@@ -2951,6 +2951,11 @@ async function installM5R07IsolatedAcceptanceDriver() {
     if (!status.isolated) return;
     document.documentElement.dataset.m5r07Isolated = "1";
     document.documentElement.dataset.m5r07Scene = status.scene;
+    document.documentElement.dataset.m5r07OpenAvailable = status.open_available ? "1" : "0";
+    if (!status.open_available) {
+      await writeM5IsolatedUiReceipt("unavailable");
+      return;
+    }
     await m5r07WaitFor("app_shell", () => document.querySelector(".app-shell"));
     await m5r07OpenSupervisorPanel();
     const panel = m5r07Panel();

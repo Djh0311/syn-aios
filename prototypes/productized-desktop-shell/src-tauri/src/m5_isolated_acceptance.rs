@@ -50,6 +50,7 @@ pub(crate) fn run_authorized_followthrough(
     grant_id: &str,
     dispatch_id: &str,
     actor_id: &str,
+    reviewer_actor_id: &str,
     reviewer_role_session_id: &str,
     now_ms: i64,
 ) -> Result<AuthorizedFollowthroughResult, String> {
@@ -144,10 +145,19 @@ pub(crate) fn run_authorized_followthrough(
         &receipt.trace_hash,
     );
     let claim = record_claim(store, &report, Some(&receipt), now_ms + 1500)?;
+    if reviewer_role_session_id.trim().is_empty()
+        || reviewer_actor_id.trim().is_empty()
+        || reviewer_role_session_id.starts_with("reviewer:")
+        || reviewer_actor_id.starts_with("reviewer:")
+        || reviewer_actor_id == actor_id
+        || reviewer_role_session_id == grant.worker_role_session_id
+    {
+        return Err("reviewer_identity_unbound".into());
+    }
     let review = record_review(
         store,
         &claim.claim_id,
-        &format!("reviewer:{project_id}"),
+        reviewer_actor_id,
         reviewer_role_session_id,
         "VERIFIED",
         now_ms + 1600,
@@ -225,7 +235,6 @@ fn open(
         &sessions,
         M5SupervisorOpenRequest {
             project_id: project_id.into(),
-            role_session_id: String::new(),
         },
         now_ms,
     )
@@ -272,16 +281,7 @@ fn run_scene_a(path: &Path) -> Result<IsolatedSceneResult, String> {
             row.get(0)
         })
         .unwrap_or(0);
-    let invented = open_project_supervisor_command(
-        &store,
-        &sessions,
-        M5SupervisorOpenRequest {
-            project_id: "scratch-a".into(),
-            role_session_id: "invented-session".into(),
-        },
-        1300,
-    )
-    .err();
+    let invented = sessions.load("invented-session").err();
     Ok(IsolatedSceneResult {
         scene: "scratch-a-readonly-and-user-reject".into(),
         passed: !chat.created_grant
@@ -348,7 +348,25 @@ fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
         "scratch-b",
         &proposal.text,
         "APPROVED",
-        None,
+        Some(
+            crate::m5_orchestration_service::AuthorizedExecutionRequest {
+                project_id: "scratch-b".into(),
+                proposal_id: proposal.text.clone(),
+                deciding_actor_id: binding.actor_id.clone(),
+                worker_role_session_id: "test-worker:scratch-b".into(),
+                principal_actor_id: binding.actor_id.clone(),
+                workflow_ref: "workflow:scratch-b".into(),
+                source_object_ref: "object:scratch-b".into(),
+                allowed_commands: vec!["echo".into()],
+                cwd_ref: "scratch:scratch-b".into(),
+                write_root_refs: vec!["scratch:scratch-b".into()],
+                object_refs: vec!["object:scratch-b".into()],
+                scope_fingerprint: "scope:scratch-b".into(),
+                policy_decision_ref: crate::m5_m3_identity::policy_decision_ref_for_action("echo"),
+                now_ms: 2000,
+                ttl_ms: 60_000,
+            },
+        ),
     )?
     .ok_or("expected_dispatch")?;
     let follow = run_authorized_followthrough(
@@ -361,6 +379,7 @@ fn run_scene_b(path: &Path) -> Result<IsolatedSceneResult, String> {
             .ok_or("missing_dispatch")?
             .as_str(),
         &binding.actor_id,
+        "test-reviewer-actor:scratch-b",
         "test-reviewer:scratch-b",
         2500,
     )?;
@@ -533,6 +552,34 @@ pub(crate) fn write_backend_derived_receipt(
         "spawned": false,
         "notes": notes,
         "derived_from": "backend_store",
+    });
+    let log_dir = crate::acceptance_runtime_profile::isolated_log_dir()?
+        .ok_or_else(|| "m5_isolated_log_dir_missing".to_string())?;
+    std::fs::create_dir_all(&log_dir).map_err(|e| format!("m5_isolated_log_dir:{e}"))?;
+    let path = log_dir.join(format!("m5r07-ui-{phase}.json"));
+    std::fs::write(
+        &path,
+        serde_json::to_vec_pretty(&body).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("write_ui_receipt:{e}"))?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+pub(crate) fn write_unavailable_receipt(
+    phase: &str,
+    m1_authority_installed: bool,
+    m3_authority_installed: bool,
+    composition_gap: Option<&str>,
+) -> Result<String, String> {
+    let body = serde_json::json!({
+        "schema": "syn.m5r07.isolated-ui-receipt.v3-unavailable",
+        "phase": phase,
+        "m1_authority_installed": m1_authority_installed,
+        "m3_authority_installed": m3_authority_installed,
+        "open_available": false,
+        "full_loop_claimed": false,
+        "composition_gap": composition_gap,
+        "derived_from": "installed_authority_slots",
     });
     let log_dir = crate::acceptance_runtime_profile::isolated_log_dir()?
         .ok_or_else(|| "m5_isolated_log_dir_missing".to_string())?;

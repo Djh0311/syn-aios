@@ -79,6 +79,7 @@ pub(crate) fn ensure_supervisor_schema(store: &M5OrchestrationStore) -> Result<(
                 created_at_ms INTEGER NOT NULL,
                 authorized_action TEXT NOT NULL DEFAULT 'none'
             );
+            -- Compatibility table only. Not an identity source; do not INSERT.
             CREATE TABLE IF NOT EXISTS m5_role_sessions (
                 role_session_id TEXT PRIMARY KEY,
                 actor_id TEXT NOT NULL,
@@ -95,79 +96,6 @@ pub(crate) fn ensure_supervisor_schema(store: &M5OrchestrationStore) -> Result<(
         [],
     );
     Ok(())
-}
-
-pub(crate) fn persist_formal_role_session(
-    store: &M5OrchestrationStore,
-    session: &SupervisorSessionRef,
-    now_ms: i64,
-) -> Result<(), String> {
-    ensure_supervisor_schema(store)?;
-    if session.role_session_id.trim().is_empty()
-        || session.actor_id.trim().is_empty()
-        || session.project_id.trim().is_empty()
-    {
-        return Err("empty_role_session_identity_rejected".to_string());
-    }
-    store
-        .connection()
-        .execute(
-            "INSERT OR REPLACE INTO m5_role_sessions (
-                role_session_id, actor_id, role, project_id, status, created_at_ms
-            ) VALUES (?1,?2,?3,?4,?5,?6)",
-            params![
-                session.role_session_id,
-                session.actor_id,
-                session.role,
-                session.project_id,
-                session.status,
-                now_ms
-            ],
-        )
-        .map_err(|e| format!("persist_role_session:{e}"))?;
-    Ok(())
-}
-
-pub(crate) fn load_formal_role_session(
-    store: &M5OrchestrationStore,
-    role_session_id: &str,
-) -> Result<Option<SupervisorSessionRef>, String> {
-    ensure_supervisor_schema(store)?;
-    store
-        .connection()
-        .query_row(
-            "SELECT role_session_id, actor_id, role, project_id, status
-             FROM m5_role_sessions WHERE role_session_id=?1",
-            [role_session_id],
-            |row| {
-                Ok(SupervisorSessionRef {
-                    role_session_id: row.get(0)?,
-                    actor_id: row.get(1)?,
-                    role: row.get(2)?,
-                    project_id: row.get(3)?,
-                    status: row.get(4)?,
-                })
-            },
-        )
-        .optional()
-        .map_err(|e| format!("load_role_session:{e}"))
-}
-
-pub(crate) struct PersistentRoleSessionPort<'a> {
-    store: &'a M5OrchestrationStore,
-}
-
-impl<'a> PersistentRoleSessionPort<'a> {
-    pub(crate) fn new(store: &'a M5OrchestrationStore) -> Self {
-        Self { store }
-    }
-}
-
-impl ProjectSupervisorRoleSessionPort for PersistentRoleSessionPort<'_> {
-    fn load(&self, role_session_id: &str) -> Result<SupervisorSessionRef, String> {
-        load_formal_role_session(self.store, role_session_id)?
-            .ok_or_else(|| "role_session_not_found".to_string())
-    }
 }
 
 pub(crate) fn open_or_resume_supervisor(
@@ -421,15 +349,7 @@ pub(crate) fn record_user_authorization_decision(
                     }
                     request
                 }
-                None => crate::m5_m3_identity::authorized_request_from_stored_proposal(
-                    &live,
-                    &proposal,
-                    &format!("session:worker:{}", live.project_id),
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_millis() as i64)
-                        .unwrap_or(0),
-                )?,
+                None => return Err("worker_view_required".to_string()),
             };
             approve_supervisor_proposal(store, &live, proposal_id)?;
             Ok(Some(prepare_and_dispatch(

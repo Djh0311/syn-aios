@@ -1,221 +1,97 @@
-// M5 consumes M3-owned RoleSession identity. This module never persists a
-// parallel M5 session authority.
+// M5 identity adapter. Project ids come only from an installed M1
+// authority/read port. Role sessions come only as immutable M3 views.
 
-use crate::m3_role_session::{
-    CorrelationId, OpaqueRef, RequestIdempotencyKey, RoleSessionId, ServerResolvedBinding,
+use crate::m1_project_index::{M1ProjectId, M1_PROJECT_INDEX_UNAVAILABLE};
+use crate::m3_project_role_session_authority::{
+    M3ProjectRole, M3ProjectRoleSessionRequest, M3ProjectRoleSessionView,
 };
-use crate::m3_role_session_repository::{
-    CreateRoleSessionCommand, M3CommandMetadata, M3OrdinaryRoleSessionRepositoryConfig,
-    M3RoleSessionSnapshotQuery, M3RoleSessionSqliteRepository,
-    M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH,
+use crate::m5_project_supervisor::{
+    ProjectSupervisorRoleSessionPort, SupervisorBinding, SupervisorSessionRef,
 };
-use crate::m5_project_supervisor::{ProjectSupervisorRoleSessionPort, SupervisorSessionRef};
-use sha2::{Digest, Sha256};
-use std::path::{Path, PathBuf};
 
-const SUPERVISOR_ROLE: &str = "project_supervisor";
-const WORKER_ROLE: &str = "worker";
-const REVIEWER_ROLE: &str = "independent_reviewer";
+pub(crate) const WHITELISTED_COMMAND: &str = "echo";
 
-pub(crate) fn official_project_id(project_root: &str) -> String {
-    format!("project:{}", stable_id(project_root))
+pub(crate) fn resolve_registered_project_id(
+    state: &crate::AppState,
+    claim: &str,
+) -> Result<M1ProjectId, String> {
+    let port = state
+        .m1_project_index_read_port()
+        .ok_or_else(|| M1_PROJECT_INDEX_UNAVAILABLE.to_string())?;
+    if claim.starts_with("project:") {
+        port.resolve_canonical_project_id(claim)
+            .map_err(|error| error.code)
+    } else {
+        port.resolve_exact_alias(claim).map_err(|error| error.code)
+    }
 }
 
-fn stable_id(value: &str) -> String {
-    let mut output = String::new();
-    for character in value.chars() {
-        if character.is_ascii_alphanumeric() {
-            output.push(character.to_ascii_lowercase());
-        } else if !output.ends_with('-') {
-            output.push('-');
-        }
-    }
-    output.trim_matches('-').chars().take(96).collect()
-}
-
-pub(crate) fn resolve_project_id_from_index(
-    index_path: &Path,
-    locator: &str,
-) -> Result<String, String> {
-    if locator.starts_with("project:") && !locator.contains('/') {
-        return Ok(locator.to_string());
-    }
-    let bytes = std::fs::read(index_path).map_err(|e| format!("m5_index_unreadable:{e}"))?;
-    let index: serde_json::Value =
-        serde_json::from_slice(&bytes).map_err(|e| format!("m5_index_invalid:{e}"))?;
-    let projects = index
-        .get("projects")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "m5_index_projects_missing".to_string())?;
-    let found = projects
-        .iter()
-        .find(|project| project.get("project_root").and_then(|v| v.as_str()) == Some(locator));
-    if found.is_none() && locator.starts_with("scratch-") {
-        return Ok(locator.to_string());
-    }
-    found.ok_or_else(|| "project_locator_not_in_index".to_string())?;
-    Ok(official_project_id(locator))
-}
-
-pub(crate) fn open_ordinary_m3_repository(
-    app_data_root: &Path,
-) -> Result<M3RoleSessionSqliteRepository, String> {
-    std::fs::create_dir_all(app_data_root).map_err(|e| format!("m5_m3_app_data_create:{e}"))?;
-    let canonical = std::fs::canonicalize(app_data_root)
-        .map_err(|_| "m5_m3_app_data_root_unavailable".to_string())?;
-    let db_path = canonical.join(M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH);
-    M3RoleSessionSqliteRepository::open_ordinary_product(&M3OrdinaryRoleSessionRepositoryConfig {
-        app_data_root: canonical,
-        db_path,
+pub(crate) fn provision_project_role(
+    state: &crate::AppState,
+    project_id: &M1ProjectId,
+    role: M3ProjectRole,
+) -> Result<M3ProjectRoleSessionView, String> {
+    let port = state
+        .m3_project_role_session_authority_port()
+        .map_err(|error| error.code)?;
+    port.provision(&M3ProjectRoleSessionRequest {
+        project_id: project_id.clone(),
+        role,
     })
     .map_err(|error| error.code)
 }
 
-pub(crate) fn app_data_root_from_m5_store(store_path: &Path) -> Result<PathBuf, String> {
-    let parent = store_path
-        .parent()
-        .and_then(|m5_dir| m5_dir.parent())
-        .ok_or_else(|| "m5_app_data_root_unavailable".to_string())?;
-    std::fs::create_dir_all(parent).map_err(|e| format!("m5_m3_app_data_create:{e}"))?;
-    std::fs::canonicalize(parent).map_err(|_| "m5_app_data_root_unavailable".to_string())
-}
-
-fn sealed_ref(namespace: &str, material: &str) -> String {
-    format!(
-        "{namespace}:sha256:{:x}",
-        Sha256::digest(material.as_bytes())
-    )
-}
-
-fn opaque(namespace: &str, material: &str) -> Result<OpaqueRef, String> {
-    OpaqueRef::try_from_canonical(sealed_ref(namespace, material))
-        .map_err(|_| format!("m5_m3_opaque_ref_invalid:{namespace}"))
-}
-
-fn supervisor_binding(project_id: &str, role: &str) -> Result<ServerResolvedBinding, String> {
-    ServerResolvedBinding::from_server_canonical(
-        sealed_ref("actor", "m5:actor:local-owner"),
-        sealed_ref("role", role),
-        sealed_ref("scope", project_id),
-        sealed_ref("object", project_id),
-        sealed_ref("channel", &format!("m5-{role}")),
-        sealed_ref("permission", &format!("m5r07-{role}-echo")),
-    )
-    .map_err(|e| e.to_string())
-}
-
-fn session_id(project_id: &str, role: &str) -> Result<RoleSessionId, String> {
-    RoleSessionId::try_from_canonical(sealed_ref("session", &format!("m5:{role}:{project_id}")))
-        .map_err(|_| "m5_m3_role_session_id_invalid".to_string())
-}
-
-fn metadata(
-    repository: &M3RoleSessionSqliteRepository,
-    project_id: &str,
-    role: &str,
-    operation: &str,
-) -> Result<M3CommandMetadata, String> {
-    let material = format!("m5:{role}:{project_id}:{operation}");
-    Ok(M3CommandMetadata {
-        receipt_id: opaque("receipt", &format!("{material}/receipt"))?,
-        event_id: opaque("event", &format!("{material}/event"))?,
-        audit_id: opaque("audit", &format!("{material}/audit"))?,
-        correlation_id: CorrelationId::try_from_canonical(sealed_ref(
-            "correlation",
-            &format!("{material}/correlation"),
-        ))
-        .map_err(|_| "m5_m3_correlation_invalid".to_string())?,
-        request_idempotency_key: RequestIdempotencyKey::try_from_canonical(sealed_ref(
-            "request",
-            &format!("{material}/idempotency"),
-        ))
-        .map_err(|_| "m5_m3_idempotency_invalid".to_string())?,
-        occurred_at: repository
-            .capture_server_utc_now()
-            .map_err(|_| "m5_m3_server_clock_unavailable".to_string())?,
+pub(crate) fn load_project_role(
+    state: &crate::AppState,
+    project_id: &M1ProjectId,
+    role: M3ProjectRole,
+) -> Result<M3ProjectRoleSessionView, String> {
+    let port = state
+        .m3_project_role_session_authority_port()
+        .map_err(|error| error.code)?;
+    port.load(&M3ProjectRoleSessionRequest {
+        project_id: project_id.clone(),
+        role,
     })
+    .map_err(|error| error.code)
 }
 
-pub(crate) fn ensure_m3_role_session(
-    repository: &M3RoleSessionSqliteRepository,
-    project_id: &str,
-    role: &str,
-) -> Result<SupervisorSessionRef, String> {
-    let binding = supervisor_binding(project_id, role)?;
-    let role_session_id = session_id(project_id, role)?;
-    let query = M3RoleSessionSnapshotQuery {
-        role_session_id: role_session_id.clone(),
-        binding: binding.clone(),
-    };
-    if let Some(snapshot) = repository
-        .load_authorized_role_session_snapshot(&query)
-        .map_err(|e| e.code)?
-    {
-        return Ok(to_supervisor_ref(&snapshot.session, project_id, role));
-    }
-    let outcome = repository
-        .create_role_session(&CreateRoleSessionCommand {
-            role_session_id: role_session_id.clone(),
-            binding,
-            metadata: metadata(repository, project_id, role, "create")?,
-        })
-        .map_err(|e| e.code)?;
-    let session = outcome
-        .role_session
-        .ok_or_else(|| "m5_m3_create_session_missing".to_string())?;
-    Ok(to_supervisor_ref(&session, project_id, role))
-}
-
-fn to_supervisor_ref(
-    session: &crate::m3_role_session::RoleSession,
-    project_id: &str,
-    role: &str,
-) -> SupervisorSessionRef {
+pub(crate) fn view_to_session_ref(view: &M3ProjectRoleSessionView) -> SupervisorSessionRef {
     SupervisorSessionRef {
-        role_session_id: session.role_session_id.as_str().to_string(),
-        project_id: project_id.to_string(),
-        actor_id: session.actor_id.as_str().to_string(),
-        role: role.to_string(),
-        status: session.status.to_string(),
+        role_session_id: view.role_session_id.clone(),
+        project_id: view.project_id.clone(),
+        actor_id: view.actor_id.clone(),
+        role: match view.role {
+            M3ProjectRole::ProjectSupervisor => "project_supervisor".into(),
+            M3ProjectRole::Worker => "worker".into(),
+            M3ProjectRole::IndependentReviewer => "independent_reviewer".into(),
+        },
+        status: "ACTIVE".into(),
     }
 }
 
-pub(crate) struct M3OwnedSupervisorSessionPort<'a> {
-    repository: &'a M3RoleSessionSqliteRepository,
-    project_id: String,
+pub(crate) struct InstalledViewPort {
+    session: SupervisorSessionRef,
 }
 
-impl<'a> M3OwnedSupervisorSessionPort<'a> {
-    pub(crate) fn open_for_project(
-        repository: &'a M3RoleSessionSqliteRepository,
-        project_id: &str,
-    ) -> Result<(Self, SupervisorSessionRef), String> {
-        let session = ensure_m3_role_session(repository, project_id, SUPERVISOR_ROLE)?;
-        Ok((
-            Self {
-                repository,
-                project_id: project_id.to_string(),
-            },
-            session,
-        ))
+impl InstalledViewPort {
+    pub(crate) fn from_view(view: &M3ProjectRoleSessionView) -> Self {
+        Self {
+            session: view_to_session_ref(view),
+        }
     }
 
-    pub(crate) fn worker_session(&self) -> Result<SupervisorSessionRef, String> {
-        ensure_m3_role_session(self.repository, &self.project_id, WORKER_ROLE)
-    }
-
-    pub(crate) fn reviewer_session(&self) -> Result<SupervisorSessionRef, String> {
-        ensure_m3_role_session(self.repository, &self.project_id, REVIEWER_ROLE)
+    pub(crate) fn session(&self) -> &SupervisorSessionRef {
+        &self.session
     }
 }
 
-impl ProjectSupervisorRoleSessionPort for M3OwnedSupervisorSessionPort<'_> {
+impl ProjectSupervisorRoleSessionPort for InstalledViewPort {
     fn load(&self, role_session_id: &str) -> Result<SupervisorSessionRef, String> {
-        let expected = session_id(&self.project_id, SUPERVISOR_ROLE)?;
-        if role_session_id != expected.as_str() && !role_session_id.is_empty() {
+        if !role_session_id.is_empty() && role_session_id != self.session.role_session_id {
             return Err("caller_invented_role_session_rejected".to_string());
         }
-        ensure_m3_role_session(self.repository, &self.project_id, SUPERVISOR_ROLE)
+        Ok(self.session.clone())
     }
 }
 
@@ -228,16 +104,14 @@ pub(crate) fn classify_whitelisted_action(goal: &str) -> &'static str {
     }
 }
 
-pub(crate) const WHITELISTED_COMMAND: &str = "echo";
-
 pub(crate) fn policy_decision_ref_for_action(action: &str) -> String {
     format!("pol:m5r07:{action}")
 }
 
 pub(crate) fn authorized_request_from_stored_proposal(
-    binding: &crate::m5_project_supervisor::SupervisorBinding,
+    binding: &SupervisorBinding,
     proposal: &crate::m5_project_supervisor::SupervisorProposal,
-    worker_role_session_id: &str,
+    worker: &M3ProjectRoleSessionView,
     now_ms: i64,
 ) -> Result<crate::m5_orchestration_service::AuthorizedExecutionRequest, String> {
     if proposal.authorized_action != WHITELISTED_COMMAND {
@@ -245,6 +119,15 @@ pub(crate) fn authorized_request_from_stored_proposal(
     }
     if proposal.project_id != binding.project_id || proposal.binding_id != binding.binding_id {
         return Err("proposal_binding_exact_join_failed".to_string());
+    }
+    if worker.project_id != binding.project_id {
+        return Err("worker_project_mismatch".to_string());
+    }
+    if worker.role != M3ProjectRole::Worker {
+        return Err("worker_role_mismatch".to_string());
+    }
+    if worker.actor_id.trim().is_empty() || worker.role_session_id.trim().is_empty() {
+        return Err("worker_view_unbound".to_string());
     }
     if proposal.status != "DRAFT" && proposal.status != "APPROVED" {
         return Err("supervisor_proposal_not_draft".to_string());
@@ -254,7 +137,7 @@ pub(crate) fn authorized_request_from_stored_proposal(
             project_id: binding.project_id.clone(),
             proposal_id: proposal.proposal_id.clone(),
             deciding_actor_id: binding.actor_id.clone(),
-            worker_role_session_id: worker_role_session_id.to_string(),
+            worker_role_session_id: worker.role_session_id.clone(),
             principal_actor_id: binding.actor_id.clone(),
             workflow_ref: format!("workflow:{}", binding.project_id),
             source_object_ref: format!("object:{}", binding.project_id),
@@ -275,16 +158,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn official_project_id_is_stable_and_canonical() {
-        assert_eq!(
-            official_project_id("/tmp/fixture/SYN R4 ISOLATED ACCEPTANCE abc"),
-            official_project_id("/tmp/fixture/SYN R4 ISOLATED ACCEPTANCE abc")
-        );
-        assert!(official_project_id("/tmp/foo").starts_with("project:"));
-        assert!(!official_project_id("/tmp/foo").contains('/'));
-    }
-
-    #[test]
     fn only_echo_is_whitelisted() {
         assert_eq!(classify_whitelisted_action("echo hello"), "echo");
         assert_eq!(classify_whitelisted_action("do not run"), "none");
@@ -292,24 +165,15 @@ mod tests {
     }
 
     #[test]
-    fn m3_owned_supervisor_session_round_trips() {
-        let fixture = std::env::temp_dir().join(format!(
-            "m5r07-m3-{}-{}",
-            std::process::id(),
-            uuid::Uuid::new_v4()
-        ));
-        let requested = fixture.join("local.codex.governance.workbench");
-        std::fs::create_dir_all(&requested).unwrap();
-        let root = std::fs::canonicalize(&requested).unwrap();
-        let repository = open_ordinary_m3_repository(&root).expect("open ordinary M3 repository");
-        let first = ensure_m3_role_session(&repository, "project:scratch-b", SUPERVISOR_ROLE)
-            .expect("create M3 supervisor session");
-        let again = ensure_m3_role_session(&repository, "project:scratch-b", SUPERVISOR_ROLE)
-            .expect("resume M3 supervisor session");
-        assert_eq!(first.role_session_id, again.role_session_id);
-        assert_eq!(first.role, "project_supervisor");
-        assert_eq!(first.project_id, "project:scratch-b");
-        assert!(!first.role_session_id.starts_with("m5:project-supervisor:"));
-        let _ = std::fs::remove_dir_all(&fixture);
+    fn m5_identity_adapter_has_no_path_hash_or_repository_open() {
+        let source = include_str!("m5_m3_identity.rs");
+        assert!(!source.contains(&format!("fn official_{}", "project_id")));
+        assert!(!source.contains(&format!("fn {}_id", "stable")));
+        assert!(!source.contains(&format!("fn resolve_project_id_from_{}", "index")));
+        assert!(!source.contains(&format!("open_ordinary_m3_{}", "repository")));
+        assert!(!source.contains(&format!("ensure_m3_{}", "role_session")));
+        assert!(!source.contains(&format!("Create{}Command", "RoleSession")));
+        assert!(!source.contains(&format!("M3RoleSession{}Repository", "Sqlite")));
+        assert!(!source.contains(&format!("chars().take({})", 96)));
     }
 }

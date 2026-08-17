@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type M5SupervisorOpenRequest = {
   project_id: string;
-  role_session_id: string;
 };
 
 export type M5SupervisorOpenResponse = {
@@ -48,7 +47,7 @@ export async function openM5ProjectSupervisor(
   projectId: string,
 ): Promise<M5SupervisorOpenResponse> {
   return invoke("open_m5_project_supervisor", {
-    request: { project_id: projectId, role_session_id: "" },
+    request: { project_id: projectId },
   });
 }
 
@@ -78,6 +77,10 @@ export type M5IsolatedAcceptanceStatus = {
   project_id: string;
   launch_ordinal: number;
   scene: string;
+  m1_authority_installed: boolean;
+  m3_authority_installed: boolean;
+  open_available: boolean;
+  composition_gap: string | null;
 };
 
 export async function loadM5IsolatedAcceptanceStatus(): Promise<M5IsolatedAcceptanceStatus> {
@@ -96,6 +99,9 @@ export type M5FormalStepResponse = {
   claim_id: string | null;
   review_id: string | null;
   result_decision_recorded: boolean;
+  reviewer_actor_id: string | null;
+  worker_actor_id: string | null;
+  worker_role_session_id: string | null;
 };
 
 export async function runM5AuthorizedRuntime(input: {

@@ -119,7 +119,8 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
       className="project-supervisor-panel"
       data-m5-supervisor-panel="ready"
       data-m5-session-status={session ? "open" : "loading"}
-      data-m5-project-id={projectId}
+      data-m5-project-id={session?.project_id ?? ""}
+      data-m5-project-alias={projectId}
       data-m5-binding-id={session?.binding_id ?? ""}
       data-m5-role-session-id={session?.role_session_id ?? ""}
       data-m5-deep-link={deepLink ?? ""}

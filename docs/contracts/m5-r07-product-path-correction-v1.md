@@ -6,8 +6,10 @@
 
 ## 规则
 
-- 普通产品路径身份真源是 M3 `RoleSession`，经 `ProjectSupervisorRoleSessionPort` 读取；禁止新建平行的 M5 role-session 权威表作为产品身份根。
-- 项目身份由服务器从 index / isolated profile 解析；渲染器 locator 只能匹配，不得发明。
+- 普通产品路径身份真源是 M3 `RoleSession` 不可变 view，只经 AppState 已安装的 `ProjectRoleSessionAuthority` provision/load；M5 不得创建/恢复 RoleSession，不得直开 M3 repository。
+- 项目身份只经已安装的 M1 authority/read port 解析已显式登记的 canonical `M1ProjectId`；调用方 alias/canonical text 只是 resolver 输入。禁止 path hash、index locator、scratch claim、自动登记或 M5 helper fallback。
+- 调用方不得提交 `role_session_id`；后续只消费服务器首次响应的 canonical project/binding。
+- 共享 isolated product profile 保持 M1/M3 未安装，M5 open fail-closed；不得把旧 isolated Tauri full-loop receipt 写成 authority PASS。
 - 渲染器不得选择或扩大 Grant `allowed_commands` / scope / policy。批准只绑定已存储提案上的 `authorized_action` 与服务器 policy。
 - 普通项目 UI 必须用正式 command 逐步驱动：runtime receipt → worker report → independent review → result decision → summary。
 - 隔离 helper 仅在 `SYN_M5R07_ISOLATED_ACCEPTANCE=1` 下可用。

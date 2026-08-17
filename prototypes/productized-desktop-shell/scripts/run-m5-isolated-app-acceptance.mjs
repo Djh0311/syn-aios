@@ -316,14 +316,19 @@ async function main() {
   let sceneA = null;
   let sceneB = null;
   let resume = null;
+  let unavailable = null;
   let firstError = null;
   try {
-    sceneA = await waitForFile(join(profile.logs, "m5r07-ui-scene-a.json"), 180_000);
-    sceneB = await waitForFile(join(profile.logs, "m5r07-ui-scene-b.json"), 180_000);
+    unavailable = await waitForFile(join(profile.logs, "m5r07-ui-unavailable.json"), 180_000);
   } catch (error) {
     firstError = String(error);
+    try {
+      sceneA = await waitForFile(join(profile.logs, "m5r07-ui-scene-a.json"), 5_000);
+    } catch {
+      // Full-loop scene A is not the isolated-profile expectation.
+    }
   }
-  const shotA = await captureScreenshot(join(profile.logs, "m5r07-window-scene-b.ppm"));
+  const shotA = null;
   if (typeof first.child.pid === "number") {
     try {
       process.kill(-first.child.pid, "SIGKILL");
@@ -335,29 +340,8 @@ async function main() {
       }
     }
   }
-  await new Promise((resolveWait) => setTimeout(resolveWait, 1500));
-  const second = spawnDetached(binaryPath, [], {
-    cwd: desktopRoot,
-    env: isolatedEnv(profile, 1),
-  });
   let resumeError = null;
-  try {
-    resume = await waitForFile(join(profile.logs, "m5r07-ui-resume.json"), 180_000);
-  } catch (error) {
-    resumeError = String(error);
-  }
-  const shotB = await captureScreenshot(join(profile.logs, "m5r07-window-resume.ppm"));
-  if (typeof second.child.pid === "number") {
-    try {
-      process.kill(-second.child.pid, "SIGTERM");
-    } catch {
-      try {
-        process.kill(second.child.pid, "SIGTERM");
-      } catch {
-        // already gone
-      }
-    }
-  }
+  const shotB = null;
   if (typeof vite.child.pid === "number") {
     try {
       process.kill(-vite.child.pid, "SIGTERM");
@@ -380,6 +364,7 @@ async function main() {
     cargo_build_exit: cargoBuild.exit_code,
     cargo_build_signal: cargoBuild.signal,
     binary_present: existsSync(binaryPath),
+    unavailable,
     scene_a: sceneA,
     scene_b: sceneB,
     resume,
@@ -390,6 +375,9 @@ async function main() {
     same_role_session:
       Boolean(sceneA?.role_session_id) &&
       sceneA?.role_session_id === resume?.role_session_id,
+    isolated_authority_unavailable:
+      unavailable?.open_available === false && unavailable?.full_loop_claimed === false,
+    composition_gap: unavailable?.composition_gap ?? null,
     scene_a_zero_grant: sceneA?.grants === 0,
     scene_b_exact_join: Boolean(sceneB?.grant_join?.claim_id && sceneB?.grant_join?.review_id),
     scene_b_deep_link_resolves: sceneB?.deep_link_resolves === true,
@@ -416,18 +404,10 @@ async function main() {
   process.stdout.write(`${JSON.stringify({ receipt_path: receiptPath, ...receipt }, null, 2)}\n`);
   const passed =
     cargoBuild.exit_code === 0 &&
-    sceneA &&
-    sceneB &&
-    resume &&
-    receipt.same_binding &&
-    receipt.same_role_session &&
-    sceneA.spawned === false &&
-    sceneA.grants === 0 &&
-    sceneB.dispatched === true &&
-    sceneB.deep_link_resolves === true &&
-    receipt.receipts_backend_derived &&
-    shotA.sha256 &&
-    shotB.sha256;
+    unavailable &&
+    receipt.isolated_authority_unavailable &&
+    unavailable.full_loop_claimed === false &&
+    !sceneB;
   process.exitCode = passed ? 0 : 1;
 }
 
