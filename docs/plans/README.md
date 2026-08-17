@@ -23,6 +23,7 @@
 - M4 当前修正与收口入口：`2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。第 8 次后端 `recovery_timer` 保留真实 98 秒等待；UI / Computer Use / PNG / attestation 为 `NOT_EXECUTED / NOT_APPLICABLE`，既非失败也非视觉 PASS。
 - M5/M6 当前事实重整与产品闭环入口：`2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md`。状态为 `PLANNED / NOT_ACTIVE`；现有 M5/M6 字节只按未验收 candidate WIP 读取，计划不自动激活 stage-14/15 或施工。
 - 2026-08-16 用户确认“Syn 原生治理与执行核心 + 外部 Agent Runtime 可替换 + 受治理自升级”；DSH 只作为方法来源和可选 adapter。正式决定见 `../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`，研究证据见 `../research/2026-08-16-deepseek-harness-ai-opc-reference-research-v1.md`。
+- 2026-08-17 用户确认以 lightcode（Poracode 上游，Apache-2.0）fork 作为 Syn 桌面壳方向：lightcode 骨架 + Syn 功能界面重建 + Syn 视觉风格；角色与事实仍由 Syn 原生核心持有。正式决定见 `../../decisions/2026-08-17-syn-lightcode-fork-desktop-shell-direction-v1.md`，实施入口 `2026-08-17-syn-lightcode-fork-shell-adoption-plan-v1.md`（`PLANNED / NOT_ACTIVE`，前置为 M5 独立验收与 stage-14 收口）。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
 
 ## M1-M11 独立阶段计划

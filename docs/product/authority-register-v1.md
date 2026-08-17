@@ -58,6 +58,7 @@
 | [`../workbench-system-architecture-v1.md`](../workbench-system-architecture-v1.md) | 当前目标软件模块边界 | 产品愿景和当前实现完成度 |
 | [`../workbench-frontend-display-boundary-v1.md`](../workbench-frontend-display-boundary-v1.md) | 普通、专业和开发界面的显示边界 | 具体视觉稿和阶段授权 |
 | [`../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`](../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md) | Syn 原生治理核心、可替换 Agent Runtime 与受治理自升级方向 | 当前实现完成度或自动升级授权 |
+| [`../../decisions/2026-08-17-syn-lightcode-fork-desktop-shell-direction-v1.md`](../../decisions/2026-08-17-syn-lightcode-fork-desktop-shell-direction-v1.md) | 以 lightcode fork 作为 Syn 桌面壳载体的方向：lightcode 骨架 + Syn 功能界面 + Syn 视觉风格，核心仍由 Syn 原生持有 | 施工授权、M5 验收豁免或 fork 已存在的事实 |
 | [`../../decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md`](../../decisions/2026-08-09-syn-product-canon-authority-and-knowledge-infrastructure-v1.md) | 本轮产品正本、材料分层和知识基础设施的确认决定 | 当前代码完成度 |
 | [`../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`](../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md) | 事件驱动、个人 / 项目范围和角色运行方式 | 当前接线完成度 |
 | [`../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md`](../../decisions/2026-08-01-memory-self-capture-daily-consolidation-and-skill-governance-amendment-v1.md) | 当前记忆自捕获、每日整理和技能候选政策 | 具体自动阈值和实现方案 |
@@ -90,6 +91,7 @@
 
 - 总迁移顺序：[`../plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md`](../plans/2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md)，当前覆盖 M1–M11；阶段存在不等于已激活。
 - M5/M6 当前修正实施计划：[`../plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md`](../plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md)，状态 `PLANNED / NOT_ACTIVE`；只组织事实恢复与阶段退出，不改产品正本、不自动激活 stage-14/15。
+- 壳采纳实施计划：[`../plans/2026-08-17-syn-lightcode-fork-shell-adoption-plan-v1.md`](../plans/2026-08-17-syn-lightcode-fork-shell-adoption-plan-v1.md)，状态 `PLANNED / NOT_ACTIVE`；前置为 M5 独立验收与 stage-14 收口，本计划存在不产生 fork、构建或施工权限。
 - 当前事实：[`../current-state.md`](../current-state.md)。
 - 当前开发入口：[`../harness/plan.md`](../harness/plan.md)及其当前链；没有活动阶段时不得从历史计划恢复授权。
 

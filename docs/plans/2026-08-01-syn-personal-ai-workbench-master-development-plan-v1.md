@@ -172,7 +172,7 @@ payload_summary / payload_ref / payload_hash
 
 ### 4.1 KEEP：保留规则和已经正确的能力
 
-- Tauri + Rust + React + Vite 桌面壳；
+- Tauri + Rust + React + Vite 桌面壳（2026-08-17 起为存续期载体；长期壳载体为 lightcode fork，见 `2026-08-17-syn-lightcode-fork-shell-adoption-plan-v1.md`）；
 - 项目作为复杂工作的主要身份、权限和执行边界；
 - proposal → 用户确认 → 边界复核 → authorization → execution 的治理语义；
 - worker report、review、用户验收和正式事实分层；

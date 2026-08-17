@@ -148,6 +148,8 @@ ORG-002 + ORG-003 + ORG-004 + ORG-005 + ORG-006 + ORG-006A → ORG-007
 | Isolated Tauri | 顶层入口、source link、成员查找 / 联系可见，并保留桌面窗口截图 / 交互 / deep-link 点击证据 | 真实模型 / 消息通过 |
 | 经授权真实场景 | 指定 summary / provider / profile 的只读分析 | 跨项目写或发布通过 |
 
+> **2026-08-17 载体修订**：依 lightcode fork 壳方向决定与用户排序确认，M6 域层（合同、service、repository、投影）先行施工，产品 UI 与隔离 App 验收载体改为新壳（lightcode fork）；上表 "Isolated Tauri" 行在 stage-15 建立时按新壳口径改写，域层验证矩阵不变。
+
 关键验收：从两个项目摘要发现冲突并回源；对项目 domain store、event/audit/outbox、sidecar / compatibility projection、文件和 spawn 设置 write-spy / hash baseline，M6 允许变化的只有自身 advisory / directory / audit owner；用户能找到并联系 stable member；更换伪服务提供方或 runtime 后 stable member 的身份、记忆引用和权限不漂移；runtime child 不冒充组织成员，temporary agent 不伪装成 stable；多视角输入在汇总前保持独立，runtime final answer 不自动生成决定；stale availability 不参与能力判定。
 
 ## 8. 授权与停止条件

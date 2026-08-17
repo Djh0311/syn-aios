@@ -134,6 +134,8 @@
 - v0 事实层：JSON 文件
 - 长期事实库方向：SQLite + FTS
 
+> **2026-08-17 壳层修订**：依 `decisions/2026-08-17-syn-lightcode-fork-desktop-shell-direction-v1.md`，桌面壳目标载体改为 lightcode fork（Electron + React + TypeScript），布局权威在新壳；Rust 本地核心保留为权威服务，通过受控接口供壳消费，壳线程不成为角色身份根。现有 Tauri 壳转入存续期，退役边界由 `docs/plans/2026-08-17-syn-lightcode-fork-shell-adoption-plan-v1.md` 结算。2026-08-01"前端整体暂不推倒"的校正在壳层面被该决定取代；本文其余各层（控制核心、事实层、适配器、记忆、知识）合同不因壳切换改变。
+
 约束：
 
 - 前端不能绕过应用服务和对象所有者直接改存储；用户在界面的明确编辑必须转成带身份、作用域、对象和预期版本的命令，验证后写回真正事实来源。
@@ -1129,7 +1131,7 @@ Workcell 进程、runtime session 或外部 Harness 被销毁后，WorkflowRun�
 
 当前 app 已有一些应保留或提取的点：
 
-- Tauri + Rust + React + Vite 桌面壳。
+- Tauri + Rust + React + Vite 桌面壳（2026-08-17 起为存续期载体；长期壳载体见 §4 壳层修订）。
 - 工作流事实层 v0。
 - Codex 会话读取和绑定。
 - 项目内工作流展示。
