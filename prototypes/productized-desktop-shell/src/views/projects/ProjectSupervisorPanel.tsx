@@ -55,6 +55,22 @@ export function ProjectSupervisorPanel({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!session) return;
+    const reload = () => {
+      void loadM5ExecutionControl({
+        binding_id: session.binding_id,
+        project_id: session.project_id,
+      })
+        .then(setControl)
+        .catch((reason: unknown) => setError(String(reason)));
+    };
+    window.addEventListener("syn-m5-execution-control-refresh", reload);
+    return () => {
+      window.removeEventListener("syn-m5-execution-control-refresh", reload);
+    };
+  }, [session]);
+
   async function sendChat() {
     if (!session) return;
     const turn = await submitM5SupervisorTurn({

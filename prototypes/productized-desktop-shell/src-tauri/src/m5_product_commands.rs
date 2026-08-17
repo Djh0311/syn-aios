@@ -178,7 +178,7 @@ fn store_from_state(state: &crate::AppState) -> Result<M5OrchestrationStore, Str
     state.open_m5_store()
 }
 
-fn persist_formal_progress(
+pub(crate) fn persist_formal_progress(
     store: &M5OrchestrationStore,
     project_id: &str,
     grant_id: Option<&str>,
@@ -246,7 +246,7 @@ fn persist_formal_progress(
     Ok(())
 }
 
-fn load_formal_progress(
+pub(crate) fn load_formal_progress(
     store: &M5OrchestrationStore,
     project_id: &str,
 ) -> Result<

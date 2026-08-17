@@ -681,6 +681,7 @@ fn persist_granted_attempt_and_pending_dispatch(
 
 pub(crate) enum DispatchReadbackSource<'a> {
     Admitted(&'a AdmittedRuntimeCapability),
+    AcceptanceStoredDispatch(&'a str),
     #[cfg(test)]
     ExactStoredDispatch(&'a str),
 }
@@ -760,6 +761,9 @@ pub(crate) fn complete_dispatch_readback_with_fault(
     let (dispatch_id, admission) = match source {
         DispatchReadbackSource::Admitted(admission) => {
             (admission.dispatch_id().to_string(), Some(admission))
+        }
+        DispatchReadbackSource::AcceptanceStoredDispatch(dispatch_id) => {
+            (dispatch_id.to_string(), None)
         }
         #[cfg(test)]
         DispatchReadbackSource::ExactStoredDispatch(dispatch_id) => (dispatch_id.to_string(), None),

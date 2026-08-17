@@ -672,6 +672,14 @@ pub fn run() {
                 return;
             }
         };
+    let m5r07_ordinary_control_requested = match crate::m5_ordinary_control_acceptance::requested()
+    {
+        Ok(requested) => requested,
+        Err(error) => {
+            eprintln!("M5R07 ordinary-control runner 请求无效：{error}");
+            return;
+        }
+    };
     if m4r02_ordinary_composition_requested {
         if let Err(error) = crate::m4r02_ordinary_composition_driver::start_early_process_watchdog()
         {
@@ -699,6 +707,11 @@ pub fn run() {
         if let Err(error) = crate::m4r06_ordinary_legacy_read_driver::start_early_process_watchdog()
         {
             crate::m4r06_ordinary_legacy_read_driver::reject_early_setup(&error);
+        }
+    }
+    if m5r07_ordinary_control_requested {
+        if let Err(error) = crate::m5_ordinary_control_acceptance::start_early_process_watchdog() {
+            crate::m5_ordinary_control_acceptance::reject_early_setup(&error);
         }
     }
     // Historical M2/M3/C09 drivers retain their archived, explicit runtime.
@@ -763,7 +776,9 @@ pub fn run() {
                 let isolated_profile = crate::acceptance_runtime_profile::active_paths()
                     .map_err(std::io::Error::other)?;
                 let isolated_profile_active = isolated_profile.is_some();
-                let state = if legacy_acceptance_runtime_requested {
+                let state = if m5r07_ordinary_control_requested {
+                    crate::m5_ordinary_control_acceptance::construct_ordinary_app_state()
+                } else if legacy_acceptance_runtime_requested {
                     acceptance_state.ok_or_else(|| {
                         "acceptance_runtime_profile_state_missing_after_initialization".to_string()
                     })
@@ -813,6 +828,11 @@ pub fn run() {
                 }
                 if m4r06_ordinary_legacy_read_requested {
                     crate::m4r06_ordinary_legacy_read_driver::mark_ordinary_constructor_ready();
+                }
+                if m5r07_ordinary_control_requested {
+                    crate::m5_ordinary_control_acceptance::mark_ordinary_constructor_ready();
+                    crate::m5_ordinary_control_acceptance::install_server_fixture(&state)
+                        .map_err(std::io::Error::other)?;
                 }
                 if !legacy_acceptance_runtime_requested {
                     crate::ordinary_product_storage_bootstrap::cold_bootstrap_before_startup(
@@ -967,6 +987,11 @@ pub fn run() {
                             &error.to_string(),
                         );
                     }
+                    if m5r07_ordinary_control_requested {
+                        crate::m5_ordinary_control_acceptance::reject_early_setup(
+                            &error.to_string(),
+                        );
+                    }
                     Err(error)
                 }
             }
@@ -989,6 +1014,9 @@ pub fn run() {
             }
             if m4r06_ordinary_legacy_read_requested {
                 crate::m4r06_ordinary_legacy_read_driver::reject_early_setup(&error.to_string());
+            }
+            if m5r07_ordinary_control_requested {
+                crate::m5_ordinary_control_acceptance::reject_early_setup(&error.to_string());
             }
             panic!("error while building tauri application: {error}");
         }

@@ -72,6 +72,7 @@ mod m5_orchestration_identity;
 mod m5_orchestration_schema;
 mod m5_orchestration_service;
 mod m5_orchestration_store;
+mod m5_ordinary_control_acceptance;
 mod m5_prepared_attempt;
 mod m5_product_commands;
 mod m5_project_summary;

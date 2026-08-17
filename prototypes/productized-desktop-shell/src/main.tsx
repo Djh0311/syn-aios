@@ -22,7 +22,11 @@ import { mintSecretaryCoordinationIdempotencyKey } from "./lib/secretaryReadMode
 import { setTauriWindowTitle } from "./lib/tauriWindow";
 import {
   loadM5IsolatedAcceptanceStatus,
+  loadM5OrdinaryControlAcceptanceStatus,
+  seedM5OrdinaryKnownNoEffectTerminal,
   writeM5IsolatedUiReceipt,
+  writeM5OrdinaryControlBackendReceipt,
+  writeM5OrdinaryControlDomReceipt,
 } from "./lib/m5ProjectSupervisor";
 import type { WorkItemStateUpdateRequest } from "./lib/types/workflow";
 import type {
@@ -2945,6 +2949,114 @@ async function m5r07FillChat(text: string) {
   await m5r07Delay(100);
 }
 
+async function m5r07OrdinaryWrite(phase: string, extra: Record<string, unknown> = {}) {
+  const panel = m5r07Panel();
+  await writeM5OrdinaryControlDomReceipt(phase, {
+    session_status: panel?.dataset.m5SessionStatus ?? "",
+    can_retry: panel?.dataset.m5CanRetry ?? "",
+    can_stop: panel?.dataset.m5CanStop ?? "",
+    control_state: panel?.dataset.m5ControlState ?? "",
+    control_attempt: panel?.dataset.m5ControlAttempt ?? "",
+    jiaoban_active: Boolean(
+      document.querySelector(".project-tool-tabs button.active")?.textContent?.includes("交办"),
+    ),
+    ...extra,
+  });
+  await writeM5OrdinaryControlBackendReceipt(phase);
+}
+
+async function installM5R07OrdinaryControlAcceptanceDriver() {
+  try {
+    const status = await loadM5OrdinaryControlAcceptanceStatus();
+    if (!status.active) return;
+    document.documentElement.dataset.m5r07Ordinary = "1";
+    document.documentElement.dataset.m5r07OrdinaryPhase = status.phase;
+    document.documentElement.dataset.m5r07OrdinaryOpen = status.open_available ? "1" : "0";
+    if (!status.open_available || !status.m1_authority_installed || !status.m3_authority_installed) {
+      await m5r07OrdinaryWrite("unavailable", {
+        m1_authority_installed: status.m1_authority_installed,
+        m3_authority_installed: status.m3_authority_installed,
+      });
+      return;
+    }
+    await m5r07WaitFor("app_shell", () => document.querySelector(".app-shell"));
+    await m5r07OpenSupervisorPanel();
+    const panel = m5r07Panel();
+    if (!panel) throw new Error("m5r07_ordinary_panel_missing");
+    const bindingId = panel.dataset.m5BindingId ?? "";
+    const roleSessionId = panel.dataset.m5RoleSessionId ?? "";
+    const projectId = panel.dataset.m5ProjectId ?? status.project_id;
+    if (!bindingId || !roleSessionId || !projectId) throw new Error("m5r07_ordinary_binding_missing");
+    if (status.phase === "reopen") {
+      await m5r07OrdinaryWrite("reopen", {
+        binding_present: Boolean(bindingId),
+        session_from_server: Boolean(roleSessionId),
+      });
+      return;
+    }
+    await m5r07OrdinaryWrite("open", {
+      binding_present: Boolean(bindingId),
+      session_from_server: Boolean(roleSessionId),
+    });
+    await m5r07FillChat("do not run");
+    await m5r07Click('[data-m5-action="propose"]');
+    await m5r07WaitFor("proposal", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5ProposalId ? next : null;
+    });
+    await m5r07Click('[data-m5-action="reject"]');
+    await m5r07OrdinaryWrite("rejected");
+    await m5r07FillChat("echo hello");
+    await m5r07Click('[data-m5-action="propose"]');
+    await m5r07WaitFor("approved_proposal", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5ProposalId ? next : null;
+    });
+    await m5r07Click('[data-m5-action="approve"]');
+    await m5r07WaitFor("approved_grant", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5GrantId && next.dataset.m5DispatchId ? next : null;
+    });
+    const seeded = await seedM5OrdinaryKnownNoEffectTerminal({
+      binding_id: bindingId,
+      project_id: projectId,
+    });
+    window.dispatchEvent(new Event("syn-m5-execution-control-refresh"));
+    await m5r07WaitFor("can_retry", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5CanRetry === "true" ? next : null;
+    });
+    await m5r07OrdinaryWrite("seeded", {
+      can_retry: "true",
+      seeded_attempt: seeded.attempt_state ?? "",
+    });
+    await m5r07Click('[data-m5-action="retry"]');
+    await m5r07WaitFor("retried", () => {
+      const next = m5r07Panel();
+      return next?.dataset.m5ControlAttempt === "GRANT_READY_NON_RUNNABLE" ? next : null;
+    });
+    await m5r07OrdinaryWrite("retried");
+    await m5r07Click('[data-m5-action="runtime"]');
+    await m5r07WaitFor("runtime_log", () => {
+      const log = document.querySelector("[data-m5-supervisor-log]");
+      return log?.textContent?.includes("runtime") ? log : null;
+    });
+    await m5r07OrdinaryWrite("runtime");
+    const runtimeButton = document.querySelector<HTMLButtonElement>('[data-m5-action="runtime"]');
+    runtimeButton?.click();
+    await m5r07Delay(400);
+    await m5r07OrdinaryWrite("runtime_repeat");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    document.documentElement.dataset.m5r07OrdinaryError = message;
+    try {
+      await m5r07OrdinaryWrite("failed", { error: message });
+    } catch {
+      // Ordinary receipt write is best-effort after a driver failure.
+    }
+  }
+}
+
 async function installM5R07IsolatedAcceptanceDriver() {
   try {
     const status = await loadM5IsolatedAcceptanceStatus();
@@ -3072,6 +3184,7 @@ void installM4R03OrdinaryClockTauriIpcBridge();
 void installM4R04OrdinaryRouteTauriIpcBridge();
 void installM4R05OrdinaryConversationTauriIpcBridge();
 void installM4R06OrdinaryLegacyReadTauriIpcBridge();
+void installM5R07OrdinaryControlAcceptanceDriver();
 void installM5R07IsolatedAcceptanceDriver();
 
 window.addEventListener("error", (event) => {

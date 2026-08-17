@@ -1540,12 +1540,20 @@ function ProjectJiaobanPanelBrowser({
   if (!isTestProject && !isStation3bProject) {
     const latestSession =
       projectSessions.sort((a, b) => (b.updated_at_ms ?? 0) - (a.updated_at_ms ?? 0))[0] ?? null;
-    return (
+    const fallback = (
       <JiaobanNonTestProjectFallback
         latestSession={latestSession}
         onOpenAgentSession={onOpenAgentSession}
       />
     );
+    if (renderLayout) {
+      return (
+        <section className="project-jiaoban project-jiaoban--split" aria-label="交办">
+          {renderLayout({ phase, main: fallback, proposalIndex: null })}
+        </section>
+      );
+    }
+    return fallback;
   }
 
   // 没有本项目工作流：交办跑不起来（说态也要有工作流才能出方案）。给老实提示 + 跳智能体，永不冻。

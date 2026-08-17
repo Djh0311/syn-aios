@@ -207,3 +207,39 @@ export async function applyM5ExecutionControl(
 ): Promise<M5ExecutionControlResponse> {
   return invoke("apply_m5_execution_control", { request });
 }
+
+export type M5OrdinaryControlAcceptanceStatus = {
+  active: boolean;
+  composition: string;
+  not_legacy_composition: boolean;
+  not_stage_closeout: boolean;
+  ordinary_disposable_fixture_only: boolean;
+  project_locator: string;
+  project_id: string;
+  phase: string;
+  m1_authority_installed: boolean;
+  m3_authority_installed: boolean;
+  open_available: boolean;
+};
+
+export async function loadM5OrdinaryControlAcceptanceStatus(): Promise<M5OrdinaryControlAcceptanceStatus> {
+  return invoke("load_m5_ordinary_control_acceptance_status");
+}
+
+export async function seedM5OrdinaryKnownNoEffectTerminal(input: {
+  binding_id: string;
+  project_id: string;
+}): Promise<M5ExecutionControlResponse> {
+  return invoke("seed_m5_ordinary_known_no_effect_terminal", { request: input });
+}
+
+export async function writeM5OrdinaryControlBackendReceipt(phase: string): Promise<string> {
+  return invoke("write_m5_ordinary_control_backend_receipt", { phase });
+}
+
+export async function writeM5OrdinaryControlDomReceipt(
+  phase: string,
+  body: Record<string, unknown>,
+): Promise<string> {
+  return invoke("write_m5_ordinary_control_dom_receipt", { phase, body });
+}
