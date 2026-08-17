@@ -1379,6 +1379,29 @@ mod tests {
         .expect("ordinary product AppState must construct")
     }
 
+    fn isolated_acceptance_app_state() -> (PathBuf, crate::AppState) {
+        let root = std::env::temp_dir().join(format!("syn-m1i01r03r01-{}", Uuid::new_v4()));
+        fs::create_dir_all(root.join("app-data")).expect("create isolated profile");
+        let root = fs::canonicalize(&root).expect("canonicalize isolated profile");
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let paths = crate::acceptance_runtime_profile::RuntimePaths {
+            root: root.clone(),
+            index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
+            tasks_path: manifest_dir.join("../../../tasks/README.md"),
+            project_root: root.join("project"),
+            workflow_state_path: root.join("workflow-state.json"),
+            app_data_root: root.join("app-data"),
+            vault_root: root.join("vault"),
+            recovery_backups_root: root.join("recovery"),
+            canvas_root: root.join("canvas"),
+            codex_db_path: root.join("codex.sqlite"),
+            app_log_dir: root.join("logs"),
+        };
+        let state = crate::AppState::try_new_with_isolated_product_profile(&paths)
+            .expect("isolated acceptance AppState must construct");
+        (root, state)
+    }
+
     fn assert_unavailable(result: Result<impl Sized, M1ProjectIndexError>) {
         assert_eq!(result.err().expect("unavailable").code, M1_PROJECT_INDEX_UNAVAILABLE);
     }
@@ -1397,6 +1420,13 @@ mod tests {
             m5_store_path: None,
         };
         assert_unavailable(fixture.m1_project_index_authority().map(|_| ()));
+    }
+
+    #[test]
+    fn m1_project_index_isolated_acceptance_app_state_authority_is_unavailable() {
+        let (root, isolated) = isolated_acceptance_app_state();
+        assert_unavailable(isolated.m1_project_index_authority().map(|_| ()));
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]

@@ -320,6 +320,36 @@ mod m3_project_role_session_authority_tests {
         }
     }
 
+    fn isolated_acceptance_app_state() -> (PathBuf, crate::AppState) {
+        let root = std::env::temp_dir().join(format!(
+            "m1i01r03r01-m3-isolated-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(root.join("app-data")).expect("create isolated profile");
+        let root = std::fs::canonicalize(&root).expect("canonicalize isolated profile");
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let paths = crate::acceptance_runtime_profile::RuntimePaths {
+            root: root.clone(),
+            index_path: manifest_dir.join("../../index-kernel/codex-index.json"),
+            tasks_path: manifest_dir.join("../../../tasks/README.md"),
+            project_root: root.join("project"),
+            workflow_state_path: root.join("workflow-state.json"),
+            app_data_root: root.join("app-data"),
+            vault_root: root.join("vault"),
+            recovery_backups_root: root.join("recovery"),
+            canvas_root: root.join("canvas"),
+            codex_db_path: root.join("codex.sqlite"),
+            app_log_dir: root.join("logs"),
+        };
+        let state = crate::AppState::try_new_with_isolated_product_profile(&paths)
+            .expect("isolated acceptance AppState must construct");
+        (root, state)
+    }
+
     fn ordinary_product_app_data_root() -> PathBuf {
         let parent = std::env::temp_dir().join(format!(
             "m3o01r01-ordinary-{}-{}",
@@ -349,11 +379,22 @@ mod m3_project_role_session_authority_tests {
     }
 
     #[test]
+    fn m3_project_role_session_authority_isolated_acceptance_app_state_returns_unavailable() {
+        let (root, isolated) = isolated_acceptance_app_state();
+        assert_unavailable_slot(&isolated);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn m3_project_role_session_authority_ordinary_slot_stays_fail_closed() {
         let lib = include_str!("lib.rs");
         assert!(
             lib.contains("M3ProjectRoleSessionAuthorityHandle::install_ordinary_product()"),
             "ordinary product constructor must still install the authority"
+        );
+        assert!(
+            lib.contains("SharedProductAuthorityProfile::IsolatedUninstalled"),
+            "isolated acceptance must explicitly leave M1/M3 uninstalled"
         );
         assert!(
             lib.matches("m3_project_role_session_authority: None,").count() >= 3,

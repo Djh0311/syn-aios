@@ -158,7 +158,7 @@ struct AppState {
         Option<m4_source_route_resolver::M4RegisteredSourceOwnerRouteRegistry>,
     // M1I01R03 installs the server-only project_index authority on the
     // ordinary product. Explicit register/read is available; startup does
-    // not mint. Acceptance/legacy leave the slot uninstalled.
+    // not mint. Isolated acceptance and legacy leave the slot uninstalled.
     #[allow(dead_code)]
     m1_project_index: Option<m1_project_index::M1ProjectIndexAuthorityHandle>,
     // M3O01 installs the server-only project-role-session authority on the
@@ -184,6 +184,14 @@ struct AllowedPaths {
     projects: BTreeSet<String>,
     rollouts: BTreeSet<String>,
 }
+
+/// Shared M4 infrastructure may be reused. M1/M3 authority install is an
+/// explicit product-profile choice and is not inherited from that reuse.
+enum SharedProductAuthorityProfile {
+    OrdinaryInstalled,
+    IsolatedUninstalled,
+}
+
 impl AppState {
     fn new() -> Self {
         Self::try_new().expect("AppState runtime profile must resolve before construction")
@@ -273,9 +281,8 @@ impl AppState {
         )
     }
 
-    /// The isolated product replaces only infrastructure ports.  It still
-    /// enters the same ordinary constructor, repository, scheduler and
-    /// command composition as a normal Tauri launch.
+    /// Isolated acceptance reuses ordinary M4 infrastructure ports only.
+    /// M1 and M3 authority slots stay uninstalled on this profile.
     fn try_new_with_isolated_product_profile(
         paths: &acceptance_runtime_profile::RuntimePaths,
     ) -> Result<Self, String> {
@@ -301,11 +308,12 @@ impl AppState {
         } else {
             m4_secretary_conversation::M4SecretaryConversationProviderConfig::Unavailable
         };
-        Self::try_new_with_ordinary_product_ports(
+        Self::try_new_with_shared_product_ports(
             &canonical_app_data_root,
             &paths.index_path,
             &paths.tasks_path,
             provider_config,
+            SharedProductAuthorityProfile::IsolatedUninstalled,
         )
     }
 
@@ -314,6 +322,22 @@ impl AppState {
         product_index_seed: &Path,
         product_tasks_seed: &Path,
         provider_config: m4_secretary_conversation::M4SecretaryConversationProviderConfig,
+    ) -> Result<Self, String> {
+        Self::try_new_with_shared_product_ports(
+            app_data_root,
+            product_index_seed,
+            product_tasks_seed,
+            provider_config,
+            SharedProductAuthorityProfile::OrdinaryInstalled,
+        )
+    }
+
+    fn try_new_with_shared_product_ports(
+        app_data_root: &Path,
+        product_index_seed: &Path,
+        product_tasks_seed: &Path,
+        provider_config: m4_secretary_conversation::M4SecretaryConversationProviderConfig,
+        authority_profile: SharedProductAuthorityProfile,
     ) -> Result<Self, String> {
         let m4_secretary_installation =
             m4_secretary_domain::install_ordinary_product_secretary_composition(app_data_root)?;
@@ -355,6 +379,20 @@ impl AppState {
             &product_data_paths.workflow_state_path,
             m4_secretary_repository.clone(),
         );
+        let (m1_project_index, m3_project_role_session_authority) = match authority_profile {
+            SharedProductAuthorityProfile::OrdinaryInstalled => (
+                Some(
+                    m1_project_index::M1ProjectIndexAuthorityHandle::install_ordinary_product(
+                        app_data_root,
+                    )
+                    .map_err(|error| error.code)?,
+                ),
+                Some(
+                    m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(),
+                ),
+            ),
+            SharedProductAuthorityProfile::IsolatedUninstalled => (None, None),
+        };
         Ok(Self {
             index_path: product_data_paths.index_path,
             tasks_path: product_data_paths.tasks_path,
@@ -368,15 +406,8 @@ impl AppState {
             m4_secretary_conversation_runtime,
             #[cfg(not(test))]
             m4_source_route_registry: Some(m4_source_route_registry),
-            m1_project_index: Some(
-                m1_project_index::M1ProjectIndexAuthorityHandle::install_ordinary_product(
-                    app_data_root,
-                )
-                .map_err(|error| error.code)?,
-            ),
-            m3_project_role_session_authority: Some(
-                m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(),
-            ),
+            m1_project_index,
+            m3_project_role_session_authority,
             m5_store_path: Some(install_m5_store_path(app_data_root)?),
         })
     }
