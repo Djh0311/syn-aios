@@ -242,6 +242,7 @@ fn sha_hex(input: &str) -> String {
         .collect()
 }
 
+#[cfg(test)]
 pub(crate) fn run_conformance_suite<R: AgentRuntimeAdapter>(
     runtime: &mut R,
     grant: &ExecutionGrant,

@@ -5,7 +5,10 @@ use crate::m5_agent_runtime::{
     AgentRuntimeAdapter, RuntimeFault, SynNativeAgentRuntime, WorkcellRun,
 };
 use crate::m5_orchestration_identity::{AttemptId, OrchestrationId, WorkflowRunId};
-use crate::m5_orchestration_service::load_joined_dispatch_chain;
+use crate::m5_orchestration_service::{
+    assert_dispatch_readback_substrate, load_joined_dispatch_chain,
+};
+use crate::m2_dto::OutboxItemStatus;
 use crate::m5_orchestration_store::M5OrchestrationStore;
 use crate::m5_prepared_attempt::AttemptState;
 use crate::m5_runtime_admission::AdmittedRuntimeCapability;
@@ -312,6 +315,15 @@ pub(crate) fn run_admitted_workcell(
     if chain.attempt.state != AttemptState::Dispatched {
         return Err("attempt_not_dispatched".to_string());
     }
+    match chain.outbox.status {
+        OutboxItemStatus::Delivered => {}
+        _ => return Err("readback_substrate_outbox_not_delivered".to_string()),
+    }
+    assert_dispatch_readback_substrate(
+        store,
+        &dispatch_id,
+        chain.attempt.attempt_id.as_str(),
+    )?;
     if workcell.effect_id.trim().is_empty()
         || workcell.effect_id != chain.dispatch.effect_id
         || workcell.effect_id != chain.grant.effect_key
@@ -328,55 +340,6 @@ pub(crate) fn run_admitted_workcell(
     persist_and_execute_workcell(store, runtime, workcell, &chain.grant, now_ms, fault)
 }
 
-#[cfg(test)]
-pub(crate) fn run_authorized_workcell(
-    store: &M5OrchestrationStore,
-    runtime: &mut dyn AgentRuntimeAdapter,
-    workcell: &WorkcellRun,
-    now_ms: i64,
-    fault: RuntimeFault,
-) -> Result<RuntimeReceipt, String> {
-    let grant = store
-        .load_grant(&workcell.parent_grant_id)?
-        .ok_or_else(|| "workcell_grant_missing".to_string())?;
-    let dispatch = store
-        .load_dispatch(&workcell.dispatch_id)?
-        .ok_or_else(|| "workcell_dispatch_missing".to_string())?;
-    let attempt = store
-        .load_attempt(&workcell.attempt_id)?
-        .ok_or_else(|| "workcell_attempt_missing".to_string())?;
-    if dispatch.state != "DISPATCHED" {
-        return Err("dispatch_readback_required".to_string());
-    }
-    if attempt.state != AttemptState::Dispatched {
-        return Err("attempt_not_dispatched".to_string());
-    }
-    if workcell.effect_id.trim().is_empty()
-        || workcell.effect_id != dispatch.effect_id
-        || workcell.effect_id != grant.effect_key
-        || dispatch.effect_id != grant.effect_key
-    {
-        return Err("workcell_effect_not_bound_to_dispatch".to_string());
-    }
-    if workcell.parent_grant_id != grant.grant_id.as_str()
-        || workcell.parent_grant_id != dispatch.grant_id
-        || attempt
-            .grant_id
-            .as_ref()
-            .map(|id| id.as_str())
-            != Some(grant.grant_id.as_str())
-    {
-        return Err("workcell_grant_join_failed".to_string());
-    }
-    if workcell.attempt_id != grant.attempt_id.as_str()
-        || workcell.attempt_id != dispatch.attempt_id
-        || workcell.attempt_id != attempt.attempt_id.as_str()
-    {
-        return Err("workcell_attempt_join_failed".to_string());
-    }
-    persist_and_execute_workcell(store, runtime, workcell, &grant, now_ms, fault)
-}
-
 fn persist_and_execute_workcell(
     store: &M5OrchestrationStore,
     runtime: &mut dyn AgentRuntimeAdapter,
@@ -385,6 +348,7 @@ fn persist_and_execute_workcell(
     now_ms: i64,
     fault: RuntimeFault,
 ) -> Result<RuntimeReceipt, String> {
+    assert_dispatch_readback_substrate(store, &workcell.dispatch_id, &workcell.attempt_id)?;
     let mut op = DurableOperation {
         operation_id: format!("op-{}", workcell.workcell_id),
         attempt_id: AttemptId::new(workcell.attempt_id.clone()),
@@ -421,6 +385,56 @@ fn persist_and_execute_workcell(
     let _ = OrchestrationId::new(op.orchestration_id.clone());
     let _ = WorkflowRunId::new(op.workflow_run_id.clone());
     Ok(receipt)
+}
+
+#[cfg(test)]
+pub(crate) fn run_authorized_workcell(
+    store: &M5OrchestrationStore,
+    runtime: &mut dyn AgentRuntimeAdapter,
+    workcell: &WorkcellRun,
+    now_ms: i64,
+    fault: RuntimeFault,
+) -> Result<RuntimeReceipt, String> {
+    let grant = store
+        .load_grant(&workcell.parent_grant_id)?
+        .ok_or_else(|| "workcell_grant_missing".to_string())?;
+    let dispatch = store
+        .load_dispatch(&workcell.dispatch_id)?
+        .ok_or_else(|| "workcell_dispatch_missing".to_string())?;
+    let attempt = store
+        .load_attempt(&workcell.attempt_id)?
+        .ok_or_else(|| "workcell_attempt_missing".to_string())?;
+    if dispatch.state != "DISPATCHED" {
+        return Err("dispatch_readback_required".to_string());
+    }
+    if attempt.state != AttemptState::Dispatched {
+        return Err("attempt_not_dispatched".to_string());
+    }
+    assert_dispatch_readback_substrate(store, &workcell.dispatch_id, &workcell.attempt_id)?;
+    if workcell.effect_id.trim().is_empty()
+        || workcell.effect_id != dispatch.effect_id
+        || workcell.effect_id != grant.effect_key
+        || dispatch.effect_id != grant.effect_key
+    {
+        return Err("workcell_effect_not_bound_to_dispatch".to_string());
+    }
+    if workcell.parent_grant_id != grant.grant_id.as_str()
+        || workcell.parent_grant_id != dispatch.grant_id
+        || attempt
+            .grant_id
+            .as_ref()
+            .map(|id| id.as_str())
+            != Some(grant.grant_id.as_str())
+    {
+        return Err("workcell_grant_join_failed".to_string());
+    }
+    if workcell.attempt_id != grant.attempt_id.as_str()
+        || workcell.attempt_id != dispatch.attempt_id
+        || workcell.attempt_id != attempt.attempt_id.as_str()
+    {
+        return Err("workcell_attempt_join_failed".to_string());
+    }
+    persist_and_execute_workcell(store, runtime, workcell, &grant, now_ms, fault)
 }
 
 #[cfg(test)]
@@ -597,5 +611,82 @@ mod tests {
         let retried = load_operation(&store, &op.operation_id).unwrap().unwrap();
         assert_eq!(retried.state, DurableOperationState::Created);
         assert_eq!(retried.retry_count, 1);
+    }
+
+    fn durable_op_count(store: &M5OrchestrationStore) -> i64 {
+        store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_durable_operations", [], |row| {
+                row.get(0)
+            })
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn admitted_effect_rejects_undelivered_or_missing_outbox() {
+        for (sql, expected) in [
+            (
+                "UPDATE m5_outbox_items SET status='AVAILABLE'",
+                "readback_substrate_outbox_not_delivered",
+            ),
+            (
+                "UPDATE m5_outbox_items SET status='POISON'",
+                "readback_substrate_outbox_not_delivered",
+            ),
+            (
+                "DELETE FROM m5_outbox_items",
+                "outbox_not_found",
+            ),
+        ] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let cell = cell(&store, "outbox");
+            store.connection().execute(sql, []).unwrap();
+            let mut runtime = SynNativeAgentRuntime::new();
+            let err = run_authorized_workcell(
+                &store,
+                &mut runtime,
+                &cell,
+                3000,
+                RuntimeFault::None,
+            )
+            .unwrap_err();
+            assert_eq!(err, expected, "{sql}");
+            assert_eq!(durable_op_count(&store), 0);
+            assert!(runtime.events().is_empty());
+        }
+    }
+
+    #[test]
+    fn admitted_effect_rejects_missing_or_tampered_carriers() {
+        for (sql, expected) in [
+            (
+                "DELETE FROM m5_events WHERE event_type='DispatchReadbackRecorded'",
+                "dispatch_readback_carriers_divergent",
+            ),
+            (
+                "UPDATE m5_events SET source_ref='m5.orchestration' WHERE event_type='DispatchReadbackRecorded'",
+                "dispatch_readback_carriers_divergent",
+            ),
+            (
+                "UPDATE m5_audit_records SET source_refs='forged' WHERE decision='DispatchReadbackRecorded'",
+                "dispatch_readback_carriers_divergent",
+            ),
+        ] {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let cell = cell(&store, "carrier");
+            store.connection().execute(sql, []).unwrap();
+            let mut runtime = SynNativeAgentRuntime::new();
+            let err = run_authorized_workcell(
+                &store,
+                &mut runtime,
+                &cell,
+                3000,
+                RuntimeFault::None,
+            )
+            .unwrap_err();
+            assert_eq!(err, expected, "{sql}");
+            assert_eq!(durable_op_count(&store), 0);
+            assert!(runtime.events().is_empty());
+        }
     }
 }

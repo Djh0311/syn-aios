@@ -271,4 +271,145 @@ mod tests {
             assert!(seen.insert(entry.id), "duplicate entry {}", entry.id);
         }
     }
+
+    fn production_prefix(src: &str) -> &str {
+        src.find("#[cfg(test)]")
+            .map(|idx| &src[..idx])
+            .unwrap_or(src)
+    }
+
+    fn item_has_cfg_test(src: &str, needle: &str) -> bool {
+        let start = match src.find(needle) {
+            Some(idx) => idx,
+            None => return false,
+        };
+        let prefix = &src[..start];
+        prefix
+            .rfind("#[")
+            .map(|attr| prefix[attr..].starts_with("#[cfg(test)]"))
+            .unwrap_or(false)
+    }
+
+    #[test]
+    fn run_conformance_suite_is_test_only() {
+        let runtime = include_str!("m5_agent_runtime.rs");
+        assert!(
+            item_has_cfg_test(runtime, "pub(crate) fn run_conformance_suite"),
+            "run_conformance_suite must stay test-only"
+        );
+        let production_sources = [
+            ("m5_agent_runtime.rs", runtime),
+            (
+                "m5_controlled_execution.rs",
+                include_str!("m5_controlled_execution.rs"),
+            ),
+            (
+                "m5_product_commands.rs",
+                include_str!("m5_product_commands.rs"),
+            ),
+            (
+                "m5_isolated_acceptance.rs",
+                include_str!("m5_isolated_acceptance.rs"),
+            ),
+            (
+                "m5_orchestration_service.rs",
+                include_str!("m5_orchestration_service.rs"),
+            ),
+            (
+                "m5_orchestration_store.rs",
+                include_str!("m5_orchestration_store.rs"),
+            ),
+            (
+                "m5_runtime_admission.rs",
+                include_str!("m5_runtime_admission.rs"),
+            ),
+            (
+                "m5_side_effect_entry.rs",
+                include_str!("m5_side_effect_entry.rs"),
+            ),
+            (
+                "m5_project_supervisor.rs",
+                include_str!("m5_project_supervisor.rs"),
+            ),
+            (
+                "m5_project_summary.rs",
+                include_str!("m5_project_summary.rs"),
+            ),
+            ("m5_gateway_traits.rs", include_str!("m5_gateway_traits.rs")),
+            (
+                "m5_execution_grant.rs",
+                include_str!("m5_execution_grant.rs"),
+            ),
+            ("m5_claim_ledger.rs", include_str!("m5_claim_ledger.rs")),
+            (
+                "m5_runtime_receipt.rs",
+                include_str!("m5_runtime_receipt.rs"),
+            ),
+            ("m5_dto.rs", include_str!("m5_dto.rs")),
+            (
+                "m5_runner_entry_registry.rs",
+                include_str!("m5_runner_entry_registry.rs"),
+            ),
+        ];
+        for (name, src) in production_sources {
+            let production = production_prefix(src);
+            assert!(
+                !production.contains("run_conformance_suite("),
+                "{name} production source must not call run_conformance_suite"
+            );
+        }
+    }
+
+    #[test]
+    fn production_cannot_pass_caller_grant_to_runtime_execute() {
+        let product = include_str!("m5_product_commands.rs");
+        let isolated = include_str!("m5_isolated_acceptance.rs");
+        let admission = include_str!("m5_runtime_admission.rs");
+        let controlled = include_str!("m5_controlled_execution.rs");
+        let runtime = include_str!("m5_agent_runtime.rs");
+        let product_prod = production_prefix(product);
+        let isolated_prod = production_prefix(isolated);
+        let admission_prod = production_prefix(admission);
+        let controlled_prod = production_prefix(controlled);
+        assert!(!product_prod.contains("run_authorized_workcell"));
+        assert!(!product_prod.contains("run_conformance_suite"));
+        assert!(
+            product_prod.contains("run_admitted_workcell"),
+            "formal product runtime must stay on the admitted workcell"
+        );
+        assert!(
+            item_has_cfg_test(isolated, "pub(crate) fn run_authorized_followthrough"),
+            "isolated followthrough must stay test-only"
+        );
+        assert!(!isolated_prod.contains("run_authorized_workcell"));
+        assert!(!isolated_prod.contains("run_conformance_suite"));
+        assert!(!admission_prod.contains(".execute(workcell"));
+        assert!(
+            item_has_cfg_test(controlled, "pub(crate) fn run_authorized_workcell"),
+            "raw workcell helper must stay test-only"
+        );
+        assert!(
+            controlled_prod.contains("fn persist_and_execute_workcell("),
+            "production execute must stay behind persist_and_execute_workcell"
+        );
+        assert_eq!(
+            controlled_prod.matches(".execute(workcell").count(),
+            1,
+            "production controlled execution must have exactly one adapter execute"
+        );
+        assert!(
+            !controlled_prod.contains("run_conformance_suite"),
+            "production controlled execution must not run the raw conformance suite"
+        );
+        assert!(
+            item_has_cfg_test(runtime, "pub(crate) fn run_conformance_suite"),
+            "raw runtime suite must stay test-only"
+        );
+        assert_eq!(
+            production_prefix(runtime)
+                .matches("run_conformance_suite(")
+                .count(),
+            0
+        );
+    }
 }

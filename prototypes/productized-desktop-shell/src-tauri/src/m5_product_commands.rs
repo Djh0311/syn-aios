@@ -1913,6 +1913,82 @@ mod tests {
     }
 
     #[test]
+    fn admitted_workcell_rejects_available_outbox_without_effect() {
+        consume_after_admit_expecting(
+            "syn-m5r07-consume-workcell-outbox-available",
+            |state, _, dispatch_id| {
+                let store = store_from_state(state).expect("m5 store");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_outbox_items SET status='AVAILABLE' WHERE outbox_item_id=(SELECT outbox_item_id FROM m5_dispatches WHERE dispatch_id=?1)",
+                        [dispatch_id],
+                    )
+                    .expect("tamper outbox available");
+            },
+            "readback_substrate_outbox_not_delivered",
+            true,
+        );
+    }
+
+    #[test]
+    fn admitted_workcell_rejects_poisoned_outbox_without_effect() {
+        consume_after_admit_expecting(
+            "syn-m5r07-consume-workcell-outbox-poison",
+            |state, _, dispatch_id| {
+                let store = store_from_state(state).expect("m5 store");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_outbox_items SET status='POISON' WHERE outbox_item_id=(SELECT outbox_item_id FROM m5_dispatches WHERE dispatch_id=?1)",
+                        [dispatch_id],
+                    )
+                    .expect("tamper outbox poison");
+            },
+            "readback_substrate_outbox_not_delivered",
+            true,
+        );
+    }
+
+    #[test]
+    fn admitted_workcell_rejects_missing_outbox_without_effect() {
+        consume_after_admit_expecting(
+            "syn-m5r07-consume-workcell-outbox-missing",
+            |state, _, dispatch_id| {
+                let store = store_from_state(state).expect("m5 store");
+                store
+                    .connection()
+                    .execute(
+                        "DELETE FROM m5_outbox_items WHERE outbox_item_id=(SELECT outbox_item_id FROM m5_dispatches WHERE dispatch_id=?1)",
+                        [dispatch_id],
+                    )
+                    .expect("delete outbox");
+            },
+            "outbox_not_found",
+            true,
+        );
+    }
+
+    #[test]
+    fn admitted_workcell_rejects_tampered_readback_event_without_effect() {
+        consume_after_admit_expecting(
+            "syn-m5r07-consume-workcell-event-tamper",
+            |state, _, dispatch_id| {
+                let store = store_from_state(state).expect("m5 store");
+                store
+                    .connection()
+                    .execute(
+                        "UPDATE m5_events SET source_ref='m5.orchestration' WHERE event_id=?1",
+                        [format!("evt-dispatch-readback-{dispatch_id}")],
+                    )
+                    .expect("tamper event");
+            },
+            "dispatch_readback_carriers_divergent",
+            true,
+        );
+    }
+
+    #[test]
     fn runtime_rejects_grant_self_selected_plan_without_durable_writes() {
         run_after_approve_expecting(
             "syn-m5r07-grant-self-select-plan",

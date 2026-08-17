@@ -9,3 +9,5 @@
 不改 plan/current leaf/stage/auth，不 close M5/stage，不激活 M6。冻结合同正文、M1/M3、shared isolated constructor、commands/lib_read、M6 与既有 WIP 不动。
 
 已知下一独立窄包：runtime 后 Attempt 未形成 terminal execution readback 却 claim 可接受 EXECUTED。本包不扩写、不冒充关闭。
+
+2026-08-17 第三组 scoped implementation correction（接 `85b1abc`，不 amend）：effect 首写前必须证明 readback substrate 完整（outbox=DELIVERED + 同一套 exact carrier verifier）；正式 truth carriers / origin-outbox exact join；`run_conformance_suite` 仅 `#[cfg(test)]`，production 不得把 caller-supplied Grant 直接交给 `AgentRuntimeAdapter::execute`。terminal execution readback 仍下一包。

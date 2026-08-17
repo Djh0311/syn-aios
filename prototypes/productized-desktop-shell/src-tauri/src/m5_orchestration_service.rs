@@ -2,8 +2,8 @@
 // PreparedAttempt → mint Grant → persist/readback → Dispatch → outbox.
 
 use crate::m2_dto::{
-    AuditRecordDto, CommandReceiptDto, CommandReceiptStatus, OutboxItemDto, OutboxItemStatus,
-    WorkbenchEventEnvelopeDto,
+    AuditAction, AuditRecordDto, AuditSensitivity, CommandReceiptDto, CommandReceiptStatus,
+    EventSensitivity, OutboxItemDto, OutboxItemStatus, WorkbenchEventEnvelopeDto,
 };
 use crate::m2_ports::{OutboxRepository, UnitOfWork};
 use crate::m5_execution_grant::{ExecutionGrant, GrantMintInput};
@@ -82,6 +82,7 @@ pub(crate) fn prepare_and_dispatch(
             &request.project_id,
             &correlation_id,
             &now_iso,
+            &request.policy_decision_ref,
         );
         store.persist_receipt(&decision_receipt)?;
         let decision = AuthorizationDecisionRecord {
@@ -114,6 +115,7 @@ pub(crate) fn prepare_and_dispatch(
             &request.project_id,
             &correlation_id,
             &now_iso,
+            &request.policy_decision_ref,
         );
         store.persist_receipt(&auth_receipt)?;
         let authorization_id = uuid::Uuid::new_v4().to_string();
@@ -149,6 +151,7 @@ pub(crate) fn prepare_and_dispatch(
             &request.project_id,
             &correlation_id,
             &now_iso,
+            &request.policy_decision_ref,
         );
         store.persist_receipt(&run_receipt)?;
         let run_id = uuid::Uuid::new_v4().to_string();
@@ -214,6 +217,7 @@ pub(crate) fn prepare_and_dispatch(
             &request.project_id,
             &correlation_id,
             &now_iso,
+            &request.policy_decision_ref,
         );
         store.persist_receipt(&mint_receipt)?;
         let mut grant = ExecutionGrant::mint(GrantMintInput {
@@ -297,15 +301,21 @@ pub(crate) fn prepare_and_dispatch(
             return Err("dispatch_failed".to_string());
         }
 
-        let dispatch_receipt = committed_receipt(
+        let dispatch_id = uuid::Uuid::new_v4().to_string();
+        let mut dispatch_receipt = committed_receipt(
             "DispatchGrantedAttempt",
             &request.deciding_actor_id,
             &request.project_id,
             &correlation_id,
             &now_iso,
+            &request.policy_decision_ref,
         );
+        dispatch_receipt.actor_id = request.principal_actor_id.clone();
+        dispatch_receipt.current_object_ref =
+            Some(format!("attempt:{}", attempt.attempt_id.as_str()));
+        dispatch_receipt.result_ref = Some(format!("dispatch:{dispatch_id}"));
+        dispatch_receipt.result_hash = Some(grant.grant_hash.clone());
         store.persist_receipt(&dispatch_receipt)?;
-        let dispatch_id = uuid::Uuid::new_v4().to_string();
         let outbox_item_id = uuid::Uuid::new_v4().to_string();
         let effect_id = grant.effect_key.clone();
         let outbox = OutboxItemDto {
@@ -319,7 +329,7 @@ pub(crate) fn prepare_and_dispatch(
             payload_ref: Some(format!("grant:{}", grant.grant_id.as_str())),
             payload_hash: Some(grant.grant_hash.clone()),
             result_command_type: "RecordDispatchReadback".to_string(),
-            idempotency_key: format!("dispatch-{}", grant.grant_id.as_str()),
+            idempotency_key: dispatch_receipt.idempotency_key.clone(),
             correlation_id: Some(correlation_id.clone()),
             status: OutboxItemStatus::Available,
             created_at: now_iso.clone(),
@@ -497,14 +507,11 @@ pub(crate) fn complete_dispatch_readback_with_fault(
         let correlation_id = assert_dispatch_origin_exact(&origin, &chain)?;
         if chain.dispatch.state == "DISPATCHED"
             && chain.attempt.state == AttemptState::Dispatched
-            && chain.outbox.status == OutboxItemStatus::Delivered
         {
-            DispatchReadbackCarriers::from_chain(&chain).assert_exact_payloads(
+            assert_dispatch_readback_substrate(
                 store,
-                &chain.dispatch,
-                &chain.attempt,
-                &chain.grant,
-                &origin,
+                &chain.dispatch.dispatch_id,
+                chain.attempt.attempt_id.as_str(),
             )?;
             return Ok((chain.dispatch.clone(), chain.attempt.clone()));
         }
@@ -520,11 +527,10 @@ pub(crate) fn complete_dispatch_readback_with_fault(
 
         persist_dispatch_readback_carriers(
             store,
-            &chain.dispatch,
-            &chain.grant.principal_actor_id,
-            &chain.grant.project_id,
-            &correlation_id,
+            &chain,
             &origin,
+            &correlation_id,
+            now_ms,
         )?;
         if fault == DispatchReadbackFault::FailAfterDispatchCarriers {
             return Err("readback_fault_after_dispatch_carriers".to_string());
@@ -543,11 +549,10 @@ pub(crate) fn complete_dispatch_readback_with_fault(
         }
         persist_attempt_dispatched_carriers(
             store,
-            &chain.attempt,
-            &chain.grant.principal_actor_id,
-            &chain.grant.project_id,
-            &correlation_id,
+            &chain,
             &origin,
+            &correlation_id,
+            now_ms,
         )?;
         if fault == DispatchReadbackFault::FailAfterAttemptCarriers {
             return Err("readback_fault_after_attempt_carriers".to_string());
@@ -572,29 +577,94 @@ fn assert_dispatch_origin_exact(
     origin: &CommandReceiptDto,
     chain: &JoinedDispatchChain,
 ) -> Result<String, String> {
-    if origin.receipt_id != chain.dispatch.created_by_command_receipt_ref {
+    let attempt_id = chain.attempt.attempt_id.as_str();
+    let grant_id = chain.grant.grant_id.as_str();
+    if origin.receipt_id != chain.dispatch.created_by_command_receipt_ref
+        || origin.receipt_id != chain.outbox.owning_command_receipt_ref
+        || origin.receipt_id.trim().is_empty()
+    {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if origin.command_id != chain.outbox.owning_command_id || origin.command_id.trim().is_empty() {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if origin.request_hash != "hash-DispatchGrantedAttempt" {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if origin.actor_id != chain.grant.principal_actor_id || origin.actor_id.trim().is_empty() {
         return Err("dispatch_origin_receipt_divergent".to_string());
     }
     if origin.scope_ref != chain.dispatch.project_id
         || origin.scope_ref != chain.grant.project_id
         || origin.scope_ref != chain.attempt.project_id
+        || origin.scope_ref != chain.outbox.scope_ref
+        || origin.scope_ref.trim().is_empty()
+    {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if origin.policy_decision_ref != chain.grant.policy_decision_ref
+        || origin.policy_decision_ref.trim().is_empty()
+        || origin.policy_decision_ref == "pol-m5r02"
     {
         return Err("dispatch_origin_receipt_divergent".to_string());
     }
     if origin.status != CommandReceiptStatus::Committed {
         return Err("dispatch_origin_receipt_divergent".to_string());
     }
-    if origin.request_hash != "hash-DispatchGrantedAttempt" {
+    if origin.current_object_ref.as_deref() != Some(&format!("attempt:{attempt_id}")) {
         return Err("dispatch_origin_receipt_divergent".to_string());
     }
-    if origin.actor_id.trim().is_empty() {
+    if origin.result_ref.as_deref() != Some(&format!("dispatch:{}", chain.dispatch.dispatch_id)) {
         return Err("dispatch_origin_receipt_divergent".to_string());
     }
-    origin
+    if origin.result_hash.as_deref() != Some(chain.grant.grant_hash.as_str()) {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    // Creation-time Dispatch revision is 1; do not accept later/current revisions.
+    if origin.committed_revision != Some(1) {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if origin.error_code.is_some() {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if origin.idempotency_key.trim().is_empty()
+        || origin.idempotency_key != chain.outbox.idempotency_key
+    {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if origin.accepted_at.trim().is_empty() || origin.created_at.trim().is_empty() {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if chain.outbox.subject_ref.as_deref() != Some(attempt_id) {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if chain.outbox.payload_ref.as_deref() != Some(&format!("grant:{grant_id}")) {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if chain.outbox.payload_hash.as_deref() != Some(chain.grant.grant_hash.as_str()) {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if chain.outbox.result_command_type != "RecordDispatchReadback" {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if chain.outbox.effect_id != chain.dispatch.effect_id
+        || chain.outbox.effect_id != chain.grant.effect_key
+        || chain.outbox.effect_id.trim().is_empty()
+    {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    if chain.outbox.capability_id != "m5.dispatch.granted-attempt" {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    let correlation_id = origin
         .correlation_id
         .clone()
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "dispatch_origin_correlation_missing".to_string())
+        .ok_or_else(|| "dispatch_origin_correlation_missing".to_string())?;
+    if chain.outbox.correlation_id.as_deref() != Some(correlation_id.as_str()) {
+        return Err("dispatch_origin_receipt_divergent".to_string());
+    }
+    Ok(correlation_id)
 }
 
 struct DispatchReadbackCarriers {
@@ -622,132 +692,226 @@ impl DispatchReadbackCarriers {
         }
     }
 
+    fn dispatch_object_ref(dispatch_id: &str) -> String {
+        format!("dispatch:{dispatch_id}")
+    }
+
+    fn attempt_object_ref(attempt_id: &str) -> String {
+        format!("attempt:{attempt_id}")
+    }
+
+    fn post_dispatch_revision(dispatch: &DispatchRecord) -> i64 {
+        if dispatch.state == "DISPATCHED" {
+            dispatch.revision
+        } else {
+            dispatch.revision + 1
+        }
+    }
+
+    fn post_attempt_revision(attempt: &PreparedAttempt) -> i64 {
+        if attempt.state == AttemptState::Dispatched {
+            attempt.revision
+        } else {
+            attempt.revision + 1
+        }
+    }
+
+    fn carrier_now_iso(attempt: &PreparedAttempt, write_now_ms: Option<i64>) -> String {
+        match write_now_ms {
+            Some(now_ms) => format_ms(now_ms),
+            None => format_ms(attempt.updated_at_ms),
+        }
+    }
+
     fn dispatch_receipt(
         &self,
         dispatch: &DispatchRecord,
-        actor_id: &str,
-        project_id: &str,
+        grant: &ExecutionGrant,
         correlation_id: &str,
-        origin: &CommandReceiptDto,
+        now_iso: &str,
     ) -> CommandReceiptDto {
+        let object_ref = Self::dispatch_object_ref(&dispatch.dispatch_id);
         stable_committed_receipt(
             &self.dispatch_receipt_id,
             &format!("cmd-record-dispatch-readback-{}", dispatch.dispatch_id),
             &format!("idem-RecordDispatchReadback-{}", dispatch.dispatch_id),
             "RecordDispatchReadback",
-            actor_id,
-            project_id,
+            &grant.principal_actor_id,
+            &grant.project_id,
             correlation_id,
-            origin,
+            &grant.policy_decision_ref,
+            Some(object_ref.clone()),
+            Some(object_ref),
+            Some(grant.grant_hash.clone()),
+            Self::post_dispatch_revision(dispatch),
+            now_iso,
         )
     }
 
     fn attempt_receipt(
         &self,
-        attempt_id: &str,
-        actor_id: &str,
-        project_id: &str,
+        attempt: &PreparedAttempt,
+        grant: &ExecutionGrant,
         correlation_id: &str,
-        origin: &CommandReceiptDto,
+        now_iso: &str,
     ) -> CommandReceiptDto {
+        let attempt_id = attempt.attempt_id.as_str();
+        let object_ref = Self::attempt_object_ref(attempt_id);
         stable_committed_receipt(
             &self.attempt_receipt_id,
             &format!("cmd-mark-attempt-dispatched-{attempt_id}"),
             &format!("idem-MarkAttemptDispatched-{attempt_id}"),
             "MarkAttemptDispatched",
-            actor_id,
-            project_id,
+            &grant.principal_actor_id,
+            &grant.project_id,
             correlation_id,
-            origin,
+            &grant.policy_decision_ref,
+            Some(object_ref.clone()),
+            Some(object_ref),
+            Some(grant.grant_hash.clone()),
+            Self::post_attempt_revision(attempt),
+            now_iso,
         )
     }
 
-    fn dispatch_event(
+    fn bound_event(
         &self,
+        event_id: &str,
+        event_type: &str,
         receipt: &CommandReceiptDto,
-        actor_id: &str,
-        project_id: &str,
-        correlation_id: &str,
+        object_ref: &str,
+        revision: i64,
+        grant: &ExecutionGrant,
         origin: &CommandReceiptDto,
+        correlation_id: &str,
+        now_iso: &str,
     ) -> WorkbenchEventEnvelopeDto {
-        let mut event = scrubbed_event(
-            "DispatchReadbackRecorded",
-            actor_id,
-            project_id,
-            &receipt.command_id,
-            correlation_id,
-            &origin.accepted_at,
-        );
-        event.event_id = self.dispatch_event_id.clone();
-        event.created_at = origin.created_at.clone();
-        event
+        WorkbenchEventEnvelopeDto {
+            event_id: event_id.to_string(),
+            event_type: event_type.to_string(),
+            occurred_at: now_iso.to_string(),
+            actor_id: grant.principal_actor_id.clone(),
+            scope_ref: grant.project_id.clone(),
+            source_ref: object_ref.to_string(),
+            source_revision: Some(revision.to_string()),
+            command_id: Some(receipt.command_id.clone()),
+            correlation_id: Some(correlation_id.to_string()),
+            causation_id: Some(origin.command_id.clone()),
+            trace_context: Some(format!("m5:{object_ref}:{correlation_id}")),
+            schema_version: "m5-orchestration.v1".to_string(),
+            sensitivity: EventSensitivity::Internal,
+            summary_ref: Some(object_ref.to_string()),
+            payload_ref: Some(object_ref.to_string()),
+            payload_hash: Some(grant.grant_hash.clone()),
+            created_at: now_iso.to_string(),
+        }
     }
 
-    fn attempt_event(
+    fn bound_audit(
         &self,
+        audit_id: &str,
+        decision: &str,
         receipt: &CommandReceiptDto,
-        actor_id: &str,
-        project_id: &str,
+        subject_ref: &str,
+        source_refs: &str,
+        grant: &ExecutionGrant,
         correlation_id: &str,
-        origin: &CommandReceiptDto,
-    ) -> WorkbenchEventEnvelopeDto {
-        let mut event = scrubbed_event(
-            "ExecutionAttemptDispatched",
-            actor_id,
-            project_id,
-            &receipt.command_id,
-            correlation_id,
-            &origin.accepted_at,
-        );
-        event.event_id = self.attempt_event_id.clone();
-        event.created_at = origin.created_at.clone();
-        event
+        now_iso: &str,
+    ) -> AuditRecordDto {
+        AuditRecordDto {
+            audit_id: audit_id.to_string(),
+            action: AuditAction::Committed,
+            decision: decision.to_string(),
+            reason_code: None,
+            actor_id: grant.principal_actor_id.clone(),
+            scope_ref: grant.project_id.clone(),
+            subject_ref: Some(subject_ref.to_string()),
+            command_id: Some(receipt.command_id.clone()),
+            correlation_id: Some(correlation_id.to_string()),
+            occurred_at: now_iso.to_string(),
+            sensitivity: AuditSensitivity::Internal,
+            scrub_result: Some("SCRUBBED".to_string()),
+            source_refs: Some(source_refs.to_string()),
+            created_at: now_iso.to_string(),
+        }
     }
 
-    fn dispatch_audit(
+    fn expected_set(
         &self,
         dispatch: &DispatchRecord,
-        receipt: &CommandReceiptDto,
-        actor_id: &str,
-        project_id: &str,
-        correlation_id: &str,
+        attempt: &PreparedAttempt,
+        grant: &ExecutionGrant,
         origin: &CommandReceiptDto,
-    ) -> AuditRecordDto {
-        let mut audit = scrubbed_audit(
+        now_iso: &str,
+    ) -> Result<ExpectedReadbackCarriers, String> {
+        let correlation_id = origin
+            .correlation_id
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| "dispatch_origin_correlation_missing".to_string())?;
+        let dispatch_ref = Self::dispatch_object_ref(&dispatch.dispatch_id);
+        let attempt_ref = Self::attempt_object_ref(attempt.attempt_id.as_str());
+        let dispatch_revision = Self::post_dispatch_revision(dispatch);
+        let attempt_revision = Self::post_attempt_revision(attempt);
+        let dispatch_receipt =
+            self.dispatch_receipt(dispatch, grant, correlation_id, now_iso);
+        let attempt_receipt = self.attempt_receipt(attempt, grant, correlation_id, now_iso);
+        let dispatch_event = self.bound_event(
+            &self.dispatch_event_id,
             "DispatchReadbackRecorded",
-            actor_id,
-            project_id,
-            &dispatch.dispatch_id,
-            &receipt.command_id,
+            &dispatch_receipt,
+            &dispatch_ref,
+            dispatch_revision,
+            grant,
+            origin,
             correlation_id,
-            &origin.accepted_at,
+            now_iso,
         );
-        audit.audit_id = self.dispatch_audit_id.clone();
-        audit.created_at = origin.created_at.clone();
-        audit
-    }
-
-    fn attempt_audit(
-        &self,
-        attempt_id: &str,
-        receipt: &CommandReceiptDto,
-        actor_id: &str,
-        project_id: &str,
-        correlation_id: &str,
-        origin: &CommandReceiptDto,
-    ) -> AuditRecordDto {
-        let mut audit = scrubbed_audit(
+        let attempt_event = self.bound_event(
+            &self.attempt_event_id,
             "ExecutionAttemptDispatched",
-            actor_id,
-            project_id,
-            attempt_id,
-            &receipt.command_id,
+            &attempt_receipt,
+            &attempt_ref,
+            attempt_revision,
+            grant,
+            origin,
             correlation_id,
-            &origin.accepted_at,
+            now_iso,
         );
-        audit.audit_id = self.attempt_audit_id.clone();
-        audit.created_at = origin.created_at.clone();
-        audit
+        let dispatch_audit = self.bound_audit(
+            &self.dispatch_audit_id,
+            "DispatchReadbackRecorded",
+            &dispatch_receipt,
+            &dispatch_ref,
+            &format!(
+                "{dispatch_ref};grant:{};{attempt_ref}",
+                grant.grant_id.as_str()
+            ),
+            grant,
+            correlation_id,
+            now_iso,
+        );
+        let attempt_audit = self.bound_audit(
+            &self.attempt_audit_id,
+            "ExecutionAttemptDispatched",
+            &attempt_receipt,
+            &attempt_ref,
+            &format!(
+                "{attempt_ref};grant:{};{dispatch_ref}",
+                grant.grant_id.as_str()
+            ),
+            grant,
+            correlation_id,
+            now_iso,
+        );
+        Ok(ExpectedReadbackCarriers {
+            dispatch_receipt,
+            attempt_receipt,
+            dispatch_event,
+            attempt_event,
+            dispatch_audit,
+            attempt_audit,
+        })
     }
 
     fn assert_exact_payloads(
@@ -755,51 +919,11 @@ impl DispatchReadbackCarriers {
         store: &M5OrchestrationStore,
         dispatch: &DispatchRecord,
         attempt: &PreparedAttempt,
-        grant: &crate::m5_execution_grant::ExecutionGrant,
+        grant: &ExecutionGrant,
         origin: &CommandReceiptDto,
     ) -> Result<(), String> {
-        let actor_id = grant.principal_actor_id.as_str();
-        let project_id = grant.project_id.as_str();
-        let correlation_id = origin
-            .correlation_id
-            .as_deref()
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| "dispatch_origin_correlation_missing".to_string())?;
-        let attempt_id = attempt.attempt_id.as_str();
-        let expected_dispatch_receipt =
-            self.dispatch_receipt(dispatch, actor_id, project_id, correlation_id, origin);
-        let expected_attempt_receipt =
-            self.attempt_receipt(attempt_id, actor_id, project_id, correlation_id, origin);
-        let expected_dispatch_event = self.dispatch_event(
-            &expected_dispatch_receipt,
-            actor_id,
-            project_id,
-            correlation_id,
-            origin,
-        );
-        let expected_attempt_event = self.attempt_event(
-            &expected_attempt_receipt,
-            actor_id,
-            project_id,
-            correlation_id,
-            origin,
-        );
-        let expected_dispatch_audit = self.dispatch_audit(
-            dispatch,
-            &expected_dispatch_receipt,
-            actor_id,
-            project_id,
-            correlation_id,
-            origin,
-        );
-        let expected_attempt_audit = self.attempt_audit(
-            attempt_id,
-            &expected_attempt_receipt,
-            actor_id,
-            project_id,
-            correlation_id,
-            origin,
-        );
+        let now_iso = Self::carrier_now_iso(attempt, None);
+        let expected = self.expected_set(dispatch, attempt, grant, origin, &now_iso)?;
         let dispatch_receipt = store
             .load_receipt(&self.dispatch_receipt_id)?
             .ok_or_else(|| "dispatch_readback_carriers_divergent".to_string())?;
@@ -818,12 +942,12 @@ impl DispatchReadbackCarriers {
         let attempt_audit = store
             .load_audit(&self.attempt_audit_id)?
             .ok_or_else(|| "dispatch_readback_carriers_divergent".to_string())?;
-        if !receipt_payload_matches(&dispatch_receipt, &expected_dispatch_receipt)
-            || !receipt_payload_matches(&attempt_receipt, &expected_attempt_receipt)
-            || !event_payload_matches(&dispatch_event, &expected_dispatch_event)
-            || !event_payload_matches(&attempt_event, &expected_attempt_event)
-            || !audit_payload_matches(&dispatch_audit, &expected_dispatch_audit)
-            || !audit_payload_matches(&attempt_audit, &expected_attempt_audit)
+        if dispatch_receipt != expected.dispatch_receipt
+            || attempt_receipt != expected.attempt_receipt
+            || dispatch_event != expected.dispatch_event
+            || attempt_event != expected.attempt_event
+            || dispatch_audit != expected.dispatch_audit
+            || attempt_audit != expected.attempt_audit
         {
             return Err("dispatch_readback_carriers_divergent".to_string());
         }
@@ -831,64 +955,58 @@ impl DispatchReadbackCarriers {
     }
 }
 
+struct ExpectedReadbackCarriers {
+    dispatch_receipt: CommandReceiptDto,
+    attempt_receipt: CommandReceiptDto,
+    dispatch_event: WorkbenchEventEnvelopeDto,
+    attempt_event: WorkbenchEventEnvelopeDto,
+    dispatch_audit: AuditRecordDto,
+    attempt_audit: AuditRecordDto,
+}
+
 fn persist_dispatch_readback_carriers(
     store: &M5OrchestrationStore,
-    dispatch: &DispatchRecord,
-    actor_id: &str,
-    project_id: &str,
-    correlation_id: &str,
+    chain: &JoinedDispatchChain,
     origin: &CommandReceiptDto,
+    correlation_id: &str,
+    now_ms: i64,
 ) -> Result<(), String> {
-    let carriers = DispatchReadbackCarriers::from_ids(&dispatch.dispatch_id, &dispatch.attempt_id);
-    let receipt =
-        carriers.dispatch_receipt(dispatch, actor_id, project_id, correlation_id, origin);
-    store.persist_receipt_once(&receipt)?;
-    store.persist_event(&carriers.dispatch_event(
-        &receipt,
-        actor_id,
-        project_id,
-        correlation_id,
+    let _ = correlation_id;
+    let carriers = DispatchReadbackCarriers::from_chain(chain);
+    let now_iso = format_ms(now_ms);
+    let expected = carriers.expected_set(
+        &chain.dispatch,
+        &chain.attempt,
+        &chain.grant,
         origin,
-    ))?;
-    store.persist_audit(&carriers.dispatch_audit(
-        dispatch,
-        &receipt,
-        actor_id,
-        project_id,
-        correlation_id,
-        origin,
-    ))?;
+        &now_iso,
+    )?;
+    store.persist_receipt_once(&expected.dispatch_receipt)?;
+    store.persist_event(&expected.dispatch_event)?;
+    store.persist_audit(&expected.dispatch_audit)?;
     Ok(())
 }
 
 fn persist_attempt_dispatched_carriers(
     store: &M5OrchestrationStore,
-    attempt: &PreparedAttempt,
-    actor_id: &str,
-    project_id: &str,
-    correlation_id: &str,
+    chain: &JoinedDispatchChain,
     origin: &CommandReceiptDto,
+    correlation_id: &str,
+    now_ms: i64,
 ) -> Result<(), String> {
-    let attempt_id = attempt.attempt_id.as_str();
-    let carriers = DispatchReadbackCarriers::from_ids("", attempt_id);
-    let receipt =
-        carriers.attempt_receipt(attempt_id, actor_id, project_id, correlation_id, origin);
-    store.persist_receipt_once(&receipt)?;
-    store.persist_event(&carriers.attempt_event(
-        &receipt,
-        actor_id,
-        project_id,
-        correlation_id,
+    let _ = correlation_id;
+    let carriers = DispatchReadbackCarriers::from_chain(chain);
+    let now_iso = format_ms(now_ms);
+    let expected = carriers.expected_set(
+        &chain.dispatch,
+        &chain.attempt,
+        &chain.grant,
         origin,
-    ))?;
-    store.persist_audit(&carriers.attempt_audit(
-        attempt_id,
-        &receipt,
-        actor_id,
-        project_id,
-        correlation_id,
-        origin,
-    ))?;
+        &now_iso,
+    )?;
+    store.persist_receipt_once(&expected.attempt_receipt)?;
+    store.persist_event(&expected.attempt_event)?;
+    store.persist_audit(&expected.attempt_audit)?;
     Ok(())
 }
 
@@ -900,7 +1018,12 @@ fn stable_committed_receipt(
     actor_id: &str,
     scope_ref: &str,
     correlation_id: &str,
-    origin: &CommandReceiptDto,
+    policy_decision_ref: &str,
+    current_object_ref: Option<String>,
+    result_ref: Option<String>,
+    result_hash: Option<String>,
+    committed_revision: i64,
+    now_iso: &str,
 ) -> CommandReceiptDto {
     CommandReceiptDto {
         receipt_id: receipt_id.to_string(),
@@ -909,74 +1032,28 @@ fn stable_committed_receipt(
         request_hash: format!("hash-{command}"),
         actor_id: actor_id.to_string(),
         scope_ref: scope_ref.to_string(),
-        current_object_ref: None,
-        policy_decision_ref: "pol-m5r02".to_string(),
+        current_object_ref,
+        policy_decision_ref: policy_decision_ref.to_string(),
         status: CommandReceiptStatus::Committed,
         correlation_id: Some(correlation_id.to_string()),
-        accepted_at: origin.accepted_at.clone(),
-        result_ref: None,
-        result_hash: None,
-        committed_revision: Some(1),
+        accepted_at: now_iso.to_string(),
+        result_ref,
+        result_hash,
+        committed_revision: Some(committed_revision),
         error_code: None,
-        created_at: origin.created_at.clone(),
+        created_at: now_iso.to_string(),
     }
 }
 
-fn receipt_payload_matches(actual: &CommandReceiptDto, expected: &CommandReceiptDto) -> bool {
-    actual.receipt_id == expected.receipt_id
-        && actual.command_id == expected.command_id
-        && actual.idempotency_key == expected.idempotency_key
-        && actual.request_hash == expected.request_hash
-        && actual.actor_id == expected.actor_id
-        && actual.scope_ref == expected.scope_ref
-        && actual.current_object_ref == expected.current_object_ref
-        && actual.policy_decision_ref == expected.policy_decision_ref
-        && actual.status == expected.status
-        && actual.correlation_id == expected.correlation_id
-        && actual.accepted_at == expected.accepted_at
-        && actual.result_ref == expected.result_ref
-        && actual.result_hash == expected.result_hash
-        && actual.committed_revision == expected.committed_revision
-        && actual.error_code == expected.error_code
-        && actual.created_at == expected.created_at
-}
-
-fn event_payload_matches(
-    actual: &WorkbenchEventEnvelopeDto,
-    expected: &WorkbenchEventEnvelopeDto,
-) -> bool {
-    actual.event_id == expected.event_id
-        && actual.event_type == expected.event_type
-        && actual.occurred_at == expected.occurred_at
-        && actual.actor_id == expected.actor_id
-        && actual.scope_ref == expected.scope_ref
-        && actual.source_ref == expected.source_ref
-        && actual.source_revision == expected.source_revision
-        && actual.command_id == expected.command_id
-        && actual.correlation_id == expected.correlation_id
-        && actual.causation_id == expected.causation_id
-        && actual.schema_version == expected.schema_version
-        && actual.sensitivity == expected.sensitivity
-        && actual.payload_hash == expected.payload_hash
-        && actual.created_at == expected.created_at
-}
-
-fn audit_payload_matches(actual: &AuditRecordDto, expected: &AuditRecordDto) -> bool {
-    actual.audit_id == expected.audit_id
-        && actual.action == expected.action
-        && actual.decision == expected.decision
-        && actual.reason_code == expected.reason_code
-        && actual.actor_id == expected.actor_id
-        && actual.scope_ref == expected.scope_ref
-        && actual.subject_ref == expected.subject_ref
-        && actual.command_id == expected.command_id
-        && actual.correlation_id == expected.correlation_id
-        && actual.occurred_at == expected.occurred_at
-        && actual.sensitivity == expected.sensitivity
-        && actual.created_at == expected.created_at
-}
-
 pub(crate) fn assert_dispatch_readback_carriers(
+    store: &M5OrchestrationStore,
+    dispatch_id: &str,
+    attempt_id: &str,
+) -> Result<(), String> {
+    assert_dispatch_readback_substrate(store, dispatch_id, attempt_id)
+}
+
+pub(crate) fn assert_dispatch_readback_substrate(
     store: &M5OrchestrationStore,
     dispatch_id: &str,
     attempt_id: &str,
@@ -990,17 +1067,30 @@ pub(crate) fn assert_dispatch_readback_carriers(
     if attempt.attempt_id.as_str() != dispatch.attempt_id {
         return Err("dispatch_readback_carriers_divergent".to_string());
     }
-    let grant = store
-        .load_grant(&dispatch.grant_id)?
-        .ok_or_else(|| "dispatch_readback_carriers_missing".to_string())?;
+    if dispatch.state != "DISPATCHED" {
+        return Err("dispatch_readback_required".to_string());
+    }
+    if attempt.state != AttemptState::Dispatched {
+        return Err("attempt_not_dispatched".to_string());
+    }
+    let now_ms = attempt.updated_at_ms;
+    let chain = load_joined_dispatch_chain(store, dispatch_id, now_ms)?;
+    match chain.outbox.status {
+        OutboxItemStatus::Delivered => {}
+        OutboxItemStatus::Available | OutboxItemStatus::Poison => {
+            return Err("readback_substrate_outbox_not_delivered".to_string());
+        }
+        _ => return Err("readback_substrate_outbox_not_delivered".to_string()),
+    }
     let origin = store
-        .load_receipt(&dispatch.created_by_command_receipt_ref)?
+        .load_receipt(&chain.dispatch.created_by_command_receipt_ref)?
         .ok_or_else(|| "dispatch_origin_receipt_missing".to_string())?;
-    DispatchReadbackCarriers::from_ids(dispatch_id, attempt_id).assert_exact_payloads(
+    assert_dispatch_origin_exact(&origin, &chain)?;
+    DispatchReadbackCarriers::from_chain(&chain).assert_exact_payloads(
         store,
-        &dispatch,
-        &attempt,
-        &grant,
+        &chain.dispatch,
+        &chain.attempt,
+        &chain.grant,
         &origin,
     )
 }
@@ -1494,6 +1584,66 @@ mod tests {
                 "UPDATE m5_audit_records SET occurred_at='1999-01-01T00:00:00.000Z' WHERE audit_id=?1",
                 "aud",
             ),
+            (
+                "UPDATE m5_command_receipts SET policy_decision_ref='pol-forged' WHERE receipt_id=?1",
+                "rcpt",
+            ),
+            (
+                "UPDATE m5_command_receipts SET current_object_ref='forged-object' WHERE receipt_id=?1",
+                "rcpt",
+            ),
+            (
+                "UPDATE m5_command_receipts SET result_ref='forged-result' WHERE receipt_id=?1",
+                "rcpt",
+            ),
+            (
+                "UPDATE m5_command_receipts SET committed_revision=99 WHERE receipt_id=?1",
+                "rcpt",
+            ),
+            (
+                "UPDATE m5_command_receipts SET result_hash='sha256:forged' WHERE receipt_id=?1",
+                "rcpt",
+            ),
+            (
+                "UPDATE m5_events SET source_ref='m5.orchestration' WHERE event_id=?1",
+                "evt",
+            ),
+            (
+                "UPDATE m5_events SET source_revision='1' WHERE event_id=?1",
+                "evt",
+            ),
+            (
+                "UPDATE m5_events SET trace_context='forged-trace' WHERE event_id=?1",
+                "evt",
+            ),
+            (
+                "UPDATE m5_events SET summary_ref='forged-summary' WHERE event_id=?1",
+                "evt",
+            ),
+            (
+                "UPDATE m5_events SET payload_ref='forged-payload' WHERE event_id=?1",
+                "evt",
+            ),
+            (
+                "UPDATE m5_events SET payload_hash='sha256:forged' WHERE event_id=?1",
+                "evt",
+            ),
+            (
+                "UPDATE m5_events SET causation_id='forged-causation' WHERE event_id=?1",
+                "evt",
+            ),
+            (
+                "UPDATE m5_audit_records SET scrub_result='FORGED' WHERE audit_id=?1",
+                "aud",
+            ),
+            (
+                "UPDATE m5_audit_records SET source_refs='forged-refs' WHERE audit_id=?1",
+                "aud",
+            ),
+            (
+                "UPDATE m5_audit_records SET action='DENIED' WHERE audit_id=?1",
+                "aud",
+            ),
         ];
         for (sql, kind) in tampers {
             let store = M5OrchestrationStore::open_in_memory().unwrap();
@@ -1588,5 +1738,243 @@ mod tests {
             })
             .unwrap();
         assert_eq!(status, "REVOKED");
+    }
+
+    #[test]
+    fn origin_outbox_join_rejects_field_drift_before_first_write() {
+        let tampers = [
+            (
+                "UPDATE m5_command_receipts SET actor_id='forged-actor' WHERE receipt_id=?1",
+                "origin",
+            ),
+            (
+                "UPDATE m5_command_receipts SET policy_decision_ref='pol-m5r02' WHERE receipt_id=?1",
+                "origin",
+            ),
+            (
+                "UPDATE m5_command_receipts SET correlation_id='forged-corr' WHERE receipt_id=?1",
+                "origin",
+            ),
+            (
+                "UPDATE m5_outbox_items SET owning_command_id='forged-cmd' WHERE outbox_item_id=?1",
+                "outbox",
+            ),
+            (
+                "UPDATE m5_outbox_items SET subject_ref='forged-attempt' WHERE outbox_item_id=?1",
+                "outbox",
+            ),
+            (
+                "UPDATE m5_outbox_items SET result_command_type='ForgedReadback' WHERE outbox_item_id=?1",
+                "outbox",
+            ),
+            (
+                "UPDATE m5_outbox_items SET payload_hash='sha256:forged' WHERE outbox_item_id=?1",
+                "outbox",
+            ),
+            (
+                "UPDATE m5_outbox_items SET idempotency_key='forged-idem' WHERE outbox_item_id=?1",
+                "outbox",
+            ),
+        ];
+        for (sql, kind) in tampers {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let result = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
+            let dispatch_id = result.dispatch_id.as_ref().unwrap().as_str().to_string();
+            let dispatch = store.load_dispatch(&dispatch_id).unwrap().unwrap();
+            let target = match kind {
+                "origin" => dispatch.created_by_command_receipt_ref.clone(),
+                _ => dispatch.outbox_item_id.clone(),
+            };
+            store.connection().execute(sql, [target]).unwrap();
+            let before = carrier_snapshot(&store);
+            let err = complete_dispatch_readback(
+                &store,
+                DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+                2_000,
+            )
+            .unwrap_err();
+            assert!(
+                err == "dispatch_origin_receipt_divergent"
+                    || err == "dispatch_origin_correlation_missing",
+                "{sql} -> {err}"
+            );
+            assert_eq!(carrier_snapshot(&store), before, "{sql}");
+            let after = store.load_dispatch(&dispatch_id).unwrap().unwrap();
+            assert_eq!(after.state, "PENDING_DELIVERY");
+        }
+    }
+
+    #[test]
+    fn origin_outbox_payload_ref_rejects_grant_id_substring_zero_change() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let result = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
+        let dispatch_id = result.dispatch_id.as_ref().unwrap().as_str().to_string();
+        let grant_id = result.grant_id.as_ref().unwrap().as_str().to_string();
+        let dispatch = store.load_dispatch(&dispatch_id).unwrap().unwrap();
+        let attempt_before = store
+            .load_attempt(&dispatch.attempt_id)
+            .unwrap()
+            .unwrap();
+        let outbox_before = M5OutboxRepository
+            .get_by_id(store.connection(), &dispatch.outbox_item_id)
+            .unwrap()
+            .unwrap();
+        let tampered = format!("evil{grant_id}suffix");
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_outbox_items SET payload_ref=?1 WHERE outbox_item_id=?2",
+                [tampered.as_str(), dispatch.outbox_item_id.as_str()],
+            )
+            .unwrap();
+        let before = carrier_snapshot(&store);
+        let err = complete_dispatch_readback(
+            &store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            2_000,
+        )
+        .unwrap_err();
+        assert_eq!(err, "dispatch_origin_receipt_divergent");
+        assert_eq!(carrier_snapshot(&store), before);
+        let after = store.load_dispatch(&dispatch_id).unwrap().unwrap();
+        let attempt_after = store
+            .load_attempt(&dispatch.attempt_id)
+            .unwrap()
+            .unwrap();
+        let outbox_after = M5OutboxRepository
+            .get_by_id(store.connection(), &dispatch.outbox_item_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(after.state, "PENDING_DELIVERY");
+        assert_eq!(after.revision, dispatch.revision);
+        assert_eq!(attempt_after.state, attempt_before.state);
+        assert_eq!(outbox_after.status, outbox_before.status);
+        assert_eq!(outbox_after.payload_ref.as_deref(), Some(tampered.as_str()));
+    }
+
+    #[test]
+    fn origin_receipt_rejects_committed_revision_drift_zero_change() {
+        let tampers = [
+            "UPDATE m5_command_receipts SET committed_revision=NULL WHERE receipt_id=?1",
+            "UPDATE m5_command_receipts SET committed_revision=0 WHERE receipt_id=?1",
+            "UPDATE m5_command_receipts SET committed_revision=2 WHERE receipt_id=?1",
+        ];
+        for sql in tampers {
+            let store = M5OrchestrationStore::open_in_memory().unwrap();
+            let result = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
+            let dispatch_id = result.dispatch_id.as_ref().unwrap().as_str().to_string();
+            let dispatch = store.load_dispatch(&dispatch_id).unwrap().unwrap();
+            let attempt_before = store
+                .load_attempt(&dispatch.attempt_id)
+                .unwrap()
+                .unwrap();
+            let outbox_before = M5OutboxRepository
+                .get_by_id(store.connection(), &dispatch.outbox_item_id)
+                .unwrap()
+                .unwrap();
+            store
+                .connection()
+                .execute(sql, [dispatch.created_by_command_receipt_ref.as_str()])
+                .unwrap();
+            let before = carrier_snapshot(&store);
+            let err = complete_dispatch_readback(
+                &store,
+                DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+                2_000,
+            )
+            .unwrap_err();
+            assert_eq!(err, "dispatch_origin_receipt_divergent", "{sql}");
+            assert_eq!(carrier_snapshot(&store), before, "{sql}");
+            let after = store.load_dispatch(&dispatch_id).unwrap().unwrap();
+            let attempt_after = store
+                .load_attempt(&dispatch.attempt_id)
+                .unwrap()
+                .unwrap();
+            let outbox_after = M5OutboxRepository
+                .get_by_id(store.connection(), &dispatch.outbox_item_id)
+                .unwrap()
+                .unwrap();
+            assert_eq!(after.state, "PENDING_DELIVERY", "{sql}");
+            assert_eq!(after.revision, dispatch.revision, "{sql}");
+            assert_eq!(attempt_after.state, attempt_before.state, "{sql}");
+            assert_eq!(outbox_after.status, outbox_before.status, "{sql}");
+        }
+    }
+
+    #[test]
+    fn unknown_carrier_enums_fail_closed() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let result = prepare_and_dispatch(&store, req(), ChainFault::None).unwrap();
+        let dispatch_id = result.dispatch_id.as_ref().unwrap().as_str().to_string();
+        complete_dispatch_readback(
+            &store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            2_000,
+        )
+        .unwrap();
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_command_receipts SET status='NOT_A_STATUS' WHERE receipt_id=?1",
+                [format!("rcpt-record-dispatch-readback-{dispatch_id}")],
+            )
+            .unwrap();
+        let err = complete_dispatch_readback(
+            &store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            3_000,
+        )
+        .unwrap_err();
+        assert!(
+            err.starts_with("unknown_receipt_status:"),
+            "{err}"
+        );
+
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_command_receipts SET status='COMMITTED' WHERE receipt_id=?1",
+                [format!("rcpt-record-dispatch-readback-{dispatch_id}")],
+            )
+            .unwrap();
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_events SET sensitivity='NOT_A_SENSITIVITY' WHERE event_id=?1",
+                [format!("evt-dispatch-readback-{dispatch_id}")],
+            )
+            .unwrap();
+        let err = complete_dispatch_readback(
+            &store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            3_000,
+        )
+        .unwrap_err();
+        assert!(
+            err.starts_with("unknown_event_sensitivity:"),
+            "{err}"
+        );
+
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_events SET sensitivity='INTERNAL' WHERE event_id=?1",
+                [format!("evt-dispatch-readback-{dispatch_id}")],
+            )
+            .unwrap();
+        store
+            .connection()
+            .execute(
+                "UPDATE m5_audit_records SET action='NOT_AN_ACTION' WHERE audit_id=?1",
+                [format!("aud-dispatch-readback-{dispatch_id}")],
+            )
+            .unwrap();
+        let err = complete_dispatch_readback(
+            &store,
+            DispatchReadbackSource::ExactStoredDispatch(&dispatch_id),
+            3_000,
+        )
+        .unwrap_err();
+        assert!(err.starts_with("unknown_audit_action:"), "{err}");
     }
 }

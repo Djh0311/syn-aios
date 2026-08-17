@@ -657,7 +657,7 @@ impl M5OrchestrationStore {
                         scope_ref: row.get(5)?,
                         current_object_ref: row.get(6)?,
                         policy_decision_ref: row.get(7)?,
-                        status: parse_receipt_status(&row.get::<_, String>(8)?),
+                        status: parse_receipt_status(&row.get::<_, String>(8)?)?,
                         correlation_id: row.get(9)?,
                         accepted_at: row.get(10)?,
                         result_ref: row.get(11)?,
@@ -669,7 +669,7 @@ impl M5OrchestrationStore {
                 },
             )
             .optional()
-            .map_err(|e| format!("load_receipt:{e}"))
+            .map_err(|e| map_closed_enum_error("load_receipt", e))
     }
 
     pub(crate) fn count_command_receipts_with_hash(&self, request_hash: &str) -> Result<i64, String> {
@@ -733,8 +733,9 @@ impl M5OrchestrationStore {
         self.conn
             .query_row(
                 "SELECT event_id, event_type, occurred_at, actor_id, scope_ref, source_ref,
-                        source_revision, command_id, correlation_id, causation_id, schema_version,
-                        sensitivity, payload_hash, created_at
+                        source_revision, command_id, correlation_id, causation_id, trace_context,
+                        schema_version, sensitivity, summary_ref, payload_ref, payload_hash,
+                        created_at
                  FROM m5_events WHERE event_id = ?1",
                 [event_id],
                 |row| {
@@ -749,31 +750,32 @@ impl M5OrchestrationStore {
                         command_id: row.get(7)?,
                         correlation_id: row.get(8)?,
                         causation_id: row.get(9)?,
-                        trace_context: None,
-                        schema_version: row.get(10)?,
-                        sensitivity: parse_event_sensitivity(&row.get::<_, String>(11)?),
-                        summary_ref: None,
-                        payload_ref: None,
-                        payload_hash: row.get(12)?,
-                        created_at: row.get(13)?,
+                        trace_context: row.get(10)?,
+                        schema_version: row.get(11)?,
+                        sensitivity: parse_event_sensitivity(&row.get::<_, String>(12)?)?,
+                        summary_ref: row.get(13)?,
+                        payload_ref: row.get(14)?,
+                        payload_hash: row.get(15)?,
+                        created_at: row.get(16)?,
                     })
                 },
             )
             .optional()
-            .map_err(|e| format!("load_event:{e}"))
+            .map_err(|e| map_closed_enum_error("load_event", e))
     }
 
     pub(crate) fn load_audit(&self, audit_id: &str) -> Result<Option<AuditRecordDto>, String> {
         self.conn
             .query_row(
                 "SELECT audit_id, action, decision, reason_code, actor_id, scope_ref, subject_ref,
-                        command_id, correlation_id, occurred_at, sensitivity, created_at
+                        command_id, correlation_id, occurred_at, sensitivity, scrub_result,
+                        source_refs, created_at
                  FROM m5_audit_records WHERE audit_id = ?1",
                 [audit_id],
                 |row| {
                     Ok(AuditRecordDto {
                         audit_id: row.get(0)?,
-                        action: parse_audit_action(&row.get::<_, String>(1)?),
+                        action: parse_audit_action(&row.get::<_, String>(1)?)?,
                         decision: row.get(2)?,
                         reason_code: row.get(3)?,
                         actor_id: row.get(4)?,
@@ -782,15 +784,15 @@ impl M5OrchestrationStore {
                         command_id: row.get(7)?,
                         correlation_id: row.get(8)?,
                         occurred_at: row.get(9)?,
-                        sensitivity: parse_audit_sensitivity(&row.get::<_, String>(10)?),
-                        scrub_result: None,
-                        source_refs: None,
-                        created_at: row.get(11)?,
+                        sensitivity: parse_audit_sensitivity(&row.get::<_, String>(10)?)?,
+                        scrub_result: row.get(11)?,
+                        source_refs: row.get(12)?,
+                        created_at: row.get(13)?,
                     })
                 },
             )
             .optional()
-            .map_err(|e| format!("load_audit:{e}"))
+            .map_err(|e| map_closed_enum_error("load_audit", e))
     }
 
     pub(crate) fn persist_event(&self, event: &WorkbenchEventEnvelopeDto) -> Result<(), String> {
@@ -798,9 +800,10 @@ impl M5OrchestrationStore {
             .execute(
                 "INSERT INTO m5_events (
                     event_id, event_type, occurred_at, actor_id, scope_ref, source_ref,
-                    source_revision, command_id, correlation_id, causation_id, schema_version,
-                    sensitivity, payload_hash, created_at
-                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+                    source_revision, command_id, correlation_id, causation_id, trace_context,
+                    schema_version, sensitivity, summary_ref, payload_ref, payload_hash,
+                    created_at
+                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)",
                 params![
                     event.event_id,
                     event.event_type,
@@ -812,8 +815,11 @@ impl M5OrchestrationStore {
                     event.command_id,
                     event.correlation_id,
                     event.causation_id,
+                    event.trace_context,
                     event.schema_version,
                     event.sensitivity.to_string(),
+                    event.summary_ref,
+                    event.payload_ref,
                     event.payload_hash,
                     event.created_at
                 ],
@@ -827,8 +833,9 @@ impl M5OrchestrationStore {
             .execute(
                 "INSERT INTO m5_audit_records (
                     audit_id, action, decision, reason_code, actor_id, scope_ref, subject_ref,
-                    command_id, correlation_id, occurred_at, sensitivity, created_at
-                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+                    command_id, correlation_id, occurred_at, sensitivity, scrub_result,
+                    source_refs, created_at
+                ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
                 params![
                     audit.audit_id,
                     audit.action.to_string(),
@@ -841,6 +848,8 @@ impl M5OrchestrationStore {
                     audit.correlation_id,
                     audit.occurred_at,
                     audit.sensitivity.to_string(),
+                    audit.scrub_result,
+                    audit.source_refs,
                     audit.created_at
                 ],
             )
@@ -948,7 +957,7 @@ impl OutboxRepository for M5OutboxRepository {
                 map_outbox_row,
             )
             .optional()
-            .map_err(|e| format!("outbox_get:{e}"))
+            .map_err(|e| map_closed_enum_error("outbox_get", e))
     }
 
     fn get_by_command_id(
@@ -1072,7 +1081,7 @@ fn map_outbox_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OutboxItemDto> {
         result_command_type: row.get(9)?,
         idempotency_key: row.get(10)?,
         correlation_id: row.get(11)?,
-        status: parse_outbox_status(&row.get::<_, String>(12)?),
+        status: parse_outbox_status(&row.get::<_, String>(12)?)?,
         created_at: row.get(13)?,
         expires_at: row.get(14)?,
         lease_token: row.get(15)?,
@@ -1083,61 +1092,114 @@ fn map_outbox_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<OutboxItemDto> {
     })
 }
 
-fn parse_receipt_status(value: &str) -> CommandReceiptStatus {
-    match value {
-        "DENIED" => CommandReceiptStatus::Denied,
-        "NEEDS_CONFIRMATION" => CommandReceiptStatus::NeedsConfirmation,
-        "COMMITTED" => CommandReceiptStatus::Committed,
-        "EXTERNAL_PENDING" => CommandReceiptStatus::ExternalPending,
-        "EXTERNAL_RESULT" => CommandReceiptStatus::ExternalResult,
-        "PROJECTION_DEGRADED" => CommandReceiptStatus::ProjectionDegraded,
-        "FAILED" => CommandReceiptStatus::Failed,
-        _ => CommandReceiptStatus::Failed,
+#[derive(Debug)]
+struct ClosedEnumError(String);
+
+impl std::fmt::Display for ClosedEnumError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
-fn parse_event_sensitivity(value: &str) -> EventSensitivity {
+impl std::error::Error for ClosedEnumError {}
+
+fn closed_enum_sql(idx: usize, err: String) -> rusqlite::Error {
+    rusqlite::Error::FromSqlConversionFailure(
+        idx,
+        rusqlite::types::Type::Text,
+        Box::new(ClosedEnumError(err)),
+    )
+}
+
+fn map_closed_enum_error(prefix: &str, e: rusqlite::Error) -> String {
+    fn extract(text: &str) -> Option<String> {
+        for marker in [
+            "unknown_receipt_status:",
+            "unknown_event_sensitivity:",
+            "unknown_audit_action:",
+            "unknown_audit_sensitivity:",
+            "unknown_outbox_status:",
+        ] {
+            if let Some(idx) = text.find(marker) {
+                return Some(text[idx..].to_string());
+            }
+        }
+        None
+    }
+    if let Some(found) = extract(&e.to_string()) {
+        return found;
+    }
+    let mut source = std::error::Error::source(&e);
+    while let Some(err) = source {
+        if let Some(found) = extract(&err.to_string()) {
+            return found;
+        }
+        source = err.source();
+    }
+    format!("{prefix}:{e}")
+}
+
+fn parse_receipt_status(value: &str) -> rusqlite::Result<CommandReceiptStatus> {
     match value {
-        "PUBLIC" => EventSensitivity::Public,
-        "INTERNAL" => EventSensitivity::Internal,
-        "RESTRICTED" => EventSensitivity::Restricted,
-        "SECRET" => EventSensitivity::Secret,
-        _ => EventSensitivity::Internal,
+        "DENIED" => Ok(CommandReceiptStatus::Denied),
+        "NEEDS_CONFIRMATION" => Ok(CommandReceiptStatus::NeedsConfirmation),
+        "COMMITTED" => Ok(CommandReceiptStatus::Committed),
+        "EXTERNAL_PENDING" => Ok(CommandReceiptStatus::ExternalPending),
+        "EXTERNAL_RESULT" => Ok(CommandReceiptStatus::ExternalResult),
+        "PROJECTION_DEGRADED" => Ok(CommandReceiptStatus::ProjectionDegraded),
+        "FAILED" => Ok(CommandReceiptStatus::Failed),
+        other => Err(closed_enum_sql(8, format!("unknown_receipt_status:{other}"))),
     }
 }
 
-fn parse_audit_action(value: &str) -> AuditAction {
+fn parse_event_sensitivity(value: &str) -> rusqlite::Result<EventSensitivity> {
     match value {
-        "ALLOWED" => AuditAction::Allowed,
-        "DENIED" => AuditAction::Denied,
-        "COMMITTED" => AuditAction::Committed,
-        "DEGRADED" => AuditAction::Degraded,
-        "QUARANTINED" => AuditAction::Quarantined,
-        _ => AuditAction::Committed,
+        "PUBLIC" => Ok(EventSensitivity::Public),
+        "INTERNAL" => Ok(EventSensitivity::Internal),
+        "RESTRICTED" => Ok(EventSensitivity::Restricted),
+        "SECRET" => Ok(EventSensitivity::Secret),
+        other => Err(closed_enum_sql(
+            12,
+            format!("unknown_event_sensitivity:{other}"),
+        )),
     }
 }
 
-fn parse_audit_sensitivity(value: &str) -> AuditSensitivity {
+fn parse_audit_action(value: &str) -> rusqlite::Result<AuditAction> {
     match value {
-        "PUBLIC" => AuditSensitivity::Public,
-        "INTERNAL" => AuditSensitivity::Internal,
-        "RESTRICTED" => AuditSensitivity::Restricted,
-        "SECRET" => AuditSensitivity::Secret,
-        _ => AuditSensitivity::Internal,
+        "ALLOWED" => Ok(AuditAction::Allowed),
+        "DENIED" => Ok(AuditAction::Denied),
+        "COMMITTED" => Ok(AuditAction::Committed),
+        "DEGRADED" => Ok(AuditAction::Degraded),
+        "QUARANTINED" => Ok(AuditAction::Quarantined),
+        other => Err(closed_enum_sql(1, format!("unknown_audit_action:{other}"))),
     }
 }
 
-fn parse_outbox_status(value: &str) -> OutboxItemStatus {
+fn parse_audit_sensitivity(value: &str) -> rusqlite::Result<AuditSensitivity> {
     match value {
-        "DECLARED" => OutboxItemStatus::Declared,
-        "AVAILABLE" => OutboxItemStatus::Available,
-        "LEASED" => OutboxItemStatus::Leased,
-        "DELIVERED" => OutboxItemStatus::Delivered,
-        "RETRY_WAIT" => OutboxItemStatus::RetryWait,
-        "POISON" => OutboxItemStatus::Poison,
-        "CANCELLED" => OutboxItemStatus::Cancelled,
-        "RESULT_RECEIVED" => OutboxItemStatus::ResultReceived,
-        _ => OutboxItemStatus::Cancelled,
+        "PUBLIC" => Ok(AuditSensitivity::Public),
+        "INTERNAL" => Ok(AuditSensitivity::Internal),
+        "RESTRICTED" => Ok(AuditSensitivity::Restricted),
+        "SECRET" => Ok(AuditSensitivity::Secret),
+        other => Err(closed_enum_sql(
+            10,
+            format!("unknown_audit_sensitivity:{other}"),
+        )),
+    }
+}
+
+fn parse_outbox_status(value: &str) -> rusqlite::Result<OutboxItemStatus> {
+    match value {
+        "DECLARED" => Ok(OutboxItemStatus::Declared),
+        "AVAILABLE" => Ok(OutboxItemStatus::Available),
+        "LEASED" => Ok(OutboxItemStatus::Leased),
+        "DELIVERED" => Ok(OutboxItemStatus::Delivered),
+        "RETRY_WAIT" => Ok(OutboxItemStatus::RetryWait),
+        "POISON" => Ok(OutboxItemStatus::Poison),
+        "CANCELLED" => Ok(OutboxItemStatus::Cancelled),
+        "RESULT_RECEIVED" => Ok(OutboxItemStatus::ResultReceived),
+        other => Err(closed_enum_sql(12, format!("unknown_outbox_status:{other}"))),
     }
 }
 
@@ -1156,6 +1218,7 @@ pub(crate) fn committed_receipt(
     scope_ref: &str,
     correlation_id: &str,
     now_iso: &str,
+    policy_decision_ref: &str,
 ) -> CommandReceiptDto {
     CommandReceiptDto {
         receipt_id: format!("rcpt-{}", uuid::Uuid::new_v4()),
@@ -1165,7 +1228,7 @@ pub(crate) fn committed_receipt(
         actor_id: actor_id.to_string(),
         scope_ref: scope_ref.to_string(),
         current_object_ref: None,
-        policy_decision_ref: "pol-m5r02".to_string(),
+        policy_decision_ref: policy_decision_ref.to_string(),
         status: CommandReceiptStatus::Committed,
         correlation_id: Some(correlation_id.to_string()),
         accepted_at: now_iso.to_string(),

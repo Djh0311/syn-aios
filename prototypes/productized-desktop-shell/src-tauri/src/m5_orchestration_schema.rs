@@ -198,8 +198,11 @@ pub(crate) fn ensure_m5_orchestration_schema(conn: &Connection) -> Result<(), St
             command_id TEXT,
             correlation_id TEXT,
             causation_id TEXT,
+            trace_context TEXT,
             schema_version TEXT NOT NULL,
             sensitivity TEXT NOT NULL,
+            summary_ref TEXT,
+            payload_ref TEXT,
             payload_hash TEXT,
             created_at TEXT NOT NULL
         );
@@ -216,6 +219,8 @@ pub(crate) fn ensure_m5_orchestration_schema(conn: &Connection) -> Result<(), St
             correlation_id TEXT,
             occurred_at TEXT NOT NULL,
             sensitivity TEXT NOT NULL,
+            scrub_result TEXT,
+            source_refs TEXT,
             created_at TEXT NOT NULL
         );
 
@@ -246,6 +251,7 @@ pub(crate) fn ensure_m5_orchestration_schema(conn: &Connection) -> Result<(), St
         "#,
     )
     .map_err(|e| format!("m5_schema_apply:{e}"))?;
+    ensure_m5_additive_columns(conn)?;
 
     let existing: Option<i64> = conn
         .query_row(
@@ -290,5 +296,34 @@ pub(crate) fn verify_m5_orchestration_schema(conn: &Connection) -> Result<(), St
             return Err(format!("m5_schema_missing_table:{table}"));
         }
     }
+    Ok(())
+}
+
+fn ensure_m5_additive_columns(conn: &Connection) -> Result<(), String> {
+    ensure_column(conn, "m5_events", "trace_context", "TEXT")?;
+    ensure_column(conn, "m5_events", "summary_ref", "TEXT")?;
+    ensure_column(conn, "m5_events", "payload_ref", "TEXT")?;
+    ensure_column(conn, "m5_audit_records", "scrub_result", "TEXT")?;
+    ensure_column(conn, "m5_audit_records", "source_refs", "TEXT")?;
+    Ok(())
+}
+
+fn ensure_column(conn: &Connection, table: &str, column: &str, decl: &str) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(|e| format!("m5_schema_table_info:{table}:{e}"))?;
+    let existing = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| format!("m5_schema_table_info_map:{table}:{e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("m5_schema_table_info_rows:{table}:{e}"))?;
+    if existing.iter().any(|name| name == column) {
+        return Ok(());
+    }
+    conn.execute(
+        &format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"),
+        [],
+    )
+    .map_err(|e| format!("m5_schema_add_column:{table}.{column}:{e}"))?;
     Ok(())
 }
