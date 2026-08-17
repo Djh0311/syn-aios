@@ -161,9 +161,9 @@ struct AppState {
     // not mint. Isolated acceptance and legacy leave the slot uninstalled.
     #[allow(dead_code)]
     m1_project_index: Option<m1_project_index::M1ProjectIndexAuthorityHandle>,
-    // M3O01 installs the server-only project-role-session authority on the
-    // ordinary product. The M1 read port is not an ordinary canonical
-    // ProjectId issuance source, so provision/load/restore stay fail-closed.
+    // M3O02 installs the server-only project-role-session authority on the
+    // ordinary product and wires the restricted M1 typed-id verifier.
+    // Isolated acceptance and legacy leave the slot uninstalled.
     #[allow(dead_code)]
     m3_project_role_session_authority:
         Option<m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle>,
@@ -380,17 +380,21 @@ impl AppState {
             m4_secretary_repository.clone(),
         );
         let (m1_project_index, m3_project_role_session_authority) = match authority_profile {
-            SharedProductAuthorityProfile::OrdinaryInstalled => (
-                Some(
+            SharedProductAuthorityProfile::OrdinaryInstalled => {
+                let m1_project_index =
                     m1_project_index::M1ProjectIndexAuthorityHandle::install_ordinary_product(
                         app_data_root,
                     )
-                    .map_err(|error| error.code)?,
-                ),
-                Some(
-                    m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(),
-                ),
-            ),
+                    .map_err(|error| error.code)?;
+                let m3_project_role_session_authority =
+                    m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(
+                        m1_project_index.restricted_typed_project_id_verifier(),
+                    );
+                (
+                    Some(m1_project_index),
+                    Some(m3_project_role_session_authority),
+                )
+            }
             SharedProductAuthorityProfile::IsolatedUninstalled => (None, None),
         };
         Ok(Self {

@@ -1,8 +1,10 @@
-//! Server-only project_index base for M1I01R01 / M1I01R02 / M1I01R03.
+//! Server-only project_index base for M1I01R01 / M1I01R02 / M1I01R03 / M3O02.
 //!
 //! This owner mints opaque `project:<uuid>` values and stores exact aliases as
 //! resolver inputs. Ordinary AppState installs a server-only authority that
-//! can explicitly register and read those ids. It does not create ActorId,
+//! can explicitly register and read those ids. M3O02 adds a restricted
+//! typed-id verifier that only revalidates an already-typed `M1ProjectId`
+//! against the same ordinary app-data root. It does not create ActorId,
 //! RoleRef, ScopeRef, CurrentObjectRef, ExecutionChannel, PermissionProfile,
 //! PermissionSnapshotRef, IdentitySnapshot, or M3 RoleSession records.
 
@@ -19,7 +21,10 @@ use uuid::Uuid;
 pub(crate) const M1_PROJECT_INDEX_PORT_VERSION: &str = "m1.project-index.read-port.v2";
 pub(crate) const M1_PROJECT_INDEX_AUTHORITY_PORT_VERSION: &str =
     "m1.project-index.authority-port.v1";
+pub(crate) const M1_TYPED_PROJECT_ID_VERIFIER_PORT_VERSION: &str =
+    "m1.project-index.typed-id-verifier.v1";
 pub(crate) const M1_PROJECT_INDEX_UNAVAILABLE: &str = "m1_project_index_unavailable";
+pub(crate) const M1_PROJECT_ID_FOREIGN_ROOT: &str = "m1_project_id_foreign_root";
 pub(crate) const M1_PROJECT_INDEX_SCHEMA_VERSION: &str = "m1.project-index.registry.v2";
 pub(crate) const M1_ORDINARY_APP_DATA_DIR_NAME: &str = "local.codex.governance.workbench";
 pub(crate) const M1_ORDINARY_REGISTRY_RELATIVE_PATH: &str = "m1/project-index-v1.json";
@@ -54,11 +59,14 @@ impl std::fmt::Display for M1ProjectIndexError {
 impl std::error::Error for M1ProjectIndexError {}
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct M1ProjectId(String);
+pub(crate) struct M1ProjectId {
+    value: String,
+    issued_app_data_root: PathBuf,
+}
 
 impl M1ProjectId {
     pub(crate) fn as_str(&self) -> &str {
-        &self.0
+        &self.value
     }
 }
 
@@ -257,6 +265,12 @@ impl M1ProjectIndexAuthorityHandle {
         }
     }
 
+    pub(crate) fn restricted_typed_project_id_verifier(&self) -> M1TypedProjectIdVerifierHandle {
+        M1TypedProjectIdVerifierHandle {
+            store: self.store.clone(),
+        }
+    }
+
     pub(crate) fn register_exact_alias(
         &self,
         request: &M1RegisterExactAliasRequest,
@@ -351,6 +365,55 @@ pub(crate) fn require_installed_authority(
         .ok_or_else(M1ProjectIndexError::unavailable)
 }
 
+/// Restricted M1 capability: revalidate an already-typed ProjectId against one
+/// ordinary app-data root. It cannot register aliases or hand out storage.
+pub(crate) trait M1TypedProjectIdVerifier {
+    fn verify_typed_project_id(
+        &self,
+        project_id: &M1ProjectId,
+    ) -> Result<M1ProjectId, M1ProjectIndexError>;
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct M1TypedProjectIdVerifierHandle {
+    store: M1ProjectIndexStore,
+}
+
+impl M1TypedProjectIdVerifierHandle {
+    pub(crate) fn verify_typed_project_id(
+        &self,
+        project_id: &M1ProjectId,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        if project_id.issued_app_data_root != self.store.canonical_app_data_root {
+            return Err(M1ProjectIndexError::new(M1_PROJECT_ID_FOREIGN_ROOT));
+        }
+        match self.store.classify_registry_presence()? {
+            RegistryPresence::Absent => Err(M1ProjectIndexError::unavailable()),
+            RegistryPresence::EstablishedMissing => Err(M1ProjectIndexError::new(
+                "m1_project_index_registry_missing",
+            )),
+            RegistryPresence::Present => {
+                let registry = self.store.load_registry(LoadMode::Required)?;
+                registry
+                    .projects
+                    .iter()
+                    .find(|project| project.project_id == project_id.as_str())
+                    .map(|project| self.store.issued_project_id(project.project_id.clone()))
+                    .ok_or_else(|| M1ProjectIndexError::new("m1_project_id_unknown"))
+            }
+        }
+    }
+}
+
+impl M1TypedProjectIdVerifier for M1TypedProjectIdVerifierHandle {
+    fn verify_typed_project_id(
+        &self,
+        project_id: &M1ProjectId,
+    ) -> Result<M1ProjectId, M1ProjectIndexError> {
+        M1TypedProjectIdVerifierHandle::verify_typed_project_id(self, project_id)
+    }
+}
+
 impl M1ProjectIndexStore {
     fn from_root(canonical_app_data_root: PathBuf) -> Self {
         let registry_path = canonical_app_data_root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH);
@@ -362,6 +425,13 @@ impl M1ProjectIndexStore {
             registry_path,
             lock_path,
             established_marker_path,
+        }
+    }
+
+    fn issued_project_id(&self, value: impl Into<String>) -> M1ProjectId {
+        M1ProjectId {
+            value: value.into(),
+            issued_app_data_root: self.canonical_app_data_root.clone(),
         }
     }
 
@@ -411,7 +481,7 @@ impl M1ProjectIndexStore {
             .projects
             .iter()
             .find(|project| project.project_id == claim)
-            .map(|project| M1ProjectId(project.project_id.clone()))
+            .map(|project| self.issued_project_id(project.project_id.clone()))
             .ok_or_else(|| M1ProjectIndexError::new("m1_project_id_unknown"))
     }
 
@@ -424,7 +494,7 @@ impl M1ProjectIndexStore {
             .filter(|project| project.exact_alias.as_deref() == Some(alias.as_str()))
             .collect::<Vec<_>>();
         match matches.as_slice() {
-            [project] => Ok(M1ProjectId(project.project_id.clone())),
+            [project] => Ok(self.issued_project_id(project.project_id.clone())),
             [] => Err(M1ProjectIndexError::new("m1_alias_unknown")),
             _ => Err(M1ProjectIndexError::new("m1_alias_duplicate")),
         }
@@ -494,7 +564,7 @@ impl M1ProjectIndexStore {
         });
         self.persist_registry(&registry)?;
         Ok(M1RegisteredProject {
-            project_id: M1ProjectId(project_id),
+            project_id: self.issued_project_id(project_id),
             exact_alias,
             resolver_revision: M1_RESOLVER_REVISION,
             registry_revision: registry.registry_revision,
@@ -566,9 +636,10 @@ impl M1ProjectIndexStore {
         if self.established_marker_is_present()? {
             return Ok(());
         }
-        let parent = self.established_marker_path.parent().ok_or_else(|| {
-            M1ProjectIndexError::new("m1_project_index_registry_parent_required")
-        })?;
+        let parent = self
+            .established_marker_path
+            .parent()
+            .ok_or_else(|| M1ProjectIndexError::new("m1_project_index_registry_parent_required"))?;
         let temp_path = parent.join(format!(
             ".m1-project-index.established.{}.tmp",
             Uuid::new_v4().simple()
@@ -819,6 +890,12 @@ impl M1ProjectIndexRegistrar {
     pub(crate) fn read_handle(&self) -> Result<M1ProjectIndexReadHandle, M1ProjectIndexError> {
         M1ProjectIndexReadHandle::open_from_root(self.store.canonical_app_data_root.clone())?
             .ok_or_else(|| M1ProjectIndexError::new("m1_project_index_unavailable"))
+    }
+
+    pub(crate) fn restricted_typed_project_id_verifier(&self) -> M1TypedProjectIdVerifierHandle {
+        M1TypedProjectIdVerifierHandle {
+            store: self.store.clone(),
+        }
     }
 }
 
@@ -1403,7 +1480,10 @@ mod tests {
     }
 
     fn assert_unavailable(result: Result<impl Sized, M1ProjectIndexError>) {
-        assert_eq!(result.err().expect("unavailable").code, M1_PROJECT_INDEX_UNAVAILABLE);
+        assert_eq!(
+            result.err().expect("unavailable").code,
+            M1_PROJECT_INDEX_UNAVAILABLE
+        );
     }
 
     #[test]
@@ -1516,6 +1596,111 @@ mod tests {
             "m1_project_id_m5_helper_claim_rejected"
         );
         assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m1_typed_project_id_verifier_revalidates_same_root_and_rejects_foreign_root() {
+        let root_a = ordinary_named_root();
+        let root_b = ordinary_named_root();
+        let authority_a =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root_a).expect("install a");
+        let authority_b =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root_b).expect("install b");
+        let registered = authority_a
+            .register_exact_alias(&M1RegisterExactAliasRequest {
+                exact_alias: "syn-m3o02-same-root".to_string(),
+            })
+            .expect("register on a");
+        let verifier_a = authority_a.restricted_typed_project_id_verifier();
+        let verifier_b = authority_b.restricted_typed_project_id_verifier();
+        assert_eq!(
+            verifier_a
+                .verify_typed_project_id(&registered.project_id)
+                .expect("same root")
+                .as_str(),
+            registered.project_id.as_str()
+        );
+        assert_eq!(
+            verifier_b
+                .verify_typed_project_id(&registered.project_id)
+                .unwrap_err()
+                .code,
+            M1_PROJECT_ID_FOREIGN_ROOT
+        );
+        let verifier_src = include_str!("m1_project_index.rs");
+        assert!(verifier_src.contains("fn verify_typed_project_id"));
+        assert!(
+            !verifier_src.contains(&format!(
+                "impl {} for {}",
+                "M1ProjectIndexAuthorityPort", "M1TypedProjectIdVerifierHandle"
+            )),
+            "restricted verifier must not expose register/storage authority"
+        );
+        let _ = fs::remove_dir_all(root_a.parent().expect("parent"));
+        let _ = fs::remove_dir_all(root_b.parent().expect("parent"));
+    }
+
+    #[test]
+    fn m1_typed_project_id_verifier_fails_closed_on_absent_missing_corrupt_and_unknown() {
+        let root = ordinary_named_root();
+        let authority =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("install");
+        let registered = authority
+            .register_exact_alias(&M1RegisterExactAliasRequest {
+                exact_alias: "syn-m3o02-revalidate".to_string(),
+            })
+            .expect("register");
+        let verifier = authority.restricted_typed_project_id_verifier();
+        let registry_path = root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH);
+        let marker_path = root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH);
+
+        fs::write(
+            &registry_path,
+            r#"{
+              "schema_version": "m1.project-index.registry.v2",
+              "registry_revision": 0,
+              "projects": []
+            }"#,
+        )
+        .expect("empty registry");
+        assert_eq!(
+            verifier
+                .verify_typed_project_id(&registered.project_id)
+                .unwrap_err()
+                .code,
+            "m1_project_id_unknown"
+        );
+
+        fs::write(&registry_path, "{not-json").expect("corrupt registry");
+        assert_eq!(
+            verifier
+                .verify_typed_project_id(&registered.project_id)
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_malformed"
+        );
+
+        fs::remove_file(&registry_path).expect("delete registry");
+        assert!(marker_path.is_file());
+        assert_eq!(
+            verifier
+                .verify_typed_project_id(&registered.project_id)
+                .unwrap_err()
+                .code,
+            "m1_project_index_registry_missing"
+        );
+
+        fs::remove_file(&marker_path).expect("delete marker");
+        fs::remove_dir_all(root.join("m1")).expect("delete m1 dir");
+        assert_eq!(
+            verifier
+                .verify_typed_project_id(&registered.project_id)
+                .unwrap_err()
+                .code,
+            M1_PROJECT_INDEX_UNAVAILABLE
+        );
         let parent = root.parent().expect("parent").to_path_buf();
         let _ = fs::remove_dir_all(parent);
     }
