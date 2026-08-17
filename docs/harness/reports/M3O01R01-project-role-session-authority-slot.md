@@ -30,8 +30,7 @@
 只证明离线 scoped checks。不证明真实 App、provider、网络、发布或独立验收。
 
 - 被拒绝 candidate：`8b39d2b0f8a19b15085f369babf8da5eb29770f9`
+- 实现 commit：`afdd2f0cfb155b9c02c2242462c1f1867f7ea7ff`
 - `cargo check --lib --offline`：exit 0（既有 warning，无本包新增 error）
 - `cargo test --lib --offline -- m3_project_role_session_authority`：5 passed；0 failed
 - `git diff --check`：clean
-
-实现 SHA 另作 evidence binding commit。

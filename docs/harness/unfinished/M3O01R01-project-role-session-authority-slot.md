@@ -7,3 +7,5 @@
 来源：独立验收拒绝 `8b39d2b0f8a19b15085f369babf8da5eb29770f9`；用户要求在当前工作树做窄纠正。
 
 产品：`docs/contracts/m3-project-role-session-authority-slot-boundary-v1.md`，`AppState` 服务器-only Result accessor，真实槽位测试。
+
+实现 commit：`afdd2f0cfb155b9c02c2242462c1f1867f7ea7ff`。不声称已解阻。
