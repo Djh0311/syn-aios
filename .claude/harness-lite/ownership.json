@@ -16,13 +16,14 @@
     "lib/managed.js",
     "lib/tree.js",
     "lib/work.js",
+    "package.json",
     "skills/root-cause.md",
     "skills/split-work.md",
     "skills/test-first.md"
   ],
-  "packageDigest": "sha256:7c1727e4fbf91a12b020cbea121abd788dad213ab84ad6aac94635615aee7b83",
+  "packageDigest": "sha256:a24ed01605b7041976308da65e3c02f0276cc9b03c17fdc43f32cda6a94edc78",
   "hookDefinitionDigest": "sha256:08f85bbbd212b37b729ae27971755d7327d6efc463a4411f68defada55934d6e",
-  "instructionBlockDigest": "sha256:38e26a67b8421fed27bb131943ee48d307aec64dae91e82cf3abd9be4829bf36",
+  "instructionBlockDigest": "sha256:e2181c9ecdfe38f0c4b4a84ed9b53ec8d2ed2da902d16d71f4c70cbd01efd51d",
   "hookPreimage": {
     "fileExisted": true,
     "addedEvents": []

@@ -7,6 +7,7 @@ const tree = require('./tree.js');
 
 const OWN = ['docs/harness/', '.claude/harness-lite/', '.codex/hooks.json'];
 const own = (file) => OWN.some((prefix) => file === prefix.replace(/\/$/, '') || file.startsWith(prefix));
+const turnDir = (root) => path.join(tree.hdir(root), 'usage', '.turns');
 function git(root, args) {
   const result = spawnSync('/usr/bin/git', args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
     env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' } });
@@ -96,8 +97,8 @@ function appendUsage(root, data, opts = {}) {
 }
 function receipt(root, id) {
   if (!id) return null;
-  const usage = path.join(tree.hdir(root), 'usage'), turnRows = io.list(path.join(usage, '.turn'), false)
-    .filter((file) => file.endsWith('.json')).map((file) => io.json(file, {}));
+  const usage = path.join(tree.hdir(root), 'usage'), turnRows = io.list(turnDir(root), false)
+    .filter((file) => file.endsWith('.json') && path.basename(file) !== '.push.json').map((file) => io.json(file, {}));
   for (const row of turnRows) if (row.receipt?.receiptId === id) return row.receipt;
   const logs = io.list(usage, false).filter((file) => file.endsWith('.log'));
   for (const file of logs) for (const line of io.read(file, '').split('\n').filter(Boolean)) {
@@ -189,4 +190,4 @@ function status(root) {
     text: `${tree.format(chain)}\nUsage：${usage.turns} 轮，${usage.files} 个产品文件\nRuntime：${JSON.stringify(health)}` };
 }
 
-module.exports = { OWN, own, git, statusPaths, snapshot, delta, outOfScope, report, appendUsage, receipt, latestVerify, checks, pushArgv, testsFor, verify, usageSummary, map, mistake, status };
+module.exports = { OWN, own, turnDir, git, statusPaths, snapshot, delta, outOfScope, report, appendUsage, receipt, latestVerify, checks, pushArgv, testsFor, verify, usageSummary, map, mistake, status };

@@ -1,0 +1,18 @@
+{
+  "name": "harness-lite",
+  "version": "0.8.0",
+  "type": "commonjs",
+  "license": "Apache-2.0",
+  "author": "呆头鹅",
+  "bin": {
+    "hl": "bin/hl.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "selfcheck": "node bin/hl.js selfcheck --run",
+    "candidate": "node scripts/build-candidate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

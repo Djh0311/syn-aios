@@ -100,8 +100,12 @@ function sameImage(expected) {
 }
 function samePostimage(change) {
   const actual = image(change.before.file), prior = change.expected.parent, directParent = prior.path === path.dirname(change.before.file);
+  let anchor = false;
+  try { const stat = fs.lstatSync(prior.path); anchor = stat.isDirectory() && !stat.isSymbolicLink() && stat.dev === prior.dev && stat.ino === prior.ino && fs.realpathSync(prior.path) === prior.real; } catch { anchor = false; }
+  const expectedReal = path.resolve(prior.real, path.relative(prior.path, path.dirname(change.before.file)));
   return actual.type === 'file' && actual.mode === change.mode && actual.body.equals(Buffer.from(change.text))
-    && (!directParent || (actual.parent.type === prior.type && actual.parent.dev === prior.dev && actual.parent.ino === prior.ino && actual.parent.real === prior.real));
+    && (directParent ? (actual.parent.type === prior.type && actual.parent.dev === prior.dev && actual.parent.ino === prior.ino && actual.parent.real === prior.real)
+      : anchor && actual.parent.type === 'directory' && actual.parent.path === path.dirname(change.before.file) && actual.parent.real === expectedReal);
 }
 function restore(value) { if (value.type === 'missing') fs.rmSync(value.file, { force: true }); else if (value.type === 'file') io.atomic(value.file, value.body, value.mode); else throw new Error('unsafe preimage'); }
 function gitExclude(root) {
@@ -110,13 +114,9 @@ function gitExclude(root) {
   return run.status === 0 && run.stdout.trim() ? path.resolve(run.stdout.trim()) : null;
 }
 function prepare(root, opts = {}) {
-  root = path.resolve(root); const operation = opts.operation || 'install', legacy04 = opts.identityKind === 'official-04';
-  // official-04 has already been byte-verified by install.js and its archived
-  // seven-field authorization can exceed the active-runtime 4 KiB read cap.
-  // Do not reinterpret that frozen legacy control as an active authorization.
-  const state = legacy04 ? { kind: 'legacy-04' } : read(root);
+  root = path.resolve(root); const operation = opts.operation || 'install', state = read(root);
   if (operation === 'uninstall') return ['missing', 'closed'].includes(state.kind) ? { ok: true, operation, state, changes: [] } : { ok: false, reason: `authorization:${state.kind}` };
-  const legacy = ['owned-05', 'official-04'].includes(opts.identityKind);
+  const legacy = opts.identityKind === 'owned-05';
   if (!legacy && !['missing', 'closed'].includes(state.kind)) return { ok: false, reason: `authorization:${state.kind}` };
   if (legacy && state.kind === 'unsafe') return { ok: false, reason: 'authorization:unsafe' };
   const authFile = path.join(root, RELATIVE_PATH), before = image(authFile);

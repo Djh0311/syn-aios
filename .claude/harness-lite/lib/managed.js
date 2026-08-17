@@ -17,7 +17,7 @@ function layout(systemRoot) {
     root, base,
     requirements: path.join(root, 'etc', 'codex', 'requirements.toml'),
     gateway: path.join(base, 'gateway', 'gateway'),
-    gatewayMain: path.join(base, 'gateway', 'main.js'),
+    gatewayMain: path.join(base, 'gateway', 'main.cjs'),
     runtime: path.join(base, 'runtime'),
     definition: path.join(base, 'policy', 'hooks.json'),
     allowlist: path.join(base, 'policy', 'allowlist.json'),
@@ -57,7 +57,7 @@ function gatewayBootstrap(systemRoot, nodePath, expected) {
   const root = path.resolve(systemRoot), base = path.join(root, 'usr', 'local', 'lib', 'harness-lite', 'current');
   const target = {
     base, requirements: path.join(root, 'etc', 'codex', 'requirements.toml'),
-    gateway: path.join(base, 'gateway', 'gateway'), gatewayMain: path.join(base, 'gateway', 'main.js'),
+    gateway: path.join(base, 'gateway', 'gateway'), gatewayMain: path.join(base, 'gateway', 'main.cjs'),
     runtime: path.join(base, 'runtime'), definition: path.join(base, 'policy', 'hooks.json'),
     allowlist: path.join(base, 'policy', 'allowlist.json'), registry: path.join(base, 'policy', 'registry.json'),
     manifest: path.join(base, 'manifest.json'), receipts: path.join(base, 'logs', 'receipts.jsonl'), log: path.join(base, 'logs', 'gateway.log'),
@@ -142,7 +142,7 @@ function gatewayBootstrap(systemRoot, nodePath, expected) {
       || JSON.stringify(manifest.managedPaths) !== JSON.stringify(expected.managedPaths) || manifest.packageDigest !== expected.packageDigest
       || manifest.allowlistDigest !== expected.allowlistDigest || manifest.definitionDigest !== expected.definitionDigest
       || manifest.requirementsDigest !== expected.requirementsDigest) return;
-    const wanted = new Set(['gateway/gateway', 'gateway/main.js', 'policy/allowlist.json', 'policy/hooks.json', 'policy/registry.json',
+    const wanted = new Set(['gateway/gateway', 'gateway/main.cjs', 'policy/allowlist.json', 'policy/hooks.json', 'policy/registry.json',
       'logs/receipts.jsonl', 'logs/gateway.log', 'manifest.json', ...expected.managedPaths.map((rel) => `runtime/${rel}`)]);
     if (list(base).some((rel) => !wanted.has(rel)) || [...wanted].some((rel) => !list(base).includes(rel))) return;
     if (packageDigest(target.runtime) !== expected.packageDigest) return;
@@ -317,7 +317,7 @@ function verifyGlobal(systemRoot) {
   }
   safeFile(target.manifest, 0o600, differences, 'manifest.json');
   safeFile(target.gateway, 0o755, differences, 'gateway/gateway');
-  safeFile(target.gatewayMain, 0o644, differences, 'gateway/main.js');
+  safeFile(target.gatewayMain, 0o644, differences, 'gateway/main.cjs');
   safeFile(target.allowlist, 0o600, differences, 'policy/allowlist.json');
   safeFile(target.definition, 0o600, differences, 'policy/hooks.json');
   safeFile(target.registry, 0o600, differences, 'policy/registry.json');
@@ -326,7 +326,7 @@ function verifyGlobal(systemRoot) {
   safeFile(target.requirements, 0o644, differences, 'requirements.toml');
   for (const rel of manifest.managedPaths) safeFile(path.join(target.runtime, rel), desiredMode(rel), differences, `runtime/${rel}`);
   const expected = new Set([
-    'gateway/gateway', 'gateway/main.js', 'policy/allowlist.json', 'policy/hooks.json', 'policy/registry.json',
+    'gateway/gateway', 'gateway/main.cjs', 'policy/allowlist.json', 'policy/hooks.json', 'policy/registry.json',
     'logs/receipts.jsonl', 'logs/gateway.log', 'manifest.json', ...manifest.managedPaths.map((rel) => `runtime/${rel}`),
   ]);
   const actual = io.list(target.base, true).map((file) => path.relative(target.base, file).replaceAll('\\', '/'));

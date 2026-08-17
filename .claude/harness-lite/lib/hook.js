@@ -12,7 +12,7 @@ const CONTINUATION_DIGEST = io.sha(CONTINUATION_REASON);
 
 const eventName = (input) => input?.hook_event_name || '';
 const cleanId = (value) => String(value || '-').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
-const turnDir = (root) => path.join(tree.hdir(root), 'usage', '.turn');
+const turnDir = work.turnDir;
 const turnFile = (root, input) => path.join(turnDir(root), `${cleanId(input.session_id)}--${cleanId(input.turn_id)}.json`);
 function readTurn(root, input) { return io.json(turnFile(root, input), {}); }
 function writeTurn(root, input, state) { io.atomic(turnFile(root, input), `${JSON.stringify(state, null, 2)}\n`); }
