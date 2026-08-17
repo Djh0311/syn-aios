@@ -22,6 +22,11 @@ const ENTRIES: &[RunnerEntry] = &[
         class: RunnerEntryClass::NewGrant,
     },
     RunnerEntry {
+        id: "M5-SE-002",
+        source_symbol: "run_m5_authorized_runtime",
+        class: RunnerEntryClass::NewGrant,
+    },
+    RunnerEntry {
         id: "RUN-001",
         source_symbol: "run_h2_phase_b_with_runner",
         class: RunnerEntryClass::GuardedLegacy,
@@ -160,8 +165,10 @@ mod tests {
     #[test]
     fn new_grant_entry_is_registered() {
         assert_eq!(classify("M5-SE-001"), Some(RunnerEntryClass::NewGrant));
+        assert_eq!(classify("M5-SE-002"), Some(RunnerEntryClass::NewGrant));
         assert_eq!(classify("RUN-006"), Some(RunnerEntryClass::Blocked));
-        assert!(!new_grant_entries().is_empty());
+        assert!(new_grant_entries().contains(&"M5-SE-001"));
+        assert!(new_grant_entries().contains(&"M5-SE-002"));
     }
 
     #[test]
