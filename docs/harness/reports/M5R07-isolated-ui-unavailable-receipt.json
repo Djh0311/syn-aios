@@ -1,10 +1,45 @@
 {
-  "composition_gap": "shared isolated product profile leaves M1/M3 authority uninstalled; M5 open fail-closed; full-loop not claimed",
-  "derived_from": "installed_authority_slots",
-  "full_loop_claimed": false,
-  "m1_authority_installed": false,
-  "m3_authority_installed": false,
-  "open_available": false,
-  "phase": "unavailable",
-  "schema": "syn.m5r07.isolated-ui-receipt.v3-unavailable"
+  "schema": "syn.m5r07.isolated-ui-unavailable.v2",
+  "implementation_sha": "f51c3f64ed21d83730f47b26b86587e1c9b7fe6b",
+  "implementation_tree": "dbdeaedaf28f42bbbff7b38ca8764b3332929d5b",
+  "workspace_leaf_only_head": "a11f39fc2d28d12ad7475a13f9214df538ace3c5",
+  "evidence_root": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK",
+  "candidate_archive_sha256": "b0c8bd159cab9083bfe26963c40e1f6d41713ee7e9530a738d215bdea3964b76",
+  "launcher_head": "f51c3f64ed21d83730f47b26b86587e1c9b7fe6b",
+  "launcher_tree": "dbdeaedaf28f42bbbff7b38ca8764b3332929d5b",
+  "raw_unavailable_path": "/tmp/syn-r4-acceptance-8SDQME/logs/m5r07-ui-unavailable.json",
+  "raw_unavailable_sha256": "bf13fd812815ffddb6245468aa183a63da229f4f0e307df7776d4ed0f818c1f3",
+  "raw_launcher_receipt_path": "/tmp/syn-r4-acceptance-8SDQME/logs/m5r07-launcher-receipt.json",
+  "raw_launcher_receipt_sha256": "b2427ab97617708db8d56e95c7deb448bf4eb16b28fe37ddf1960ace1b13552d",
+  "profile_root": "/tmp/syn-r4-acceptance-8SDQME",
+  "classification": [
+    "REAL_PROCESS_VIRTUAL_X11",
+    "NO_WINDOW_CAPTURE",
+    "NO_UI_PASS"
+  ],
+  "window_capture": "NOT_EXECUTED",
+  "scene_a": "NOT_EXECUTED",
+  "scene_b": "NOT_EXECUTED",
+  "resume": "NOT_EXECUTED",
+  "second_launch": "NOT_EXECUTED",
+  "process_unavailable": {
+    "schema": "syn.m5r07.isolated-ui-receipt.v3-unavailable",
+    "phase": "unavailable",
+    "m1_authority_installed": false,
+    "m3_authority_installed": false,
+    "open_available": false,
+    "full_loop_claimed": false,
+    "composition_gap": "shared isolated product profile leaves M1/M3 authority uninstalled; M5 open fail-closed; full-loop not claimed",
+    "derived_from": "installed_authority_slots"
+  },
+  "leaf": "M5R07",
+  "stage": "stage-14",
+  "status": "AWAITING_INDEPENDENT_ACCEPTANCE",
+  "closeout": "NOT_CLOSEOUT",
+  "m5_complete": "NOT_M5_COMPLETE",
+  "historical_not_current": {
+    "df11a4a3fa19c6d91c8aaa006e395f83c155e772": "historical unavailable-only copy; NOT_CURRENT_EVIDENCE",
+    "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd": "historical scene A/B/resume files; SUPERSEDED / NOT_CURRENT_EVIDENCE"
+  },
+  "evidence_commit_sha": "NOT_SELF_REFERENCED"
 }

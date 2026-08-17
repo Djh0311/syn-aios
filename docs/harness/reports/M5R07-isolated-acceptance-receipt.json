@@ -1,24 +1,98 @@
 {
-  "schema": "syn.m5r07.isolated-acceptance.v3",
-  "candidate_sha": "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd",
-  "disposable_checkout_receipt": "docs/harness/reports/M5R07-disposable-checkout-receipt.json",
-  "isolated_app_launcher_receipt": "docs/harness/reports/M5R07-isolated-app-launcher-receipt.json",
-  "ui_receipts": {
-    "scene_a": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-a.json",
-    "scene_b": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-b.json",
-    "resume": "docs/harness/reports/M5R07-isolated-app-evidence/ui-resume.json"
-  },
-  "proofs": {
-    "rejection_zero_grant": true,
-    "exact_joins": true,
-    "stale": true,
-    "deep_link_resolves": true,
-    "restart_recovery": true,
-    "receipts_backend_derived": true,
-    "m3_role_session": true
-  },
-  "window_capture": "EXECUTED_ROOT_ONLY / NOT_CLAIMED_PANEL_PIXELS",
+  "schema": "syn.m5r07.isolated-acceptance.v4",
+  "implementation_sha": "f51c3f64ed21d83730f47b26b86587e1c9b7fe6b",
+  "implementation_tree": "dbdeaedaf28f42bbbff7b38ca8764b3332929d5b",
+  "workspace_leaf_only_head": "a11f39fc2d28d12ad7475a13f9214df538ace3c5",
+  "evidence_root": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK",
+  "candidate_archive": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/candidate.tar",
+  "candidate_archive_sha256": "b0c8bd159cab9083bfe26963c40e1f6d41713ee7e9530a738d215bdea3964b76",
+  "launcher_checkout": "/tmp/m5r07-f51-fresh-evidence-iRNwEfkK/launcher",
+  "launcher_head": "f51c3f64ed21d83730f47b26b86587e1c9b7fe6b",
+  "launcher_tree": "dbdeaedaf28f42bbbff7b38ca8764b3332929d5b",
+  "raw_launcher_receipt_path": "/tmp/syn-r4-acceptance-8SDQME/logs/m5r07-launcher-receipt.json",
+  "raw_launcher_receipt_sha256": "b2427ab97617708db8d56e95c7deb448bf4eb16b28fe37ddf1960ace1b13552d",
+  "raw_unavailable_path": "/tmp/syn-r4-acceptance-8SDQME/logs/m5r07-ui-unavailable.json",
+  "raw_unavailable_sha256": "bf13fd812815ffddb6245468aa183a63da229f4f0e307df7776d4ed0f818c1f3",
   "leaf": "M5R07",
   "stage": "stage-14",
-  "status": "AWAITING_INDEPENDENT_ACCEPTANCE"
+  "status": "AWAITING_INDEPENDENT_ACCEPTANCE",
+  "closeout": "NOT_CLOSEOUT",
+  "m5_complete": "NOT_M5_COMPLETE",
+  "evidence_bundle": "BOUND_AWAITING_INDEPENDENT_ACCEPTANCE",
+  "current_receipts": {
+    "disposable_checkout": "docs/harness/reports/M5R07-disposable-checkout-receipt.json",
+    "isolated_app_launcher": "docs/harness/reports/M5R07-isolated-app-launcher-receipt.json",
+    "isolated_ui_unavailable": "docs/harness/reports/M5R07-isolated-ui-unavailable-receipt.json"
+  },
+  "current_columns": {
+    "ordinary_disposable_backend_full_loop": {
+      "result": "PASS",
+      "kind": "server_fixture_preregistered_m1_alias_and_m3_authority_backend_product_command_loop",
+      "gui": false,
+      "window_capture": "NOT_EXECUTED",
+      "source": "git archive f51 extracted to /tmp/m5r07-f51-fresh-evidence-iRNwEfkK/source",
+      "named_loop_test": "m5_product_commands::tests::ordinary_product_loop_uses_distinct_m3_views_and_survives_reopen",
+      "named_loop_test_result": "ok",
+      "commands": {
+        "cargo_check_lib_offline": {"exit": 0, "result": "PASS"},
+        "cargo_test_lib_offline_m5_": {"exit": 0, "passed": 158, "failed": 0, "filtered": 1843, "result": "PASS"},
+        "cargo_test_lib_offline_execution_readback_": {"exit": 0, "passed": 13, "failed": 0, "filtered": 1988, "result": "PASS"},
+        "cargo_test_lib_offline_executed_claim_": {"exit": 0, "passed": 3, "failed": 0, "filtered": 1998, "result": "PASS"},
+        "npm_ci_offline_ignore_scripts": {"exit": 0, "added_packages": 90, "audited_packages": 91, "result": "PASS"},
+        "npm_run_typecheck": {"exit": 0, "result": "PASS"},
+        "npm_run_build": {"exit": 0, "modules": 310, "result": "PASS"}
+      }
+    },
+    "shared_isolated_real_process_unavailable_only": {
+      "result": "PASS",
+      "kind": "authority_unavailable_fail_closed",
+      "classification": [
+        "REAL_PROCESS_VIRTUAL_X11",
+        "NO_WINDOW_CAPTURE",
+        "NO_UI_PASS"
+      ],
+      "m1_authority_installed": false,
+      "m3_authority_installed": false,
+      "open_available": false,
+      "full_loop_claimed": false,
+      "derived_from": "installed_authority_slots",
+      "display": ":99",
+      "xvfb_launcher_exit": 0,
+      "not_executed": [
+        "scene_a",
+        "scene_b",
+        "resume",
+        "second_launch",
+        "window_capture"
+      ]
+    }
+  },
+  "current_ui_scene_receipts": "NONE",
+  "current_positive_ui_proofs": "NONE",
+  "historical_not_current_evidence": {
+    "faa6ed191f6bef29ddd03b74b4369c4b4e6445fd": {
+      "status": ["historical", "SUPERSEDED", "NOT_CURRENT_EVIDENCE"],
+      "scene_files_byte_frozen": {
+        "ui_scene_a": {
+          "path": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-a.json",
+          "sha256": "5e730c077cd8c281b729596a19e5421c74d704e539615a9d7f1d7d6b3eeb1909"
+        },
+        "ui_scene_b": {
+          "path": "docs/harness/reports/M5R07-isolated-app-evidence/ui-scene-b.json",
+          "sha256": "5206360ae97f1f47b182a7fc7fdd4ec308c8446599029af4c3e8b629ecb1721a"
+        },
+        "ui_resume": {
+          "path": "docs/harness/reports/M5R07-isolated-app-evidence/ui-resume.json",
+          "sha256": "d3970ecc535d6bec58bbccb31c21f0d6f8286aa4a137682bd71661dfa4b7f7b6"
+        }
+      }
+    },
+    "df11a4a3fa19c6d91c8aaa006e395f83c155e772": {
+      "status": ["historical", "NOT_CURRENT_EVIDENCE"],
+      "note": "older disposable/unavailable receipts only; not mixed into current proof"
+    }
+  },
+  "stage14_blocker_excluded_from_m5_implementation": "ordinary M1 legacy ProjectRecord to canonical/alias composition",
+  "f51_product_fail": false,
+  "evidence_commit_sha": "NOT_SELF_REFERENCED"
 }
