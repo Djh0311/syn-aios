@@ -1,5 +1,7 @@
 # M5R07 项目 UI、隔离 App 与阶段候选
 
+> **2026-08-18 挂起（不是失败、不是撤销）**：用户把 M1 纳入 M5 验收前置，M5R00 按真实 M1 缺口重开为唯一 current leaf，本叶暂离 current 等待。已获得的全部 scoped independent PASS 继续有效，不得反向写成 FAIL。M5R00 通过独立验收后本叶拉回 current 继续。届时的验收标准按 `docs/harness/stages/stage-14.md` 的 2026-08-18 修订执行：界面类证据已取消，组合类六项必须真实通过，真桌面像素证据记为新壳 F5 欠项。下文正文保持原样，未按新标准改写。
+
 阶段：stage-14 M5 项目主管与执行闭环（事实重整与产品闭环）
 
 目标：用冻结 DTO 接现有项目壳，不重写 execution kernel 或页面布局；在隔离 app-data / scratch 上证明完整闭环；形成只含 M5 投影的 candidate series 后保持 `AWAITING_INDEPENDENT_ACCEPTANCE`。不自行关闭 stage-14，不宣布 M5 完成。
