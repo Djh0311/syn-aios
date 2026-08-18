@@ -20,7 +20,15 @@ use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
-#[cfg(unix)]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
 use std::os::unix::fs::OpenOptionsExt;
 
 pub(crate) const M1_PROJECT_INDEX_PORT_VERSION: &str = "m1.project-index.read-port.v2";
@@ -1198,23 +1206,76 @@ fn load_ordinary_identity_source(
     parse_ordinary_identity_source_bytes(&bytes)
 }
 
-// Linux `O_NOFOLLOW` (0400000) and `O_NONBLOCK` (04000). Ordinary identity
-// source open must reject a final-component symlink and must not block on a
-// non-regular replacement before regular-file metadata is checked on the fd.
-#[cfg(unix)]
-const LINUX_O_NOFOLLOW: i32 = 0x20000;
-#[cfg(unix)]
-const LINUX_O_NONBLOCK: i32 = 0x800;
-// Linux `ELOOP`: `open(..., O_NOFOLLOW)` on a final-component symlink.
-const LINUX_ELOOP: i32 = 40;
+// Platform-neutral ordinary-identity-source open flags and symlink-open errno.
+// Values are assigned only by mutually exclusive target-family cfg. This is
+// not a runtime OS-string branch. Ordinary identity source open must reject a
+// final-component symlink and must not block on a FIFO/non-regular replacement
+// before regular-file metadata is checked on the fd.
+//
+// Linux/Android family: linux uapi `asm-generic/fcntl.h` and
+// `asm-generic/errno-base.h`. `O_NOFOLLOW = 00400000` (0x20000),
+// `O_NONBLOCK = 00004000` (0x800), `ELOOP = 40`. Current host verification is
+// Linux x86_64 only; these cfg values do not claim other Linux/Android
+// machines were executed here.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS: i32 = 0x20000 | 0x800;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO: i32 = 40;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const _: () = {
+    assert!(ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS == 0x20000 | 0x800);
+    assert!(ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS != 0x0100 | 0x0004);
+    assert!(ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO == 40);
+    assert!(ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO != 62);
+};
 
+// Apple/BSD family: Darwin/BSD `sys/fcntl.h` and `sys/errno.h`.
+// `O_NOFOLLOW = 0x0100`, `O_NONBLOCK = 0x0004`, `ELOOP = 62`. Static /
+// cross-compile boundary only; this package has not run on macOS/BSD
+// hardware and must not reuse Linux names or numeric values.
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
+const ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS: i32 = 0x0100 | 0x0004;
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
+const ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO: i32 = 62;
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
+const _: () = {
+    assert!(ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS == 0x0100 | 0x0004);
+    assert!(ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS != 0x20000 | 0x800);
+    assert!(ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO == 62);
+    assert!(ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO != 40);
+};
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
 fn open_ordinary_identity_source_nofollow(path: &Path) -> Result<File, M1ProjectIndexError> {
     let mut options = OpenOptions::new();
     options.read(true);
-    #[cfg(unix)]
-    {
-        options.custom_flags(LINUX_O_NOFOLLOW | LINUX_O_NONBLOCK);
-    }
+    options.custom_flags(ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS);
     match options.open(path) {
         Ok(file) => Ok(file),
         Err(error) if error.kind() == ErrorKind::NotFound => Err(M1ProjectIndexError::new(
@@ -1229,8 +1290,50 @@ fn open_ordinary_identity_source_nofollow(path: &Path) -> Result<File, M1Project
     }
 }
 
+// Remaining targets, including non-Unix: std cannot prove final-component
+// no-follow here. Fail closed and do not invent support or treat Linux
+// `ELOOP=40` as this platform's errno.
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+)))]
+fn open_ordinary_identity_source_nofollow(path: &Path) -> Result<File, M1ProjectIndexError> {
+    let _ = path;
+    Err(M1ProjectIndexError::new(
+        M1_ORDINARY_IDENTITY_SOURCE_UNSUPPORTED,
+    ))
+}
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
 fn ordinary_identity_source_open_rejected_symlink(error: &std::io::Error) -> bool {
-    error.raw_os_error() == Some(LINUX_ELOOP)
+    error.raw_os_error() == Some(ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO)
+}
+
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "dragonfly",
+    target_os = "netbsd",
+    target_os = "openbsd",
+)))]
+fn ordinary_identity_source_open_rejected_symlink(error: &std::io::Error) -> bool {
+    let _ = error;
+    false
 }
 
 fn validate_opened_ordinary_identity_source_file(file: &File) -> Result<(), M1ProjectIndexError> {
@@ -2549,6 +2652,44 @@ mod tests {
         let _ = fs::remove_dir_all(parent);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn m5r08_m1_source_fifo_fails_closed_without_blocking() {
+        let root = ordinary_named_root();
+        let source_path = root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
+        let status = std::process::Command::new("mkfifo")
+            .arg(&source_path)
+            .status()
+            .expect("spawn mkfifo");
+        assert!(status.success(), "mkfifo must create the identity source fifo");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let replay_root = root.clone();
+        thread::spawn(move || {
+            let replay =
+                M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source(&replay_root);
+            let ctor = ordinary_tauri_constructor_error(&replay_root);
+            let _ = tx.send((replay, ctor));
+        });
+        let (replay, ctor) = rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("fifo open must return without blocking");
+        assert_eq!(
+            replay.unwrap_err().code,
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert_eq!(ctor, M1_ORDINARY_IDENTITY_SOURCE_MALFORMED);
+        let metadata = source_path
+            .symlink_metadata()
+            .expect("fifo path remains");
+        assert!(!metadata.file_type().is_file());
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
+        assert!(!root.join("m1").exists());
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
     #[test]
     fn m5r08_m1_source_replacement_after_open_cannot_switch_consumed_document() {
         const ORIGINAL_ALIAS: &str = "syn-m5r08-original-source-alias";
@@ -2633,7 +2774,13 @@ mod tests {
         assert!(source_load.contains("validate_opened_ordinary_identity_source_file"));
         assert!(source_load.contains("read_ordinary_identity_source_from_handle"));
         assert!(source_load.contains("custom_flags"));
-        assert!(source_load.contains("LINUX_O_NOFOLLOW"));
+        assert!(source_load.contains("ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS"));
+        assert!(source_load.contains("ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO"));
+        assert!(source_load.contains("target_os = \"linux\""));
+        assert!(source_load.contains("target_vendor = \"apple\""));
+        assert!(!source_load.contains("LINUX_O_NOFOLLOW"));
+        assert!(!source_load.contains("LINUX_O_NONBLOCK"));
+        assert!(!source_load.contains("LINUX_ELOOP"));
         assert!(source_load.contains(".metadata("));
         assert!(source_load.contains("read_to_end"));
         assert!(
@@ -2644,6 +2791,66 @@ mod tests {
             !source_load.contains("fs::read"),
             "load_ordinary_identity_source must not reopen the pathname for the read"
         );
+    }
+
+    #[test]
+    fn m5r09_m1_source_nofollow_flags_and_errno_use_target_family() {
+        const LINUX_ANDROID_OPEN_FLAGS: i32 = 0x20000 | 0x800;
+        const APPLE_BSD_OPEN_FLAGS: i32 = 0x0100 | 0x0004;
+        const LINUX_ANDROID_SYMLINK_ERRNO: i32 = 40;
+        const APPLE_BSD_SYMLINK_ERRNO: i32 = 62;
+        assert_ne!(LINUX_ANDROID_OPEN_FLAGS, APPLE_BSD_OPEN_FLAGS);
+        assert_ne!(LINUX_ANDROID_SYMLINK_ERRNO, APPLE_BSD_SYMLINK_ERRNO);
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            assert_eq!(
+                ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS,
+                LINUX_ANDROID_OPEN_FLAGS
+            );
+            assert_eq!(
+                ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO,
+                LINUX_ANDROID_SYMLINK_ERRNO
+            );
+            assert_ne!(ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS, APPLE_BSD_OPEN_FLAGS);
+            assert_ne!(
+                ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO,
+                APPLE_BSD_SYMLINK_ERRNO
+            );
+            let linux_android =
+                std::io::Error::from_raw_os_error(LINUX_ANDROID_SYMLINK_ERRNO);
+            let apple_bsd = std::io::Error::from_raw_os_error(APPLE_BSD_SYMLINK_ERRNO);
+            assert!(ordinary_identity_source_open_rejected_symlink(&linux_android));
+            assert!(!ordinary_identity_source_open_rejected_symlink(&apple_bsd));
+        }
+
+        #[cfg(any(
+            target_vendor = "apple",
+            target_os = "freebsd",
+            target_os = "dragonfly",
+            target_os = "netbsd",
+            target_os = "openbsd",
+        ))]
+        {
+            assert_eq!(ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS, APPLE_BSD_OPEN_FLAGS);
+            assert_eq!(
+                ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO,
+                APPLE_BSD_SYMLINK_ERRNO
+            );
+            assert_ne!(
+                ORDINARY_IDENTITY_SOURCE_OPEN_FLAGS,
+                LINUX_ANDROID_OPEN_FLAGS
+            );
+            assert_ne!(
+                ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO,
+                LINUX_ANDROID_SYMLINK_ERRNO
+            );
+            let linux_android =
+                std::io::Error::from_raw_os_error(LINUX_ANDROID_SYMLINK_ERRNO);
+            let apple_bsd = std::io::Error::from_raw_os_error(APPLE_BSD_SYMLINK_ERRNO);
+            assert!(ordinary_identity_source_open_rejected_symlink(&apple_bsd));
+            assert!(!ordinary_identity_source_open_rejected_symlink(&linux_android));
+        }
     }
 
     const M5R09_ENROLL_ALIAS: &str = "/tmp/syn-m5r09-enroll-project";
