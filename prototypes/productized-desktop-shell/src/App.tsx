@@ -11,6 +11,7 @@ import {
   bindWorkflowNodeCodexSession,
   correctTaskPackageDispatchFields,
   copyTaskPackagePreview,
+  enrollM1ProjectIdentity,
   captureMemoryEvent,
   createMemoryCandidateFromObservation,
   createProjectConsultationProposal,
@@ -1366,6 +1367,7 @@ export function App() {
           onPreviewMemoryEntityRelationCandidates: browserPreviewEnabled
             ? () => Promise.reject(new Error("浏览器预览模式：记忆实体关系预览需用 Tauri 桌面壳。"))
             : previewMemoryEntityRelationCandidates,
+          onEnrollM1ProjectIdentity: browserPreviewEnabled ? undefined : enrollM1ProjectIdentity,
         })}
     </WorkbenchShell>
   );

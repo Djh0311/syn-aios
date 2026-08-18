@@ -2345,6 +2345,28 @@ export function getProjectWorkflowNodes(
   return invoke<{ nodes: unknown[]; edges: unknown[] }>("get_project_workflow_nodes", { projectRoot, workflowId });
 }
 
+export type M1ProjectIdentityEnrollmentRequest = {
+  project_root: string;
+};
+
+export type M1ProjectIdentityEnrollmentStatus = "created" | "already_enrolled";
+
+export type M1ProjectIdentityEnrollmentDto = {
+  project_id: string;
+  exact_alias: string;
+  source_ref: string;
+  source_revision: number;
+  registry_revision: number;
+  status: M1ProjectIdentityEnrollmentStatus;
+};
+
+export function enrollM1ProjectIdentity(
+  request: M1ProjectIdentityEnrollmentRequest,
+): Promise<M1ProjectIdentityEnrollmentDto> {
+  ensureTauriRuntime();
+  return invoke<M1ProjectIdentityEnrollmentDto>("enroll_m1_project_identity", { request });
+}
+
 function ensureTauriRuntime() {
   if (!("__TAURI_INTERNALS__" in window)) {
     throw new Error("当前页面不在 Tauri 窗口中运行；请使用 npm run tauri:dev 启动桌面壳。");

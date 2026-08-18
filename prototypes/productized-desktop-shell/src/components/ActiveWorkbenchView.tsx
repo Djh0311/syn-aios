@@ -10,7 +10,11 @@ import {
   previewMaturePatterns,
   renderTaskPackagePreview,
 } from "../lib/tauri";
-import type { SystemStatusReadModel } from "../lib/tauri";
+import type {
+  M1ProjectIdentityEnrollmentDto,
+  M1ProjectIdentityEnrollmentRequest,
+  SystemStatusReadModel,
+} from "../lib/tauri";
 import type {
   BlackboardCandidateStoreV1,
   FormalMemoryStoreV1,
@@ -98,6 +102,9 @@ export type ActiveWorkbenchViewProps = {
   onPreviewProjectDirectorTaskPlan?: (request: PreviewProjectDirectorTaskPlanInput) => Promise<ProjectDirectorTaskPlan>;
   onPreviewFormalMemoryLifecycle?: Parameters<typeof MemoryCenterView>[0]["onPreviewFormalMemoryLifecycle"];
   onPreviewMemoryEntityRelationCandidates?: Parameters<typeof MemoryCenterView>[0]["onPreviewMemoryEntityRelationCandidates"];
+  onEnrollM1ProjectIdentity?: (
+    request: M1ProjectIdentityEnrollmentRequest,
+  ) => Promise<M1ProjectIdentityEnrollmentDto>;
 };
 
 export function renderActiveWorkbenchView({
@@ -137,6 +144,7 @@ export function renderActiveWorkbenchView({
   onPreviewFormalMemoryLifecycle,
   onPreviewMemoryEntityRelationCandidates,
   browserPreviewData,
+  onEnrollM1ProjectIdentity,
 }: ActiveWorkbenchViewProps) {
   if (view === "secretary_board") {
     return secretaryContext ? (
@@ -183,56 +191,62 @@ export function renderActiveWorkbenchView({
 
   if (view === "projects") {
     return (
-      <ProjectsView
-        projects={snapshot.projects}
-        sessions={snapshot.sessions}
-        workflowState={workflowState}
-        hasRealSnapshot={hasRealSnapshot}
-        secretarySourceFocus={secretarySourceFocus}
-        onSecretarySourceFocusOutcome={onSecretarySourceFocusOutcome}
-        blackboardCandidateStore={blackboardCandidateStore}
-        planAuthorizationStore={planAuthorizationStore}
-        projectConsultationProposalStore={projectConsultationProposalStore}
-        observationStore={observationStore}
-        memoryCandidateStore={memoryCandidateStore}
-        formalMemoryStore={formalMemoryStore}
-        memoryLintStore={memoryLintStore}
-        runtimeSessionAttention={snapshot.runtime_session_attention}
-        realExecutionProductCommands={snapshot.real_execution_product_commands}
-        projectWorkflowAutomation={snapshot.project_workflow_automation}
-        k3B1Recovery={snapshot.k3_b1_recovery}
-        workflowStateLoading={workflowStateLoading}
-        workflowStateError={workflowStateError}
-        onReloadWorkflowState={onReloadWorkflowState}
-        onWorkflowStateReadRefresh={onWorkflowStateReadRefresh}
-        onRequestAction={onRequestAction}
-        onProposalStoreRefresh={onProposalStoreRefresh}
-        onLoadTranscript={browserPreviewData?.loadTranscript ?? loadCodexSessionTranscript}
-        onRenderTaskPreview={(projectRoot, workItemId) =>
-          browserPreviewData
-            ? Promise.reject(new Error("浏览器预览模式：任务包预览需用 Tauri 桌面壳。"))
-            : renderTaskPackagePreview({ project_root: projectRoot, work_item_id: workItemId })
-        }
-        onInspectDispatchReadiness={(projectRoot, workItemId) =>
-          browserPreviewData
-            ? Promise.reject(new Error("浏览器预览模式：派发准备检查需用 Tauri 桌面壳。"))
-            : inspectTaskPackageDispatchReadiness({ project_root: projectRoot, work_item_id: workItemId })
-        }
-        onInspectWorkflowRunCheck={(projectRoot, workflowId) =>
-          browserPreviewData
-            ? Promise.reject(new Error("浏览器预览模式：运行检查需用 Tauri 桌面壳。"))
-            : inspectWorkflowRunCheck({ project_root: projectRoot, workflow_id: workflowId })
-        }
-        onInspectAutoDispatchAuthorization={
-          browserPreviewData
-            ? () => Promise.reject(new Error("浏览器预览模式：自动派发授权检查需用 Tauri 桌面壳。"))
-            : inspectAutoDispatchAuthorization
-        }
-        onPreviewTaskMemoryPacket={onPreviewTaskMemoryPacket}
-        onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
-        onOpenAgentSession={onOpenAgentSession}
-        onNotice={onNotice}
-      />
+      <>
+        <ProjectsView
+          projects={snapshot.projects}
+          sessions={snapshot.sessions}
+          workflowState={workflowState}
+          hasRealSnapshot={hasRealSnapshot}
+          secretarySourceFocus={secretarySourceFocus}
+          onSecretarySourceFocusOutcome={onSecretarySourceFocusOutcome}
+          blackboardCandidateStore={blackboardCandidateStore}
+          planAuthorizationStore={planAuthorizationStore}
+          projectConsultationProposalStore={projectConsultationProposalStore}
+          observationStore={observationStore}
+          memoryCandidateStore={memoryCandidateStore}
+          formalMemoryStore={formalMemoryStore}
+          memoryLintStore={memoryLintStore}
+          runtimeSessionAttention={snapshot.runtime_session_attention}
+          realExecutionProductCommands={snapshot.real_execution_product_commands}
+          projectWorkflowAutomation={snapshot.project_workflow_automation}
+          k3B1Recovery={snapshot.k3_b1_recovery}
+          workflowStateLoading={workflowStateLoading}
+          workflowStateError={workflowStateError}
+          onReloadWorkflowState={onReloadWorkflowState}
+          onWorkflowStateReadRefresh={onWorkflowStateReadRefresh}
+          onRequestAction={onRequestAction}
+          onProposalStoreRefresh={onProposalStoreRefresh}
+          onLoadTranscript={browserPreviewData?.loadTranscript ?? loadCodexSessionTranscript}
+          onRenderTaskPreview={(projectRoot, workItemId) =>
+            browserPreviewData
+              ? Promise.reject(new Error("浏览器预览模式：任务包预览需用 Tauri 桌面壳。"))
+              : renderTaskPackagePreview({ project_root: projectRoot, work_item_id: workItemId })
+          }
+          onInspectDispatchReadiness={(projectRoot, workItemId) =>
+            browserPreviewData
+              ? Promise.reject(new Error("浏览器预览模式：派发准备检查需用 Tauri 桌面壳。"))
+              : inspectTaskPackageDispatchReadiness({ project_root: projectRoot, work_item_id: workItemId })
+          }
+          onInspectWorkflowRunCheck={(projectRoot, workflowId) =>
+            browserPreviewData
+              ? Promise.reject(new Error("浏览器预览模式：运行检查需用 Tauri 桌面壳。"))
+              : inspectWorkflowRunCheck({ project_root: projectRoot, workflow_id: workflowId })
+          }
+          onInspectAutoDispatchAuthorization={
+            browserPreviewData
+              ? () => Promise.reject(new Error("浏览器预览模式：自动派发授权检查需用 Tauri 桌面壳。"))
+              : inspectAutoDispatchAuthorization
+          }
+          onPreviewTaskMemoryPacket={onPreviewTaskMemoryPacket}
+          onPreviewProjectDirectorTaskPlan={onPreviewProjectDirectorTaskPlan}
+          onOpenAgentSession={onOpenAgentSession}
+          onNotice={onNotice}
+        />
+        <M1ProjectIdentityEnrollmentEntry
+          projects={snapshot.projects}
+          onEnroll={onEnrollM1ProjectIdentity}
+        />
+      </>
     );
   }
 
@@ -643,6 +657,131 @@ function CanvasRunResidueSweeperCard() {
             </p>
           ) : null}
         </div>
+      ) : null}
+    </section>
+  );
+}
+
+type M1EnrollmentUiPhase = "idle" | "pending" | "created" | "already_enrolled" | "failed";
+
+function m1EnrollmentSafeErrorText(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return /^[A-Za-z0-9_:-]{1,128}$/.test(message) ? message : "登记失败，未能完成项目身份登记。";
+}
+
+function M1ProjectIdentityEnrollmentEntry({
+  projects,
+  onEnroll,
+}: {
+  projects: WorkbenchSnapshot["projects"];
+  onEnroll?: (request: M1ProjectIdentityEnrollmentRequest) => Promise<M1ProjectIdentityEnrollmentDto>;
+}) {
+  const [selectedRoot, setSelectedRoot] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<M1EnrollmentUiPhase>("idle");
+  const [result, setResult] = useState<M1ProjectIdentityEnrollmentDto | null>(null);
+  const [errorText, setErrorText] = useState<string | null>(null);
+  const effectiveRoot = projects.some((project) => project.project_root === selectedRoot)
+    ? selectedRoot
+    : (projects[0]?.project_root ?? "");
+  const disabledReason = !onEnroll
+    ? "浏览器预览或当前宿主没有登记回调，不会调用 enroll_m1_project_identity。"
+    : projects.length === 0
+      ? "当前项目列表没有可选择的条目。"
+      : null;
+  const canSubmit = Boolean(onEnroll && effectiveRoot && !busy && !disabledReason);
+
+  const submitEnrollment = () => {
+    if (!canSubmit || !onEnroll || busy) return;
+    setBusy(true);
+    setPhase("pending");
+    setResult(null);
+    setErrorText(null);
+    void onEnroll({ project_root: effectiveRoot })
+      .then((receipt) => {
+        if (receipt.status === "created") {
+          setResult(receipt);
+          setPhase("created");
+          return;
+        }
+        if (receipt.status === "already_enrolled") {
+          setResult(receipt);
+          setPhase("already_enrolled");
+          return;
+        }
+        setResult(null);
+        setErrorText("登记结果无法识别。");
+        setPhase("failed");
+      })
+      .catch((error: unknown) => {
+        setResult(null);
+        setErrorText(m1EnrollmentSafeErrorText(error));
+        setPhase("failed");
+      })
+      .finally(() => {
+        setBusy(false);
+      });
+  };
+
+  return (
+    <section
+      className="panel source-entry-section"
+      data-m1-enrollment-entry="1"
+      data-m1-command="enroll_m1_project_identity"
+      data-m1-auto-invoke="never"
+      data-m1-enrollment-status={phase}
+      aria-label="登记项目身份"
+    >
+      <h3 style={{ margin: "0 0 4px", fontSize: "var(--text-lg)" }}>登记项目身份</h3>
+      <p className="muted small-note">
+        从当前项目列表选择一条现有条目，再点「登记项目身份」。只提交该条目的 project_root；canonical
+        身份由后端返回，前端不推导、不缓存。本入口不证明真实项目、真实窗口或发布已验证。
+      </p>
+      <div className="workflow-state-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <select
+          aria-label="选择要登记的项目"
+          data-m1-enrollment-project-select="1"
+          disabled={busy || projects.length === 0}
+          value={effectiveRoot}
+          onChange={(event) => setSelectedRoot(event.target.value)}
+        >
+          {projects.map((project) => (
+            <option key={project.project_root} value={project.project_root}>
+              {project.name} · {project.project_root}
+            </option>
+          ))}
+        </select>
+        <button
+          className="primary-button"
+          type="button"
+          data-m1-enrollment-submit="1"
+          disabled={!canSubmit}
+          onClick={submitEnrollment}
+        >
+          {busy ? "正在登记…" : "登记项目身份"}
+        </button>
+      </div>
+      {disabledReason ? <p className="muted small-note">{disabledReason}</p> : null}
+      {phase === "idle" ? <p className="muted small-note">尚未执行登记。</p> : null}
+      {phase === "pending" ? <p className="muted small-note">正在登记…</p> : null}
+      {phase === "created" && result ? (
+        <p className="muted small-note" data-m1-enrollment-result="created">
+          首次创建成功。canonical project_id：<code>{result.project_id}</code>；exact alias：
+          <code>{result.exact_alias}</code>；source revision：{result.source_revision}；registry revision：
+          {result.registry_revision}。
+        </p>
+      ) : null}
+      {phase === "already_enrolled" && result ? (
+        <p className="muted small-note" data-m1-enrollment-result="already_enrolled">
+          已登记，本次为幂等重放。canonical project_id：<code>{result.project_id}</code>；exact alias：
+          <code>{result.exact_alias}</code>；source revision：{result.source_revision}；registry revision：
+          {result.registry_revision}。
+        </p>
+      ) : null}
+      {phase === "failed" ? (
+        <p className="muted small-note" data-m1-enrollment-result="failed">
+          登记失败：{errorText}
+        </p>
       ) : null}
     </section>
   );
