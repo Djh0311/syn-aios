@@ -6546,15 +6546,59 @@ fn load_memory_pattern_store(
     mature_pattern_store::load_store(&state.workflow_state_path, &unix_timestamp_string())
 }
 
+fn resolve_m1_canonical_project_id_for_memory_governance(
+    state: &AppState,
+    project_root: &str,
+) -> Result<String, String> {
+    let port = state
+        .m1_project_index_read_port()
+        .ok_or_else(|| m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE.to_string())?;
+    port.resolve_exact_alias(project_root)
+        .map(|project_id| project_id.as_str().to_string())
+        .map_err(|error| error.code)
+}
+
+fn preview_mature_patterns_with_state(
+    request: &PreviewMaturePatternsInput,
+    state: &AppState,
+) -> Result<MaturePatternPreviewOutput, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_memory_governance(state, &request.project_root)?;
+    mature_pattern_governance::preview_mature_patterns_for_canonical_project(
+        &state.workflow_state_path,
+        &mature_pattern_governance::TrustedCanonicalProject {
+            project_root: request.project_root.clone(),
+            project_id: canonical_project_id,
+        },
+        request,
+        &unix_timestamp_string(),
+    )
+}
+
 #[tauri::command]
 fn preview_mature_patterns(
     request: PreviewMaturePatternsInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<MaturePatternPreviewOutput, String> {
-    mature_pattern_governance::preview_mature_patterns(
+    preview_mature_patterns_with_state(&request, &state)
+}
+
+fn record_mature_pattern_decision_with_state(
+    request: &RecordMaturePatternDecisionInput,
+    state: &AppState,
+) -> Result<RecordMaturePatternDecisionOutput, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_memory_governance(state, &request.project_root)?;
+    mature_pattern_governance::record_mature_pattern_decision_for_canonical_project(
         &state.workflow_state_path,
-        &request,
+        &mature_pattern_governance::TrustedCanonicalProject {
+            project_root: request.project_root.clone(),
+            project_id: canonical_project_id,
+        },
+        request,
         &unix_timestamp_string(),
+        &format!("write-memory-pattern-{}", unix_timestamp_nanos()),
+        &format!("write-formal-memory-pattern-{}", unix_timestamp_nanos()),
     )
 }
 
@@ -6563,12 +6607,23 @@ fn record_mature_pattern_decision(
     request: RecordMaturePatternDecisionInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<RecordMaturePatternDecisionOutput, String> {
-    mature_pattern_governance::record_mature_pattern_decision(
+    record_mature_pattern_decision_with_state(&request, &state)
+}
+
+fn preview_memory_entity_relation_candidates_with_state(
+    request: &PreviewMemoryEntityRelationCandidatesInput,
+    state: &AppState,
+) -> Result<MemoryEntityRelationPreviewOutput, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_memory_governance(state, &request.project_root)?;
+    memory_entity_relation_governance::preview_candidates_for_canonical_project(
         &state.workflow_state_path,
-        &request,
+        &memory_entity_relation_governance::TrustedCanonicalProject {
+            project_root: request.project_root.clone(),
+            project_id: canonical_project_id,
+        },
+        request,
         &unix_timestamp_string(),
-        &format!("write-memory-pattern-{}", unix_timestamp_nanos()),
-        &format!("write-formal-memory-pattern-{}", unix_timestamp_nanos()),
     )
 }
 
@@ -6577,10 +6632,24 @@ fn preview_memory_entity_relation_candidates(
     request: PreviewMemoryEntityRelationCandidatesInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<MemoryEntityRelationPreviewOutput, String> {
-    memory_entity_relation_governance::preview_candidates(
+    preview_memory_entity_relation_candidates_with_state(&request, &state)
+}
+
+fn record_memory_entity_alias_decision_with_state(
+    request: &RecordMemoryEntityAliasDecisionInput,
+    state: &AppState,
+) -> Result<RecordMemoryEntityAliasDecisionOutput, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_memory_governance(state, &request.project_root)?;
+    memory_entity_relation_governance::record_alias_decision_for_canonical_project(
         &state.workflow_state_path,
-        &request,
+        &memory_entity_relation_governance::TrustedCanonicalProject {
+            project_root: request.project_root.clone(),
+            project_id: canonical_project_id,
+        },
+        request,
         &unix_timestamp_string(),
+        &format!("write-memory-entity-alias-{}", unix_timestamp_nanos()),
     )
 }
 
@@ -6589,11 +6658,24 @@ fn record_memory_entity_alias_decision(
     request: RecordMemoryEntityAliasDecisionInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<RecordMemoryEntityAliasDecisionOutput, String> {
-    memory_entity_relation_governance::record_alias_decision(
+    record_memory_entity_alias_decision_with_state(&request, &state)
+}
+
+fn record_memory_entity_merge_decision_with_state(
+    request: &RecordMemoryEntityMergeDecisionInput,
+    state: &AppState,
+) -> Result<RecordMemoryEntityMergeDecisionOutput, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_memory_governance(state, &request.project_root)?;
+    memory_entity_relation_governance::record_merge_decision_for_canonical_project(
         &state.workflow_state_path,
-        &request,
+        &memory_entity_relation_governance::TrustedCanonicalProject {
+            project_root: request.project_root.clone(),
+            project_id: canonical_project_id,
+        },
+        request,
         &unix_timestamp_string(),
-        &format!("write-memory-entity-alias-{}", unix_timestamp_nanos()),
+        &format!("write-memory-entity-merge-{}", unix_timestamp_nanos()),
     )
 }
 
@@ -6602,11 +6684,24 @@ fn record_memory_entity_merge_decision(
     request: RecordMemoryEntityMergeDecisionInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<RecordMemoryEntityMergeDecisionOutput, String> {
-    memory_entity_relation_governance::record_merge_decision(
+    record_memory_entity_merge_decision_with_state(&request, &state)
+}
+
+fn record_memory_relation_candidate_decision_with_state(
+    request: &RecordMemoryRelationCandidateDecisionInput,
+    state: &AppState,
+) -> Result<RecordMemoryRelationCandidateDecisionOutput, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_memory_governance(state, &request.project_root)?;
+    memory_entity_relation_governance::record_relation_decision_for_canonical_project(
         &state.workflow_state_path,
-        &request,
+        &memory_entity_relation_governance::TrustedCanonicalProject {
+            project_root: request.project_root.clone(),
+            project_id: canonical_project_id,
+        },
+        request,
         &unix_timestamp_string(),
-        &format!("write-memory-entity-merge-{}", unix_timestamp_nanos()),
+        &format!("write-memory-relation-{}", unix_timestamp_nanos()),
     )
 }
 
@@ -6615,12 +6710,7 @@ fn record_memory_relation_candidate_decision(
     request: RecordMemoryRelationCandidateDecisionInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<RecordMemoryRelationCandidateDecisionOutput, String> {
-    memory_entity_relation_governance::record_relation_decision(
-        &state.workflow_state_path,
-        &request,
-        &unix_timestamp_string(),
-        &format!("write-memory-relation-{}", unix_timestamp_nanos()),
-    )
+    record_memory_relation_candidate_decision_with_state(&request, &state)
 }
 
 #[tauri::command]
@@ -8935,5 +9025,412 @@ mod m4c08_legacy_read_compatibility_command_tests {
         let command_source = &source[command_start..];
         assert!(command_source.contains("m4_legacy_read_registry"));
         assert!(command_source.contains("read_server_owned_legacy_candidates"));
+    }
+}
+
+#[cfg(test)]
+mod m5r08_m1_command_tests {
+    use super::*;
+    use crate::m1_project_index;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "syn-m5r08-m1-cmd-{}-{}-{}",
+            prefix,
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    fn state_without_m1(dir: &Path) -> AppState {
+        let workflow = dir.join("workflow-state.v0.json");
+        fs::write(&workflow, "{}").expect("workflow");
+        AppState {
+            index_path: dir.join("codex-index.json"),
+            tasks_path: dir.join("tasks.md"),
+            workflow_state_path: workflow,
+            m3_role_session_read_runtime: Default::default(),
+            m1_project_index: None,
+            m3_project_role_session_authority: None,
+            m5_store_path: None,
+        }
+    }
+
+    fn ordinary_state_with_alias(alias: &str) -> (PathBuf, AppState, String) {
+        let parent = temp_dir("ordinary");
+        let app_data_root = parent.join(m1_project_index::M1_ORDINARY_APP_DATA_DIR_NAME);
+        fs::create_dir_all(&app_data_root).expect("app data");
+        let app_data_root = fs::canonicalize(&app_data_root).expect("canon");
+        let source = serde_json::json!({
+            "schema_version": m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_SCHEMA_VERSION,
+            "source_id": "syn-m5r08-m1-synthetic-source",
+            "source_revision": 1,
+            "projects": [{
+                "entry_id": "syn-m5r08-m1-entry-1",
+                "mode": "migrate_legacy_project",
+                "source_ref": "synthetic://m5r08-m1",
+                "exact_alias": alias
+            }]
+        });
+        fs::write(
+            app_data_root.join(m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            format!("{source}\n"),
+        )
+        .expect("write source");
+        let seed_dir = parent.join("seeds");
+        fs::create_dir_all(&seed_dir).expect("seeds");
+        let index_seed = seed_dir.join("codex-index.json");
+        let tasks_seed = seed_dir.join("README.md");
+        fs::write(&index_seed, r#"{"projects":[]}"#).expect("index");
+        fs::write(&tasks_seed, "# synthetic\n").expect("tasks");
+        let state = AppState::try_new_with_tauri_ordinary_product_seeds(
+            &app_data_root,
+            &index_seed,
+            &tasks_seed,
+        )
+        .expect("state");
+        let canonical = state
+            .m1_project_index_read_port()
+            .expect("m1 port")
+            .resolve_exact_alias(alias)
+            .expect("resolve alias")
+            .as_str()
+            .to_string();
+        (parent, state, canonical)
+    }
+
+    fn sidecar_bytes(state: &AppState) -> (Option<Vec<u8>>, Option<Vec<u8>>) {
+        let pattern = crate::mature_pattern_store::sidecar_path(&state.workflow_state_path)
+            .ok()
+            .and_then(|path| fs::read(path).ok());
+        let entity = crate::memory_entity_relation_store::sidecar_path(&state.workflow_state_path)
+            .ok()
+            .and_then(|path| fs::read(path).ok());
+        (pattern, entity)
+    }
+
+    fn assert_zero_sidecar_write(state: &AppState, before: (Option<Vec<u8>>, Option<Vec<u8>>)) {
+        assert_eq!(sidecar_bytes(state), before);
+    }
+
+    fn production_span(source: &str, start_marker: &str, end_marker: &str) -> String {
+        let start = source.find(start_marker).expect(start_marker);
+        let rest = &source[start..];
+        let end = rest.find(end_marker).expect(end_marker);
+        rest[..end].to_string()
+    }
+
+    #[test]
+    fn m5r08_m1_six_commands_resolve_through_m1_port() {
+        let source = include_str!("commands.rs");
+        let span = production_span(
+            source,
+            "fn resolve_m1_canonical_project_id_for_memory_governance(",
+            "fn run_memory_lint(",
+        );
+        assert!(span.contains("m1_project_index_read_port"));
+        assert!(span.contains("resolve_exact_alias"));
+        assert!(span.contains("preview_mature_patterns_for_canonical_project"));
+        assert!(span.contains("record_mature_pattern_decision_for_canonical_project"));
+        assert!(span.contains("preview_candidates_for_canonical_project"));
+        assert!(span.contains("record_alias_decision_for_canonical_project"));
+        assert!(span.contains("record_merge_decision_for_canonical_project"));
+        assert!(span.contains("record_relation_decision_for_canonical_project"));
+        assert!(!span.contains("project_id(&request.project_root)"));
+        assert!(!span.contains("crate::project_id"));
+        for name in [
+            "fn preview_mature_patterns_with_state(",
+            "fn record_mature_pattern_decision_with_state(",
+            "fn preview_memory_entity_relation_candidates_with_state(",
+            "fn record_memory_entity_alias_decision_with_state(",
+            "fn record_memory_entity_merge_decision_with_state(",
+            "fn record_memory_relation_candidate_decision_with_state(",
+        ] {
+            assert!(span.contains(name), "missing {name}");
+            assert!(
+                span.contains("resolve_m1_canonical_project_id_for_memory_governance"),
+                "M1 resolve missing around {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn m5r08_m1_authority_missing_is_zero_write_for_six_commands() {
+        let dir = temp_dir("missing-authority");
+        let state = state_without_m1(&dir);
+        let before = sidecar_bytes(&state);
+        let root = "/tmp/m5r08-missing-authority";
+        let missing = m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE;
+        assert_eq!(
+            preview_mature_patterns_with_state(
+                &PreviewMaturePatternsInput {
+                    project_root: root.to_string(),
+                    project_id: Some("project:caller".to_string()),
+                    workflow_id: None,
+                },
+                &state,
+            )
+            .expect_err("missing m1"),
+            missing
+        );
+        assert_eq!(
+            record_mature_pattern_decision_with_state(
+                &RecordMaturePatternDecisionInput {
+                    project_root: root.to_string(),
+                    candidate_id: "mature-pattern-candidate:v1:unused".to_string(),
+                    decision: MaturePatternDecisionKind::Reject,
+                    actor_id: "user-m5r08".to_string(),
+                    actor_role: "user".to_string(),
+                    confirmed_by: None,
+                    reason: "unused".to_string(),
+                    expected_pattern_store_revision: Some(0),
+                    expected_formal_store_revision: None,
+                },
+                &state,
+            )
+            .expect_err("missing m1"),
+            missing
+        );
+        assert_eq!(
+            preview_memory_entity_relation_candidates_with_state(
+                &PreviewMemoryEntityRelationCandidatesInput {
+                    project_root: root.to_string(),
+                    project_id: Some("project:caller".to_string()),
+                    workflow_id: None,
+                },
+                &state,
+            )
+            .expect_err("missing m1"),
+            missing
+        );
+        assert_eq!(
+            record_memory_entity_alias_decision_with_state(
+                &RecordMemoryEntityAliasDecisionInput {
+                    project_root: root.to_string(),
+                    entity_candidate_id: "entity-candidate:v1:unused".to_string(),
+                    decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                    actor_id: "user-m5r08".to_string(),
+                    actor_role: "user".to_string(),
+                    reason: "unused".to_string(),
+                    expected_store_revision: Some(0),
+                },
+                &state,
+            )
+            .expect_err("missing m1"),
+            missing
+        );
+        assert_eq!(
+            record_memory_entity_merge_decision_with_state(
+                &RecordMemoryEntityMergeDecisionInput {
+                    project_root: root.to_string(),
+                    merge_candidate_id: "entity-merge-candidate:v1:unused".to_string(),
+                    decision: MemoryEntityMergeDecisionKind::ConfirmMerge,
+                    actor_id: "user-m5r08".to_string(),
+                    actor_role: "user".to_string(),
+                    confirmed_by: Some("user".to_string()),
+                    reason: "unused".to_string(),
+                    expected_store_revision: Some(0),
+                },
+                &state,
+            )
+            .expect_err("missing m1"),
+            missing
+        );
+        assert_eq!(
+            record_memory_relation_candidate_decision_with_state(
+                &RecordMemoryRelationCandidateDecisionInput {
+                    project_root: root.to_string(),
+                    relation_candidate_id: "relation-candidate:v1:unused".to_string(),
+                    decision: MemoryRelationCandidateDecisionKind::RejectRelation,
+                    actor_id: "user-m5r08".to_string(),
+                    actor_role: "user".to_string(),
+                    confirmed_by: None,
+                    reason: "unused".to_string(),
+                    expected_store_revision: Some(0),
+                },
+                &state,
+            )
+            .expect_err("missing m1"),
+            missing
+        );
+        assert_zero_sidecar_write(&state, before);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r08_m1_unknown_alias_is_zero_write_for_six_commands() {
+        let alias = "/tmp/m5r08-registered-alias";
+        let (parent, state, _canonical) = ordinary_state_with_alias(alias);
+        let before = sidecar_bytes(&state);
+        let unknown = "/tmp/m5r08-unknown-alias";
+        assert_eq!(
+            preview_mature_patterns_with_state(
+                &PreviewMaturePatternsInput {
+                    project_root: unknown.to_string(),
+                    project_id: None,
+                    workflow_id: None,
+                },
+                &state,
+            )
+            .expect_err("unknown alias"),
+            "m1_alias_unknown"
+        );
+        assert_eq!(
+            record_mature_pattern_decision_with_state(
+                &RecordMaturePatternDecisionInput {
+                    project_root: unknown.to_string(),
+                    candidate_id: "mature-pattern-candidate:v1:unused".to_string(),
+                    decision: MaturePatternDecisionKind::Reject,
+                    actor_id: "user-m5r08".to_string(),
+                    actor_role: "user".to_string(),
+                    confirmed_by: None,
+                    reason: "unused".to_string(),
+                    expected_pattern_store_revision: Some(0),
+                    expected_formal_store_revision: None,
+                },
+                &state,
+            )
+            .expect_err("unknown alias"),
+            "m1_alias_unknown"
+        );
+        assert_eq!(
+            preview_memory_entity_relation_candidates_with_state(
+                &PreviewMemoryEntityRelationCandidatesInput {
+                    project_root: unknown.to_string(),
+                    project_id: None,
+                    workflow_id: None,
+                },
+                &state,
+            )
+            .expect_err("unknown alias"),
+            "m1_alias_unknown"
+        );
+        assert_eq!(
+            record_memory_entity_alias_decision_with_state(
+                &RecordMemoryEntityAliasDecisionInput {
+                    project_root: unknown.to_string(),
+                    entity_candidate_id: "entity-candidate:v1:unused".to_string(),
+                    decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                    actor_id: "user-m5r08".to_string(),
+                    actor_role: "user".to_string(),
+                    reason: "unused".to_string(),
+                    expected_store_revision: Some(0),
+                },
+                &state,
+            )
+            .expect_err("unknown alias"),
+            "m1_alias_unknown"
+        );
+        assert_eq!(
+            record_memory_entity_merge_decision_with_state(
+                &RecordMemoryEntityMergeDecisionInput {
+                    project_root: unknown.to_string(),
+                    merge_candidate_id: "entity-merge-candidate:v1:unused".to_string(),
+                    decision: MemoryEntityMergeDecisionKind::ConfirmMerge,
+                    actor_id: "user-m5r08".to_string(),
+                    actor_role: "user".to_string(),
+                    confirmed_by: Some("user".to_string()),
+                    reason: "unused".to_string(),
+                    expected_store_revision: Some(0),
+                },
+                &state,
+            )
+            .expect_err("unknown alias"),
+            "m1_alias_unknown"
+        );
+        assert_eq!(
+            record_memory_relation_candidate_decision_with_state(
+                &RecordMemoryRelationCandidateDecisionInput {
+                    project_root: unknown.to_string(),
+                    relation_candidate_id: "relation-candidate:v1:unused".to_string(),
+                    decision: MemoryRelationCandidateDecisionKind::RejectRelation,
+                    actor_id: "user-m5r08".to_string(),
+                    actor_role: "user".to_string(),
+                    confirmed_by: None,
+                    reason: "unused".to_string(),
+                    expected_store_revision: Some(0),
+                },
+                &state,
+            )
+            .expect_err("unknown alias"),
+            "m1_alias_unknown"
+        );
+        assert_zero_sidecar_write(&state, before);
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r08_m1_caller_project_id_cannot_override_canonical() {
+        let alias = "/tmp/m5r08-caller-override";
+        let (parent, state, canonical) = ordinary_state_with_alias(alias);
+        let spoofed = "project:cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+        let preview = preview_memory_entity_relation_candidates_with_state(
+            &PreviewMemoryEntityRelationCandidatesInput {
+                project_root: alias.to_string(),
+                project_id: Some(spoofed.to_string()),
+                workflow_id: None,
+            },
+            &state,
+        )
+        .expect("preview");
+        let project_candidate = preview
+            .entity_candidates
+            .iter()
+            .find(|candidate| candidate.entity_kind == MemoryEntityKind::Project)
+            .expect("project candidate");
+        assert_eq!(project_candidate.source_id.as_deref(), Some(canonical.as_str()));
+        assert_ne!(project_candidate.source_id.as_deref(), Some(spoofed));
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r08_m1_canonical_store_write_via_command() {
+        let alias = "/tmp/m5r08-command-write";
+        let (parent, state, canonical) = ordinary_state_with_alias(alias);
+        let preview = preview_memory_entity_relation_candidates_with_state(
+            &PreviewMemoryEntityRelationCandidatesInput {
+                project_root: alias.to_string(),
+                project_id: Some("project:caller-ignored".to_string()),
+                workflow_id: None,
+            },
+            &state,
+        )
+        .expect("preview");
+        let candidate_id = preview
+            .entity_candidates
+            .iter()
+            .find(|candidate| candidate.entity_kind == MemoryEntityKind::Project)
+            .expect("project candidate")
+            .candidate_id
+            .clone();
+        let output = record_memory_entity_alias_decision_with_state(
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: alias.to_string(),
+                entity_candidate_id: candidate_id,
+                decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                actor_id: "user-m5r08".to_string(),
+                actor_role: "user".to_string(),
+                reason: "command path must persist canonical project id".to_string(),
+                expected_store_revision: Some(preview.store_revision),
+            },
+            &state,
+        )
+        .expect("write");
+        assert_eq!(output.store_revision, preview.store_revision + 1);
+        let store = crate::memory_entity_relation_store::load_store(
+            &state.workflow_state_path,
+            "2026-08-18T00:00:03Z",
+        )
+        .expect("load");
+        assert_eq!(store.project_id.as_deref(), Some(canonical.as_str()));
+        assert_ne!(
+            store.project_id.as_deref(),
+            Some(crate::project_id(alias).as_str())
+        );
+        let _ = fs::remove_dir_all(parent);
     }
 }

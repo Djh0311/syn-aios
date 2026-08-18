@@ -14,14 +14,36 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-pub(crate) fn preview_candidates(
+pub(crate) struct TrustedCanonicalProject {
+    pub project_root: String,
+    pub project_id: String,
+}
+
+pub(crate) fn preview_candidates_for_canonical_project(
     workflow_state_path: &Path,
+    trusted: &TrustedCanonicalProject,
     input: &PreviewMemoryEntityRelationCandidatesInput,
     timestamp: &str,
 ) -> Result<MemoryEntityRelationPreviewOutput, String> {
-    validate_preview_input(input)?;
+    require_matching_project_root(
+        &input.project_root,
+        trusted,
+        "实体 / 关系治理缺少 project_root",
+    )?;
+    let input = overlay_preview_input(input, trusted);
     let store = crate::memory_entity_relation_store::load_store(workflow_state_path, timestamp)?;
-    let derived = derive_candidates(workflow_state_path, input, timestamp, &store)?;
+    preview_allows_store_project_id(
+        store.project_id.as_deref(),
+        trusted,
+        "memory_entity_relation_store_project_id_mismatch",
+    )?;
+    let derived = derive_candidates(
+        workflow_state_path,
+        &input,
+        &trusted.project_id,
+        timestamp,
+        &store,
+    )?;
     Ok(MemoryEntityRelationPreviewOutput {
         store_revision: store.revision,
         entity_candidates: derived.entity_candidates,
@@ -32,23 +54,54 @@ pub(crate) fn preview_candidates(
     })
 }
 
-pub(crate) fn record_alias_decision(
+#[cfg(test)]
+pub(crate) fn preview_candidates(
     workflow_state_path: &Path,
+    input: &PreviewMemoryEntityRelationCandidatesInput,
+    timestamp: &str,
+) -> Result<MemoryEntityRelationPreviewOutput, String> {
+    validate_preview_input(input)?;
+    let trusted = TrustedCanonicalProject {
+        project_root: input.project_root.clone(),
+        project_id: crate::project_id(&input.project_root),
+    };
+    preview_candidates_for_canonical_project(workflow_state_path, &trusted, input, timestamp)
+}
+
+pub(crate) fn record_alias_decision_for_canonical_project(
+    workflow_state_path: &Path,
+    trusted: &TrustedCanonicalProject,
     input: &RecordMemoryEntityAliasDecisionInput,
     timestamp: &str,
     write_id: &str,
 ) -> Result<RecordMemoryEntityAliasDecisionOutput, String> {
+    require_matching_project_root(
+        &input.project_root,
+        trusted,
+        "实体 / 关系治理缺少 project_root",
+    )?;
     validate_actor_can_decide(&input.actor_role)?;
     validate_non_empty("entity_candidate_id", &input.entity_candidate_id)?;
     validate_non_empty("reason", &input.reason)?;
-    let preview_input = preview_input_from_project_root(&input.project_root);
+    let preview_input = overlay_preview_from_trusted(trusted);
     crate::memory_entity_relation_store::with_locked_store(
         workflow_state_path,
         timestamp,
         write_id,
         |store| {
+            bind_store_top_level_project_id(
+                &mut store.project_id,
+                trusted,
+                "memory_entity_relation_store_project_id_mismatch",
+            )?;
             validate_expected_revision(input.expected_store_revision, store)?;
-            let derived = derive_candidates(workflow_state_path, &preview_input, timestamp, store)?;
+            let derived = derive_candidates(
+                workflow_state_path,
+                &preview_input,
+                &trusted.project_id,
+                timestamp,
+                store,
+            )?;
             let candidate = derived
                 .entity_candidates
                 .into_iter()
@@ -86,8 +139,8 @@ pub(crate) fn record_alias_decision(
                 vec!["entity_candidate_decision_only".to_string()],
             );
             store.audit_events.push(audit_event.clone());
-            store.project_id = Some(crate::project_id(&input.project_root));
-            store.workflow_id = Some(crate::default_workflow_id(&input.project_root));
+            store.project_id = Some(trusted.project_id.clone());
+            store.workflow_id = Some(crate::default_workflow_id(&trusted.project_root));
             store.registry.updated_at = timestamp.to_string();
             store.revision += 1;
             Ok(RecordMemoryEntityAliasDecisionOutput {
@@ -101,23 +154,60 @@ pub(crate) fn record_alias_decision(
     )
 }
 
-pub(crate) fn record_merge_decision(
+#[cfg(test)]
+pub(crate) fn record_alias_decision(
     workflow_state_path: &Path,
+    input: &RecordMemoryEntityAliasDecisionInput,
+    timestamp: &str,
+    write_id: &str,
+) -> Result<RecordMemoryEntityAliasDecisionOutput, String> {
+    let trusted = TrustedCanonicalProject {
+        project_root: input.project_root.clone(),
+        project_id: crate::project_id(&input.project_root),
+    };
+    record_alias_decision_for_canonical_project(
+        workflow_state_path,
+        &trusted,
+        input,
+        timestamp,
+        write_id,
+    )
+}
+
+pub(crate) fn record_merge_decision_for_canonical_project(
+    workflow_state_path: &Path,
+    trusted: &TrustedCanonicalProject,
     input: &RecordMemoryEntityMergeDecisionInput,
     timestamp: &str,
     write_id: &str,
 ) -> Result<RecordMemoryEntityMergeDecisionOutput, String> {
+    require_matching_project_root(
+        &input.project_root,
+        trusted,
+        "实体 / 关系治理缺少 project_root",
+    )?;
     validate_actor_can_decide(&input.actor_role)?;
     validate_non_empty("merge_candidate_id", &input.merge_candidate_id)?;
     validate_non_empty("reason", &input.reason)?;
-    let preview_input = preview_input_from_project_root(&input.project_root);
+    let preview_input = overlay_preview_from_trusted(trusted);
     crate::memory_entity_relation_store::with_locked_store(
         workflow_state_path,
         timestamp,
         write_id,
         |store| {
+            bind_store_top_level_project_id(
+                &mut store.project_id,
+                trusted,
+                "memory_entity_relation_store_project_id_mismatch",
+            )?;
             validate_expected_revision(input.expected_store_revision, store)?;
-            let derived = derive_candidates(workflow_state_path, &preview_input, timestamp, store)?;
+            let derived = derive_candidates(
+                workflow_state_path,
+                &preview_input,
+                &trusted.project_id,
+                timestamp,
+                store,
+            )?;
             let merge_candidate = derived
                 .merge_candidates
                 .into_iter()
@@ -193,8 +283,8 @@ pub(crate) fn record_merge_decision(
                 ],
             );
             store.audit_events.push(audit_event.clone());
-            store.project_id = Some(crate::project_id(&input.project_root));
-            store.workflow_id = Some(crate::default_workflow_id(&input.project_root));
+            store.project_id = Some(trusted.project_id.clone());
+            store.workflow_id = Some(crate::default_workflow_id(&trusted.project_root));
             store.registry.updated_at = timestamp.to_string();
             store.revision += 1;
             Ok(RecordMemoryEntityMergeDecisionOutput {
@@ -211,23 +301,60 @@ pub(crate) fn record_merge_decision(
     )
 }
 
-pub(crate) fn record_relation_decision(
+#[cfg(test)]
+pub(crate) fn record_merge_decision(
     workflow_state_path: &Path,
+    input: &RecordMemoryEntityMergeDecisionInput,
+    timestamp: &str,
+    write_id: &str,
+) -> Result<RecordMemoryEntityMergeDecisionOutput, String> {
+    let trusted = TrustedCanonicalProject {
+        project_root: input.project_root.clone(),
+        project_id: crate::project_id(&input.project_root),
+    };
+    record_merge_decision_for_canonical_project(
+        workflow_state_path,
+        &trusted,
+        input,
+        timestamp,
+        write_id,
+    )
+}
+
+pub(crate) fn record_relation_decision_for_canonical_project(
+    workflow_state_path: &Path,
+    trusted: &TrustedCanonicalProject,
     input: &RecordMemoryRelationCandidateDecisionInput,
     timestamp: &str,
     write_id: &str,
 ) -> Result<RecordMemoryRelationCandidateDecisionOutput, String> {
+    require_matching_project_root(
+        &input.project_root,
+        trusted,
+        "实体 / 关系治理缺少 project_root",
+    )?;
     validate_actor_can_decide(&input.actor_role)?;
     validate_non_empty("relation_candidate_id", &input.relation_candidate_id)?;
     validate_non_empty("reason", &input.reason)?;
-    let preview_input = preview_input_from_project_root(&input.project_root);
+    let preview_input = overlay_preview_from_trusted(trusted);
     crate::memory_entity_relation_store::with_locked_store(
         workflow_state_path,
         timestamp,
         write_id,
         |store| {
+            bind_store_top_level_project_id(
+                &mut store.project_id,
+                trusted,
+                "memory_entity_relation_store_project_id_mismatch",
+            )?;
             validate_expected_revision(input.expected_store_revision, store)?;
-            let derived = derive_candidates(workflow_state_path, &preview_input, timestamp, store)?;
+            let derived = derive_candidates(
+                workflow_state_path,
+                &preview_input,
+                &trusted.project_id,
+                timestamp,
+                store,
+            )?;
             let relation_candidate = derived
                 .relation_candidates
                 .into_iter()
@@ -289,8 +416,8 @@ pub(crate) fn record_relation_decision(
                 ],
             );
             store.audit_events.push(audit_event.clone());
-            store.project_id = Some(crate::project_id(&input.project_root));
-            store.workflow_id = Some(crate::default_workflow_id(&input.project_root));
+            store.project_id = Some(trusted.project_id.clone());
+            store.workflow_id = Some(crate::default_workflow_id(&trusted.project_root));
             store.revision += 1;
             Ok(RecordMemoryRelationCandidateDecisionOutput {
                 store_revision: store.revision,
@@ -306,6 +433,26 @@ pub(crate) fn record_relation_decision(
     )
 }
 
+#[cfg(test)]
+pub(crate) fn record_relation_decision(
+    workflow_state_path: &Path,
+    input: &RecordMemoryRelationCandidateDecisionInput,
+    timestamp: &str,
+    write_id: &str,
+) -> Result<RecordMemoryRelationCandidateDecisionOutput, String> {
+    let trusted = TrustedCanonicalProject {
+        project_root: input.project_root.clone(),
+        project_id: crate::project_id(&input.project_root),
+    };
+    record_relation_decision_for_canonical_project(
+        workflow_state_path,
+        &trusted,
+        input,
+        timestamp,
+        write_id,
+    )
+}
+
 struct DerivedCandidates {
     entity_candidates: Vec<MemoryEntityCandidate>,
     merge_candidates: Vec<MemoryEntityMergeCandidate>,
@@ -315,6 +462,7 @@ struct DerivedCandidates {
 fn derive_candidates(
     workflow_state_path: &Path,
     input: &PreviewMemoryEntityRelationCandidatesInput,
+    trusted_project_id: &str,
     timestamp: &str,
     store: &MemoryEntityRelationStoreV1,
 ) -> Result<DerivedCandidates, String> {
@@ -322,10 +470,7 @@ fn derive_candidates(
     let candidate_store =
         crate::memory_candidate_store::load_store(workflow_state_path, timestamp)?;
     let observation_store = crate::observation_store::load_store(workflow_state_path, timestamp)?;
-    let project_id = input
-        .project_id
-        .clone()
-        .unwrap_or_else(|| crate::project_id(&input.project_root));
+    let project_id = trusted_project_id.to_string();
     let workflow_id = input
         .workflow_id
         .clone()
@@ -989,13 +1134,82 @@ fn dedupe_relation_candidates(
     output
 }
 
-fn preview_input_from_project_root(
-    project_root: &str,
+fn require_matching_project_root(
+    actual: &str,
+    trusted: &TrustedCanonicalProject,
+    empty_message: &str,
+) -> Result<(), String> {
+    if actual.trim().is_empty() {
+        return Err(empty_message.to_string());
+    }
+    if actual != trusted.project_root {
+        return Err(format!(
+            "实体 / 关系 project_root 与已解析项目不一致：expected {}, actual {}",
+            trusted.project_root, actual
+        ));
+    }
+    Ok(())
+}
+
+fn overlay_preview_input(
+    input: &PreviewMemoryEntityRelationCandidatesInput,
+    trusted: &TrustedCanonicalProject,
 ) -> PreviewMemoryEntityRelationCandidatesInput {
     PreviewMemoryEntityRelationCandidatesInput {
-        project_root: project_root.to_string(),
-        project_id: Some(crate::project_id(project_root)),
-        workflow_id: Some(crate::default_workflow_id(project_root)),
+        project_root: trusted.project_root.clone(),
+        project_id: Some(trusted.project_id.clone()),
+        workflow_id: input
+            .workflow_id
+            .clone()
+            .or_else(|| Some(crate::default_workflow_id(&trusted.project_root))),
+    }
+}
+
+fn overlay_preview_from_trusted(
+    trusted: &TrustedCanonicalProject,
+) -> PreviewMemoryEntityRelationCandidatesInput {
+    PreviewMemoryEntityRelationCandidatesInput {
+        project_root: trusted.project_root.clone(),
+        project_id: Some(trusted.project_id.clone()),
+        workflow_id: Some(crate::default_workflow_id(&trusted.project_root)),
+    }
+}
+
+fn bind_store_top_level_project_id(
+    store_project_id: &mut Option<String>,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    match store_project_id.as_deref() {
+        None => {
+            *store_project_id = Some(trusted.project_id.clone());
+            Ok(())
+        }
+        Some(existing) if existing == trusted.project_id => Ok(()),
+        Some(existing) if existing == crate::project_id(&trusted.project_root) => {
+            *store_project_id = Some(trusted.project_id.clone());
+            Ok(())
+        }
+        Some(existing) => Err(format!(
+            "{mismatch_code}: expected {}, actual {existing}",
+            trusted.project_id
+        )),
+    }
+}
+
+fn preview_allows_store_project_id(
+    store_project_id: Option<&str>,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    match store_project_id {
+        None => Ok(()),
+        Some(existing) if existing == trusted.project_id => Ok(()),
+        Some(existing) if existing == crate::project_id(&trusted.project_root) => Ok(()),
+        Some(existing) => Err(format!(
+            "{mismatch_code}: expected {}, actual {existing}",
+            trusted.project_id
+        )),
     }
 }
 
@@ -1246,5 +1460,285 @@ fn source_kind_name(kind: MemoryRelationSourceKind) -> &'static str {
         MemoryRelationSourceKind::TaskPackage => "task_package",
         MemoryRelationSourceKind::LlmInferred => "llm_inferred",
         MemoryRelationSourceKind::SimilarityHit => "similarity_hit",
+    }
+}
+
+#[cfg(test)]
+mod m5r08_m1_tests {
+    use super::*;
+    use crate::{
+        MemoryEntityAliasDecisionKind, MemoryEntityKind, MemoryEntityRelationStoreV1,
+        PreviewMemoryEntityRelationCandidatesInput, RecordMemoryEntityAliasDecisionInput,
+    };
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "syn-m5r08-m1-entity-{}-{}-{}",
+            prefix,
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&dir).expect("temp");
+        dir
+    }
+
+    fn workflow_path(dir: &Path) -> PathBuf {
+        let path = dir.join("workflow-state.v0.json");
+        fs::write(&path, "{}").expect("workflow");
+        path
+    }
+
+    fn trusted(root: &str, id: &str) -> TrustedCanonicalProject {
+        TrustedCanonicalProject {
+            project_root: root.to_string(),
+            project_id: id.to_string(),
+        }
+    }
+
+    fn write_store(path: &Path, store: &MemoryEntityRelationStoreV1) {
+        let sidecar = crate::memory_entity_relation_store::sidecar_path(path).expect("sidecar");
+        fs::write(&sidecar, serde_json::to_string(store).expect("json")).expect("write");
+    }
+
+    fn empty_store(project_id: Option<&str>) -> MemoryEntityRelationStoreV1 {
+        MemoryEntityRelationStoreV1 {
+            store_version: "memory_entity_relations.v1".to_string(),
+            project_id: project_id.map(|value| value.to_string()),
+            workflow_id: None,
+            revision: 0,
+            registry: crate::MemoryEntityRegistry {
+                entities: vec![],
+                updated_at: "2026-08-18T00:00:00Z".to_string(),
+                warnings: vec!["memory_entity_registry_minimal".to_string()],
+            },
+            entity_candidates: vec![],
+            merge_candidates: vec![],
+            relation_candidates: vec![],
+            relations: vec![],
+            audit_events: vec![],
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        }
+    }
+
+    fn preview_input(root: &str, spoofed_project_id: Option<&str>) -> PreviewMemoryEntityRelationCandidatesInput {
+        PreviewMemoryEntityRelationCandidatesInput {
+            project_root: root.to_string(),
+            project_id: spoofed_project_id.map(|value| value.to_string()),
+            workflow_id: None,
+        }
+    }
+
+    fn first_project_candidate_id(
+        path: &Path,
+        trusted_project: &TrustedCanonicalProject,
+    ) -> String {
+        let preview = preview_candidates_for_canonical_project(
+            path,
+            trusted_project,
+            &preview_input(&trusted_project.project_root, None),
+            "2026-08-18T00:00:01Z",
+        )
+        .expect("preview");
+        preview
+            .entity_candidates
+            .iter()
+            .find(|candidate| candidate.entity_kind == MemoryEntityKind::Project)
+            .expect("project candidate")
+            .candidate_id
+            .clone()
+    }
+
+    #[test]
+    fn m5r08_m1_memory_entity_relation_canonical_store_write() {
+        let dir = temp_dir("canonical-write");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r08-entity-canonical";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa10";
+        let trusted_project = trusted(root, canonical);
+        let candidate_id = first_project_candidate_id(&path, &trusted_project);
+        let output = record_alias_decision_for_canonical_project(
+            &path,
+            &trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: candidate_id,
+                decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                actor_id: "user-m5r08".to_string(),
+                actor_role: "user".to_string(),
+                reason: "confirm project entity with canonical id".to_string(),
+                expected_store_revision: Some(0),
+            },
+            "2026-08-18T00:00:02Z",
+            "write-m5r08-entity-canonical",
+        )
+        .expect("canonical write");
+        assert_eq!(output.store_revision, 1);
+        let store = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:03Z")
+            .expect("load");
+        assert_eq!(store.project_id.as_deref(), Some(canonical));
+        assert_ne!(
+            store.project_id.as_deref(),
+            Some(crate::project_id(root).as_str())
+        );
+        assert!(output
+            .entity
+            .expect("entity")
+            .source_refs
+            .iter()
+            .any(|source| source.source_id.as_deref() == Some(canonical)));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r08_m1_memory_entity_relation_legacy_top_level_migrates() {
+        let dir = temp_dir("legacy-migrate");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r08-entity-legacy";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa11";
+        let legacy = crate::project_id(root);
+        write_store(&path, &empty_store(Some(legacy.as_str())));
+        let trusted_project = trusted(root, canonical);
+        let candidate_id = first_project_candidate_id(&path, &trusted_project);
+        record_alias_decision_for_canonical_project(
+            &path,
+            &trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: candidate_id,
+                decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                actor_id: "user-m5r08".to_string(),
+                actor_role: "user".to_string(),
+                reason: "migrate legacy top-level project id".to_string(),
+                expected_store_revision: Some(0),
+            },
+            "2026-08-18T00:00:02Z",
+            "write-m5r08-entity-legacy",
+        )
+        .expect("legacy migrate");
+        let store = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:03Z")
+            .expect("load");
+        assert_eq!(store.project_id.as_deref(), Some(canonical));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r08_m1_memory_entity_relation_foreign_id_rejects_zero_write() {
+        let dir = temp_dir("foreign-reject");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r08-entity-foreign";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa12";
+        let foreign = "project:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+        write_store(&path, &empty_store(Some(foreign)));
+        let sidecar = crate::memory_entity_relation_store::sidecar_path(&path).expect("sidecar");
+        let before = fs::read(&sidecar).expect("before");
+        let trusted_project = trusted(root, canonical);
+        let error = record_alias_decision_for_canonical_project(
+            &path,
+            &trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: "entity-candidate:v1:unused".to_string(),
+                decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                actor_id: "user-m5r08".to_string(),
+                actor_role: "user".to_string(),
+                reason: "foreign id must not write".to_string(),
+                expected_store_revision: Some(0),
+            },
+            "2026-08-18T00:00:02Z",
+            "write-m5r08-entity-foreign",
+        )
+        .expect_err("foreign id must fail closed");
+        assert!(
+            error.contains("memory_entity_relation_store_project_id_mismatch"),
+            "{error}"
+        );
+        assert_eq!(fs::read(&sidecar).expect("after"), before);
+        let store = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:03Z")
+            .expect("load");
+        assert_eq!(store.revision, 0);
+        assert_eq!(store.project_id.as_deref(), Some(foreign));
+        assert!(store.audit_events.is_empty());
+        assert!(store.registry.entities.is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r08_m1_memory_entity_relation_caller_project_id_cannot_override() {
+        let dir = temp_dir("caller-override");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r08-entity-override";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa13";
+        let spoofed = "project:cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+        let preview = preview_candidates_for_canonical_project(
+            &path,
+            &trusted(root, canonical),
+            &preview_input(root, Some(spoofed)),
+            "2026-08-18T00:00:01Z",
+        )
+        .expect("preview");
+        let project_candidate = preview
+            .entity_candidates
+            .iter()
+            .find(|candidate| candidate.entity_kind == MemoryEntityKind::Project)
+            .expect("project candidate");
+        assert_eq!(project_candidate.source_id.as_deref(), Some(canonical));
+        assert_ne!(project_candidate.source_id.as_deref(), Some(spoofed));
+        assert!(project_candidate
+            .source_refs
+            .iter()
+            .any(|source| source.source_id.as_deref() == Some(canonical)));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r08_m1_memory_entity_relation_canonical_preview_reads_legacy_store() {
+        let dir = temp_dir("preview-legacy");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r08-entity-preview-legacy";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa14";
+        let legacy = crate::project_id(root);
+        write_store(&path, &empty_store(Some(legacy.as_str())));
+        let sidecar = crate::memory_entity_relation_store::sidecar_path(&path).expect("sidecar");
+        let before = fs::read(&sidecar).expect("before");
+        let preview = preview_candidates_for_canonical_project(
+            &path,
+            &trusted(root, canonical),
+            &preview_input(root, None),
+            "2026-08-18T00:00:01Z",
+        )
+        .expect("legacy store remains readable");
+        assert!(preview
+            .entity_candidates
+            .iter()
+            .any(|candidate| candidate.entity_kind == MemoryEntityKind::Project
+                && candidate.source_id.as_deref() == Some(canonical)));
+        assert_eq!(fs::read(&sidecar).expect("after"), before);
+        let store = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:02Z")
+            .expect("load");
+        assert_eq!(store.project_id.as_deref(), Some(legacy.as_str()));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r08_m1_memory_entity_relation_production_does_not_issue_path_derived_id() {
+        let source = include_str!("memory_entity_relation_governance.rs");
+        let production_end = source
+            .find("#[cfg(test)]\nmod m5r08_m1_tests")
+            .expect("m5r08 test module");
+        let production = &source[..production_end];
+        assert!(production.contains("TrustedCanonicalProject"));
+        assert!(production.contains("preview_candidates_for_canonical_project"));
+        assert!(production.contains("record_alias_decision_for_canonical_project"));
+        assert!(production.contains("record_merge_decision_for_canonical_project"));
+        assert!(production.contains("record_relation_decision_for_canonical_project"));
+        assert!(!production.contains(concat!(
+            "store.project_id = Some(",
+            "crate::project_id"
+        )));
+        assert!(production.contains("let project_id = trusted_project_id.to_string();"));
+        assert!(production.contains("existing == crate::project_id(&trusted.project_root)"));
     }
 }
