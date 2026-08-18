@@ -59,6 +59,17 @@ codex
 5. 再用公开仓事实刷新申请三段英文，确认都不超过 500 字符，且不把未落地的 Harness 附录、Release、stars 或生产连接写成已发生。
 6. 用户本人填写 First name、Last name、ChatGPT 邮箱、OpenAI Organization ID 后提交 https://openai.com/form/codex-for-oss/ 。
 
+## 2026-08-18 21:10 定稿的四段申请文案（每段 ≤500 字符，字符数经实测）
+
+表单实际有四问，比本文件早前预设的三段多一问「为何需要 Codex Security」。下列文案基于当日实测事实：公开仓 898 个提交、首个提交 2026-06-11、53 个活跃开发日、219 个 Rust 文件、129 个 TS/TSX 文件、2114 个 Rust `#[test]`、50 份合同、0 star、0 下载、无安装包、**无 CI（`.github/workflows` 不存在）**。旧版「600+ public commits」作废。
+
+1. Why qualify（483 字符）：见下方 `applications/` 引用或直接使用本节文案；如实以生态位与维护深度立论，先自陈无 star 无下载。
+2. Why Codex Security（499 字符）：如实列举提示注入、凭据处理、路径逃逸、校验-读取 TOCTOU（一处已修、一处记为欠账）、Tauri IPC 命令面、SQLite 完整性、Rust/npm 供应链，并主动承认无 CI、无自动化安全审查。
+3. API credits（485 字符）：只用于本仓维护——issue 分诊、PR 审查、回归测试生成、发布就绪检查、合同漂移检测、安全审查；具体到自动化现由人工执行的独立验收、检测 50 份合同与实现的漂移、补跨模块攻击链用例。明确不用于终端用户功能或制造指标。
+4. Anything else（500 字符）：自陈 pre-1.0、0 star、无发布物、无外部连接器、未接真实 provider/账号/凭据、无生产运行；申请依据是生态位与维护深度；并如实披露本仓由多 agent 在一套治理规则下开发（Codex 主管、Grok 写产品码、另起无上下文继承的 agent 做独立验收）。
+
+为压到 500 字符被砍掉、可在字数允许时补回的内容：失败重试建立新 lineage 而旧链不可改写；每个里程碑经独立验收并绑定确切 SHA/tree；希望把 fail-closed 约定变成机械化检查并在 1.0 之前补上。
+
 ## 申请预填（push 当天按公开仓再核）
 
 - GitHub username：`Djh0311`
