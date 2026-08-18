@@ -2,7 +2,7 @@
 
 阶段：stage-14 M5 项目主管与执行闭环（事实重整与产品闭环）
 
-状态：`CURRENT` / `IN_PROGRESS` / `NOT_STAGE_CLOSEOUT` / `NOT_M5_COMPLETE`。本叶只承接 M5R07 独立 PASS 结论明确列出的后续欠账；不反写 M5R07，不关闭 stage-14，不激活 M6 或壳采纳。
+状态：`CURRENT` / `CANDIDATE_READY` / `AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_STAGE_CLOSEOUT` / `NOT_M5_COMPLETE`。本叶只承接 M5R07 独立 PASS 结论明确列出的后续欠账；不反写 M5R07，不关闭 stage-14，不激活 M6 或壳采纳。
 
 来源收据：`u-68fc6ed5b0c72851083c`；用户明确要求在最新 PASS 后先完成生命周期迁移，并把 verdict 欠账写入新 current leaf 后推进至本叶标准真实通过。独立结论：`/home/synadmin/workspace/.syn-gates/verdicts/M5R07-20260818-1344.verdict.md`。
 
@@ -21,6 +21,14 @@
 9. 对当前 34 项未归属 WIP 逐项形成路径、Git 状态、内容 hash、来源/语义归属与后续 disposition 的只读 manifest。它们继续原位保全，不暂存、不覆盖、不删除；`m6_*.rs` 明确保持未跟踪候选，不能被 M5 候选或任何 clean 吞掉。
 10. Grok 产品改动按窄任务包串行实施；主管逐包复核。候选在 disposable checkout 至少通过 `cargo check --lib --offline`、直接相关 M1/identity/memory/runtime 测试、完整 `cargo test --lib --offline m5_ -- --test-threads=1`、前端 typecheck/build、`git diff --check`；原始日志绑定候选 SHA/tree。
 11. 全部标准真实通过后，authorization 保持精确 closed 两字段，在 `.syn-gates/open/` 写唯一 M5R08 节点请求并停止；不得自行归档本叶、关闭 stage-14、宣布 M5 完成、进入 M6 或壳采纳。
+
+候选事实（2026-08-18）：
+
+- 最终内容候选 `09e9b323c26046b750209424aa7aca77e9c7aadb` / tree `657f7db696d3004eb3f6c5921e365df468ce617a` 已在 detached disposable checkout 通过本叶定向验证、完整 `m5_` 188/188、前端 typecheck/default build/显式 acceptance build 与候选范围 `git diff --check`。
+- 前驱 `cf0ad36` 的完整矩阵曾真实失败 187/188；失败日志保留。窄返修只把旧静态 bypass guard 从全文件扫描收窄到 production prefix，之后定向与完整矩阵全部重跑。
+- 原始证据位于 `/home/synadmin/workspace/.syn-gates/evidence/M5R08-09e9b32/`；仓库报告为 `docs/harness/reports/M5R08-candidate-and-evidence-v1.md`。
+- verdict 的 34 项 WIP 全部逐项只读归责并原位排除；本轮新生成的 `.turns/` 单列为第 35 项 runtime 载体，不混入 opening 集合。
+- 本叶仍 current 且等待独立验收；不得据此归档、closeout、激活 M6 或壳采纳。
 
 允许动：
 

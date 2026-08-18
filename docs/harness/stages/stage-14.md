@@ -75,7 +75,7 @@
 - [x] M5R05 受控执行、恢复与 runtime conformance
 - [x] M5R06 ProjectSummary 正式投影
 - [x] M5R07 项目 UI、隔离 App 与阶段候选（修订标准候选 `7cab372` / tree `df6b743` 已由 `M5R07-20260818-1344.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout 或 M5 完成）
-- [ ] M5R08 M1 消费面、attempt-scoped runtime 幂等与验收欠账收敛（唯一 current；只处理 M5R07 PASS verdict 明列的后续欠账，不反写 M5R07）
+- [ ] M5R08 M1 消费面、attempt-scoped runtime 幂等与验收欠账收敛（唯一 current；内容候选 `09e9b32` / tree `657f7db` 已通过本叶验证并等待独立验收；不反写 M5R07，不等于 closeout）
 - [ ] M5 独立验收与 closeout
 
 ## 2026-08-18 M5R07 独立验收后的继续边界
@@ -83,3 +83,9 @@
 - M5R07 的独立 PASS 只放行候选 `7cab37203fe70fe69f696e45fc6a12b314d1fd84` / tree `df6b7432f2a1e5d56eb434e4c5ed979a4f4144b1` 及记账 `0b7b5e1` / `a85278a`；不反向重验或改写其 scoped PASS。
 - 最新 verdict 的欠账 1、2 是 M6 实际前置；欠账 3、5、6、7、9 必须在 closeout 前诚实结清。欠账 4 与 8 仍分别绑定旧壳若分发前的验收 driver 剥离，以及新壳 F5 的窗口像素证据；M5R08 只做本仓可关闭部分与精确下游交接，不启动壳采纳。
 - stage-14 本次不关闭；M5R08 达到自身标准后仍须 authorization closed、写仓外节点请求并停止，等待独立验收。
+
+## 2026-08-18 M5R08 候选节点
+
+- 内容候选 `09e9b323c26046b750209424aa7aca77e9c7aadb` / tree `657f7db696d3004eb3f6c5921e365df468ce617a` 已把 verdict 的本仓工程/记账欠账收敛到本叶允许域；完整 carrier 与标准映射见 `docs/harness/reports/M5R08-candidate-and-evidence-v1.md`。
+- 新鲜 disposable 证据：`cargo check` 0；M1/memory/mature/runtime/ordinary-source/runner-registry 定向全绿；完整 `m5_` 188/188；前端 typecheck、默认 production build、显式 acceptance build 均 0；默认 bundle 无 M5R07 marker，显式 bundle 有 marker；candidate range `git diff --check` 0。
+- M5R08 仍为 current、`AWAITING_INDEPENDENT_ACCEPTANCE`。stage-14 不关闭，M5 不宣布完成，M6/stage-15/syn-shell 不激活。
