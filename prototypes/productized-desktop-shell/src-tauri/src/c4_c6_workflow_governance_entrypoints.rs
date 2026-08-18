@@ -609,12 +609,42 @@ fn record_project_director_process_fact_decision_core(
             validation_warnings.join(", ")
         ));
     }
-    if !workflow_exists(&value, &request.workflow_id) {
+    if let Some(canonical_project_id) = canonical_project_id {
+        if canonical_workflow_record_index(&value, &request.workflow_id, canonical_project_id)?
+            .is_none()
+        {
+            return Err("当前项目还没有目标 workflow；无法记录过程事实确认".to_string());
+        }
+    } else if !workflow_exists(&value, &request.workflow_id) {
         return Err("当前项目还没有目标 workflow；无法记录过程事实确认".to_string());
     }
-    let report = find_worker_report_event(&value, &request.report_id)
-        .ok_or_else(|| "找不到 worker 汇报；无法记录过程事实确认".to_string())?
-        .clone();
+    let report = if let Some(canonical_project_id) = canonical_project_id {
+        let report_index = canonical_owned_record_index(
+            &value,
+            "audit_events",
+            canonical_project_id,
+            "worker_report",
+            |event| {
+                optional_string_from(event, "event_id").as_deref()
+                    == Some(request.report_id.as_str())
+                    && matches!(
+                        optional_string_from(event, "event_type").as_deref(),
+                        Some("worker_structured_report_recorded") | Some("subagent_report")
+                    )
+            },
+        )?
+        .ok_or_else(|| "找不到 worker 汇报；无法记录过程事实确认".to_string())?;
+        value
+            .get("audit_events")
+            .and_then(Value::as_array)
+            .and_then(|events| events.get(report_index))
+            .ok_or_else(|| "找不到 worker 汇报；无法记录过程事实确认".to_string())?
+            .clone()
+    } else {
+        find_worker_report_event(&value, &request.report_id)
+            .ok_or_else(|| "找不到 worker 汇报；无法记录过程事实确认".to_string())?
+            .clone()
+    };
     if optional_string_from(&report, "workflow_id").as_deref() != Some(request.workflow_id.as_str())
     {
         return Err("worker 汇报不属于目标 workflow，已拒绝确认过程事实".to_string());
@@ -3019,6 +3049,55 @@ fn normalize_c4_symbol(value: &str) -> String {
 mod review_evidence_c4_tests {
     use super::*;
 
+    fn m6d03_temp_path(name: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock should work")
+            .as_nanos();
+        std::env::temp_dir().join(format!("m6d03-c4-{name}-{nanos}"))
+    }
+
+    fn m6d03_project(project_root: &str) -> ProjectRecord {
+        ProjectRecord {
+            project_root: project_root.to_string(),
+            name: project_root.to_string(),
+            active_hint: true,
+            thread_count: 0,
+            active_thread_count: 0,
+            archived_thread_count: 0,
+            latest_updated_at_ms: None,
+            authority_files: vec![],
+            handoff_files: vec![],
+            evidence_files: vec![],
+            harness_candidates: vec![],
+            harness_resources: vec![],
+            context_warnings: vec![],
+            warnings: vec![],
+        }
+    }
+
+    fn m6d03_process_fact_request(
+        project_root: &str,
+        project_id: &str,
+        workflow_id: &str,
+        report_id: &str,
+    ) -> ProjectDirectorProcessFactDecisionInput {
+        ProjectDirectorProcessFactDecisionInput {
+            project_root: project_root.to_string(),
+            project_id: project_id.to_string(),
+            workflow_id: workflow_id.to_string(),
+            report_id: report_id.to_string(),
+            actor_id: "project-director-m6d03".to_string(),
+            actor_role: "project_director".to_string(),
+            decision: "request_rework".to_string(),
+            accepted_facts: vec![],
+            rejected_fact_ids: vec!["process-fact:m6d03-rejected".to_string()],
+            summary: "M6D03 owner exact-join rejection fixture.".to_string(),
+            expected_workflow_revision: None,
+            expected_observation_store_revision: None,
+        }
+    }
+
     fn station4_byte_authorization() -> PlanAuthorization {
         let project_root = crate::STATION_4_WRITE_PROJECT_ROOT;
         PlanAuthorization {
@@ -3166,5 +3245,78 @@ mod review_evidence_c4_tests {
                 .any(|reason| reason.contains("授权写入范围为空")),
             "non-derived task id must not inherit the exception: {reasons:?}"
         );
+    }
+
+    #[test]
+    fn m6d03_c4_workflow_and_worker_report_require_canonical_owner_before_write() {
+        let dir = m6d03_temp_path("owner-exact-join");
+        std::fs::create_dir_all(&dir).expect("temp dir should create");
+        let path = dir.join("workflow-state.v0.json");
+        let project_a = m6d03_project("/tmp/m6d03-c4-project-a");
+        let project_b = m6d03_project("/tmp/m6d03-c4-project-b");
+        bootstrap_project_workflow_at(&path, &project_a).expect("project A should bootstrap");
+        bootstrap_project_workflow_at(&path, &project_b).expect("project B should bootstrap");
+        let project_a_id = project_id(&project_a.project_root);
+        let project_b_id = project_id(&project_b.project_root);
+        let workflow_a = default_workflow_id(&project_a.project_root);
+        let workflow_b = default_workflow_id(&project_b.project_root);
+        let report_id = "report:m6d03:foreign-owner";
+        let mut value = read_workflow_state_value(&path).expect("state should read");
+        array_mut(&mut value, "audit_events")
+            .expect("audit events")
+            .push(serde_json::json!({
+                "event_id": report_id,
+                "event_type": "worker_structured_report_recorded",
+                "target_ref": "work-item:m6d03:foreign",
+                "project_id": project_b_id.clone(),
+                "workflow_id": workflow_a.clone(),
+                "actor_ref": "worker:m6d03",
+                "source_kind": "worker_handoff",
+                "permission_level": "workflow_event_record",
+                "created_at": "2026-08-19T06:00:00Z"
+            }));
+        std::fs::write(
+            &path,
+            serde_json::to_vec_pretty(&value).expect("state should serialize"),
+        )
+        .expect("state should write");
+
+        let before = std::fs::read(&path).expect("state before workflow rejection");
+        let workflow_error =
+            record_project_director_process_fact_decision_with_canonical_project_id_at(
+                &path,
+                &m6d03_process_fact_request(
+                    &project_a.project_root,
+                    &project_a_id,
+                    &workflow_b,
+                    report_id,
+                ),
+                &project_a_id,
+            )
+            .expect_err("project B workflow must be foreign to project A");
+        assert!(workflow_error.starts_with("m6p00_workflow_project_id_mismatch:workflow:"));
+        assert_eq!(std::fs::read(&path).expect("state after"), before);
+
+        let report_error =
+            record_project_director_process_fact_decision_with_canonical_project_id_at(
+                &path,
+                &m6d03_process_fact_request(
+                    &project_a.project_root,
+                    &project_a_id,
+                    &workflow_a,
+                    report_id,
+                ),
+                &project_a_id,
+            )
+            .expect_err("project B report must be foreign to project A");
+        assert!(report_error.starts_with("m6p00_workflow_project_id_mismatch:worker_report:"));
+        assert_eq!(std::fs::read(&path).expect("state after"), before);
+        assert!(!observation_store::sidecar_path(&path)
+            .expect("observation sidecar path")
+            .exists());
+        assert!(!memory_capture_bus::sidecar_path(&path)
+            .expect("capture sidecar path")
+            .exists());
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

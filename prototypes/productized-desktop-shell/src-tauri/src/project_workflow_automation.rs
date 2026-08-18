@@ -4,9 +4,11 @@ use sha2::{Digest, Sha256};
 use std::path::Path;
 
 use crate::{
-    array_mut, backup_workflow_state_file, codex_local_runner, default_workflow_id, find_work_item,
-    i64_value, memory_capture_bus, node_exists, optional_string_from,
-    read_workflow_state_value, real_execution_command,
+    array_mut, backup_workflow_state_file, canonical_node_record_index,
+    canonical_owned_record_index, canonical_work_item_record_index,
+    canonical_workflow_record_index, codex_local_runner, default_workflow_id, find_work_item,
+    i64_value, memory_capture_bus, node_exists, optional_string_from, read_workflow_state_value,
+    real_execution_command,
     record_project_director_process_fact_decision_with_canonical_project_id_at,
     record_worker_structured_report_at, stable_id, utils::hash::sha256_hex,
     validate_workflow_state, workflow_audit::audit_event_identity, workflow_exists,
@@ -120,6 +122,12 @@ pub(crate) fn run_project_workflow_automation_phase_a_at(
             return Err("project_workflow_automation_project_id_mismatch".to_string());
         }
     }
+    // Guarded legacy compatibility: callers that predate an explicit
+    // workflow_id may still name the path-derived default, but that identifier
+    // is only a lookup key.  The canonical owner join below is authoritative;
+    // an explicit foreign owner wins over any ownerless legacy fixture and
+    // fails before a write.  Remove this fallback when every caller supplies
+    // workflow_id and the workflow-state migration stamps all nested owners.
     let workflow_id = input
         .workflow_id
         .clone()
@@ -141,7 +149,7 @@ pub(crate) fn run_project_workflow_automation_phase_a_at(
             validation_warnings.join(", ")
         ));
     }
-    if !workflow_exists(&value, &workflow_id) {
+    if canonical_workflow_record_index(&value, &workflow_id, canonical_project_id)?.is_none() {
         let mut plan = build_plan(
             input,
             &project_id_value,
@@ -229,6 +237,22 @@ pub(crate) fn run_project_workflow_automation_phase_a_at(
         });
     }
 
+    let developer_node_id = input
+        .workflow_node_id
+        .clone()
+        .unwrap_or_else(|| format!("{workflow_id}:node:codex-dev"));
+    if canonical_node_record_index(
+        &value,
+        &workflow_id,
+        &developer_node_id,
+        canonical_project_id,
+    )?
+    .is_none()
+    {
+        return Err(format!(
+            "K3 Level A 找不到开发线节点，无法绑定 run unit：{developer_node_id}"
+        ));
+    }
     let work_item_id = ensure_work_item(
         workflow_state_path,
         &mut value,
@@ -237,16 +261,9 @@ pub(crate) fn run_project_workflow_automation_phase_a_at(
         &workflow_id,
         timestamp,
     )?;
-    let developer_node_id = input
-        .workflow_node_id
-        .clone()
-        .unwrap_or_else(|| format!("{workflow_id}:node:codex-dev"));
-    if !node_exists(&value, &workflow_id, &developer_node_id) {
-        return Err(format!(
-            "K3 Level A 找不到开发线节点，无法绑定 run unit：{developer_node_id}"
-        ));
-    }
-    if find_work_item(&value, &workflow_id, &work_item_id).is_none() {
+    if canonical_work_item_record_index(&value, &workflow_id, &work_item_id, canonical_project_id)?
+        .is_none()
+    {
         return Err(format!(
             "K3 Level A 找不到工作项，无法绑定 run unit：{work_item_id}"
         ));
@@ -1922,20 +1939,23 @@ fn ensure_work_item(
     timestamp: &str,
 ) -> Result<String, String> {
     if let Some(work_item_id) = input.work_item_id.as_ref() {
+        canonical_work_item_record_index(value, workflow_id, work_item_id, project_id_value)?;
         return Ok(work_item_id.clone());
     }
-    if let Some(existing) = value
-        .get("work_items")
-        .and_then(Value::as_array)
-        .and_then(|items| {
-            items.iter().find(|item| {
-                optional_string_from(item, "workflow_id").as_deref() == Some(workflow_id)
-                    && optional_string_from(item, "source_kind").as_deref() == Some(J2_SOURCE_KIND)
-            })
-        })
-        .and_then(|item| optional_string_from(item, "work_item_id"))
+    if let Some(index) =
+        canonical_owned_record_index(value, "work_items", project_id_value, "work_item", |item| {
+            optional_string_from(item, "workflow_id").as_deref() == Some(workflow_id)
+                && optional_string_from(item, "source_kind").as_deref() == Some(J2_SOURCE_KIND)
+        })?
     {
-        return Ok(existing);
+        if let Some(existing) = value
+            .get("work_items")
+            .and_then(Value::as_array)
+            .and_then(|items| items.get(index))
+            .and_then(|item| optional_string_from(item, "work_item_id"))
+        {
+            return Ok(existing);
+        }
     }
     let backup = backup_workflow_state_file(workflow_state_path, timestamp)?;
     let is_j2_b_probe =
@@ -3932,6 +3952,17 @@ mod tests {
         bootstrap_project_workflow_at(&path, &project).expect("workflow should bootstrap");
         let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa51";
         assert_ne!(canonical, project_id(root).as_str());
+        // The ordinary M1 migration stamps the canonical owner before the
+        // canonical Phase-A path may consume this workflow.  A path-derived
+        // explicit owner is foreign after that cut and must not be tolerated
+        // by the runtime merely because this is a direct unit fixture.
+        let mut migrated = read_workflow_state_value(&path).expect("state should read");
+        migrated["workflows"][0]["project_id"] = Value::String(canonical.to_string());
+        fs::write(
+            &path,
+            serde_json::to_vec_pretty(&migrated).expect("state should serialize"),
+        )
+        .expect("migrated state should write");
         let result = run_project_workflow_automation_phase_a_at(
             &path,
             &fixture_input(root),
@@ -3994,6 +4025,175 @@ mod tests {
         assert!(production.contains("project_workflow_automation_project_id_mismatch"));
         assert!(!production.contains("unwrap_or_else(|| project_id(&input.project_root))"));
         assert!(!production.contains("project_id(&input.project_root)"));
+    }
+
+    fn assert_m6d03_phase_a_zero_write(
+        path: &Path,
+        input: &ProjectWorkflowAutomationInput,
+        canonical_project_id: &str,
+        expected_target: &str,
+    ) {
+        let before = fs::read(path).expect("state before owner rejection");
+        let error = run_project_workflow_automation_phase_a_at(
+            path,
+            input,
+            canonical_project_id,
+            "2026-08-19T06:00:00Z",
+            "write-m6d03-owner-rejection",
+        )
+        .expect_err("foreign owner must fail closed");
+        assert!(
+            error.starts_with(&format!(
+                "m6p00_workflow_project_id_mismatch:{expected_target}:"
+            )),
+            "unexpected owner error: {error}"
+        );
+        assert_eq!(
+            fs::read(path).expect("state after owner rejection"),
+            before,
+            "owner rejection must not mutate workflow state"
+        );
+        assert!(
+            !observation_store::sidecar_path(path)
+                .expect("observation sidecar path")
+                .exists(),
+            "owner rejection must precede observation writes"
+        );
+        assert!(
+            !memory_capture_bus::sidecar_path(path)
+                .expect("capture sidecar path")
+                .exists(),
+            "owner rejection must precede capture writes"
+        );
+    }
+
+    #[test]
+    fn m6d03_phase_a_project_a_root_with_project_b_workflow_is_zero_write() {
+        let dir = temp_path("m6d03-foreign-workflow");
+        fs::create_dir_all(&dir).expect("temp dir should create");
+        let path = dir.join("workflow-state.v0.json");
+        let project_a = fixture_project("/tmp/m6d03-project-a");
+        let project_b = fixture_project("/tmp/m6d03-project-b");
+        bootstrap_project_workflow_at(&path, &project_a).expect("project A should bootstrap");
+        bootstrap_project_workflow_at(&path, &project_b).expect("project B should bootstrap");
+
+        let mut input = fixture_input(&project_a.project_root);
+        input.workflow_id = Some(default_workflow_id(&project_b.project_root));
+        assert_m6d03_phase_a_zero_write(
+            &path,
+            &input,
+            &project_id(&project_a.project_root),
+            "workflow",
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6d03_phase_a_default_workflow_fallback_requires_canonical_owner() {
+        let dir = temp_path("m6d03-default-owner");
+        fs::create_dir_all(&dir).expect("temp dir should create");
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project("/tmp/m6d03-default-owner");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should bootstrap");
+        let mut value = read_workflow_state_value(&path).expect("state should read");
+        value["workflows"][0]["project_id"] =
+            Value::String("project:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb".to_string());
+        fs::write(
+            &path,
+            serde_json::to_vec_pretty(&value).expect("state should serialize"),
+        )
+        .expect("state should write");
+
+        let input = fixture_input(&project.project_root);
+        assert!(
+            input.workflow_id.is_none(),
+            "fixture exercises legacy fallback"
+        );
+        assert_m6d03_phase_a_zero_write(
+            &path,
+            &input,
+            &project_id(&project.project_root),
+            "workflow",
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6d03_phase_a_foreign_node_owner_is_zero_write() {
+        let dir = temp_path("m6d03-foreign-node");
+        fs::create_dir_all(&dir).expect("temp dir should create");
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project("/tmp/m6d03-foreign-node");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should bootstrap");
+        let workflow_id = default_workflow_id(&project.project_root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let mut value = read_workflow_state_value(&path).expect("state should read");
+        let node = value["nodes"]
+            .as_array_mut()
+            .expect("nodes")
+            .iter_mut()
+            .find(|node| optional_string_from(node, "node_id").as_deref() == Some(node_id.as_str()))
+            .expect("developer node");
+        node["project_id"] =
+            Value::String("project:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb".to_string());
+        fs::write(
+            &path,
+            serde_json::to_vec_pretty(&value).expect("state should serialize"),
+        )
+        .expect("state should write");
+
+        let mut input = fixture_input(&project.project_root);
+        input.workflow_id = Some(workflow_id);
+        input.workflow_node_id = Some(node_id);
+        assert_m6d03_phase_a_zero_write(&path, &input, &project_id(&project.project_root), "node");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6d03_phase_a_foreign_work_item_owner_is_zero_write() {
+        let dir = temp_path("m6d03-foreign-work-item");
+        fs::create_dir_all(&dir).expect("temp dir should create");
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project("/tmp/m6d03-foreign-work-item");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should bootstrap");
+        let workflow_id = default_workflow_id(&project.project_root);
+        let work_item_id = "work-item:m6d03:foreign";
+        let mut value = read_workflow_state_value(&path).expect("state should read");
+        value["work_items"]
+            .as_array_mut()
+            .expect("work items")
+            .push(json!({
+                "work_item_id": work_item_id,
+                "project_id": "project:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                "workflow_id": workflow_id.clone(),
+                "title": "foreign owner fixture",
+                "state": "ready_to_dispatch",
+                "source_kind": J2_SOURCE_KIND,
+                "source_ref": "fixture:m6d03:foreign",
+                "assigned_role_id": "developer_execution",
+                "current_node_id": format!("{workflow_id}:node:codex-dev"),
+                "agent_type": "codex",
+                "adapter_id": "codex-local",
+                "permission_level": "workflow_event_record",
+                "created_at": "2026-08-19T06:00:00Z",
+                "updated_at": "2026-08-19T06:00:00Z"
+            }));
+        fs::write(
+            &path,
+            serde_json::to_vec_pretty(&value).expect("state should serialize"),
+        )
+        .expect("state should write");
+
+        let mut input = fixture_input(&project.project_root);
+        input.workflow_id = Some(workflow_id);
+        input.work_item_id = Some(work_item_id.to_string());
+        assert_m6d03_phase_a_zero_write(
+            &path,
+            &input,
+            &project_id(&project.project_root),
+            "work_item",
+        );
+        let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
