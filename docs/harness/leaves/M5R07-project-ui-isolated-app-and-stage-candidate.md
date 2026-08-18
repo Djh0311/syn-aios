@@ -6,7 +6,7 @@
 
 目标：用冻结 DTO 接现有项目壳，不重写 execution kernel 或页面布局；在隔离 app-data / scratch 上证明完整闭环；形成只含 M5 投影的 candidate series 后保持 `AWAITING_INDEPENDENT_ACCEPTANCE`。不自行关闭 stage-14，不宣布 M5 完成。
 
-状态：`CURRENT` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的 evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`、U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 与 U02 ordinary disposable positive Tauri candidate exact `0952c83d20304cd589a8c641d6d30120d04d91f4` 已获 scoped PASS；均不是 stage closeout。不得把上述 scoped PASS 写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
+状态：`AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。M5R07 修订标准的 final 内容候选是 `7cab37203fe70fe69f696e45fc6a12b314d1fd84`（tree `df6b7432f2a1e5d56eb434e4c5ed979a4f4144b1`），fresh evidence 在 `/home/synadmin/workspace/.syn-gates/evidence/M5R07-7cab372/`；尚未获得本节点的独立验收。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的旧 evidence 内容/载体已获 Git/Harness scoped independent PASS，非本次修订标准候选、非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`、U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 与 U02 ordinary disposable positive Tauri candidate exact `0952c83d20304cd589a8c641d6d30120d04d91f4` 已获 scoped PASS；均不是 stage closeout。不得把上述 scoped PASS 或本次候选写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
 
 来源收据：用户明确把提示内剩余工作做完；M5R06 PASS（`867fd20`）。
 
@@ -28,13 +28,14 @@
 1. ordinary disposable positive Tauri PASS：server fixture 预登记 M1 alias + M3 authority，真实 Vite + Tauri + Xvfb 走默认 `jiaoban` DOM 与两次进程；它不是 legacy production composition，也没有窗口截图。
 2. shared isolated 真实 Vite+Tauri/Xvfb 只证明 authority-unavailable fail-closed；`NO_UI_PASS` / `NO_WINDOW_CAPTURE`；scene / resume / second launch `NOT_EXECUTED`。
 
-当前剩余缺口（不得反向写成既有 scoped candidate FAIL，也不得 close）：
+当前剩余事项（不得反向写成既有 scoped candidate FAIL，也不得 close）：
 
-1. M5R00 已解决普通启动取得 M1 正式身份的前置并通过独立验收；M5R07 仍须完成 D1 运行期正式身份消费、D2 验收启动来源铺设，以及修订标准要求的一次普通产品组合闭环与新鲜 evidence-binding。
+1. 本 leaf 的八项修订完成标准已在内容候选 `7cab372` 的 detached disposable checkout 上得到直接证据；仍须等待总指导独立验收。独立 PASS 之前不得归档 leaf、关闭 stage-14、宣布 M5 完成或进入 M6 / 壳采纳。
+2. 真桌面窗口像素证据仍按 stage-14 修订记为新壳 F5 欠项，不属于 M5R07 当前完成标准；本候选明确 `NO_WINDOW_CAPTURE`。
 
-证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b / U01c 尚无 fresh evidence-binding。U02 exact-base overlay 上 `cargo check --lib --offline`、ordinary fixture 4/4、typecheck、build 均 PASS；真实 Xvfb launcher exit 0，binding/project 跨重启一致且 duplicate runtime 零第二 effect。该 `/tmp` receipt 是 scoped acceptance 事实，不冒充独立 evidence-binding。下一停点是 M5R07 修订标准的候选与独立验收节点；shared-isolated 始终只作 authority-unavailable negative regression。不得自动进入 M6 或 closeout。
+证据：`7cab372` fresh checkout 上 `cargo check --lib --offline` exit 0，`m5_` 180/180、task-memory 15/15、M1 ordinary source 5/5、typecheck/build 均 PASS；真实 Xvfb launcher exit 0，拒绝零业务副作用，失败后新 lineage，完整 Proposal 到 ResultUserDecision/ProjectFact exact chain 成立，独立 reviewer 成立，binding/project/三类 RoleSession/对象 ID/计数/M1 registry 跨重启一致，duplicate runtime 零第二 effect。原始 logs、phase receipts 与 SQLite 在 `/home/synadmin/workspace/.syn-gates/evidence/M5R07-7cab372/`；这是隔离合成输入上的普通产品组合事实，不冒充真实用户老项目、日常运行、部署、发布或独立验收。前驱 `ab5c46e` 的 179/180 失败日志保留并由 `7cab372` 的单文件测试边界修复转绿。shared-isolated 始终只作 authority-unavailable negative regression。不得自动进入 M6 或 closeout。
 
-载体：U01a `f962038e725ba4e24b2699a46cd1a8d274f13ae6`；U01b `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`；U01c `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7`；U02 `0952c83d20304cd589a8c641d6d30120d04d91f4`（均 scoped PASS；非 stage closeout）。implementation `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`；fresh evidence final tip `0e0fcb26233dfbe618129ea05160b835f660f74b`；gateway predecessor `1433d51466e59352cc8859e1c47f176da04f25b0`。
+载体：本次产品序列 `ab5c46e2265121d92f5b9cd58643180e7a2cd7a8` → final `7cab37203fe70fe69f696e45fc6a12b314d1fd84`（tree `df6b7432f2a1e5d56eb434e4c5ed979a4f4144b1`）；候选报告 `docs/harness/reports/M5R07-2026-08-18-7cab372-candidate.md`。既有 scoped 载体继续为 U01a `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`、U01c `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7`、U02 `0952c83d20304cd589a8c641d6d30120d04d91f4`；均非 stage closeout。
 
 允许动（M5R07 最窄 UI/control/recovery 修包；写域只使用已列 M5/前端/main/runner/report/task 路径；不新增 M1/M6/shared-isolated authority，不改冻结合同正文；真正 ordinary GUI composition 与最终 positive 证据仍受 M1 owner 阻塞；不得自动进入 M1 修正、M6 或 closeout）：
 
@@ -58,6 +59,8 @@
 - prototypes/productized-desktop-shell/src-tauri/src/m5_claim_ledger.rs（已发生：EXECUTED claim 前置 terminal readback gate）
 - prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs（仅登记 M5 command）
 - prototypes/productized-desktop-shell/src-tauri/src/commands.rs（**仅因** `AppState` 新增 `m5_store_path` 后测试字面量 E0063；只补该字段，不改其它 command 语义）
+- prototypes/productized-desktop-shell/src-tauri/src/commands.rs（2026-08-18 D1 必要相邻：仅普通 `generate_task_package_file` command 经已安装 M1 read port 解析 canonical ProjectId 并向下传递；不得扩成任意 command 改写）
+- prototypes/productized-desktop-shell/src-tauri/src/workflow_state_lifecycle_task_package.rs（2026-08-18 D1 必要相邻：仅接收服务器已解析的 canonical ProjectId 并用于 task memory packet；不得改工作流状态机语义）
 - prototypes/productized-desktop-shell/src-tauri/src/lib_read_model_boundary_tests.rs（同上：只补 `m5_store_path: None`，不改读模型边界）
 - prototypes/productized-desktop-shell/src/lib/tauri.ts、src/lib/m5ProjectSupervisor.ts [新增；消费 M5 control commands]
 - prototypes/productized-desktop-shell/src/views/projects/ProjectSupervisorPanel.tsx [新增；接入 stop/retry/resume 与 recovery 控制；不重画页面布局]
@@ -76,6 +79,9 @@
 - tasks/2026-08-17-syn-m5r07-ui-control-recovery-v1.md [U01 新增]
 - tasks/2026-08-18-syn-m5r07-terminal-retry-lineage-v1.md [U01c 新增]
 - tasks/2026-08-18-syn-m5r07-ordinary-positive-tauri-v1.md [U02 新增]
+- tasks/2026-08-18-syn-m5r07-m1-consumption-and-source-provision-v1.md [D1/D2 窄包新增]
+- tasks/2026-08-18-syn-m5r07-ordinary-full-chain-and-reopen-evidence-v1.md [ordinary 完整闭环、精确引用与重启证据窄包新增]
+- tasks/2026-08-18-syn-m5r07-control-registry-regression-repair-v1.md [fresh 全量 M5 矩阵发现的 control 静态边界假阳性返修窄包新增]
 - docs/harness/plan.md、docs/current-state.md、docs/harness/audit/2026-08.jsonl、docs/harness/stages/stage-14.md（仅独立验收 closeout；当前用户边界禁止改 plan/stage/authorization）
 - docs/harness/reports/M5R07-*
 - docs/harness/leaves/M5R07-project-ui-isolated-app-and-stage-candidate.md
