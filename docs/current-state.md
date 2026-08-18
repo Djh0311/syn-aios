@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-18，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 产品内容锚 `c91d8fc` 与 M5R09 记账 `8e6f59f` 已获独立 PASS，M5C01 closeout 内容 `de98d69` 已完成事实/交接收敛；M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。M6 与壳采纳未激活，M5 不是已发布、已部署或真实日用完成。
+截至 2026-08-19，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。stage-15 已激活；M6P00 内容候选 `4147454` 已由主管自复核 PASS 并归档，当前停在前置独立检查点。M6 域层、壳采纳、发布、部署与真实日用均未由此成立。
 
 ## 2026-08-18 M5 当前状态
 
@@ -9,10 +9,17 @@
 - 独立验收官在 `c91d8fc` detached checkout 上复跑 `cargo check` 0；`m5r09_` 23/23，memory/mature 各 14/14，ordinary source 4/4，完整 `m5_` 188/188；前端 typecheck/default build 0；默认 bundle gate 与候选/记账 diff check 符合预期。主管原始证据位于 `.syn-gates/evidence/M5R09-c91d8fc/`。
 - M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 只含 5 个 closeout/unfinished/交接路径，零产品源码变化。结构、冻结物、用户载体、authorization 与 lifecycle 检查最终全绿；日志位于 `.syn-gates/evidence/M5C01-de98d69/`。
 - protected WIP 已分活动 runtime 与静态 hash 两层。30 个静态路径在 closeout 观察时 30/30 hash 不变；`commands.rs` 候选外旧 WIP仍为 59+/56-；6 个 `m6_*.rs` 仍未跟踪。用户 OSS 门面已于 `c1025ba` 精确 7 路径独立提交，不属 M5 候选。没有 reset、stash、clean、覆盖或混入候选。
-- M5R09、M5C01 与 stage-14 已归档，`authorization.json` 为精确 closed 两字段，当前没有 M5 current leaf。M6、stage-15、F2/F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
+- M5R09、M5C01 与 stage-14 已归档，当前没有 M5 current leaf。stage-15 已 active；M6P00 已到独立检查点，M6D01–M6D08 仍未开始。F2/F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
 - 上述结论只到 Linux WSL 的 detached/local/synthetic/ordinary Tauri 产品链和静态边界；没有真实个人资料/项目、真实 provider/账号/凭据、外部业务写、macOS/BSD 实机、真窗口像素、新壳运行、部署、发布或长期真实日用。
 
-当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。D0D01 的历史 `SOURCE_BYTES_MATCH` 不证明依赖安装、产品运行、Headless Core、Primary / Edge、部署或发布。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档。当前没有 M5 current leaf，authorization closed；stage-15/M6 未建立。
+当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档；`stage-15` active。M6P00 收口时 authorization closed 且 leaves 暂空，等待独立检查点 PASS 后才进入 M6D01。
+
+## 2026-08-19 stage-15 / M6P00 当前状态
+
+- 内容候选 `4147454bc046d5a5d3047799725d9e77ed086179` / tree `69816100d15c449b16faef08deda1fc37af48df5` 将正式 Global Supervisor、project workflow、workflow execution/dispatch 与过程事实入口接入 M1 canonical `ProjectId`，并为 relation source owner 增加可判别类型、foreign project fail-closed 与合法 doc/tool/session 保留边界。
+- detached candidate 上 `cargo check --lib --offline` exit 0；M6P00 21/21、global supervisor 33/33（2 ignored）、memory relation 19/19、project workflow 51/51（6 ignored）、workflow dispatch 14/14、offline role 3/3，`git diff --check` exit 0。原始日志在 `.syn-gates/evidence/M6P00-4147454/`。
+- `conversation_transport_` 在候选与 clean HEAD 上均为 22 passed / 6 failed、exit 101，失败集合一致，作为既有基线欠账记录，不伪装成绿色回归，也不反向判 M6P00 失败。
+- 该结论只到本地 synthetic/disposable 产品链与主管自复核；Cursor Opus 检查点仍待签发，M6D01–M6D08 未开始，不构成 M6 域层完成、GUI/新壳验收、发布或真实系统运行。
 
 ## 现在分别看哪里
 
@@ -80,7 +87,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 尚未成立或未进入
 
-- M5 已在 `c91d8fc` 的具名 product-chain 范围通过独立验收并由 M5C01 关闭 stage-14；尚未成立的是发布、真实资料/项目、真实 provider/账号/凭据、macOS/BSD 实机、真窗口像素、新壳运行与长期日用。M6 前的 canonical ProjectId 消费扩面和 relation owner 类型化仍在 unfinished，不反向否定 M5 scoped PASS。
+- M5 已在 `c91d8fc` 的具名 product-chain 范围通过独立验收并由 M5C01 关闭 stage-14；M6P00 canonical ProjectId 消费扩面与 relation owner 类型化已由主管自复核并归档、仍待独立检查点。尚未成立的是 M6 域层各叶、发布、真实资料/项目、真实 provider/账号/凭据、macOS/BSD 实机、真窗口像素、新壳运行与长期日用。
 - M6 Global Supervisor 成功 consult 未实现；M4 只持 M3 Handoff 请求/回执边界，普通产品 recipient 显式 unavailable。
 - M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M4 只产出 source-backed event/ref，不写 M7 对象。
 - M8 真实 connector、credential 与外部 source 未进入；M9 旧路 command unregister/物理退役、M10 全日真实试点与发布硬化、M11 受治理自升级也未进入。
@@ -91,9 +98,9 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档。M5C01 已形成绑定 closeout 内容与原始证据的 lifecycle 载体，authorization closed；当前停在 M5 closeout 独立复核节点。
+M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档，`stage-15` active。authorization closed；当前停在 M6P00 独立检查点，PASS 前不拉入 M6D01。
 
-不得从 stage-14 关闭自动激活 M6、stage-15、F2/F3/F5、壳采纳、OSS-01 push/申请、真实数据 / 模型 / provider / connector / 账号凭据 / 外部业务写、部署或发布；这些均未获本轮授权，也没有发生。
+stage-15 的明确激活只授权当前计划内 M6 域层连续推进，不自动激活 F2/F3/F5、壳采纳、OSS-01 push/申请、真实数据 / 模型 / provider / connector / 账号凭据 / 外部业务写、部署或发布；这些均没有发生。
 
 ## 保全
 

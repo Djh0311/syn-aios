@@ -2,9 +2,9 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`CURRENT` / `NOT_ACCEPTED` / `NOT_CLOSEOUT`。stage-15 于 2026-08-18 建立并 active；authorization closed；M6 域层各叶、F2/F3/F5 与壳采纳均未激活。
+状态：`SELF_REVIEW_PASS` / `ARCHIVED` / `CHECKPOINT_PENDING`。内容候选 `4147454bc046d5a5d3047799725d9e77ed086179` 已按七项判据放行；authorization closed；M6 域层各叶、F2/F3/F5 与壳采纳均未激活。
 
-分工口径（2026-08-18 22:30 用户改定后由总指导校订）：本叶的实施与逐叶验收由开发主管承包，见 `handoffs/2026-08-18-syn-supervisor-handoff-stage-15-full-stage-ownership-v1.md`。总指导只排叶、裁决硬停点、在阶段做完后独立验收，不逐叶把关。下面第 8 条按此口径改写，旧的"举手等总指导逐叶验收"口径作废。
+分工口径：本叶的实施与逐叶验收由开发主管承包。Grok 是优先产品源码执行者但不是唯一写者；Grok 不可用、卡住或不收敛时由同一 Codex 在本叶写域内接管。检查点由同一长驻 Codex 前台阻塞启动零上下文 Cursor Opus 验收官；不再依赖驱动脚本或第二个 Codex。
 
 来源收据：`M5R09-20260818-1836.verdict.md` 欠账 2、4 与 2026-08-18 18:40 用户 closeout 纪律把本项定为 M6 前置（当时判为“不修也不至于对真实用户不可用”，因此没进 M5 返修）；用户 2026-08-18 21:49 明确“接下来就是 M6”，并批准总指导的排法：M6 域层施工前先做本前置。交接输入见 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节。
 
@@ -27,7 +27,9 @@
 6. `cargo check --lib --offline` 与本叶相关定向测试在 disposable checkout 上通过，证据绑定候选 SHA；
 7. 独立内容提交，写域精确，`git diff --check` 通过；
 8. 主管自己起独立复核并按七项判据放行（写域、冻结物、WIP 保全、独立 worktree 重跑、实质、不越级、欠账），不放行就自己开返修；放行后自己收口：归档本叶到 `docs/harness/done/2026-08/`、据实标记 `stage-15.md` 与 `plan.md`、写审计行与叶报告、authorization 打回精确 closed 两字段；
-9. 收口后在 `/home/synadmin/workspace/.syn-gates/open/` 写交包文件，命名 `stage-15-m6p00-<YYYYMMDD-HHMM>.md`，含候选与记账 SHA/tree、自查七项的原始证据与退出码、仍未完成事项与欠账、实际写域清单，然后停下等总指导验收。M6 域层八叶（`M6D01`–`M6D08`）已由总指导排入 `unfinished/`，检查点见 `stage-15.md`；**但本叶通过前不许把 `M6D01` 拉成 current leaf**，PASS 后由总指导拉起下一段。不自建叶子，不关闭 stage-15，不宣布 M6 完成，不进入 F2/F3/F5 或壳采纳。
+9. 收口后在 `/home/synadmin/workspace/.syn-gates/open/` 写交包文件，命名 `stage-15-m6p00-<YYYYMMDD-HHMM>.md`，含候选与记账 SHA/tree、自查七项的原始证据与退出码、仍未完成事项与欠账、实际写域清单。然后同一 Codex 前台阻塞启动零上下文 Cursor Opus 验收官并每两分钟报告心跳；只读 verdict。PASS 后处理交包与欠账、把 `M6D01` 拉成唯一 current leaf并用真实 receipt 重签 authorization；FAIL 只按点名范围返修。同一检查点连续两次 FAIL、verdict 缺失或首行不可读则写 halt 交包停止。不关闭 stage-15，不宣布 M6 完成，不进入 F2/F3/F5 或壳采纳。
+
+收口事实（2026-08-19）：主管自复核七项全部放行；原始证据在 `/home/synadmin/workspace/.syn-gates/evidence/M6P00-4147454/`。`conversation_transport_` 的 6 个失败在 clean HEAD 与候选上完全相同，记录为既有基线欠账，不扩大本叶。独立检查点结论仍待 Cursor Opus 签发。
 
 证据：只在 disposable checkout 上产出定向证据，绑定候选 SHA。本叶不做 GUI、不做窗口截图、不做 computer use、不接真实 provider 或账号。
 
@@ -44,6 +46,7 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/commands.rs`（仅 canonical 解析与校验接线）
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 canonical 解析接线与必要 `AppState` 接线）
 - workflow / 编排入口文件中经本叶报告点名的具体文件（`workflow_execution_entrypoints.rs`、`workflow_run_dispatch_entrypoints.rs`、`workflow_read_model_entrypoints.rs`、`project_workflow_automation.rs`、`m5_orchestration_store.rs`、`m5_orchestration_schema.rs`），**仅** canonical ProjectId 的解析与校验接线；不改执行合同语义、不改 Grant/receipt/audit/quarantine 边界
+- `prototypes/productized-desktop-shell/src-tauri/src/c4_c6_workflow_governance_entrypoints.rs`（2026-08-19 施工中发现的必要相邻路径：仅给项目编排的 process-fact observation 写入增加 canonical ProjectId 校验/接线；旧入口行为不变，不改过程事实、audit 或 observation 合同语义）
 - `tasks/2026-08-18-*`、`tasks/2026-08-19-*`
 - `docs/harness/stages/stage-15.md`、`docs/harness/leaves/`、`docs/harness/unfinished/`、`docs/harness/done/2026-08/`（仅本叶收口归档）、`docs/harness/authorization.json`、`docs/harness/audit/2026-08.jsonl`、`docs/harness/reports/M6P00-*`、`docs/harness/plan.md`、`docs/current-state.md`
 

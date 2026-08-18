@@ -20,7 +20,7 @@
 
 - M6P00 前置与 M6D01–M6D08 各自达到本叶写下的标准，经主管自复核放行；
 - 每叶各自独立内容提交与定向证据，逐项进入 done；任一实现不得冒充整阶段完成；
-- 每到检查点（CP1/CP2/CP3）authorization 回精确 closed，并在仓库外 `/home/synadmin/workspace/.syn-gates/open/` 写该检查点交包文件等总指导验收；PASS 才继续下一段；
+- 每到检查点 authorization 回精确 closed，并在仓库外 `/home/synadmin/workspace/.syn-gates/open/` 写交包；同一长驻 Codex 前台阻塞启动零上下文 Cursor Opus 验收官，PASS 才继续下一段；
 - `git diff --check` 通过；M6 写面零未知 delta；stage-12、D0C04/D0C05、M1–M5 冻结合同全程只读保全；
 - 阶段关闭另需独立验收结论明确放行，不由本阶段任一叶自行宣布。
 
@@ -49,9 +49,9 @@
 - 出现 secret/credential/真实运行数据/未知 symlink/special file、要求伪造证据、M1–M5 冻结合同或 stage-12/D0C04/D0C05 意外修改、候选 commit 与新鲜证据 SHA 不一致、`syn-shell` 写面被触碰时立即停止并交总线；
 - authorization 保持精确 closed 两字段，不手填 executionReceipt/session/turn/expiresAt；每次 leaf 切换先 closed 再按真实 receipt 重新签发，禁止旧 active JSON 跨 leaf 续用。
 
-## 检查点纪律（2026-08-18 22:45 用户要求总指导一次排完 M6 并在中间设检查点）
+## 检查点纪律（2026-08-19 00:35 用户改定为同一 Codex 阻塞续跑）
 
-本阶段的叶子已一次排完，主管在同一段内连续施工、逐叶自复核，但到检查点必须停：
+本阶段的叶子已一次排完，主管在同一段内连续施工、逐叶自复核；到检查点暂停仓库施工并先验收当前段：
 
 | 检查点 | 覆盖叶 | 交包文件 |
 |---|---|---|
@@ -61,17 +61,17 @@
 | CP3 | M6D05、M6D06 | `stage-15-cp3-<YYYYMMDD-HHMM>.md` |
 | 阶段交包 | M6D07、M6D08 | `stage-15-<YYYYMMDD-HHMM>.md` |
 
-到检查点的硬动作，缺一不可：把 `authorization.json` 打回精确 closed 两字段；在 `/home/synadmin/workspace/.syn-gates/open/` 写该检查点的交包文件（含所覆盖各叶的候选与记账 SHA/tree、每叶做了什么、主管自复核七项的原始证据与退出码、仍未完成事项与欠账、请求验收的确切范围、实际写域清单）；原始日志留在 `.syn-gates/evidence/`；然后结束进程。`open/` 里同时只应存在一个交包文件；写之前确认没有未处理的旧文件，有就停下并在日志里说明。
+到检查点的硬动作，缺一不可：把 `authorization.json` 打回精确 closed 两字段；在 `/home/synadmin/workspace/.syn-gates/open/` 写该检查点的交包文件（含所覆盖各叶的候选与记账 SHA/tree、每叶做了什么、主管自复核七项的原始证据与退出码、仍未完成事项与欠账、请求验收的确切范围、实际写域清单）；原始日志留在 `.syn-gates/evidence/`；确认 `docs/harness/leaves/` 为空后，由当前同一 Codex 前台阻塞启动 Cursor Opus 独立验收官。`open/` 里同时只应存在一个交包文件；写之前确认没有未处理的旧文件，有就按硬停点处理。
 
-不得跳过检查点、不得把两个检查点合并交包、不得在未获 PASS 时进入下一检查点的第一叶。收口后 `docs/harness/leaves/` 应为空，下一段第一叶等 PASS 后才拉入。
+不得跳过检查点、不得把两个检查点合并交包、不得在未获 PASS 时进入下一段第一叶。验收期间仓库保持只读，Codex 每两分钟发一次会话心跳；收口后 `docs/harness/leaves/` 应为空，下一段第一叶等 PASS 后才拉入。
 
-检查点验收的执行载体（2026-08-18 23:20 用户选定）：仓外驱动 `/home/synadmin/workspace/.syn-gates/checkpoint-loop.sh` 起主管跑一段，主管交包退出后由该驱动起**零上下文独立验收官**（提示词 `verifier-prompt-checkpoint.md`，判据即本文件与各叶自己写下的标准），结论写 `verdicts/<交包名>.verdict.md`，首行顶格 `VERDICT: PASS` 或 `VERDICT: FAIL`。PASS 驱动自动起下一段；FAIL 主管按返修意见在当前段范围内返修后重新交包；连续 3 次 FAIL 按不收敛停下等人裁。驱动每轮另外守两条边界：只读保全的 6 个 `m6_*.rs` 与 `linux-schema.json` 的在场与未跟踪状态、验收官不得修改仓库，任一被破就停。总指导在用户回来后复核每一份 verdict，并保留阶段验收权。
+检查点验收的执行载体：`checkpoint-loop.sh` 已退役，不退出、不等待驱动、不另起第二个 Codex。当前 Codex 使用 `/home/synadmin/workspace/.syn-gates/verifier-prompt-checkpoint.md` 生成提示词并前台阻塞运行 `cursor-agent --trust --force --output-format text`；验收官把结论写到 `verdicts/<交包名>.verdict.md`，首行顶格 `VERDICT: PASS` 或 `VERDICT: FAIL`。Codex绝不写、改、删 verdict。PASS 时把非阶段终包移入 `handled/`，按 verdict 点名欠账分流，拉入下一段第一叶并用同一真实用户 receipt 重签 authorization；FAIL 时只在当前段和 verdict 点名范围返修后重交。同一检查点连续两次 FAIL、结论首行不可读或文件未生成时，写 `stage-15-halt-<YYYYMMDD-HHMM>.md` 并停止。阶段终包 PASS 后保留在 `open/`，停止并留给总指导做最终处置。
 
 ## 叶子
 
 顺序依 stage-6 计划第 5 节依赖图（ORG-001 → ORG-003 → ORG-002 → ORG-004；ORG-001 → ORG-005 / ORG-006；ORG-003+005+006 → ORG-006A），并按"syn 源码同一时间单写者"串行化：
 
-- [ ] M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置（current，前置）
+- [x] M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置（内容 `4147454`；主管七项自复核 PASS；已归档，独立检查点待验）
 - [ ] M6D01 跨项目与成员合同冻结（ORG-001，只写合同）→ CP1
 - [ ] M6D02 顶层 Global Supervisor 持久 RoleSession（ORG-003）→ **CP1 停点**
 - [ ] M6D03 只读跨项目 query 与 advisory（ORG-002）→ CP2
