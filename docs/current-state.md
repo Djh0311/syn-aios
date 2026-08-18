@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-19，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。stage-15 已激活；M6P00 内容候选 `4147454` 已由主管自复核 PASS 并归档，当前停在前置独立检查点。M6 域层、壳采纳、发布、部署与真实日用均未由此成立。
+截至 2026-08-19，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。stage-15 active；M6P00 内容 `4147454` / 记账 `cf1cb25` 已获独立 PASS，当前进入 M6D01 合同冻结。M6 域层、壳采纳、发布、部署与真实日用均未由此成立。
 
 ## 2026-08-18 M5 当前状态
 
@@ -12,14 +12,14 @@
 - M5R09、M5C01 与 stage-14 已归档，当前没有 M5 current leaf。stage-15 已 active；M6P00 已到独立检查点，M6D01–M6D08 仍未开始。F2/F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
 - 上述结论只到 Linux WSL 的 detached/local/synthetic/ordinary Tauri 产品链和静态边界；没有真实个人资料/项目、真实 provider/账号/凭据、外部业务写、macOS/BSD 实机、真窗口像素、新壳运行、部署、发布或长期真实日用。
 
-当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档；`stage-15` active。M6P00 收口时 authorization closed 且 leaves 暂空，等待独立检查点 PASS 后才进入 M6D01。
+当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档；`stage-15` active。M6P00 检查点已 PASS，当前唯一 leaf 为 M6D01；授权按该 leaf 与同一真实用户 receipt 重新签发，不继承 M6P00 active JSON。
 
 ## 2026-08-19 stage-15 / M6P00 当前状态
 
 - 内容候选 `4147454bc046d5a5d3047799725d9e77ed086179` / tree `69816100d15c449b16faef08deda1fc37af48df5` 将正式 Global Supervisor、project workflow、workflow execution/dispatch 与过程事实入口接入 M1 canonical `ProjectId`，并为 relation source owner 增加可判别类型、foreign project fail-closed 与合法 doc/tool/session 保留边界。
 - detached candidate 上 `cargo check --lib --offline` exit 0；M6P00 21/21、global supervisor 33/33（2 ignored）、memory relation 19/19、project workflow 51/51（6 ignored）、workflow dispatch 14/14、offline role 3/3，`git diff --check` exit 0。原始日志在 `.syn-gates/evidence/M6P00-4147454/`。
 - `conversation_transport_` 在候选与 clean HEAD 上均为 22 passed / 6 failed、exit 101，失败集合一致，作为既有基线欠账记录，不伪装成绿色回归，也不反向判 M6P00 失败。
-- 该结论只到本地 synthetic/disposable 产品链与主管自复核；Cursor Opus 检查点仍待签发，M6D01–M6D08 未开始，不构成 M6 域层完成、GUI/新壳验收、发布或真实系统运行。
+- Cursor Opus 独立验收在修正记账写域后签发 `stage-15-m6p00-20260819-0342.verdict.md` PASS；放行只到 M6P00。M6D01 现为合同施工叶，M6D02–M6D08 未开始，不构成 M6 域层完成、GUI/新壳验收、发布或真实系统运行。
 
 ## 现在分别看哪里
 
@@ -98,7 +98,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档，`stage-15` active。authorization closed；当前停在 M6P00 独立检查点，PASS 前不拉入 M6D01。
+M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档，`stage-15` active。M6P00 已独立 PASS；当前推进 M6D01，只写合同与 fixtures，不写产品源码。
 
 stage-15 的明确激活只授权当前计划内 M6 域层连续推进，不自动激活 F2/F3/F5、壳采纳、OSS-01 push/申请、真实数据 / 模型 / provider / connector / 账号凭据 / 外部业务写、部署或发布；这些均没有发生。
 

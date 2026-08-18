@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`PLANNED` / `NOT_STARTED`。stage-15 检查点 CP1 的第一叶。前置：M6P00 通过主管自复核并收口。
+状态：`CURRENT` / `NOT_STARTED`。stage-15 检查点 CP1 的第一叶。前置已满足：M6P00 内容 `4147454`、记账 `cf1cb25` 获独立 verdict `stage-15-m6p00-20260819-0342.verdict.md` PASS。
 
 来源收据：`docs/plans/2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` 第 4 节 SYN-ORG-001 与第 3 节对象/owner/不变量表；执行引用字段集固定依 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节；用户 2026-08-18 22:41 要求总指导一次排完 M6 并设中间检查点。
 

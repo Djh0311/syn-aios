@@ -13,9 +13,10 @@
 3. source deep link 点击回源、跨重启、意见不反写的真实 App 证据；
 4. 真实桌面窗口像素证据（窗口可见、截图 / 交互载体），按 F5 的一次性责任结算，旧壳截图、DOM / SQLite 推断、Xvfb 载体或静态源码都不算；
 5. UI 明确区分"临时"与"稳定"成员；stale availability 在界面上不被当能力。
+6. M6P00 PASS verdict 点名的隔离档前置：`SharedProductAuthorityProfile::IsolatedUninstalled` 当前不安装 M1 project-index authority，13 个 canonical command 会正确以 `m1_project_index_unavailable` fail-closed。新壳双项目隔离验收前必须明确裁定并实现隔离 profile 是否/如何安装独立 M1 authority；不得靠 path-derived fallback 或复用普通 profile 数据绕过。
 
 为什么不在 stage-15：syn 仓库源码写面同一时间只允许一个施工者，F2 起的壳侧实施与 stage-15 争用该写面；且 UI 载体已从旧壳改到新壳，旧壳 UI 不再是 M6 的验收载体。
 
-前置：stage-15 M6 域层通过总指导阶段验收；`syn-shell` F2（壳 ↔ Syn 核心桥）与 F3 就绪；F3 必须先接收"不得继承 M5R07 acceptance driver"的禁令；用户明确开始。
+前置：stage-15 M6 域层通过总指导阶段验收；`syn-shell` F2（壳 ↔ Syn 核心桥）与 F3 就绪；F3 必须先接收"不得继承 M5R07 acceptance driver"的禁令；上方 M1 authority 隔离方案已明确；用户明确开始。
 
 不许动（在本叶被正式排入之前）：不得由 stage-15 任一叶提前实现、不得用旧壳 UI 顶替、不得用域层证据声称本叶已完成、不得用离线 fixture 或协议推断冒充真实窗口证据。

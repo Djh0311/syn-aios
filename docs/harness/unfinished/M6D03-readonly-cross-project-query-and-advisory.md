@@ -6,6 +6,11 @@
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-002、第 3 节 `ProjectSummary` 与 `CrossProjectAdvisory` / `AdvisoryApplicationProjection` 不变量、第 7 节关键验收（write-spy / hash baseline）；ProjectSummary 输入固定依 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节与 `docs/contracts/m5-project-summary-projection-v1.md`；判据以 M6D01 冻结合同为准。
 
+M6P00 PASS verdict 硬前置（`stage-15-m6p00-20260819-0342.verdict.md` 欠账 3、8，也是本叶完成标准）：
+
+- 在实现只读跨项目 query 前，先把 C4 canonical process-fact 分支与 Phase A 的 workflow / node / work-item 查找收紧为 canonical owner exact join；项目 A root 搭配项目 B workflow id 必须在任何 observation/authorization/state 写入前 fail-closed，并有零写反例。可复用 `canonical_owned_record_index` / `canonical_workflow_record_index` 的显式 foreign-owner `Err` 语义，不得用“找不到就跳过”或 ownerless fallback 放过 foreign owner；同时处理或显式封死 `project_workflow_automation.rs` 的 path-derived `default_workflow_id` 兜底。
+- 明确证明固定测试项目封条下的 `execute_project_workflow_node` guarded legacy 不进入任何 M6 跨项目 query 输入面；不在本叶解封该 command。
+
 目标：让全局主管只读地消费多个项目的最小 ProjectSummary，产出可回源的风险 / 依赖 / 冲突 / 优先级建议，并且对项目零写入。这是 M6 的核心能力叶。
 
 做完的标准：
@@ -32,6 +37,7 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/m6_org_global_role_session.rs`（仅本叶所需的会话消费接线）
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 `mod` 声明、`AppState` 接线与 command 注册）
 - `prototypes/productized-desktop-shell/src-tauri/src/commands.rs`（仅本叶 command 接线）
+- `prototypes/productized-desktop-shell/src-tauri/src/c4_c6_workflow_governance_entrypoints.rs`、`prototypes/productized-desktop-shell/src-tauri/src/project_workflow_automation.rs`、`prototypes/productized-desktop-shell/src-tauri/src/workflow_run_dispatch_entrypoints.rs`（仅关闭上方 M6P00 verdict 点名的 workflow owner exact-join 缺口；不得改 observation / execution 合同的其他语义）
 - `m5_project_summary.rs`：**仅**可见性调整与新增 trait 实现，不改 `ProjectSummaryQueryPort` 语义、不放宽 stale / foreign 拒绝、不改 watermark 与 hash 判定；每处改动在报告里逐条说明
 - `docs/contracts/`（仅新增增补合同）
 - `tasks/2026-08-*`、`tasks/2026-08-19-*`

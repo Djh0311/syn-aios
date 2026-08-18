@@ -71,8 +71,8 @@
 
 顺序依 stage-6 计划第 5 节依赖图（ORG-001 → ORG-003 → ORG-002 → ORG-004；ORG-001 → ORG-005 / ORG-006；ORG-003+005+006 → ORG-006A），并按"syn 源码同一时间单写者"串行化：
 
-- [x] M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置（内容 `4147454`；主管七项自复核 PASS；已归档，独立检查点待验）
-- [ ] M6D01 跨项目与成员合同冻结（ORG-001，只写合同）→ CP1
+- [x] M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置（内容 `4147454`、记账 `cf1cb25`；独立检查点 `stage-15-m6p00-20260819-0342` PASS）
+- [ ] M6D01 跨项目与成员合同冻结（ORG-001，只写合同；current）→ CP1
 - [ ] M6D02 顶层 Global Supervisor 持久 RoleSession（ORG-003）→ **CP1 停点**
 - [ ] M6D03 只读跨项目 query 与 advisory（ORG-002）→ CP2
 - [ ] M6D04 Secretary consult Handoff（ORG-004）→ **CP2 停点**
