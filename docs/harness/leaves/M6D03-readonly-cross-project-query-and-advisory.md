@@ -39,6 +39,7 @@ M6P00 PASS verdict 硬前置（`stage-15-m6p00-20260819-0342.verdict.md` 欠账 
 - `prototypes/productized-desktop-shell/src-tauri/src/m6_org_global_role_session.rs`（仅本叶所需的会话消费接线）
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 `mod` 声明、`AppState` 接线与 command 注册）
 - `prototypes/productized-desktop-shell/src-tauri/src/commands.rs`（仅本叶 command 接线）
+- `prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs`（仅把本叶新增的只读 advisory command 与恒拒绝 project-write-attempt command 加入既有 `generate_handler!`；不得改其他 registry 条目或 command gate）
 - `prototypes/productized-desktop-shell/src-tauri/src/c4_c6_workflow_governance_entrypoints.rs`、`prototypes/productized-desktop-shell/src-tauri/src/project_workflow_automation.rs`、`prototypes/productized-desktop-shell/src-tauri/src/workflow_run_dispatch_entrypoints.rs`（仅关闭上方 M6P00 verdict 点名的 workflow owner exact-join 缺口；不得改 observation / execution 合同的其他语义）
 - `m5_project_summary.rs`：**仅**可见性调整与新增 trait 实现，不改 `ProjectSummaryQueryPort` 语义、不放宽 stale / foreign 拒绝、不改 watermark 与 hash 判定；每处改动在报告里逐条说明
 - `docs/contracts/`（仅新增增补合同）
