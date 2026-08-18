@@ -2,14 +2,25 @@
 
 观察时间：`2026-08-18T15:07:58+08:00`
 
-观察基线：M5R07 独立验收结论记录的 34 项工作树载体，即 23 个 tracked ` M` + 11 个 untracked `??`。本清单只做路径、Git 状态、内容 SHA-256、可证明来源/语义域和 disposition 记账；不推断作者、不暂存、不覆盖、不删除。
+观察基线：M5R07 独立验收结论记录的 34 项工作树载体，即 23 个 tracked ` M` + 11 个 untracked `??`。本清单只做路径、Git 状态、可证明来源/语义域和 disposition 记账；静态 WIP 另记可复核内容 SHA-256，活动 Harness runtime 只绑定观察时点并明确允许漂移。不推断作者、不暂存、不覆盖、不删除。
 
 统一 disposition：`PRESERVE_IN_PLACE / EXCLUDE_FROM_M5R08_CANDIDATE / NO_CLEAN / OWNER_REVIEW_REQUIRED`。语义域只按路径和 verdict 已给分类，不等于代码已验收。
 
+## 活动 Harness runtime（观察时点，不承诺内容 hash）
+
+| # | Git | path | 观察时点与漂移边界 |
+|---:|:---:|---|---|
+| 1 | ` M` | `docs/harness/usage/.observed.json` | `2026-08-18T15:07:58+08:00` 时已存在；hook 可继续改写，不作静态 hash 承诺 |
+| 2 | ` M` | `docs/harness/usage/.observed.jsonl` | `2026-08-18T15:07:58+08:00` 时已存在；hook 可继续追加，不作静态 hash 承诺 |
+| 26 | `??` | `docs/harness/usage/host-events.json` | `2026-08-18T15:07:58+08:00` 时已存在；Harness runtime 可漂移，不作静态 hash 承诺 |
+| 27 | `??` | `docs/harness/usage/host-health.json` | `2026-08-18T15:07:58+08:00` 时已存在；Harness runtime 可漂移，不作静态 hash 承诺 |
+
+## 静态受保护 WIP（观察时点内容 hash）
+
+以下 SHA-256 只承诺对应静态文件在上述观察时点的内容，可按路径复核；不把它们纳入 M5R08 候选。
+
 | # | Git | SHA-256 | bytes | path | 来源 / 语义归属 |
 |---:|:---:|---|---:|---|---|
-| 1 | ` M` | `9c909e50c2e340171a2a343763829892ac7e3dbfa4f03912c1f1b6bfbfb58c24` | 1762 | `docs/harness/usage/.observed.json` | M5R07 verdict 前已存在；Harness usage runtime |
-| 2 | ` M` | `7c31a0df0c3f7c8f6636f88ff02c62173eeefdcfaa149e0d178f93d93b784661` | 128085 | `docs/harness/usage/.observed.jsonl` | M5R07 verdict 前已存在；Harness usage runtime |
 | 3 | ` M` | `830722a25e6c702b500caa22f45d6c1cf9fe448f96667062932b85e186a610fa` | 46555 | `prototypes/productized-desktop-shell/src-tauri/src/acceptance_runtime_profile.rs` | M5R07 verdict 前已存在；未归属 legacy product Rust WIP |
 | 4 | ` M` | `8979c93a95e6d0f5167b962b5531632ca3a785d5fb067f3485eee7b0b1a66a36` | 35571 | `prototypes/productized-desktop-shell/src-tauri/src/codex_db.rs` | M5R07 verdict 前已存在；未归属 legacy product Rust WIP |
 | 5 | ` M` | `08120086ac64c7ff6583d71c3211aa8ca97088a8dd903af3f0dbd1238cc53cd8` | 98061 | `prototypes/productized-desktop-shell/src-tauri/src/codex_local_runner.rs` | M5R07 verdict 前已存在；未归属 legacy product Rust WIP |
@@ -33,8 +44,6 @@
 | 23 | ` M` | `db54ca720b9d6f3f63b446145f2ff14f94992120c1bac8fcbcf1b83628ded2ad` | 43904 | `prototypes/productized-desktop-shell/src-tauri/src/workbench_sqlite_schema_m2.rs` | M5R07 verdict 前已存在；未归属 legacy product Rust WIP |
 | 24 | `??` | `4643b4d6f257a568f8a3755f10ecfbf4cdf9df047b374104c7119542a678a108` | 1358 | `docs/harness/reports/2026-08-18-01a010f4-5eea-77c1-979d-d03cadd2a3a4-01a010f4-5f75-7de3-a0f2-f9874eedb5b9.md` | M5R07 verdict 前已存在；untracked dated Harness report |
 | 25 | `??` | `08240abe0afac02413adf61a84f03c1c8fd138a2e71d7f8d3ddfd4c2f8a0eb8a` | 3087 | `docs/harness/reports/2026-08-18-01a0130d-aa03-7992-a314-1a03408c729e-01a0130d-aa7e-7390-a7bf-93c389047cc2.md` | M5R07 verdict 前已存在；untracked dated Harness report |
-| 26 | `??` | `f7658bc20acb6328f1fbe1a6a32f2f6f496b090eac5950d7b53bb26ef8a5062a` | 6558 | `docs/harness/usage/host-events.json` | M5R07 verdict 前已存在；Harness usage runtime |
-| 27 | `??` | `e69b44cd04910cf7083ce301e096f40004558c0e1f584cf19cd3579c95e59cc7` | 4896 | `docs/harness/usage/host-health.json` | M5R07 verdict 前已存在；Harness usage runtime |
 | 28 | `??` | `7e51a7ed92547e6c96f8d37d0ff7de836e9ee5b6102b1c6ba06ae075207c2a15` | 116888 | `prototypes/productized-desktop-shell/src-tauri/gen/schemas/linux-schema.json` | M5R07 verdict 前已存在；untracked generated Tauri schema |
 | 29 | `??` | `620faa27056e7cfac6fb119731c62c04eb5b65d7a4e5641b5944bea4af76b58e` | 13544 | `prototypes/productized-desktop-shell/src-tauri/src/m6_cross_project_query.rs` | M5R07 verdict 前已存在；untracked M6 candidate, M6 not active |
 | 30 | `??` | `2c576d9b6f89e97f8e5e5754071a3e3623f3e5d8920a93b3a78afc6a46bb276d` | 10828 | `prototypes/productized-desktop-shell/src-tauri/src/m6_global_supervisor_session.rs` | M5R07 verdict 前已存在；untracked M6 candidate, M6 not active |
@@ -48,4 +57,4 @@
 - 34 项计数与 verdict 一致：21 个 modified product Rust + 6 个 untracked M6 候选 + 1 个 generated schema + 4 个 Harness usage runtime 文件 + 2 个 dated report。
 - `commands.rs` 在 M5R08 包 1 采用 preimage-to-postimage 精确暂存；提交后工作树相对 HEAD 仍为 `59 insertions / 56 deletions`，证明旧 WIP 没被该提交吞入。
 - 本轮开始后 Harness 于 `2026-08-18T14:01:51+08:00` 新生成 `docs/harness/usage/.turns/`（观察时 1 个文件，目录 canonical content hash `7f086db158802bd2164ca0c1e576cc03d07797441b205f76824926c035bb64bd`，539815 bytes）。它不是 verdict 的 34 项之一，因此不伪装成 opening WIP；它同样保持 untracked、原位保全并排除于 M5R08 候选。
-- `.observed.json` / `.observed.jsonl` 是活动 Harness runtime 文件，后续 hook 可能继续改变其工作树 hash；表中 hash 只绑定上述观察时点，不把 mutable usage 文件纳入候选。
+- 四个 Harness runtime 文件在活动表中只绑定观察时点和路径，不作内容 hash 承诺；后续 hook 可继续改写或追加，它们不纳入候选。静态表的 SHA-256 承诺不适用于这些活动文件。

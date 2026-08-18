@@ -22,7 +22,7 @@
 
 1. 六个已注册 memory/mature governance command 在读写前经 AppState 安装的 M1 read port `resolve_exact_alias` 取得 canonical ProjectId；无生产 path-derived fallback。旧 top-level path-derived id 只在 exact legacy 边界迁移，foreign id fail-closed，nested legacy carrier 保留兼容读取。
 2. 普通 runtime 的 workcell、durable operation 与 receipt 由 admitted attempt/grant 派生。同一项目两个合法 attempt 的 workcell/operation/receipt/effect 均不同，旧 lineage 不改写；同一 attempt/effect 的持久化重入在 adapter 前以 `duplicate_effect` 拒绝，零第二 effect。
-3. 任一 scoped M5 candidate 节点前跑完整 `m5_` 已写入 leaf 与每个任务包流程。本候选实际执行 188/188；前驱 `cf0ad36` 的 187/188 红灯没有被隐去，并由窄返修后全量重跑关闭。
+3. 任一 scoped M5 candidate 节点前跑完整 `m5_` 是 leaf 级候选流程规则；这里不声称此前每一个产品任务包都实际包含或执行了该矩阵。本候选实际执行 188/188；前驱 `cf0ad36` 的 187/188 红灯没有被隐去，并由窄返修后全量重跑关闭。
 4. M5R07 acceptance driver 只有 `VITE_SYN_M5R07_ACCEPTANCE_DRIVER` 精确为 `1` 才进入 production bundle；默认 build 无 `m5r07_`、`m5r07Ordinary`、`m5r07Isolated`、`syn-m5r07` 标记。后端 `status.active` / `status.isolated` gate 保留。
 5. `try_new_with_tauri_app_data_root` 的 tasks seed 已发生路径修正，已补记进 `docs/contracts/m5-r07-product-path-correction-v1.md`；修正事实绑定原提交 `99a5afc`，不宣称由 M5R08 新实现。
 6. ordinary identity source 以 `O_NOFOLLOW` 打开最终组件，regular-file metadata 与 bytes read 绑定同一已打开 handle；symlink fail-closed，路径替换后仍消费原 handle bytes。证据边界不扩大为 parent-component 或 in-place mutation 全面防御。
