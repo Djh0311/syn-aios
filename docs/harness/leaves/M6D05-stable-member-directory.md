@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`PLANNED` / `NOT_STARTED`。stage-15 检查点 CP3 的第一叶。前置：CP2 获总指导 PASS。
+状态：`CURRENT` / `IN_PROGRESS`。stage-15 检查点 CP3 的第一叶。前置 CP2 已由独立 verdict `stage-15-cp2-20260819-0733.verdict.md` PASS；其 8 条欠账已按 verdict 只做记账分流，不进入本叶实施。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-005、第 3 节 `StableMember` 与 `Availability` 不变量、第 7 节关键验收（更换伪服务提供方或 runtime 后身份 / 记忆引用 / 权限不漂移；stale availability 不参与能力判定）；判据以 M6D01 冻结合同为准。
 
