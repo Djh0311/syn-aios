@@ -81,6 +81,7 @@ mod m5_runner_entry_registry;
 mod m5_runtime_admission;
 mod m5_runtime_receipt;
 mod m5_side_effect_entry;
+mod m6_org_global_role_session;
 // Historical generic candidate traits are deliberately crate-private.  The
 // one M2 authority surface is the concrete
 // `workflow-state-sidecar.repository.m2.v1` adapter in
@@ -172,6 +173,10 @@ struct AppState {
     m3_project_role_session_authority:
         Option<m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle>,
     m5_store_path: Option<PathBuf>,
+    // M6D02 installs the server-fixed Global Supervisor RoleSession only on
+    // the ordinary product profile, using the M3 repository cloned from M4
+    // composition. Legacy and isolated-uninstalled profiles stay unavailable.
+    m6_org_global_role_session: m6_org_global_role_session::M6OrgGlobalRoleSessionSlot,
 }
 include!("types.rs");
 trait CodexResumeRunner {
@@ -223,6 +228,8 @@ impl AppState {
                         &paths.app_data_root.join("local.codex.governance.workbench"),
                     )
                     .ok(),
+                    m6_org_global_role_session:
+                        m6_org_global_role_session::M6OrgGlobalRoleSessionSlot::unavailable(),
                 });
             }
             let m3_role_session_read_runtime =
@@ -246,6 +253,8 @@ impl AppState {
                     &paths.app_data_root.join("local.codex.governance.workbench"),
                 )
                 .ok(),
+                m6_org_global_role_session:
+                    m6_org_global_role_session::M6OrgGlobalRoleSessionSlot::unavailable(),
             });
         }
         // Non-Tauri internal hosts still use this legacy composition for the
@@ -269,6 +278,8 @@ impl AppState {
             m1_project_index: None,
             m3_project_role_session_authority: None,
             m5_store_path: None,
+            m6_org_global_role_session:
+                m6_org_global_role_session::M6OrgGlobalRoleSessionSlot::unavailable(),
         })
     }
 
@@ -362,6 +373,7 @@ impl AppState {
         let m4_secretary_installation =
             m4_secretary_domain::install_ordinary_product_secretary_composition(app_data_root)?;
         let m3_role_session_read_runtime = m4_secretary_installation.read_runtime.clone();
+        let m6_repository = m4_secretary_installation.repository.clone();
         let product_data_paths =
             ordinary_product_storage_bootstrap::ProductDataPaths::resolve_and_materialize(
                 app_data_root,
@@ -399,26 +411,36 @@ impl AppState {
             &product_data_paths.workflow_state_path,
             m4_secretary_repository.clone(),
         );
-        let (m1_project_index, m3_project_role_session_authority) = match authority_profile {
-            SharedProductAuthorityProfile::OrdinaryInstalled => {
-                let m1_project_index =
-                    m1_project_index::M1ProjectIndexAuthorityHandle::install_ordinary_product(
-                        app_data_root,
+        let (m1_project_index, m3_project_role_session_authority, m6_org_global_role_session) =
+            match authority_profile {
+                SharedProductAuthorityProfile::OrdinaryInstalled => {
+                    let m1_project_index =
+                        m1_project_index::M1ProjectIndexAuthorityHandle::install_ordinary_product(
+                            app_data_root,
+                        )
+                        .map_err(|error| error.code)?;
+                    let m3_project_role_session_authority =
+                        m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(
+                            m1_project_index.restricted_typed_project_id_verifier(),
+                            app_data_root,
+                        )
+                        .map_err(|error| error.code)?;
+                    let m6_org_global_role_session =
+                        m6_org_global_role_session::install_ordinary_product_runtime(
+                            m6_repository,
+                        )?;
+                    (
+                        Some(m1_project_index),
+                        Some(m3_project_role_session_authority),
+                        m6_org_global_role_session,
                     )
-                    .map_err(|error| error.code)?;
-                let m3_project_role_session_authority =
-                    m3_project_role_session_authority::M3ProjectRoleSessionAuthorityHandle::install_ordinary_product(
-                        m1_project_index.restricted_typed_project_id_verifier(),
-                        app_data_root,
-                    )
-                    .map_err(|error| error.code)?;
-                (
-                    Some(m1_project_index),
-                    Some(m3_project_role_session_authority),
-                )
-            }
-            SharedProductAuthorityProfile::IsolatedUninstalled => (None, None),
-        };
+                }
+                SharedProductAuthorityProfile::IsolatedUninstalled => (
+                    None,
+                    None,
+                    m6_org_global_role_session::M6OrgGlobalRoleSessionSlot::unavailable(),
+                ),
+            };
         Ok(Self {
             index_path: product_data_paths.index_path,
             tasks_path: product_data_paths.tasks_path,
@@ -435,6 +457,7 @@ impl AppState {
             m1_project_index,
             m3_project_role_session_authority,
             m5_store_path: Some(install_m5_store_path(app_data_root)?),
+            m6_org_global_role_session,
         })
     }
 
@@ -3683,6 +3706,7 @@ mod tests {
             m1_project_index: None,
             m3_project_role_session_authority: None,
             m5_store_path: None,
+            m6_org_global_role_session: Default::default(),
         };
         let error = generate_task_package_file_with_state(
             &TaskPackageFileGenerationRequest {

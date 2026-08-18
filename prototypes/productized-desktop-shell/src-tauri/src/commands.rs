@@ -4099,6 +4099,7 @@ mod conversation_transport_command_tests {
                     m1_project_index: None,
                     m3_project_role_session_authority: None,
                     m5_store_path: None,
+                    m6_org_global_role_session: Default::default(),
                 },
             }
         }
@@ -4792,6 +4793,21 @@ fn load_secretary_role_session_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto, String> {
     load_secretary_role_session_status_for_state(&state)
+}
+
+/// Ordinary-product Global Supervisor status. Renderer input cannot carry
+/// actor, role, scope, path, provider, permission, or session identity.
+#[tauri::command]
+fn load_global_supervisor_role_session_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_global_role_session::M6OrgGlobalRoleSessionStatusDto, String> {
+    load_global_supervisor_role_session_status_for_state(&state)
+}
+
+fn load_global_supervisor_role_session_status_for_state(
+    state: &AppState,
+) -> Result<crate::m6_org_global_role_session::M6OrgGlobalRoleSessionStatusDto, String> {
+    Ok(state.m6_org_global_role_session.status())
 }
 
 fn load_secretary_role_session_status_for_state(
@@ -9448,6 +9464,7 @@ mod m5r08_m1_command_tests {
             m1_project_index: None,
             m3_project_role_session_authority: None,
             m5_store_path: None,
+            m6_org_global_role_session: Default::default(),
         }
     }
 
@@ -10088,6 +10105,7 @@ mod m6p00_project_workflow_tests {
             m1_project_index: None,
             m3_project_role_session_authority: None,
             m5_store_path: None,
+            m6_org_global_role_session: Default::default(),
         }
     }
 

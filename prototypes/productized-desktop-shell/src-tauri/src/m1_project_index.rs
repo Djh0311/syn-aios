@@ -2105,6 +2105,7 @@ mod tests {
             m1_project_index: None,
             m3_project_role_session_authority: None,
             m5_store_path: None,
+            m6_org_global_role_session: Default::default(),
         };
         assert_unavailable(fixture.m1_project_index_authority().map(|_| ()));
     }

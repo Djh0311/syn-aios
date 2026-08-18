@@ -33,6 +33,7 @@ fn snapshot_keeps_metadata_without_session_body() {
         m1_project_index: None,
         m3_project_role_session_authority: None,
         m5_store_path: None,
+        m6_org_global_role_session: Default::default(),
     };
     let index = json!({
       "generated_at": "2026-05-27T10:23:52Z",
@@ -120,6 +121,7 @@ fn g2_diagnostic_summary_reports_degraded_store_without_repair() {
         m1_project_index: None,
         m3_project_role_session_authority: None,
         m5_store_path: None,
+        m6_org_global_role_session: Default::default(),
     };
     fs::write(&state.tasks_path, "- `g2.md`：G2\n").expect("write tasks");
     let index = json!({
@@ -245,6 +247,7 @@ fn workbench_snapshot_includes_backend_agent_adapter_descriptor() {
         m1_project_index: None,
         m3_project_role_session_authority: None,
         m5_store_path: None,
+        m6_org_global_role_session: Default::default(),
     };
     let index = json!({
       "generated_at": "2026-06-03T00:00:00Z",
@@ -343,6 +346,7 @@ fn backend_agent_adapter_descriptor_is_stable_without_codex_signals() {
         m1_project_index: None,
         m3_project_role_session_authority: None,
         m5_store_path: None,
+        m6_org_global_role_session: Default::default(),
     };
     let snapshot = build_snapshot_with_session_source(
         &state,
@@ -775,6 +779,7 @@ fn unavailable_state() -> AppState {
         m1_project_index: None,
         m3_project_role_session_authority: None,
         m5_store_path: None,
+        m6_org_global_role_session: Default::default(),
     }
 }
 
