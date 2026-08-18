@@ -35,6 +35,7 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/lib_memory_lint_mature_pattern_tests.rs`（仅把相关既有测试迁到 canonical authority fixture）
 - `prototypes/productized-desktop-shell/src-tauri/src/m5_controlled_execution.rs`（仅精确 duplicate-effect 重入测试；必要时最小修正直接暴露出的同范围缺陷）
 - `prototypes/productized-desktop-shell/src-tauri/src/m5_product_commands.rs`（仅 dispatch 状态门精确反例）
+- `prototypes/productized-desktop-shell/src-tauri/src/m5_ordinary_control_acceptance.rs`（必要相邻路径；仅把“missing ordinary identity source 必须拒绝构造”的过时反例改为本叶约定的 `UNENROLLED` 可恢复启动与 M1 业务 fail-closed 反例，不改 M5R07/M5R08 已通过的执行链或验收 driver）
 - `tasks/2026-08-18-syn-m5r09-*` [新增]
 - `docs/harness/reports/M5R08-candidate-and-evidence-v1.md`（仅修正“每个任务包”过大表述）
 - `docs/harness/reports/M5R08-protected-wip-attribution-v1.md`（仅拆分活动 runtime 与静态 WIP 的 hash 承诺）
