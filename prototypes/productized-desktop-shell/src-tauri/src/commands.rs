@@ -8,6 +8,66 @@ fn load_workbench_snapshot(state: tauri::State<'_, AppState>) -> Result<Workbenc
     Ok(build_snapshot(&state, &index, &tasks_text))
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct M1ProjectIdentityEnrollmentRequest {
+    project_root: String,
+}
+
+#[derive(Serialize)]
+struct M1ProjectIdentityEnrollmentDto {
+    project_id: String,
+    exact_alias: String,
+    source_ref: String,
+    source_revision: u64,
+    registry_revision: u64,
+    status: String,
+}
+
+#[tauri::command]
+fn enroll_m1_project_identity(
+    request: M1ProjectIdentityEnrollmentRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<M1ProjectIdentityEnrollmentDto, String> {
+    enroll_m1_project_identity_with_state(request, &state)
+}
+
+fn enroll_m1_project_identity_with_state(
+    request: M1ProjectIdentityEnrollmentRequest,
+    state: &AppState,
+) -> Result<M1ProjectIdentityEnrollmentDto, String> {
+    let index = read_index(state)?;
+    let matches: Vec<_> = parse_projects(&index)
+        .into_iter()
+        .filter(|project| project.project_root == request.project_root)
+        .collect();
+    if matches.len() != 1 {
+        return Err("m1_enrollment_product_index_exact_match_required".to_string());
+    }
+    let exact_alias = matches[0].project_root.clone();
+    let source_ref = format!("product-index:{}", exact_alias);
+    let enrolled = state
+        .m1_project_index_authority()
+        .map_err(|e| e.code)?
+        .enroll_ordinary_project(&m1_project_index::M1EnrollOrdinaryProjectRequest {
+            exact_alias,
+            source_ref,
+        })
+        .map_err(|e| e.code)?;
+    let status = match enrolled.status {
+        m1_project_index::M1OrdinaryEnrollmentStatus::Created => "created",
+        m1_project_index::M1OrdinaryEnrollmentStatus::AlreadyEnrolled => "already_enrolled",
+    };
+    Ok(M1ProjectIdentityEnrollmentDto {
+        project_id: enrolled.project_id.as_str().to_string(),
+        exact_alias: enrolled.exact_alias,
+        source_ref: enrolled.source_ref,
+        source_revision: enrolled.source_revision,
+        registry_revision: enrolled.registry_revision,
+        status: status.to_string(),
+    })
+}
+
 /// Fixed no-request projection of the already installed C09 isolated runtime.
 /// The renderer cannot select a profile, owner, scope, model, path or fixture.
 #[tauri::command]
