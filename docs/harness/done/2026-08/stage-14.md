@@ -1,5 +1,7 @@
 # 阶段14 M5 项目主管与执行闭环（事实重整与产品闭环）
 
+状态：`COMPLETED / M5 SCOPED PRODUCT-CHAIN PASS / STAGE-14 CLOSED / NOT_RELEASED`。关闭绑定 M5 产品锚 `c91d8fc`、M5R09 接受记账 `8e6f59f`、M5C01 closeout 内容 `de98d69` 与后续 lifecycle 记账；不激活 M6、stage-15 或壳采纳。
+
 总计划：product-line 唯一基线与 Harness Lite 切换
 
 目标：按 `docs/plans/2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` 完成 M5 项目主管与执行闭环的事实重整与产品闭环。先完成 REC-00 事实恢复门，再按前置矩阵判定 M5R00（仅 GAP 时），随后顺序完成 M5R01–M5R07，形成只含 M5 投影的 candidate commit series 后停止等待独立验收。本阶段不激活 M6/M7。
@@ -77,7 +79,7 @@
 - [x] M5R07 项目 UI、隔离 App 与阶段候选（修订标准候选 `7cab372` / tree `df6b743` 已由 `M5R07-20260818-1344.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout 或 M5 完成）
 - [x] M5R08 M1 消费面、attempt-scoped runtime 幂等与验收欠账收敛（内容候选 `09e9b32` / tree `657f7db` 与记账 `00e766a` / tree `b9c8f5f` 已由 `M5R08-20260818-1536.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout 或 M5 完成）
 - [x] M5R09 M1 登记生产者与 closeout 前欠账加固（内容候选 `c91d8fc` / tree `fe2d982` 与记账 `8e6f59f` / tree `2043660` 已由 `M5R09-20260818-1836.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout、发布或 M6 激活）
-- [ ] M5C01 stage-14 / M5 closeout（唯一 current；只做生命周期、权威状态、载体/WIP 分层与 M6 输入交接，不开第四个加固叶，不改产品源码）
+- [x] M5C01 stage-14 / M5 closeout（内容候选 `de98d69` / tree `b90244a`；只做生命周期、权威状态、载体/WIP 分层与 M6 输入交接，零产品源码变化）
 
 ## 2026-08-18 M5R07 独立验收后的继续边界
 
@@ -108,3 +110,10 @@
 - 最新独立结论 `M5R09-20260818-1836.verdict.md` 放行内容候选 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d`、记账 `8e6f59f48d2d90891d3c02396378921e4a2f5d6e` / tree `2043660c9547c6c102ae24414674918ca8215eb0` 及 M5R09 自身生命周期收口；M5R09 据此归档。
 - 依 2026-08-18 18:40 用户纪律，下一唯一 current 为 M5C01 closeout，不开第四个加固叶。verdict 的 8 项欠账只按“真实用户不可用”门分类；本次没有一项被提升为 closeout 前产品返修，其余进入 unfinished 或 closeout 载体记账。
 - 用户自有 OSS 门面已于 `c1025ba81b6c7885a16529b8f66c919655db48e4` 以精确 7 路径独立提交，不属 M5R09 或 M5C01 候选；OSS-01 保持 unfinished，stage-14 closeout 不执行 push 或外部申请。
+
+## 2026-08-18 M5C01 stage closeout
+
+- closeout 内容候选 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 精确绑定 3 个 verdict 后续 unfinished、closeout 输入报告与 M5→M6/新壳交接；零产品路径变化。
+- 结构、写域、冻结合同、用户载体、30 项静态 WIP hash、authorization 与 lifecycle 唯一性检查最终全为 exit 0；初始脚本锚点/计数误判红灯原样保留。原始日志根 `.syn-gates/evidence/M5C01-de98d69/`。
+- M5 在具名证据范围内记为 `SCOPED PRODUCT-CHAIN PASS` 并关闭 stage-14；不扩大为发布、真实用户资料/项目、真实 provider/账号/凭据、外部业务写、macOS/BSD 实机、真窗口像素、新壳运行或长期日用。
+- stage-15/M6 仍未建立、未激活；canonical ProjectId 扩面等前置在 unfinished，须后续用户明确开始。OSS-01 继续 unfinished，未 push 或申请。

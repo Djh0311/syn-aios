@@ -2,9 +2,9 @@
 
 日期：2026-08-16<br>
 里程碑：`M5 / M6 corrective closure`<br>
-状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY**<br>
-当前实现定级：**M5/M6 CANDIDATE WIP / UNIT-LEVEL PROTOTYPE / NOT_ACCEPTED / NOT_MAINLINE**<br>
-当前 Git 锚点：WSL `main@9103c3b26b060e854be119a8cedaa856a2a900ce`；迁移、Harness Lite 0.8、架构文档与 M5/M6 候选仍混在未提交工作树中。<br>
+状态：**M5 CLOSED / M6 PLANNED NOT ACTIVE / NO SUCCESSOR AUTHORITY**<br>
+当前实现定级：**M5 SCOPED PRODUCT-CHAIN PASS / STAGE-14 CLOSED / NOT RELEASED；M6 CANDIDATE WIP / NOT ACTIVE**<br>
+当前 Git 锚点：M5 产品内容 `c91d8fc72bcbf80186736caff841cb7a9b0660d1`；M5R09 接受记账 `8e6f59f48d2d90891d3c02396378921e4a2f5d6e`；M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484`。用户 OSS 门面 `c1025ba` 是独立 7 路径载体，不属 M5 候选。<br>
 上位计划：[`Syn 总开发计划 v1`](2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md)、[`M5 阶段计划 v1`](2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md)、[`M6 阶段计划 v1`](2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md)。<br>
 拟用 Harness 生命周期：真实 `stage-14` 完成 M5；M5 独立验收后才建立真实 `stage-15` 完成 M6。过去只在 `docs/harness/plan.md` 手工勾选的 14/15 不视为已发生的 stage 历史。<br>
 
@@ -461,3 +461,10 @@ M6 最终退出仍以原 M6 计划第 9 节为准。M6R01–M6R08 完成后可�
 5. M6R01–M6R09 完成后再次独立验收；只给出 M7 首个窄包建议，不自动激活。
 
 本计划不要求用户再次拍板 M5/M6 已确定的核心产品需求。未来施工任务只需用户确认“按本计划开始 M5”或“在 M5 验收后按本计划开始 M6”；其余实现细节由对应开发主管自主收敛。
+
+## 10. 2026-08-18 M5 closeout
+
+- REC-00、M5R00、M5R01–M5R09 已按各自放行位置归档；M5C01 依 18:40 用户纪律直接执行 closeout，没有第四个加固 leaf。
+- M5 产品内容 `c91d8fc` 经 `M5R09-20260818-1836.verdict.md` 独立 PASS；M5C01 内容 `de98d69` 只含 closeout/unfinished/交接 5 路径，结构、冻结物、authorization、用户载体与 30 项静态 WIP hash 检查最终通过。
+- stage-14 已关闭，M5 状态为 `SCOPED PRODUCT-CHAIN PASS / NOT RELEASED`。真实资料/provider、macOS/BSD 实机、真窗口像素、新壳、部署与发布均不在结论内。
+- ProjectSummary/QueryPort、完整 execution identity envelope、runner compatibility/rollback 已形成 M6 输入。canonical ProjectId 扩面与 relation owner 类型化仍是 M6 前置 unfinished；stage-15/M6 未建立、未激活，须用户另行明确开始。

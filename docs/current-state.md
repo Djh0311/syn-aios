@@ -1,18 +1,18 @@
 # 当前状态
 
-截至 2026-08-18，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 的本地内容已推进，但 stage-14 尚未关闭；M6 与壳采纳未激活。M5R08 已通过适用独立验收并归档，当前唯一 leaf 是逐条承接其 8 项欠账的 M5R09，不是 M5 完成。
+截至 2026-08-18，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 产品内容锚 `c91d8fc` 与 M5R09 记账 `8e6f59f` 已获独立 PASS，M5C01 closeout 内容 `de98d69` 已完成事实/交接收敛；M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。M6 与壳采纳未激活，M5 不是已发布、已部署或真实日用完成。
 
 ## 2026-08-18 M5 当前状态
 
-- M5R00 候选 `99a5afc`、M5R07 修订候选 `7cab372` 与 M5R08 内容候选 `09e9b32` 已分别通过适用独立验收并归档；M5R08 的放行还精确绑定记账 `00e766a`，stage-14 没有因此关闭。
-- 唯一 current leaf 是 M5R09；内容候选 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d` 已形成，状态为 `CANDIDATE_READY / AWAITING_INDEPENDENT_ACCEPTANCE`。`authorization.json` 为精确 closed 两字段。
-- M5R09 候选提供普通产品显式 M1 enrollment producer 与最小 UI；缺 source 可恢复启动为 `UNENROLLED` 而 M1 业务写 fail-closed。nested memory/mature owner 收敛 canonical identity，governance 测试走 authority fixture；no-follow 使用 target-family cfg；dispatch gate 与 durable duplicate-effect 反例精确分开。
-- detached disposable checkout 上 `cargo check --lib --offline` 0；`m5r09_` 23/23，memory/mature 各 14/14，ordinary source 4/4，完整 `m5_` 188/188；前端 typecheck/default build 0；默认 bundle 无 M5R07 marker；candidate-range diff check 0。原始证据位于 `.syn-gates/evidence/M5R09-c91d8fc/`。
-- 上述只证明候选源码的离线/本地 Rust、TypeScript、production bundle 和静态边界；没有 GUI/Tauri 进程、窗口截图、macOS/BSD 实机、真实个人资料/项目、真实 provider/账号/凭据、外部业务写、部署或发布，也不是独立验收或 M5 closeout。
-- protected WIP 已分活动 runtime 与静态 hash 两层。29 个同比静态路径 hash 不变；`commands.rs` 只叠加获准候选内容，其候选外旧 WIP 仍为 59+/56-；6 个 `m6_*.rs` 仍未跟踪。没有 reset、stash、clean、覆盖或混入候选。
-- 本地 `main` 已包含 M5R09 内容候选；stage-14 仍为 `OPEN / NOT_ACCEPTED / NOT_CLOSEOUT`，M5R09 留在 `leaves/` 等待独立验收。M6、F2/F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
+- M5R00 候选 `99a5afc`、M5R07 修订候选 `7cab372`、M5R08 内容候选 `09e9b32` 与 M5R09 内容候选 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` 已分别通过适用独立验收；M5R09 放行精确绑定记账 `8e6f59f48d2d90891d3c02396378921e4a2f5d6e`。
+- M5R09 提供普通产品显式 M1 enrollment producer 与最小 UI；缺 source 可恢复启动为 `UNENROLLED` 而 M1 业务写 fail-closed。nested memory/mature owner 收敛 canonical identity，governance 测试走 authority fixture；no-follow 使用 target-family cfg；dispatch gate 与 durable duplicate-effect 反例精确分开。
+- 独立验收官在 `c91d8fc` detached checkout 上复跑 `cargo check` 0；`m5r09_` 23/23，memory/mature 各 14/14，ordinary source 4/4，完整 `m5_` 188/188；前端 typecheck/default build 0；默认 bundle gate 与候选/记账 diff check 符合预期。主管原始证据位于 `.syn-gates/evidence/M5R09-c91d8fc/`。
+- M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 只含 5 个 closeout/unfinished/交接路径，零产品源码变化。结构、冻结物、用户载体、authorization 与 lifecycle 检查最终全绿；日志位于 `.syn-gates/evidence/M5C01-de98d69/`。
+- protected WIP 已分活动 runtime 与静态 hash 两层。30 个静态路径在 closeout 观察时 30/30 hash 不变；`commands.rs` 候选外旧 WIP仍为 59+/56-；6 个 `m6_*.rs` 仍未跟踪。用户 OSS 门面已于 `c1025ba` 精确 7 路径独立提交，不属 M5 候选。没有 reset、stash、clean、覆盖或混入候选。
+- M5R09、M5C01 与 stage-14 已归档，`authorization.json` 为精确 closed 两字段，当前没有 M5 current leaf。M6、stage-15、F2/F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
+- 上述结论只到 Linux WSL 的 detached/local/synthetic/ordinary Tauri 产品链和静态边界；没有真实个人资料/项目、真实 provider/账号/凭据、外部业务写、macOS/BSD 实机、真窗口像素、新壳运行、部署、发布或长期真实日用。
 
-当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。D0D01 的历史 `SOURCE_BYTES_MATCH` 不证明依赖安装、产品运行、Headless Core、Primary / Edge、部署或发布。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 已完成并归档。stage-14 的唯一 current leaf 为 M5R09，且 authorization closed。
+当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。D0D01 的历史 `SOURCE_BYTES_MATCH` 不证明依赖安装、产品运行、Headless Core、Primary / Edge、部署或发布。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档。当前没有 M5 current leaf，authorization closed；stage-15/M6 未建立。
 
 ## 现在分别看哪里
 
@@ -80,7 +80,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 尚未成立或未进入
 
-- M5R00、M5R07 与 M5R08 已各自在适用范围通过独立验收；M5R09 已形成满足本叶标准的候选，但尚未独立验收或归档，因此 M5/stage-14 整体仍未验收或关闭。不得把候选或既有 scoped PASS 写成 M5 完成。
+- M5 已在 `c91d8fc` 的具名 product-chain 范围通过独立验收并由 M5C01 关闭 stage-14；尚未成立的是发布、真实资料/项目、真实 provider/账号/凭据、macOS/BSD 实机、真窗口像素、新壳运行与长期日用。M6 前的 canonical ProjectId 消费扩面和 relation owner 类型化仍在 unfinished，不反向否定 M5 scoped PASS。
 - M6 Global Supervisor 成功 consult 未实现；M4 只持 M3 Handoff 请求/回执边界，普通产品 recipient 显式 unavailable。
 - M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M4 只产出 source-backed event/ref，不写 M7 对象。
 - M8 真实 connector、credential 与外部 source 未进入；M9 旧路 command unregister/物理退役、M10 全日真实试点与发布硬化、M11 受治理自升级也未进入。
@@ -91,9 +91,9 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13` 已归档。stage-14 仍开，当前唯一施工投影是 M5R09；本叶已形成绑定候选与原始证据，现于 authorization closed 下请求独立验收并停止。
+M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档。M5C01 已形成绑定 closeout 内容与原始证据的 lifecycle 载体，authorization closed；当前停在 M5 closeout 独立复核节点。
 
-不得在 M5R09 独立验收前归档本叶、关闭 stage-14、宣布 M5 完成、激活 M6 或壳采纳。真实数据 / 模型 / provider / connector / 账号凭据 / 外部业务写 / 发布仍未获授权，也没有发生。
+不得从 stage-14 关闭自动激活 M6、stage-15、F2/F3/F5、壳采纳、OSS-01 push/申请、真实数据 / 模型 / provider / connector / 账号凭据 / 外部业务写、部署或发布；这些均未获本轮授权，也没有发生。
 
 ## 保全
 

@@ -2,10 +2,10 @@
 
 日期：2026-08-01<br>
 阶段：`M5`<br>
-状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
+状态：**SCOPED PRODUCT-CHAIN PASS / STAGE-14 CLOSED / NOT RELEASED / NO SUCCESSOR AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M5。<br>
 硬前置：M1 scope / workflow-owner / report / ExecutionGrant；M2 UoW；M3 Project Supervisor RoleSession。<br>
-当前路线状态：M1–M4 已完成各自具名范围，M5 仍未激活。Harness 动态 stage / leaf 另看 `../harness/plan.md`，不从本计划推导；本计划不授权真实项目写、执行器、Codex、DSH、桌面应用或产品代码。第 0 节是 2026-08-01 的预激活盘点，M5 真正启动前必须对当前代码重新核验。
+当前路线状态：M1–M4 已完成各自具名范围；M5 产品锚 `c91d8fc` 已获独立 PASS，M5C01 closeout 内容 `de98d69` 已完成，`stage-14` 已关闭。Harness 动态状态另看 `../harness/plan.md`；本完成事实不授权真实项目写、真实 provider、M6、壳采纳、部署或发布。第 0 节保留为 2026-08-01 的预激活历史盘点，不再代表当前缺口。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../current-state.md` → 2026-08-01 修订与当前能力盘点 → master → M1-M3 退出回执 → 本计划。现有特殊路径零件只作迁移素材，不等于普通项目闭环。
 
@@ -185,3 +185,10 @@ scope / owner 修复、local schema / store migration、App 启动 / 强制退�
 - 旧 fixed path 有 manifest / compatibility / rollback，未删除；
 - 把 ProjectSummary 和 temporary agent attempt/report 合同交 M6；
 - `../current-state.md` 回写实际完成与暂缓项；M6 未激活不得续跑。
+
+## 10. 2026-08-18 closeout 结果
+
+- M5 产品内容锚：`c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d`；M5R09 接受记账：`8e6f59f48d2d90891d3c02396378921e4a2f5d6e`。
+- M5C01 closeout 内容：`de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d`；零产品源码变化，负责 M6 输入、欠账路由与载体/WIP 分层。
+- ProjectSummary/QueryPort、完整 execution identity envelope 与 runner compatibility/rollback 边界已交 M6；canonical ProjectId 消费扩面与 relation owner 类型化保留为 M6 前置 unfinished，不激活 stage-15。
+- `stage-14` 已关闭；证据上限为 Linux WSL detached/local/synthetic/ordinary Tauri product chain，不含真实用户资料/项目、真实 provider、macOS/BSD 实机、真窗口像素、新壳、部署或发布。

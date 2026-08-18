@@ -19,9 +19,9 @@
 - M0 产品正本、权威分级、候选收口和文档入口整理已经完成；它是文档收口，不是产品代码阶段。
 - M1、M2 已完成主线收口。
 - M3 已完成：M3C01–M3C08 已进入主线并归档，M3C08 内容提交为 `fa8e392`，阶段状态为 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。
-- M4C01–M4C10 已进入主线并归档，`stage-06` 已程序性关闭。2026-08-11 独立总线复核的五项 P1 已由 M4R01–M4R06 修正；M4R07 v2 portable receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12）。M4R01–M4R07 均已归档，`stage-07` 已关闭；M5–M11 继续未激活。当前 Harness 现场单独看 `../harness/plan.md`，本索引不复制动态 leaf 状态。
+- M4C01–M4C10 已进入主线并归档，`stage-06` 已程序性关闭。2026-08-11 独立总线复核的五项 P1 已由 M4R01–M4R06 修正；M4R07 v2 portable receipt 在当前后端/普通产品链合同范围内为 `PASS`（12/12），`stage-07` 已关闭。M5 产品内容 `c91d8fc` 为 scoped product-chain PASS，M5C01 closeout 内容 `de98d69` 已关闭 `stage-14`；M6–M11 继续未激活。当前 Harness 现场单独看 `../harness/plan.md`，本索引不复制动态 leaf 状态。
 - M4 当前修正与收口入口：`2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md`。第 8 次后端 `recovery_timer` 保留真实 98 秒等待；UI / Computer Use / PNG / attestation 为 `NOT_EXECUTED / NOT_APPLICABLE`，既非失败也非视觉 PASS。
-- M5/M6 当前事实重整与产品闭环入口：`2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md`。状态为 `PLANNED / NOT_ACTIVE`；现有 M5/M6 字节只按未验收 candidate WIP 读取，计划不自动激活 stage-14/15 或施工。
+- M5/M6 事实重整与产品闭环入口：`2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md`。M5 产品内容 `c91d8fc` 为 scoped product-chain PASS，M5C01 closeout 内容 `de98d69` 已关闭 stage-14；M6 仍为 `PLANNED / NOT_ACTIVE`，计划不自动激活 stage-15 或施工。
 - 2026-08-16 用户确认“Syn 原生治理与执行核心 + 外部 Agent Runtime 可替换 + 受治理自升级”；DSH 只作为方法来源和可选 adapter。正式决定见 `../../decisions/2026-08-16-syn-native-governance-core-and-governed-self-upgrade-direction-v1.md`，研究证据见 `../research/2026-08-16-deepseek-harness-ai-opc-reference-research-v1.md`。
 - 2026-08-17 用户确认以 lightcode（Poracode 上游，Apache-2.0）fork 作为 Syn 桌面壳方向：lightcode 骨架 + Syn 功能界面重建 + Syn 视觉风格；角色与事实仍由 Syn 原生核心持有。正式决定见 `../../decisions/2026-08-17-syn-lightcode-fork-desktop-shell-direction-v1.md`，实施入口 `2026-08-17-syn-lightcode-fork-shell-adoption-plan-v1.md`（`PLANNED / NOT_ACTIVE`，前置为 M5 独立验收与 stage-14 收口）。
 - 当前产品运行模型见 `../../decisions/2026-08-01-whole-workbench-event-driven-operating-model-amendment-v1.md`。
@@ -35,9 +35,9 @@
 | M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-05 CLOSED`；内容提交 `fa8e392` |
 | M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` | `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`；不含视觉、真实数据或发布验收 |
 | M4 修正 | `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md` | M4R01–M4R07 已完成并归档，`stage-07` 已关闭；不重开 stage-06，不自动激活下游 |
-| M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M1-M3 |
+| M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `SCOPED PRODUCT-CHAIN PASS / STAGE-14 CLOSED / NOT RELEASED` |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖 M3-M5 |
-| M5/M6 修正 | `2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` | `PLANNED / NOT_ACTIVE`；先恢复事实载体，再顺序完成并独立验收 M5、M6 |
+| M5/M6 修正 | `2026-08-16-syn-m5-m6-fact-reconciliation-and-product-closure-plan-v1.md` | M5 closed；M6 `PLANNED / NOT_ACTIVE`，须另行明确开始 |
 | M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE`；存储策略片与真实日常接入分层依赖 |
 | M8 | `2026-08-01-syn-stage-8-connector-and-credential-reference-plan-v1.md` | `PLANNED / NOT_ACTIVE`；设计、框架和真实服务提供方分层授权 |
 | M9 | `2026-08-01-syn-stage-9-read-model-migration-and-legacy-retirement-plan-v1.md` | `PLANNED / NOT_ACTIVE`；依赖替代链证据 |

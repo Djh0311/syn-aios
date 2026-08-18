@@ -1,7 +1,7 @@
 # Syn 全能个人 AI 工作台总开发计划 v1
 
 日期：2026-08-01<br>
-状态：**当前总开发计划；M0–M3 已完成各自具名主线范围。M4 的 M4R07 v2 后端/普通产品链为 12/12 PASS，M4R01–M4R07 已归档且 `stage-07` 已关闭；M5–M11 未激活。**<br>
+状态：**当前总开发计划；M0–M3 已完成各自具名主线范围。M4 为 M4R07 v2 product-chain PASS、`stage-07` closed；M5 为 scoped product-chain PASS、`stage-14` closed。M6–M11 未激活。**<br>
 计划性质：定义长期重构和迁移顺序，不维护逐任务进度，不单独授予代码、桌面应用、存储、真实消息、外部连接、凭据、Git（版本控制写入）或发布权限。当前事实看 `../current-state.md`、源码和新鲜验证；具体施工入口看当前用户指令、`AGENTS.md` 与轻量开发护栏的活动阶段、唯一活动叶和 `../harness/authorization.json`。没有活动阶段时，不从本计划推导自动下一包。
 
 ## 0. 目标
@@ -276,7 +276,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 
 ### 5.1 独立阶段计划索引
 
-下列文件把 master 的顺序展开为可单独审查的阶段合同。M1–M3 已完成主线收口；M3C08 内容提交为 `fa8e392`。M4C01–M4C10 已进入主线，`stage-06` 已程序性关闭；独立总线复核的五项普通产品 P1 已由 M4R01–M4R06 修正，M4R07 v2 后端/普通产品链为 12/12 PASS。M4R01–M4R07 已完成并归档，`stage-07` 已关闭；M5–M11 仍为 `PLANNED / NOT_ACTIVE`，不因文件存在而获得执行权。当前 Harness 现场另看 `../harness/plan.md`，不在 master 复制动态 leaf 状态。
+下列文件把 master 的顺序展开为可单独审查的阶段合同。M1–M3 已完成主线收口；M3C08 内容提交为 `fa8e392`。M4C01–M4C10 已进入主线，M4R07 v2 后端/普通产品链为 12/12 PASS，`stage-07` 已关闭。M5 的产品内容锚 `c91d8fc` 已在具名范围通过独立验收，M5C01 closeout 内容 `de98d69` 已完成交接与生命周期收敛，`stage-14` 已关闭；M6–M11 仍为 `PLANNED / NOT_ACTIVE`。当前 Harness 现场另看 `../harness/plan.md`，不在 master 复制动态 leaf 状态。
 
 | 阶段 | 独立计划 | 当前路由状态 |
 |---|---|---|
@@ -284,7 +284,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 | M2 | `2026-08-01-syn-stage-2-fact-event-audit-transaction-foundation-plan-v1.md` | `COMPLETED / MAINLINE / BOUNDED_REFERENCE_SLICE` |
 | M3 | `2026-08-01-syn-stage-3-role-session-and-explicit-handoff-plan-v1.md` | `COMPLETED / MAINLINE / STAGE-05 CLOSED`；内容提交 `fa8e392` |
 | M4 | `2026-08-01-syn-stage-4-secretary-attention-and-daily-rhythm-plan-v1.md` + `2026-08-11-syn-m4-independent-remediation-and-reacceptance-plan-v1.md` | `M4R07 V2 PRODUCT-CHAIN PASS / STAGE-07 CLOSED`；UI/CU 未执行，不含视觉或发布验收 |
-| M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
+| M5 | `2026-08-01-syn-stage-5-project-supervisor-and-execution-loop-plan-v1.md` | `SCOPED PRODUCT-CHAIN PASS / STAGE-14 CLOSED / NOT RELEASED` |
 | M6 | `2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M7 | `2026-08-01-syn-stage-7-memory-personal-model-and-skill-governance-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
 | M8 | `2026-08-01-syn-stage-8-connector-and-credential-reference-plan-v1.md` | `PLANNED / NOT_ACTIVE` |
@@ -355,7 +355,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 
 前端：先增加明确角色入口和固定上下文标签，不先改首页视觉；智能体中心成为成员与历史会话目录。
 
-退出门：每种角色新建 / 续接 / stop；重启恢复；跨项目续接拒绝；会话不静默生成 workflow / formal memory；Station 3b 后端真拒绝。真实 Codex 消息另行授权。2026-08-10，M3C08 已由 `fa8e392` 收口内容并达到 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4 的 stage-06 随后程序性关闭；其普通产品修正已进入 M4R07 v2 产品链 PASS，M4R01–M4R07 已归档且 stage-07 已关闭，M5 仍未激活。
+退出门：每种角色新建 / 续接 / stop；重启恢复；跨项目续接拒绝；会话不静默生成 workflow / formal memory；Station 3b 后端真拒绝。真实 Codex 消息另行授权。2026-08-10，M3C08 已由 `fa8e392` 收口内容并达到 `COMPLETED / MAINLINE / STAGE-05 CLOSED`。M4 的 stage-06 随后程序性关闭；其普通产品修正已进入 M4R07 v2 产品链 PASS，M4R01–M4R07 已归档且 stage-07 已关闭。M5 后续已于 2026-08-18 以 scoped product-chain PASS 关闭 stage-14。
 
 ### M4 — 秘书、个人范围、Attention 与日常节奏
 
@@ -370,7 +370,7 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 
 排序底线：已与别人约定和时间敏感事项优先；所有条目必须显示来源、owner、为何出现、最后变化并能回源。
 
-退出门：App 重启不丢关注状态；“已知晓”不改项目 / 任务 / 记忆；同窗口日报幂等；每个日报项可精确回源；无事件窗口零模型调用；普通产品具备持续 Secretary 对话和内部来源入口。2026-08-11 独立总线复核指出的普通来源、到期唤醒、精确回源、持续对话和实际 legacy parity 缺口已由 M4R01–M4R06 修正；2026-08-13 M4R07 v2 receipt 以固定 12 次、实际 12 次验证当前后端/普通产品链。第 8 次 `recovery_timer` 保留真实 98 秒等待与后端恢复验证；UI / Computer Use / PNG / attestation 为 `NOT_EXECUTED / NOT_APPLICABLE`，因此本结论不是视觉 PASS。M4R01–M4R07 已归档，`stage-07` 已关闭；M5 继续未激活。
+退出门：App 重启不丢关注状态；“已知晓”不改项目 / 任务 / 记忆；同窗口日报幂等；每个日报项可精确回源；无事件窗口零模型调用；普通产品具备持续 Secretary 对话和内部来源入口。2026-08-11 独立总线复核指出的普通来源、到期唤醒、精确回源、持续对话和实际 legacy parity 缺口已由 M4R01–M4R06 修正；2026-08-13 M4R07 v2 receipt 以固定 12 次、实际 12 次验证当前后端/普通产品链。第 8 次 `recovery_timer` 保留真实 98 秒等待与后端恢复验证；UI / Computer Use / PNG / attestation 为 `NOT_EXECUTED / NOT_APPLICABLE`，因此本结论不是视觉 PASS。M4R01–M4R07 已归档，`stage-07` 已关闭；M5 后续已于 2026-08-18 关闭 stage-14，M6 仍未激活。
 
 ### M5 — 项目主管与既有执行能力重组
 
@@ -391,6 +391,8 @@ M4 与 M5 只能在写域不重叠、公共合同冻结后并行。M7 的知识 
 前端：保留现有项目壳和专业 tab，不重新发明已撤回的项目页布局；默认项目主管对话，方案 / 审批 / 运行按明确动作打开。
 
 退出门：隔离 scratch project 覆盖 read-only、单 allowlisted write、用户拒绝、worker blocked、runtime kill / restart / recovery、child grant 不扩权、duplicate effect、trace readback、全局意见和最终用户决定；至少两种 runtime 实现或 fake conformance adapter 证明合同不绑定单一 Harness。固定测试路径不再定义通用业务语义。
+
+2026-08-18 closeout：M5 产品内容锚 `c91d8fc` 已在修订后的普通产品组合范围获得独立 PASS；M5C01 内容 `de98d69` 完成 M6 输入、欠账路由与 WIP/载体分层，`stage-14` 已关闭。结论为 `SCOPED PRODUCT-CHAIN PASS / NOT RELEASED`，不含真实资料/provider、macOS/BSD 实机、真窗口像素、新壳运行、部署或发布；M6/stage-15 仍未激活。
 
 ### M6 — 全局主管与内部组织
 
