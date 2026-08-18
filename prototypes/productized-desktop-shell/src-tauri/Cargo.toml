@@ -3,8 +3,8 @@ name = "codex-governance-workbench"
 version = "0.1.0"
 description = "Codex governance workbench desktop shell"
 authors = ["Codex"]
-license = ""
-repository = ""
+license = "Apache-2.0"
+repository = "https://github.com/Djh0311/syn-aios"
 edition = "2021"
 rust-version = "1.77.2"
 

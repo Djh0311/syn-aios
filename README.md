@@ -1,6 +1,34 @@
-# Syn 个人智能工作台
+# Syn
 
-Syn 是为当前用户长期服务的个人智能工作台。它让秘书、全局主管、项目主管、稳定成员和临时智能体围绕同一套事实、知识、记忆、技能、权限与审计持续协作。当前首先接入的是 Codex（代码智能体），以后可以接入其他智能体、模型和服务提供方；角色身份不与某一种实现永久绑定。
+Syn is a local-first personal AI workbench for durable work across long-running projects. It coordinates role identity, project scope, persistent conversations, handoffs, permissions, audit evidence, recovery, and daily attention without treating a model transcript or frontend cache as product truth.
+
+Syn is built as a Tauri 2 desktop application with a Rust backend, React and TypeScript frontend, and SQLite persistence.
+
+Public repository: https://github.com/Djh0311/syn-aios
+
+License: [Apache-2.0](LICENSE). Copyright 2026 呆头鹅.
+
+## Current maintainer preview
+
+The repository contains implemented foundations for server-owned role sessions, persistent turns and provider handles, explicit handoffs, source-first inbox and open-loop coordination, deterministic daily windows, audit receipts, and recovery-oriented state machines.
+
+The project is still pre-1.0 and in active development. External connectors, a packaged public release, broad adoption, and long-term real-world operation are not claimed. See [`docs/current-state.md`](docs/current-state.md) for the exact implementation and evidence boundary.
+
+## Why Syn exists
+
+Most agent tools optimize a single prompt or coding session. Syn explores the harder maintenance problem: how a person and multiple long-running agents can keep identity, scope, knowledge, state, evidence, and recoverability coherent over time.
+
+Syn is not a Codex shell, and it is not only a chat app, project manager, knowledge base, or coding workflow tool.
+
+## Explore the current tree
+
+There is no public installer yet. The desktop prototype lives in [`prototypes/productized-desktop-shell`](prototypes/productized-desktop-shell). Build and run notes there are development notes, not a release claim.
+
+```text
+git clone https://github.com/Djh0311/syn-aios.git
+```
+
+After clone, start from this README, then [`docs/current-state.md`](docs/current-state.md) and the product documents below. Do not treat isolated test fixtures, handoffs, or old evidence screenshots as a shipped product.
 
 ## 产品入口
 
@@ -24,3 +52,5 @@ docs/harness/plan.md → 当前阶段 → 唯一当前任务包（leaf，当前�
 ```
 
 没有活动阶段和当前任务包时，不从旧计划、旧授权、交接或验收报告推导新的施工权限。远端、部署、发布、真实服务提供方、真实账号和真实消息仍需对应的明确授权。
+
+贡献与安全报告见 [`CONTRIBUTING.md`](CONTRIBUTING.md) 和 [`SECURITY.md`](SECURITY.md)。
