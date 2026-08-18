@@ -2,7 +2,7 @@
 
 阶段：stage-14 M5 项目主管与执行闭环（事实重整与产品闭环）
 
-状态：`CURRENT` / `IN_PROGRESS` / `NOT_STAGE_CLOSEOUT` / `NOT_M5_COMPLETE`。本叶承接 M5R08 独立 PASS 结论列出的 8 项后续欠账；M5R08 的 scoped PASS 不反写、不重做。本叶不关闭 stage-14，不激活 M6、stage-15 或壳采纳。
+状态：`CURRENT` / `CANDIDATE_READY` / `AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_STAGE_CLOSEOUT` / `NOT_M5_COMPLETE`。本叶承接 M5R08 独立 PASS 结论列出的 8 项后续欠账；M5R08 的 scoped PASS 不反写、不重做。本叶不关闭 stage-14，不激活 M6、stage-15 或壳采纳。
 
 来源收据：`u-7c1590b9c908f00b3110`；用户明确要求最新 PASS 后先完成生命周期迁移，把 verdict 欠账写入新 current leaf 的“做完的标准”，再推进至本叶标准真实通过。独立结论：`/home/synadmin/workspace/.syn-gates/verdicts/M5R08-20260818-1536.verdict.md`。
 
@@ -20,6 +20,13 @@
 8. M5→壳交接继续明确欠账接收边界：F3 不继承 M5R07 acceptance driver；真窗口像素证据由新壳 F5 获取；并明确“`syn-shell` F2 启动时第一件事登记第 2、3 节”为仍未完成的接收方责任。本叶只保证交接与未完成状态可追踪，不进入 `syn-shell`、不建立 F2/F3/F5 leaf、不声称接收或像素证据已发生。
 9. Grok 产品改动按窄任务包串行实施；主管逐包复核。最终候选在 disposable checkout 至少通过 `cargo check --lib --offline`、直接相关 M1/enrollment/memory/mature/runtime 测试、完整 `cargo test --lib --offline m5_ -- --test-threads=1`、前端 typecheck/build、默认 bundle gate、`git diff --check`；原始日志绑定候选 SHA/tree。
 10. 全部本叶标准真实通过后，authorization 保持精确 closed 两字段，在 `.syn-gates/open/` 写唯一 M5R09 节点请求并停止；不得自行归档本叶、关闭 stage-14、宣布 M5 完成、进入 M6 或壳采纳。
+
+候选事实（不等于独立验收）：
+
+- 内容候选 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d` 已覆盖上述 1–8 项，并保持本叶允许写域。
+- detached disposable checkout 原始证据位于 `/home/synadmin/workspace/.syn-gates/evidence/M5R09-c91d8fc/`：`cargo check --lib --offline` 0；`m5r09_` 23/23；memory/mature 各 14/14；ordinary source 4/4；完整 `m5_` 188/188；前端 typecheck/default build 0；默认 bundle marker 零命中；candidate-range `git diff --check` 0。
+- `M5R09-protected-wip-attribution-v1.md` 与更新后的 M5R08 manifest 分开活动 runtime 和静态 hash；`commands.rs` 候选外 WIP 仍为 59+/56-，6 个 `m6_*.rs` 仍未跟踪。
+- 当前只请求本 leaf 的独立验收；本叶仍留在 `leaves/`，不自行归档或前进到下一 leaf。
 
 允许动：
 
