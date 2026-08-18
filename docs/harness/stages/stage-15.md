@@ -18,9 +18,9 @@
 
 干完的标准：
 
-- M6P00 前置达到自身标准并通过独立验收；
-- 其后每个 M6 域层叶各自独立内容提交与定向证据，逐项进入 done；任一实现不得冒充整阶段完成；
-- 每叶到节点时 authorization 回精确 closed，并在仓库外 `/home/synadmin/workspace/.syn-gates/open/` 写节点请求文件等独立验收；
+- M6P00 前置与 M6D01–M6D08 各自达到本叶写下的标准，经主管自复核放行；
+- 每叶各自独立内容提交与定向证据，逐项进入 done；任一实现不得冒充整阶段完成；
+- 每到检查点（CP1/CP2/CP3）authorization 回精确 closed，并在仓库外 `/home/synadmin/workspace/.syn-gates/open/` 写该检查点交包文件等总指导验收；PASS 才继续下一段；
 - `git diff --check` 通过；M6 写面零未知 delta；stage-12、D0C04/D0C05、M1–M5 冻结合同全程只读保全；
 - 阶段关闭另需独立验收结论明确放行，不由本阶段任一叶自行宣布。
 
@@ -49,6 +49,36 @@
 - 出现 secret/credential/真实运行数据/未知 symlink/special file、要求伪造证据、M1–M5 冻结合同或 stage-12/D0C04/D0C05 意外修改、候选 commit 与新鲜证据 SHA 不一致、`syn-shell` 写面被触碰时立即停止并交总线；
 - authorization 保持精确 closed 两字段，不手填 executionReceipt/session/turn/expiresAt；每次 leaf 切换先 closed 再按真实 receipt 重新签发，禁止旧 active JSON 跨 leaf 续用。
 
+## 检查点纪律（2026-08-18 22:45 用户要求总指导一次排完 M6 并在中间设检查点）
+
+本阶段的叶子已一次排完，主管在同一段内连续施工、逐叶自复核，但到检查点必须停：
+
+| 检查点 | 覆盖叶 | 交包文件 |
+|---|---|---|
+| （前置） | M6P00 | `stage-15-m6p00-<YYYYMMDD-HHMM>.md` |
+| CP1 | M6D01、M6D02 | `stage-15-cp1-<YYYYMMDD-HHMM>.md` |
+| CP2 | M6D03、M6D04 | `stage-15-cp2-<YYYYMMDD-HHMM>.md` |
+| CP3 | M6D05、M6D06 | `stage-15-cp3-<YYYYMMDD-HHMM>.md` |
+| 阶段交包 | M6D07、M6D08 | `stage-15-<YYYYMMDD-HHMM>.md` |
+
+到检查点的硬动作，缺一不可：把 `authorization.json` 打回精确 closed 两字段；在 `/home/synadmin/workspace/.syn-gates/open/` 写该检查点的交包文件（含所覆盖各叶的候选与记账 SHA/tree、每叶做了什么、主管自复核七项的原始证据与退出码、仍未完成事项与欠账、请求验收的确切范围、实际写域清单）；原始日志留在 `.syn-gates/evidence/`；然后结束进程。`open/` 里同时只应存在一个交包文件；写之前确认没有未处理的旧文件，有就停下并在日志里说明。
+
+不得跳过检查点、不得把两个检查点合并交包、不得在未获总指导 PASS 时进入下一检查点的第一叶。总指导给出 PASS 后由总指导重新拉起主管会话；FAIL 则按返修意见在当前范围内返修，重跑直接受影响的验证与必要回归。
+
 ## 叶子
 
-- [ ] M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置（current）
+顺序依 stage-6 计划第 5 节依赖图（ORG-001 → ORG-003 → ORG-002 → ORG-004；ORG-001 → ORG-005 / ORG-006；ORG-003+005+006 → ORG-006A），并按"syn 源码同一时间单写者"串行化：
+
+- [ ] M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置（current，前置）
+- [ ] M6D01 跨项目与成员合同冻结（ORG-001，只写合同）→ CP1
+- [ ] M6D02 顶层 Global Supervisor 持久 RoleSession（ORG-003）→ **CP1 停点**
+- [ ] M6D03 只读跨项目 query 与 advisory（ORG-002）→ CP2
+- [ ] M6D04 Secretary consult Handoff（ORG-004）→ **CP2 停点**
+- [ ] M6D05 稳定成员目录（ORG-005）→ CP3
+- [ ] M6D06 临时 agent 历史投影（ORG-006）→ **CP3 停点**
+- [ ] M6D07 独立多视角会诊（ORG-006A）
+- [ ] M6D08 M6 域层集成回归与阶段候选 → **阶段交包**
+
+明确不在本阶段：ORG-007 双项目隔离 App 验收与顶层入口 UI，载体在新壳，记在 `unfinished/M6S01-dual-project-isolated-app-acceptance-on-new-shell.md`。因此本阶段通过也只到 M6 域层，不构成 M6 完成。
+
+文件名纪律（总指导钉死，避免覆盖只读保全）：6 个未跟踪 `m6_*.rs` 占用了 `m6_cross_project_query.rs`、`m6_global_supervisor_session.rs`、`m6_member_directory.rs`（含 `.bak`）、`m6_organization_identity.rs`、`m6_temporary_agent_history.rs` 这几个名字。本阶段新增域层源码统一用 `m6_org_*` 前缀，禁止使用上述任一名字。
