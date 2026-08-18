@@ -1,0 +1,954 @@
+{
+  "schema": "syn.fixture.m6-org-001.contract-cases.v1",
+  "contract_id": "m6-cross-project-and-organization-v1",
+  "task_id": "SYN-ORG-001",
+  "leaf": "M6D01",
+  "implementation_status": "CONTRACT_AND_FIXTURES_ONLY",
+  "required_keys": [
+    "id",
+    "contract_id",
+    "rule_id",
+    "polarity",
+    "category",
+    "input",
+    "expected_code",
+    "expected_mutated_targets"
+  ],
+  "required_negative_categories": [
+    "stale-summary-as-fresh",
+    "denied-scope-no-degrade-or-cache",
+    "foreign-project-owner",
+    "missing-watermark",
+    "temporary-as-stable",
+    "stale-availability-as-permission",
+    "temporary-envelope-missing-field",
+    "unmappable-legacy-quarantine",
+    "multiview-presubmit-isolation",
+    "adoption-writes-project",
+    "application-mutates-advisory-lifecycle",
+    "degraded-as-stale",
+    "denied-as-missing",
+    "missing-as-stale-with-cache",
+    "advisory-join-mismatch",
+    "report-self-claim-envelope",
+    "runtime-trace-derivation",
+    "child-run-creates-member",
+    "agent-center-session-auto-promote",
+    "legacy-single-project-review-auto-promote",
+    "multiview-result-as-command",
+    "provider-as-member-identity",
+    "same-name-merge",
+    "directory-as-authorization",
+    "forbidden-raw-transcript",
+    "direct-project-store-read",
+    "project-writeback",
+    "missing-field-compatibility"
+  ],
+  "cases": [
+  {
+    "id": "CF-M6-ORG-POS-001",
+    "contract_id": "m6-cross-project-and-organization-v1",
+    "rule_id": "record-cross-project-advisory",
+      "polarity": "POSITIVE",
+      "category": "exact-advisory-join",
+      "input": {
+        "command": "RecordCrossProjectAdvisory",
+        "advisory_id": "advisory_01",
+        "global_role_session_id": "role_session_global_01",
+      "consult_handoff_ref": "consult_handoff_01",
+      "handoff_id": "handoff_01",
+      "handoff_revision": 1,
+      "handoff_status_ref": "ACCEPTED",
+      "handoff_receipt_ref": "handoff_receipt_01",
+        "generated_at": "2026-08-18T00:00:00Z",
+        "policy_decision_ref": "policy_allow_01",
+        "consumed_summaries": [
+          {
+            "summary_id": "summary_01",
+            "project_id": "project_01",
+            "project_owner_ref": "owner_01",
+            "schema_version": "m5-project-summary-v1",
+            "version": 4,
+            "source_watermark": "watermark_01",
+            "summary_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "policy_decision_ref": "policy_allow_01",
+            "freshness_state": "fresh",
+            "source_refs": ["object_ref_01"]
+          },
+          {
+            "summary_id": "summary_02",
+            "project_id": "project_02",
+            "project_owner_ref": "owner_02",
+            "schema_version": "m5-project-summary-v1",
+            "version": 2,
+            "source_watermark": "watermark_02",
+            "summary_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "policy_decision_ref": "policy_allow_01",
+            "freshness_state": "fresh",
+            "source_refs": ["object_ref_02"]
+          }
+        ],
+        "source_links": [
+          {
+            "source_link_id": "source_link_01",
+            "object_ref": "object_ref_01",
+            "project_id": "project_01",
+            "summary_id": "summary_01",
+            "title_ref": "title_ref_01",
+            "scrubbed_summary_ref": "scrubbed_summary_ref_01",
+            "deep_link_metadata_ref": "deep_link_01"
+          }
+        ]
+      },
+      "expected_code": "ADVISORY_RECORDED",
+      "expected_mutated_targets": ["CrossProjectAdvisory.lifecycle_status"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-002",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "POSITIVE",
+      "category": "fresh-summary-consume",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "query_port": "ProjectSummaryQueryPort",
+        "consumer_role_session_id": "role_session_global_01",
+        "consumer_scope_ref": "scope_global_01",
+        "consumer_scope_kind": "GLOBAL",
+        "consumer_expires_at": "2026-08-19T00:00:00Z",
+        "judged_at": "2026-08-18T12:00:00Z",
+        "policy_decision_ref": "policy_allow_01",
+        "requested_project_id": "project_01",
+        "project_owner_ref": "owner_01",
+        "summary_id": "summary_01",
+        "schema_version": "m5-project-summary-v1",
+        "version": 4,
+        "source_watermark": "watermark_01",
+        "current_watermark": "watermark_01",
+        "summary_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_refs": ["object_ref_01"]
+      },
+      "expected_code": "SUMMARY_CONSUMED_FRESH",
+      "expected_mutated_targets": ["FreshnessJudgement.freshness_state"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-003",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "adopt-advisory",
+      "polarity": "POSITIVE",
+      "category": "adoption-creates-only-decision-request",
+      "input": {
+        "command": "AdoptCrossProjectAdvisory",
+        "advisory_id": "advisory_01",
+        "advisory_lifecycle_status": "ISSUED",
+        "actor_id": "actor_user_01",
+        "creates_decision_request": true,
+        "creates_project_command": false,
+        "creates_grant": false,
+        "creates_fact": false,
+        "changes_advisory_lifecycle": false
+      },
+      "expected_code": "DECISION_REQUEST_CREATED",
+      "expected_mutated_targets": ["DecisionRequest.status"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-004",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "observe-application-receipt",
+      "polarity": "POSITIVE",
+      "category": "partial-application-projection",
+      "input": {
+        "command": "ObserveAdvisoryApplicationReceipt",
+        "advisory_id": "advisory_01",
+        "advisory_revision": 1,
+        "decision_request_id": "decision_request_01",
+        "observations": [
+          {
+            "observation_id": "observation_01",
+            "project_id": "project_01",
+            "project_owner_ref": "owner_01",
+            "authoritative_command_receipt_ref": "receipt_apply_01",
+            "grant_ref": "grant_01",
+            "outcome": "applied",
+            "source_receipt_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          {
+            "observation_id": "observation_02",
+            "project_id": "project_02",
+            "project_owner_ref": "owner_02",
+            "authoritative_command_receipt_ref": "receipt_fail_02",
+            "grant_ref": "grant_02",
+            "outcome": "failed",
+            "source_receipt_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        ],
+        "partial_apply": true,
+        "owns_project_result": false,
+        "changes_advisory_lifecycle": false,
+        "history_append_only": true
+      },
+      "expected_code": "APPLICATION_PARTIAL_PROJECTED",
+      "expected_mutated_targets": ["AdvisoryApplicationProjection.history", "PerProjectApplicationObservation.outcome"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-005",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "record-contact",
+      "polarity": "POSITIVE",
+      "category": "contact-no-grant",
+      "input": {
+        "command": "RecordMemberContact",
+        "from_actor_id": "actor_user_01",
+        "to_member_id": "member_01",
+        "handoff_id": "handoff_contact_01",
+        "role_session_id": "role_session_contact_01",
+        "capability_granted": false,
+        "directory_is_authority": false
+      },
+      "expected_code": "CONTACT_RECEIPT_RECORDED",
+      "expected_mutated_targets": ["ContactReceipt.status"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-006",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "start-multi-view-consultation",
+      "polarity": "POSITIVE",
+      "category": "multiview-presubmit-isolation",
+      "input": {
+        "command": "StartMultiViewConsultation",
+        "consultation_id": "consultation_01",
+        "question_packet": {
+          "question_packet_id": "question_packet_01",
+          "question_ref": "question_ref_01",
+          "source_refs": ["object_ref_01", "object_ref_02"],
+          "packet_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "minimal": true,
+          "schema_version": "m6-question-packet-v1"
+        },
+      "views": [
+          {
+            "view_id": "view_01",
+            "role_session_id": "role_session_consult_a",
+            "workcell_ref": "workcell_a",
+            "context_packet_ref": "context_a",
+            "question_packet_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "submitted": false,
+            "peer_conclusions_readable_before_submit": false
+          },
+          {
+            "view_id": "view_02",
+            "role_session_id": "role_session_consult_b",
+            "workcell_ref": "workcell_b",
+            "context_packet_ref": "context_b",
+            "question_packet_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "submitted": false,
+            "peer_conclusions_readable_before_submit": false
+          }
+      ],
+      "budget_limit_ref": "budget_limit_01",
+      "budget_state": "WITHIN_BUDGET",
+      "deadline_at": "2026-08-18T13:00:00Z",
+      "timeout_state": "WITHIN_TIME",
+      "result_state": "PENDING",
+      "produces_command": false,
+        "produces_grant": false,
+        "produces_fact": false
+      },
+      "expected_code": "MULTIVIEW_ISOLATED",
+      "expected_mutated_targets": ["MultiViewConsultation.result_state"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-007",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "promote-temporary-agent",
+      "polarity": "POSITIVE",
+      "category": "human-promotion-promoted-from",
+      "input": {
+        "command": "PromoteTemporaryAgent",
+        "explicit_human_command": true,
+        "temporary_agent_id": "temporary_agent_01",
+        "member_id": "member_02",
+        "promoted_from": "temporary_agent_01",
+        "promoted_by_actor_id": "actor_user_01",
+        "source_temporary_agent_type_unchanged": true
+      },
+      "expected_code": "MEMBER_PROMOTED",
+      "expected_mutated_targets": ["StableMember.membership_lifecycle", "PromotionBinding.promoted_from"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-008",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "project-temporary-agent",
+      "polarity": "POSITIVE",
+      "category": "temporary-agent-full-envelope",
+      "input": {
+        "command": "ProjectTemporaryAgent",
+        "temporary_agent_id": "temporary_agent_01",
+        "execution_envelope": {
+          "project_id": "project_01",
+          "orchestration_id": "orchestration_01",
+          "workflow_run_id": "workflow_run_01",
+          "work_item_id": "work_item_01",
+          "node_id": "node_01",
+          "dispatch_id": "dispatch_01",
+          "attempt_id": "attempt_01",
+          "grant_id": "grant_01",
+          "worker_role_session_id": "role_session_worker_01",
+          "authoritative_receipt_ref": "receipt_exec_01",
+          "trusted_actor_id": "actor_worker_01",
+          "hashes": {
+            "grant_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+            "report_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+            "receipt_hash": "3333333333333333333333333333333333333333333333333333333333333333"
+          }
+        },
+        "report_self_claim": false,
+        "missing_field_compatibility": false,
+        "runtime_trace_derivation": false,
+        "copies_report_body": false
+      },
+      "expected_code": "TEMPORARY_AGENT_PROJECTED",
+      "expected_mutated_targets": ["TemporaryAgent.membership_lifecycle"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-009",
+      "contract_id": "m6-cross-project-and-organization-v1",
+    "rule_id": "mark-advisory-stale",
+      "polarity": "POSITIVE",
+      "category": "watermark-change-marks-stale-no-overwrite",
+      "input": {
+        "command": "MarkAdvisoryStaleOnWatermarkChange",
+        "advisory_id": "advisory_01",
+        "prior_lifecycle_status": "ISSUED",
+        "prior_consumed_watermark": "watermark_01",
+        "current_watermark": "watermark_01_next",
+        "overwrite_history": false,
+        "silent_recompute": false
+      },
+      "expected_code": "ADVISORY_MARKED_STALE",
+      "expected_mutated_targets": ["CrossProjectAdvisory.lifecycle_status", "CrossProjectAdvisory.freshness_state"]
+    },
+  {
+    "id": "CF-M6-ORG-POS-010",
+    "contract_id": "m6-cross-project-and-organization-v1",
+    "rule_id": "consult-handoff-reference-only",
+      "polarity": "POSITIVE",
+      "category": "consult-handoff-is-ref",
+      "input": {
+        "command": "BindConsultHandoff",
+        "consult_handoff_ref": "consult_handoff_01",
+      "handoff_id": "handoff_01",
+      "handoff_revision": 1,
+      "status_ref": "ACCEPTED",
+      "consult_kind": "SECRETARY_TO_GLOBAL_SUPERVISOR",
+        "from_role_session_id": "role_session_secretary_01",
+        "to_role_ref": "role_global_supervisor",
+        "scope_ref": "scope_global_01",
+      "question_ref": "question_ref_01",
+      "object_refs": ["object_ref_01"],
+      "receipt_ref": "handoff_receipt_01",
+        "project_write_capability": false,
+        "replaces_m3_handoff": false
+      },
+      "expected_code": "CONSULT_HANDOFF_BOUND",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-POS-011",
+      "contract_id": "m6-cross-project-and-organization-v1",
+    "rule_id": "capability-permission-read-only",
+      "polarity": "POSITIVE",
+      "category": "capability-ref-read-only",
+      "input": {
+        "command": "ObserveCapabilityPermissionRef",
+        "subject_member_id": "member_01",
+        "kind": "capability",
+        "source": "policy_grant_domain",
+        "revision": 7,
+        "observed_at": "2026-08-18T00:00:00Z",
+        "directory_is_authority": false,
+        "read_only": true,
+        "authorizes_command": false
+      },
+      "expected_code": "CAPABILITY_REF_OBSERVED",
+      "expected_mutated_targets": ["CapabilityPermissionRef.observed_at"]
+    },
+    {
+      "id": "CF-M6-ORG-POS-012",
+      "contract_id": "m6-cross-project-and-organization-v1",
+    "rule_id": "child-run-reference-only",
+      "polarity": "POSITIVE",
+      "category": "child-run-ref-only",
+      "input": {
+        "command": "RecordChildRunRef",
+        "child_run_ref": "child_run_01",
+        "parent_workcell_ref": "workcell_parent_01",
+        "attempt_id": "attempt_01",
+        "grant_id": "grant_01",
+        "trace_ref": "trace_ref_01",
+        "creates_stable_member": false,
+        "creates_temporary_agent": false,
+        "creates_organization_hierarchy": false
+      },
+      "expected_code": "CHILD_RUN_REF_RECORDED",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-POS-013",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "observe-application-receipt",
+      "polarity": "POSITIVE",
+      "category": "compensation-rollback-observation",
+      "input": {
+        "command": "ObserveAdvisoryApplicationReceipt",
+        "advisory_id": "advisory_01",
+        "decision_request_id": "decision_request_01",
+        "prior_observation_id": "observation_01",
+        "prior_outcome": "applied",
+        "observation_id": "observation_03",
+        "project_id": "project_01",
+        "project_owner_ref": "owner_01",
+        "authoritative_command_receipt_ref": "receipt_rollback_01",
+        "outcome": "rolled_back",
+        "overwrite_prior_observation": false,
+        "changes_advisory_lifecycle": false
+      },
+      "expected_code": "APPLICATION_ROLLBACK_OBSERVED",
+      "expected_mutated_targets": ["AdvisoryApplicationProjection.history", "PerProjectApplicationObservation.outcome"]
+    },
+    {
+      "id": "CF-M6-ORG-NEG-001",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "NEGATIVE",
+      "category": "stale-summary-as-fresh",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "query_port": "ProjectSummaryQueryPort",
+        "consumer_role_session_id": "role_session_global_01",
+        "consumer_scope_ref": "scope_global_01",
+        "consumer_expires_at": "2026-08-19T00:00:00Z",
+        "judged_at": "2026-08-18T12:00:00Z",
+        "policy_decision_ref": "policy_allow_01",
+        "requested_project_id": "project_01",
+        "project_owner_ref": "owner_01",
+        "summary_id": "summary_01",
+        "schema_version": "m5-project-summary-v1",
+        "version": 3,
+        "source_watermark": "watermark_old",
+        "current_watermark": "watermark_01",
+        "summary_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "consume_as": "fresh"
+      },
+      "expected_code": "REJECTED_STALE_SUMMARY_AS_FRESH",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-002",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "NEGATIVE",
+      "category": "denied-scope-no-degrade-or-cache",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "query_port": "ProjectSummaryQueryPort",
+        "consumer_role_session_id": "role_session_global_01",
+        "consumer_scope_ref": "scope_denied_01",
+        "policy_decision_ref": "policy_deny_01",
+        "requested_project_id": "project_01",
+        "project_owner_ref": "owner_01",
+        "freshness_state": "denied",
+        "represent_as": "stale",
+        "reuse_cache": true,
+        "cached_payload_ref": "cached_summary_01"
+      },
+      "expected_code": "REJECTED_DENIED_SCOPE_NO_DEGRADE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-003",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "NEGATIVE",
+      "category": "foreign-project-owner",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "query_port": "ProjectSummaryQueryPort",
+        "consumer_role_session_id": "role_session_global_01",
+        "consumer_scope_ref": "scope_global_01",
+        "policy_decision_ref": "policy_allow_01",
+        "requested_project_id": "project_01",
+        "project_owner_ref": "owner_foreign",
+        "expected_project_owner_ref": "owner_01"
+      },
+      "expected_code": "REJECTED_FOREIGN_PROJECT_OWNER",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-004",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "record-cross-project-advisory",
+      "polarity": "NEGATIVE",
+      "category": "missing-watermark",
+      "input": {
+        "command": "RecordCrossProjectAdvisory",
+        "advisory_id": "advisory_missing_watermark",
+        "global_role_session_id": "role_session_global_01",
+      "consult_handoff_ref": "consult_handoff_01",
+      "handoff_id": "handoff_01",
+      "handoff_revision": 1,
+      "handoff_status_ref": "ACCEPTED",
+      "handoff_receipt_ref": "handoff_receipt_01",
+      "generated_at": "2026-08-18T00:00:00Z",
+      "policy_decision_ref": "policy_allow_01",
+      "consumed_summaries": [
+          {
+            "summary_id": "summary_01",
+            "project_id": "project_01",
+            "project_owner_ref": "owner_01",
+            "schema_version": "m5-project-summary-v1",
+            "version": 4,
+            "source_watermark": null,
+          "summary_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy_decision_ref": "policy_allow_01",
+          "freshness_state": "fresh",
+          "source_refs": ["object_ref_01"]
+        }
+      ],
+      "source_links": [{"source_link_id":"source_link_01","object_ref":"object_ref_01","project_id":"project_01","summary_id":"summary_01","title_ref":"title_ref_01","scrubbed_summary_ref":"scrubbed_summary_ref_01","deep_link_metadata_ref":"deep_link_01"}]
+      },
+      "expected_code": "REJECTED_MISSING_WATERMARK",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-005",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "register-stable-member",
+      "polarity": "NEGATIVE",
+      "category": "temporary-as-stable",
+      "input": {
+        "command": "RegisterStableMember",
+        "presented_type": "StableMember",
+        "member_id": "temporary_agent_01",
+        "temporary_agent_id": "temporary_agent_01",
+        "identity_source": "TemporaryAgent"
+      },
+      "expected_code": "REJECTED_TEMPORARY_AS_STABLE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-006",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "observe-availability",
+      "polarity": "NEGATIVE",
+      "category": "stale-availability-as-permission",
+      "input": {
+        "command": "AuthorizeWithAvailability",
+        "availability_id": "availability_01",
+        "subject_ref": "member_01",
+        "source": "adapter_status",
+        "observed_at": "2026-08-17T00:00:00Z",
+        "ttl": "PT1H",
+        "judged_at": "2026-08-18T12:00:00Z",
+        "observed_state": "available",
+        "effective_state": "unknown",
+        "used_as_permission": true
+      },
+      "expected_code": "REJECTED_STALE_AVAILABILITY_AS_PERMISSION",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-007",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "project-temporary-agent",
+      "polarity": "NEGATIVE",
+      "category": "temporary-envelope-missing-field",
+      "input": {
+        "command": "ProjectTemporaryAgent",
+        "temporary_agent_id": "temporary_agent_incomplete",
+        "execution_envelope": {
+          "project_id": "project_01",
+          "orchestration_id": "orchestration_01",
+          "workflow_run_id": "workflow_run_01",
+          "work_item_id": "work_item_01",
+          "node_id": "node_01",
+          "dispatch_id": null,
+          "attempt_id": "attempt_01",
+          "grant_id": "grant_01",
+          "worker_role_session_id": "role_session_worker_01",
+          "authoritative_receipt_ref": "receipt_exec_01",
+          "trusted_actor_id": "actor_worker_01",
+          "hashes": {
+            "grant_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+            "report_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+            "receipt_hash": "3333333333333333333333333333333333333333333333333333333333333333"
+          }
+        }
+      },
+      "expected_code": "REJECTED_INCOMPLETE_EXECUTION_ENVELOPE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-008",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "quarantine-unmappable-legacy",
+      "polarity": "NEGATIVE",
+      "category": "unmappable-legacy-quarantine",
+      "input": {
+        "command": "ImportLegacyRecord",
+        "legacy_kind": "UNMAPPABLE_OTHER",
+        "mappable": false,
+        "guess_fill": true,
+        "promote_to": "CrossProjectAdvisory"
+      },
+      "expected_code": "QUARANTINED_UNMAPPABLE_LEGACY",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-009",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "submit-consultation-view",
+      "polarity": "NEGATIVE",
+      "category": "multiview-presubmit-isolation",
+      "input": {
+        "command": "SubmitConsultationView",
+        "consultation_id": "consultation_01",
+        "view_id": "view_01",
+        "submitted": false,
+        "reads_peer_conclusion_ref": "view_02_conclusion",
+        "peer_conclusions_readable_before_submit": true
+      },
+      "expected_code": "REJECTED_PEER_CONCLUSION_PRE_SUBMIT",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-010",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "adopt-advisory",
+      "polarity": "NEGATIVE",
+      "category": "adoption-writes-project",
+      "input": {
+        "command": "AdoptCrossProjectAdvisory",
+        "advisory_id": "advisory_01",
+        "creates_decision_request": true,
+        "creates_project_command": true,
+        "creates_grant": true
+      },
+      "expected_code": "REJECTED_ADOPTION_PROJECT_WRITE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-011",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "observe-application-receipt",
+      "polarity": "NEGATIVE",
+      "category": "application-mutates-advisory-lifecycle",
+      "input": {
+        "command": "ObserveAdvisoryApplicationReceipt",
+        "advisory_id": "advisory_01",
+        "decision_request_id": "decision_request_01",
+        "outcome": "applied",
+        "changes_advisory_lifecycle": true,
+        "sets_advisory_lifecycle_status": "ISSUED"
+      },
+      "expected_code": "REJECTED_APPLICATION_MUTATES_ADVISORY",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-012",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "NEGATIVE",
+      "category": "degraded-as-stale",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "query_port": "ProjectSummaryQueryPort",
+        "freshness_state": "degraded",
+        "represent_as": "stale",
+        "reuse_cache": false
+      },
+      "expected_code": "REJECTED_DEGRADED_AS_STALE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-013",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "NEGATIVE",
+      "category": "denied-as-missing",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "freshness_state": "denied",
+        "represent_as": "missing",
+        "reuse_cache": false
+      },
+      "expected_code": "REJECTED_DENIED_AS_MISSING",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-014",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "NEGATIVE",
+      "category": "missing-as-stale-with-cache",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "freshness_state": "missing",
+        "represent_as": "stale",
+        "reuse_cache": true,
+        "cached_payload_ref": "cached_summary_01"
+      },
+      "expected_code": "REJECTED_MISSING_AS_STALE_OR_CACHE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-015",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "record-cross-project-advisory",
+      "polarity": "NEGATIVE",
+      "category": "advisory-join-mismatch",
+      "input": {
+        "command": "RecordCrossProjectAdvisory",
+        "advisory_id": "advisory_mismatch",
+        "global_role_session_id": "role_session_global_01",
+      "consult_handoff_ref": "consult_handoff_01",
+      "handoff_id": "handoff_01",
+      "handoff_revision": 1,
+      "handoff_status_ref": "ACCEPTED",
+      "handoff_receipt_ref": "handoff_receipt_01",
+      "generated_at": "2026-08-18T00:00:00Z",
+      "policy_decision_ref": "policy_allow_01",
+      "consumed_summaries": [
+          {
+            "summary_id": "summary_01",
+            "project_id": "project_01",
+            "declared_project_id": "project_01",
+            "joined_project_id": "project_99",
+            "project_owner_ref": "owner_01",
+            "schema_version": "m5-project-summary-v1",
+            "version": 4,
+            "source_watermark": "watermark_01",
+          "summary_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "policy_decision_ref": "policy_allow_01",
+          "freshness_state": "fresh",
+          "source_refs": ["object_ref_01"]
+        }
+      ],
+      "source_links": [{"source_link_id":"source_link_01","object_ref":"object_ref_01","project_id":"project_01","summary_id":"summary_01","title_ref":"title_ref_01","scrubbed_summary_ref":"scrubbed_summary_ref_01","deep_link_metadata_ref":"deep_link_01"}]
+      },
+      "expected_code": "REJECTED_ADVISORY_JOIN_MISMATCH",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-016",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "project-temporary-agent",
+      "polarity": "NEGATIVE",
+      "category": "report-self-claim-envelope",
+      "input": {
+        "command": "ProjectTemporaryAgent",
+        "temporary_agent_id": "temporary_agent_self_claim",
+        "identity_source": "report_self_claim",
+        "report_self_claim": true,
+        "trusted_actor_id": null
+      },
+      "expected_code": "REJECTED_REPORT_SELF_CLAIM",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-017",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "project-temporary-agent",
+      "polarity": "NEGATIVE",
+      "category": "runtime-trace-derivation",
+      "input": {
+        "command": "ProjectTemporaryAgent",
+        "temporary_agent_id": "temporary_agent_trace",
+        "identity_source": "runtime_trace",
+        "runtime_trace_derivation": true,
+        "grant_id": null
+      },
+      "expected_code": "REJECTED_RUNTIME_TRACE_DERIVATION",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-018",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "register-stable-member",
+      "polarity": "NEGATIVE",
+      "category": "child-run-creates-member",
+      "input": {
+        "command": "RegisterStableMember",
+        "identity_source": "ChildRunRef",
+        "child_run_ref": "child_run_01",
+        "creates_stable_member": true
+      },
+      "expected_code": "REJECTED_CHILD_RUN_AS_MEMBER",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-019",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "quarantine-unmappable-legacy",
+      "polarity": "NEGATIVE",
+      "category": "agent-center-session-auto-promote",
+      "input": {
+        "command": "ImportLegacyRecord",
+        "legacy_kind": "AGENT_CENTER_SESSION",
+        "auto_promote_to": "StableMember"
+      },
+      "expected_code": "REJECTED_AGENT_CENTER_AUTO_PROMOTE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-020",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "quarantine-unmappable-legacy",
+      "polarity": "NEGATIVE",
+      "category": "legacy-single-project-review-auto-promote",
+      "input": {
+        "command": "ImportLegacyRecord",
+        "legacy_kind": "SINGLE_PROJECT_REVIEW",
+        "auto_promote_to": "CrossProjectAdvisory"
+      },
+      "expected_code": "REJECTED_LEGACY_REVIEW_AUTO_PROMOTE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-021",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "assemble-consultation-result",
+      "polarity": "NEGATIVE",
+      "category": "multiview-result-as-command",
+      "input": {
+        "command": "AssembleMultiViewConsultation",
+        "consultation_id": "consultation_01",
+        "produces_command": true,
+        "produces_grant": true,
+        "produces_fact": true
+      },
+      "expected_code": "REJECTED_CONSULTATION_AS_COMMAND",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-022",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "register-stable-member",
+      "polarity": "NEGATIVE",
+      "category": "provider-as-member-identity",
+      "input": {
+        "command": "RegisterStableMember",
+        "member_id": "provider_thread_01",
+        "identity_source": "provider",
+        "provider": "fixture_provider",
+        "model": "fixture_model",
+        "thread": "thread_01"
+      },
+      "expected_code": "REJECTED_PROVIDER_AS_MEMBER_IDENTITY",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-023",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "register-stable-member",
+      "polarity": "NEGATIVE",
+      "category": "same-name-merge",
+      "input": {
+        "command": "RegisterStableMember",
+        "member_id": "member_03",
+        "display_name_ref": "display_name_shared",
+        "existing_member_id": "member_01",
+        "existing_display_name_ref": "display_name_shared",
+        "merge_on_display_name": true
+      },
+      "expected_code": "REJECTED_SAME_NAME_MERGE",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-024",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "record-contact",
+      "polarity": "NEGATIVE",
+      "category": "directory-as-authorization",
+      "input": {
+        "command": "AuthorizeFromDirectory",
+        "member_id": "member_01",
+        "directory_is_authority": true,
+        "capability_granted": true
+      },
+      "expected_code": "REJECTED_DIRECTORY_AS_AUTHORIZATION",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-025",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "record-cross-project-advisory",
+      "polarity": "NEGATIVE",
+      "category": "forbidden-raw-transcript",
+      "input": {
+      "command": "RecordCrossProjectAdvisory",
+      "advisory_id": "advisory_sensitive",
+      "raw_transcript": "fixture-only raw transcript body",
+      "forbidden_payload_present": true
+      },
+      "expected_code": "REJECTED_FORBIDDEN_MATERIAL",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-026",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "NEGATIVE",
+      "category": "direct-project-store-read",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "query_port": "project_store",
+        "direct_project_store_read": true
+      },
+      "expected_code": "REJECTED_DIRECT_PROJECT_STORE_READ",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-027",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "consume-project-summary",
+      "polarity": "NEGATIVE",
+      "category": "project-writeback",
+      "input": {
+        "command": "ConsumeProjectSummary",
+        "query_port": "ProjectSummaryQueryPort",
+        "project_writeback": true
+      },
+      "expected_code": "REJECTED_PROJECT_WRITEBACK",
+      "expected_mutated_targets": []
+    },
+    {
+      "id": "CF-M6-ORG-NEG-028",
+      "contract_id": "m6-cross-project-and-organization-v1",
+      "rule_id": "project-temporary-agent",
+      "polarity": "NEGATIVE",
+      "category": "missing-field-compatibility",
+      "input": {
+        "command": "ProjectTemporaryAgent",
+        "temporary_agent_id": "temporary_agent_compat",
+        "missing_field_compatibility": true,
+        "execution_envelope": {
+          "project_id": "project_01",
+          "orchestration_id": "orchestration_01",
+          "workflow_run_id": "workflow_run_01",
+          "work_item_id": "work_item_01",
+          "node_id": "node_01",
+          "dispatch_id": "dispatch_01",
+          "attempt_id": "attempt_01",
+          "grant_id": null,
+          "worker_role_session_id": "role_session_worker_01",
+          "authoritative_receipt_ref": "receipt_exec_01",
+          "trusted_actor_id": "actor_worker_01",
+          "hashes": {}
+        }
+      },
+      "expected_code": "REJECTED_MISSING_FIELD_COMPATIBILITY",
+      "expected_mutated_targets": []
+    }
+  ]
+}
