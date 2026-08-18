@@ -14,11 +14,14 @@
 
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 pub(crate) const M1_PROJECT_INDEX_PORT_VERSION: &str = "m1.project-index.read-port.v2";
 pub(crate) const M1_PROJECT_INDEX_AUTHORITY_PORT_VERSION: &str =
@@ -967,26 +970,80 @@ fn load_ordinary_identity_source(
     root: &Path,
 ) -> Result<M1OrdinaryIdentitySourceDocument, M1ProjectIndexError> {
     let path = root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
-    let metadata = match fs::symlink_metadata(&path) {
-        Ok(metadata) => metadata,
+    let file = open_ordinary_identity_source_nofollow(&path)?;
+    validate_opened_ordinary_identity_source_file(&file)?;
+    let bytes = read_ordinary_identity_source_from_handle(&file)?;
+    parse_ordinary_identity_source_bytes(&bytes)
+}
+
+// Linux `O_NOFOLLOW` (0400000) and `O_NONBLOCK` (04000). Ordinary identity
+// source open must reject a final-component symlink and must not block on a
+// non-regular replacement before regular-file metadata is checked on the fd.
+#[cfg(unix)]
+const LINUX_O_NOFOLLOW: i32 = 0x20000;
+#[cfg(unix)]
+const LINUX_O_NONBLOCK: i32 = 0x800;
+// Linux `ELOOP`: `open(..., O_NOFOLLOW)` on a final-component symlink.
+const LINUX_ELOOP: i32 = 40;
+
+fn open_ordinary_identity_source_nofollow(
+    path: &Path,
+) -> Result<File, M1ProjectIndexError> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        options.custom_flags(LINUX_O_NOFOLLOW | LINUX_O_NONBLOCK);
+    }
+    match options.open(path) {
+        Ok(file) => Ok(file),
         Err(error) if error.kind() == ErrorKind::NotFound => {
-            return Err(M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MISSING));
+            Err(M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MISSING))
         }
-        Err(_) => {
-            return Err(M1ProjectIndexError::new(
-                M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE,
-            ));
+        Err(error) if ordinary_identity_source_open_rejected_symlink(&error) => {
+            Err(M1ProjectIndexError::new(
+                M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
+            ))
         }
-    };
-    if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+        Err(_) => Err(M1ProjectIndexError::new(
+            M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE,
+        )),
+    }
+}
+
+fn ordinary_identity_source_open_rejected_symlink(error: &std::io::Error) -> bool {
+    error.raw_os_error() == Some(LINUX_ELOOP)
+}
+
+fn validate_opened_ordinary_identity_source_file(
+    file: &File,
+) -> Result<(), M1ProjectIndexError> {
+    let metadata = file.metadata().map_err(|_| {
+        M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE)
+    })?;
+    if !metadata.file_type().is_file() {
         return Err(M1ProjectIndexError::new(
             M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
         ));
     }
-    let bytes = fs::read(&path).map_err(|_| {
+    Ok(())
+}
+
+fn read_ordinary_identity_source_from_handle(
+    file: &File,
+) -> Result<Vec<u8>, M1ProjectIndexError> {
+    let mut file = file;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(|_| {
         M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE)
     })?;
-    let document: M1OrdinaryIdentitySourceDocument = serde_json::from_slice(&bytes)
+    Ok(bytes)
+}
+
+fn parse_ordinary_identity_source_bytes(
+    bytes: &[u8],
+) -> Result<M1OrdinaryIdentitySourceDocument, M1ProjectIndexError> {
+    let document: M1OrdinaryIdentitySourceDocument = serde_json::from_slice(bytes)
         .map_err(|_| M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MALFORMED))?;
     if document.schema_version != M1_ORDINARY_IDENTITY_SOURCE_SCHEMA_VERSION {
         return Err(M1ProjectIndexError::new(
@@ -1954,6 +2011,18 @@ mod tests {
         .expect("write ordinary identity source");
     }
 
+    fn load_ordinary_identity_source_after_validated_open(
+        root: &Path,
+        after_validated_open: impl FnOnce(&Path),
+    ) -> Result<M1OrdinaryIdentitySourceDocument, M1ProjectIndexError> {
+        let path = root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
+        let file = open_ordinary_identity_source_nofollow(&path)?;
+        validate_opened_ordinary_identity_source_file(&file)?;
+        after_validated_open(&path);
+        let bytes = read_ordinary_identity_source_from_handle(&file)?;
+        parse_ordinary_identity_source_bytes(&bytes)
+    }
+
     fn registry_revision_and_bytes(root: &Path) -> (u64, Vec<u8>) {
         let bytes = fs::read(root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH))
             .expect("read persisted registry");
@@ -2214,5 +2283,136 @@ mod tests {
         assert!(invoke_src.contains("try_new_with_tauri_ordinary_product_seeds"));
         assert!(!invoke_src.contains("../../index-kernel/codex-index.json"));
         assert!(!invoke_src.contains("try_new_with_tauri_app_data_root("));
+    }
+
+    #[test]
+    fn m5r08_m1_source_symlink_fails_closed_without_registry_or_marker() {
+        let root = ordinary_named_root();
+        let source_path = root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
+        let target = root.join("m5r08-m1-source-symlink-target.json");
+        fs::write(
+            &target,
+            ordinary_identity_source_json(M5R00_SOURCE_ALIAS, "create"),
+        )
+        .expect("write symlink target");
+        std::os::unix::fs::symlink(&target, &source_path).expect("create source symlink");
+
+        assert_eq!(
+            M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source(&root)
+                .unwrap_err()
+                .code,
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert_eq!(
+            ordinary_tauri_constructor_error(&root),
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert!(source_path
+            .symlink_metadata()
+            .expect("source path remains")
+            .file_type()
+            .is_symlink());
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
+        assert!(!root.join("m1").exists());
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r08_m1_source_replacement_after_open_cannot_switch_consumed_document() {
+        const ORIGINAL_ALIAS: &str = "syn-m5r08-original-source-alias";
+        const REPLACEMENT_ALIAS: &str = "syn-m5r08-replacement-source-alias";
+        let root = ordinary_named_root();
+        write_ordinary_identity_source(&root, ORIGINAL_ALIAS);
+        let source_path = root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
+
+        let document = load_ordinary_identity_source_after_validated_open(&root, |path| {
+            let replacement = path.with_file_name("m5r08-m1-source-replacement.json");
+            fs::write(
+                &replacement,
+                ordinary_identity_source_json(REPLACEMENT_ALIAS, "create"),
+            )
+            .expect("write replacement inode");
+            fs::rename(&replacement, path).expect("replace source pathname");
+        })
+        .expect("consume bytes from the validated opened handle");
+
+        let pathname_bytes =
+            fs::read_to_string(&source_path).expect("read replacement pathname target");
+        assert!(pathname_bytes.contains(REPLACEMENT_ALIAS));
+        assert!(!pathname_bytes.contains(ORIGINAL_ALIAS));
+        assert_eq!(document.projects[0].exact_alias, ORIGINAL_ALIAS);
+        assert_ne!(document.projects[0].exact_alias, REPLACEMENT_ALIAS);
+
+        let store = M1ProjectIndexStore::from_root(root.clone());
+        store
+            .replay_ordinary_identity_source(&document)
+            .expect("replay only the handle snapshot");
+        let authority = M1ProjectIndexAuthorityHandle::install_ordinary_product(&root)
+            .expect("install after snapshot replay");
+        authority
+            .resolve_exact_alias(ORIGINAL_ALIAS)
+            .expect("opened-handle alias registered");
+        assert_eq!(
+            authority
+                .resolve_exact_alias(REPLACEMENT_ALIAS)
+                .unwrap_err()
+                .code,
+            "m1_alias_unknown"
+        );
+        assert!(root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).is_file());
+        assert!(root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).is_file());
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r08_m1_source_valid_ordinary_replay_succeeds() {
+        let root = ordinary_named_root();
+        write_ordinary_identity_source(&root, M5R00_SOURCE_ALIAS);
+        M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source(&root)
+            .expect("valid ordinary source replay");
+        assert!(root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).is_file());
+        assert!(root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).is_file());
+        let authority = M1ProjectIndexAuthorityHandle::install_ordinary_product(&root)
+            .expect("install after valid replay");
+        let project_id = authority
+            .resolve_exact_alias(M5R00_SOURCE_ALIAS)
+            .expect("replayed alias");
+        validate_canonical_project_id(project_id.as_str()).expect("opaque uuid");
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r08_m1_source_production_has_no_symlink_metadata_then_fs_read_reopen() {
+        let production = include_str!("m1_project_index.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production owner");
+        let start = production
+            .find("fn load_ordinary_identity_source(")
+            .expect("load_ordinary_identity_source");
+        let end = production[start..]
+            .find("\nfn validate_source_token(")
+            .map(|offset| start + offset)
+            .expect("validate_source_token bound");
+        let source_load = &production[start..end];
+        assert!(source_load.contains("open_ordinary_identity_source_nofollow"));
+        assert!(source_load.contains("validate_opened_ordinary_identity_source_file"));
+        assert!(source_load.contains("read_ordinary_identity_source_from_handle"));
+        assert!(source_load.contains("custom_flags"));
+        assert!(source_load.contains("LINUX_O_NOFOLLOW"));
+        assert!(source_load.contains(".metadata("));
+        assert!(source_load.contains("read_to_end"));
+        assert!(
+            !source_load.contains("symlink_metadata"),
+            "load_ordinary_identity_source must not lstat a pathname object"
+        );
+        assert!(
+            !source_load.contains("fs::read"),
+            "load_ordinary_identity_source must not reopen the pathname for the read"
+        );
     }
 }
