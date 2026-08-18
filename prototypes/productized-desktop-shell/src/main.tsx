@@ -3202,8 +3202,12 @@ void installM4R03OrdinaryClockTauriIpcBridge();
 void installM4R04OrdinaryRouteTauriIpcBridge();
 void installM4R05OrdinaryConversationTauriIpcBridge();
 void installM4R06OrdinaryLegacyReadTauriIpcBridge();
-void installM5R07OrdinaryControlAcceptanceDriver();
-void installM5R07IsolatedAcceptanceDriver();
+// Build-time opt-in only. Exact value "1" is required; DEV and unset stay closed.
+// Backend status.active / status.isolated remain the runtime half of the gate.
+if (import.meta.env.VITE_SYN_M5R07_ACCEPTANCE_DRIVER === "1") {
+  void installM5R07OrdinaryControlAcceptanceDriver();
+  void installM5R07IsolatedAcceptanceDriver();
+}
 
 window.addEventListener("error", (event) => {
   const root = document.getElementById("root");
