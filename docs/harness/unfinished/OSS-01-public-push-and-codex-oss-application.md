@@ -20,7 +20,8 @@
 - 事前只读核对：远端 main 真实为 `01d107b`（本地 `origin/main` ref 已过期，实际差 228 个提交而非 111）；`FETCH_HEAD..HEAD` 远端独有 0 条，确认纯 fast-forward；228 提交范围内凭据样式命中 9 处，全部为本仓安全扫描测试的占位假值且位于删除行；敏感文件名命中全部为 `secretary` 误配。
 - 事后核对：远端 `main` = 本地 `HEAD` = `b900bb66e4f3034c4fc237b8d0829541d691785a`；公开历史 895 个提交。
 - 认证载体：本机原先无任何 GitHub 凭据。先试 fine-grained token（HTTPS）被 403 拒（身份为 `Djh0311`，缺 Contents 写权限），改为新建本机 ed25519 密钥 `~/.ssh/id_ed25519`（`SHA256:41eq84EaFCCOU5mNFwwMeS/tQpnwAKgdX69MdvUjSd0`），由用户加进 GitHub Authentication Keys。`github.com` 三个主机公钥取自 `https://api.github.com/meta`（TLS 通道），指纹与官方公布值逐一相符后写入 `known_hosts`；未使用 `StrictHostKeyChecking=no`。临时 token 文件已 `shred -u` 删除，**仍需用户本人在 GitHub 撤销该 token**。
-- 未做：GitHub About / Topics 设置（本机无 `gh`，需用户在网页端按下文文案填），申请表提交（须用户本人）。
+- GitHub About / Topics 已设置（2026-08-18 20:40）：`gh` 2.97.0 官方二进制装在 `~/.local/bin/gh`（sha256 与官方 `checksums.txt` 相符，未用 sudo、未加系统源），由用户以设备码流程授权为 `Djh0311`（scopes `gist, read:org, repo`）。`gh repo edit` 写入描述与 10 个 topics，回读确认：可见性 `PUBLIC`、默认分支 `main`、描述与 topics 与本文件文案一致。
+- 未做：Codex for OSS 申请表提交（须用户本人填写姓名、ChatGPT 邮箱、OpenAI Organization ID）。申请文案里「600+ public commits」按当前公开事实为 895，可照填或改准，不得往上夸大。
 
 ## 触发条件
 
