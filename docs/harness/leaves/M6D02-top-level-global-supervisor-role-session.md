@@ -30,6 +30,7 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 `mod` 声明、`AppState` 接线与 command 注册）
 - `prototypes/productized-desktop-shell/src-tauri/src/commands.rs`（仅本叶 command 接线）
 - `prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs`（施工前调用图核实出的必要相邻路径：仅把本叶新增 command 加入现有 `tauri::generate_handler!` 清单；不改其他注册项或模块挂载）
+- `prototypes/productized-desktop-shell/src-tauri/src/lib_read_model_boundary_tests.rs`、`m1_project_index.rs`、`m3_project_role_session_authority.rs`（编译后核实出的必要相邻测试装配路径：仅在既有 `AppState` 测试字面量中补 `m6_org_global_role_session: Default::default()`；不改任何既有断言、实现语义或权限边界）
 - `m3_role_session.rs`、`m3_role_session_repository.rs`、`m3_role_session_schema.rs`：**仅**可见性调整（如 `pub(crate)`）与新增 trait 实现，不改既有语义、不改既有字段含义；每一处此类改动须在本叶报告里逐条列出并说明为何不可避免
 - `docs/contracts/`（仅新增增补合同）
 - `tasks/2026-08-*`、`tasks/2026-08-19-*`
