@@ -11,8 +11,7 @@ use crate::m4_secretary_domain::{
     M4RegisteredSourcePublication, M4SourceStatus,
 };
 use crate::m4_secretary_repository::{
-    M4RegisteredSourcePublicationOutcome, M4SecretaryRepositoryError,
-    M4SecretarySqliteRepository,
+    M4RegisteredSourcePublicationOutcome, M4SecretaryRepositoryError, M4SecretarySqliteRepository,
 };
 use crate::m4_source_owner_schema::{
     map_proposal_owner_status, M4ClaimedSourceOwnerPublicationV1, M4SourceOwnerClaimOutcomeV1,

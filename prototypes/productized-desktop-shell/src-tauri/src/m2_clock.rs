@@ -70,9 +70,7 @@ pub(crate) fn utc_rfc3339_at_epoch_ms(epoch_ms: i64) -> String {
     let hour = seconds_in_day / 3_600;
     let minute = (seconds_in_day % 3_600) / 60;
     let second = seconds_in_day % 60;
-    format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
-    )
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z")
 }
 
 // Howard Hinnant's public-domain civil-date conversion, expressed with

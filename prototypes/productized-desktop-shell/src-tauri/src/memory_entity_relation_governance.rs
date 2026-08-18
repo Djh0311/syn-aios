@@ -1282,9 +1282,17 @@ fn validate_nested_owner_identities(
         if candidate.entity_kind != MemoryEntityKind::Project {
             continue;
         }
-        allow_optional_owner_project_id(candidate.source_id.as_deref(), trusted, NESTED_OWNER_MISMATCH)?;
+        allow_optional_owner_project_id(
+            candidate.source_id.as_deref(),
+            trusted,
+            NESTED_OWNER_MISMATCH,
+        )?;
         for source in &candidate.source_refs {
-            allow_optional_owner_project_id(source.source_id.as_deref(), trusted, NESTED_OWNER_MISMATCH)?;
+            allow_optional_owner_project_id(
+                source.source_id.as_deref(),
+                trusted,
+                NESTED_OWNER_MISMATCH,
+            )?;
         }
     }
     for entity in &store.registry.entities {
@@ -1292,10 +1300,18 @@ fn validate_nested_owner_identities(
             continue;
         }
         for source in &entity.source_refs {
-            allow_optional_owner_project_id(source.source_id.as_deref(), trusted, NESTED_OWNER_MISMATCH)?;
+            allow_optional_owner_project_id(
+                source.source_id.as_deref(),
+                trusted,
+                NESTED_OWNER_MISMATCH,
+            )?;
         }
         for alias in &entity.aliases {
-            allow_optional_owner_project_id(alias.source_id.as_deref(), trusted, NESTED_OWNER_MISMATCH)?;
+            allow_optional_owner_project_id(
+                alias.source_id.as_deref(),
+                trusted,
+                NESTED_OWNER_MISMATCH,
+            )?;
         }
     }
     for relation in &store.relations {
@@ -1325,9 +1341,7 @@ fn validate_optional_proven_owner_project_source_id(
     mismatch_code: &str,
 ) -> Result<(), String> {
     match value {
-        Some(value)
-            if value == trusted.project_id || value == legacy_owner_project_id(trusted) =>
-        {
+        Some(value) if value == trusted.project_id || value == legacy_owner_project_id(trusted) => {
             allow_owner_project_id(value, trusted, mismatch_code)
         }
         _ => Ok(()),
@@ -1730,7 +1744,10 @@ mod m5r08_m1_tests {
         }
     }
 
-    fn preview_input(root: &str, spoofed_project_id: Option<&str>) -> PreviewMemoryEntityRelationCandidatesInput {
+    fn preview_input(
+        root: &str,
+        spoofed_project_id: Option<&str>,
+    ) -> PreviewMemoryEntityRelationCandidatesInput {
         PreviewMemoryEntityRelationCandidatesInput {
             project_root: root.to_string(),
             project_id: spoofed_project_id.map(|value| value.to_string()),
@@ -1920,8 +1937,10 @@ mod m5r08_m1_tests {
         assert!(preview
             .entity_candidates
             .iter()
-            .any(|candidate| candidate.entity_kind == MemoryEntityKind::Project
-                && candidate.source_id.as_deref() == Some(canonical)));
+            .any(
+                |candidate| candidate.entity_kind == MemoryEntityKind::Project
+                    && candidate.source_id.as_deref() == Some(canonical)
+            ));
         assert_eq!(fs::read(&sidecar).expect("after"), before);
         let store = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:02Z")
             .expect("load");
@@ -1941,10 +1960,7 @@ mod m5r08_m1_tests {
         assert!(production.contains("record_alias_decision_for_canonical_project"));
         assert!(production.contains("record_merge_decision_for_canonical_project"));
         assert!(production.contains("record_relation_decision_for_canonical_project"));
-        assert!(!production.contains(concat!(
-            "store.project_id = Some(",
-            "crate::project_id"
-        )));
+        assert!(!production.contains(concat!("store.project_id = Some(", "crate::project_id")));
         assert!(production.contains("let project_id = trusted_project_id.to_string();"));
         assert!(production.contains("existing == crate::project_id(&trusted.project_root)"));
     }
@@ -2144,8 +2160,10 @@ mod m5r09_tests {
         assert!(store
             .relation_candidates
             .iter()
-            .all(|candidate| candidate.subject_entity_id == canonical_entity_id
-                || candidate.subject_entity_id == "entity:v1:memory_record:other"));
+            .all(
+                |candidate| candidate.subject_entity_id == canonical_entity_id
+                    || candidate.subject_entity_id == "entity:v1:memory_record:other"
+            ));
     }
 
     fn first_kind_candidate_id(
@@ -2412,11 +2430,11 @@ mod m5r09_tests {
             crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:04Z")
                 .expect("load");
         assert_eq!(after_alias.project_id.as_deref(), Some(fixture));
-        assert_ne!(after_alias.project_id.as_deref(), Some(path_derived.as_str()));
-        let merge = preview
-            .merge_candidates
-            .first()
-            .expect("merge candidate");
+        assert_ne!(
+            after_alias.project_id.as_deref(),
+            Some(path_derived.as_str())
+        );
+        let merge = preview.merge_candidates.first().expect("merge candidate");
         let merge_output = record_merge_decision(
             &path,
             &RecordMemoryEntityMergeDecisionInput {
@@ -2460,9 +2478,8 @@ mod m5r09_tests {
             "write-m5r09-entity-fixture-relation",
         )
         .expect("relation wrapper");
-        let after =
-            crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:08Z")
-                .expect("load");
+        let after = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:08Z")
+            .expect("load");
         assert_eq!(after.project_id.as_deref(), Some(fixture));
         assert_ne!(after.project_id.as_deref(), Some(path_derived.as_str()));
         let _ = fs::remove_dir_all(dir);

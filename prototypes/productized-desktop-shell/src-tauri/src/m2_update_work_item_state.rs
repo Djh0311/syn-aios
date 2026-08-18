@@ -41,7 +41,10 @@ fn m2_trace_policy_ref(command: &UpdateWorkItemStateCommand, policy_ref: String)
 }
 
 fn m2_trace_source_refs(command: &UpdateWorkItemStateCommand) -> String {
-    let base = format!("workflow_state:{}:{}", command.project_id, command.workflow_id);
+    let base = format!(
+        "workflow_state:{}:{}",
+        command.project_id, command.workflow_id
+    );
     match m2_workflow_state_sidecar_trace_context(command) {
         Some(trace) => format!("{base};{trace}"),
         None => base,
@@ -382,12 +385,15 @@ fn get_aggregate(
                 .get("state")
                 .and_then(|v| v.as_str())
                 .unwrap_or("draft");
-            (vec![WorkItem {
-                work_item_id: wi_id,
-                node_id: node_id.unwrap_or_default(),
-                status: WorkItemStatus::from_str(status_str),
-                state_json: record_json,
-            }], source_id)
+            (
+                vec![WorkItem {
+                    work_item_id: wi_id,
+                    node_id: node_id.unwrap_or_default(),
+                    status: WorkItemStatus::from_str(status_str),
+                    state_json: record_json,
+                }],
+                source_id,
+            )
         }
         None => return Ok(None),
     };
@@ -441,12 +447,13 @@ fn save_aggregate(
         )
         .optional()
         .map_err(|error| format!("m2_workflow_state_meta_binding_query_failed:{error}"))?;
-    let (workspace_id, source_root_hash, source_id, prior_revision, raw_meta) = binding.ok_or_else(|| {
-        format!(
-            "m2_workflow_state_meta_binding_missing:work_item_id={}",
-            work_item.work_item_id
-        )
-    })?;
+    let (workspace_id, source_root_hash, source_id, prior_revision, raw_meta) = binding
+        .ok_or_else(|| {
+            format!(
+                "m2_workflow_state_meta_binding_missing:work_item_id={}",
+                work_item.work_item_id
+            )
+        })?;
     let prior_revision = prior_revision.unwrap_or(0);
     let expected_prior_revision = aggregate
         .revision
@@ -462,7 +469,10 @@ fn save_aggregate(
     let meta_object = meta_json
         .as_object_mut()
         .ok_or_else(|| "m2_workflow_state_meta_json_not_object".to_string())?;
-    meta_object.insert("revision".to_string(), Value::Number(aggregate.revision.into()));
+    meta_object.insert(
+        "revision".to_string(),
+        Value::Number(aggregate.revision.into()),
+    );
     let next_meta_json = serde_json::to_string(&meta_json)
         .map_err(|error| format!("m2_workflow_state_meta_json_serialize_failed:{error}"))?;
     let rows = connection
@@ -674,8 +684,7 @@ fn create_or_update_snapshot(
         object_revision: aggregate.revision,
         source_watermark: event.event_id.clone(),
         snapshot_hash: canonical_workflow_state_sidecar_snapshot_hash_for_aggregate(
-            command,
-            aggregate,
+            command, aggregate,
         ),
         projector_id: "workflow_projector".to_string(),
         built_at: generate_timestamp(),
@@ -1342,10 +1351,7 @@ fn create_workflow_state_projection_outbox(
         payload_ref: event.payload_ref.clone(),
         payload_hash: event.payload_hash.clone(),
         result_command_type: WORKFLOW_STATE_JSON_PROJECTION_RESULT_COMMAND.to_string(),
-        idempotency_key: format!(
-            "workflow-state-projection-result:{}",
-            receipt.receipt_id
-        ),
+        idempotency_key: format!("workflow-state-projection-result:{}", receipt.receipt_id),
         correlation_id: Some(command.command_id.clone()),
         status: OutboxItemStatus::Available,
         created_at: generate_timestamp(),
@@ -1715,8 +1721,7 @@ fn create_or_update_snapshot_with_transaction(
         object_revision: aggregate.revision,
         source_watermark: event.event_id.clone(),
         snapshot_hash: canonical_workflow_state_sidecar_snapshot_hash_for_aggregate(
-            command,
-            aggregate,
+            command, aggregate,
         ),
         projector_id: "workflow_projector".to_string(),
         built_at: generate_timestamp(),
@@ -1861,18 +1866,34 @@ mod tests {
         let node_a = json!({"node_id": "node-1", "state": "running"});
         let node_b = json!({"state": "running", "node_id": "node-1"});
         let first = canonical_workflow_state_sidecar_snapshot_hash(
-            "project-1", "workflow-1", 7, &work_item_a, &node_a,
+            "project-1",
+            "workflow-1",
+            7,
+            &work_item_a,
+            &node_a,
         );
         let rebuilt = canonical_workflow_state_sidecar_snapshot_hash(
-            "project-1", "workflow-1", 7, &work_item_b, &node_b,
+            "project-1",
+            "workflow-1",
+            7,
+            &work_item_b,
+            &node_b,
         );
         let changed = canonical_workflow_state_sidecar_snapshot_hash(
-            "project-1", "workflow-1", 7,
+            "project-1",
+            "workflow-1",
+            7,
             &json!({"work_item_id": "item-1", "state": "completed"}),
             &node_a,
         );
-        assert_eq!(first, rebuilt, "canonical rebuild must retain the content hash");
-        assert_ne!(first, changed, "semantic content changes must change the hash");
+        assert_eq!(
+            first, rebuilt,
+            "canonical rebuild must retain the content hash"
+        );
+        assert_ne!(
+            first, changed,
+            "semantic content changes must change the hash"
+        );
         assert_eq!(first.len(), 64);
     }
 
@@ -2131,19 +2152,31 @@ mod tests {
 
         let mut changed_actor = base.clone();
         changed_actor.actor_id = "actor-b".to_string();
-        assert_ne!(base_hash, update_work_item_state_request_hash(&changed_actor));
+        assert_ne!(
+            base_hash,
+            update_work_item_state_request_hash(&changed_actor)
+        );
 
         let mut changed_scope = base.clone();
         changed_scope.scope_ref = "scope-b".to_string();
-        assert_ne!(base_hash, update_work_item_state_request_hash(&changed_scope));
+        assert_ne!(
+            base_hash,
+            update_work_item_state_request_hash(&changed_scope)
+        );
 
         let mut changed_revision = base.clone();
         changed_revision.expected_revision = Some(8);
-        assert_ne!(base_hash, update_work_item_state_request_hash(&changed_revision));
+        assert_ne!(
+            base_hash,
+            update_work_item_state_request_hash(&changed_revision)
+        );
 
         let mut changed_payload = base.clone();
         changed_payload.new_state_json = Some("{\"after_state\":\"running\",\"repository_port_version\":\"workflow-state-sidecar.repository.m2.v2\"}".to_string());
-        assert_ne!(base_hash, update_work_item_state_request_hash(&changed_payload));
+        assert_ne!(
+            base_hash,
+            update_work_item_state_request_hash(&changed_payload)
+        );
 
         let mut reordered_equivalent_payload = base;
         reordered_equivalent_payload.new_state_json = Some("{\"after_state\":\"running\",\"repository_port_version\":\"workflow-state-sidecar.repository.m2.v1\"}".to_string());

@@ -297,7 +297,8 @@ pub fn list_workflow_templates() -> Result<Vec<WorkflowTemplateSummary>, String>
     if !dir.exists() {
         return Ok(Vec::new());
     }
-    let entries = fs::read_dir(&dir).map_err(|e| format!("读模板目录失败 {}：{e}", dir.display()))?;
+    let entries =
+        fs::read_dir(&dir).map_err(|e| format!("读模板目录失败 {}：{e}", dir.display()))?;
     let mut out = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();

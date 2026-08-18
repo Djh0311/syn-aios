@@ -266,7 +266,8 @@ fn run_after_runtime_ready(app_handle: &tauri::AppHandle) -> Result<(), String> 
     let result = match phase {
         DriverPhase::Seed => seed_receipt(&paths, &attempt),
         DriverPhase::Run => {
-            let (receipt, binding) = run_after_tauri_ipc_inner(app_handle, &state, &paths, &attempt)?;
+            let (receipt, binding) =
+                run_after_tauri_ipc_inner(app_handle, &state, &paths, &attempt)?;
             command_binding = Some(binding);
             Ok(receipt)
         }
@@ -616,11 +617,9 @@ fn ensure_m2_sidecar_meta_binding(
     workflow_state_path: &Path,
     allow_create: bool,
 ) -> Result<(), String> {
-    let connection = Connection::open_with_flags(
-        &config.db_path,
-        OpenFlags::SQLITE_OPEN_READ_WRITE,
-    )
-    .map_err(|error| format!("m2_r4_reference_slice_meta_open:{error}"))?;
+    let connection =
+        Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+            .map_err(|error| format!("m2_r4_reference_slice_meta_open:{error}"))?;
     let count: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM workflow_state_meta WHERE source_id = ?1",
@@ -746,8 +745,8 @@ fn run_after_tauri_ipc_inner(
         },
     )?;
     let workflow_id = crate::default_workflow_id(&paths.project_root.display().to_string());
-    let expected_revision = repository
-        .m2_workflow_state_sidecar_revision(&workflow_id, &work_item_id)?;
+    let expected_revision =
+        repository.m2_workflow_state_sidecar_revision(&workflow_id, &work_item_id)?;
     let invocation = TauriIpcInvocation {
         schema_version: TAURI_IPC_SCHEMA_VERSION,
         operation: "update_work_item_state",
@@ -946,14 +945,21 @@ fn external_effect_receipt(
         }
         Err(error) => error,
     };
-    if !extension_limit.to_string().contains("lease_extension_limit") {
+    if !extension_limit
+        .to_string()
+        .contains("lease_extension_limit")
+    {
         return Err(format!(
             "m2_r4_reference_external_effect_extension_limit_wrong_error:{extension_limit}"
         ));
     }
     let expiry_at = now_ms
         .checked_add(2)
-        .and_then(|value| value.checked_add(crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS))
+        .and_then(|value| {
+            value.checked_add(
+                crate::workbench_sqlite_repository::M2_R4_FAKE_EXTERNAL_ADAPTER_LEASE_MS,
+            )
+        })
         .ok_or_else(|| "m2_r4_reference_external_effect_clock_overflow".to_string())?;
     let expiry_released = match repository
         .with_immediate_transaction(
@@ -1089,7 +1095,17 @@ fn external_effect_receipt(
         declaration_audit_count,
         result_audit_command_id,
         result_audit_correlation,
-    ): (String, i64, i64, String, Option<String>, i64, i64, Option<String>, Option<String>) = connection
+    ): (
+        String,
+        i64,
+        i64,
+        String,
+        Option<String>,
+        i64,
+        i64,
+        Option<String>,
+        Option<String>,
+    ) = connection
         .query_row(
             "SELECT outbox_items.status, outbox_items.attempt_count,
                     outbox_items.lease_extension_count, command_receipts.status,
@@ -1229,7 +1245,17 @@ fn external_effect_readback_receipt(
         declaration_audit_count,
         result_audit_command_id,
         result_audit_correlation,
-    ): (String, i64, i64, String, String, i64, i64, Option<String>, Option<String>) = connection
+    ): (
+        String,
+        i64,
+        i64,
+        String,
+        String,
+        i64,
+        i64,
+        Option<String>,
+        Option<String>,
+    ) = connection
         .query_row(
             "SELECT outbox_items.status, outbox_items.attempt_count,
                     outbox_items.lease_extension_count, owning.status, result_receipts.receipt_id,
@@ -1495,9 +1521,9 @@ fn driver_nonce() -> Result<String, String> {
     let value = std::env::var(M2_R4_REFERENCE_SLICE_NONCE_ENV)
         .map_err(|_| "m2_r4_reference_slice_driver_nonce_missing".to_string())?;
     if value.len() != 32
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (byte.is_ascii_lowercase() && byte.is_ascii_hexdigit()))
+        || !value.bytes().all(|byte| {
+            byte.is_ascii_digit() || (byte.is_ascii_lowercase() && byte.is_ascii_hexdigit())
+        })
     {
         return Err("m2_r4_reference_slice_driver_nonce_invalid".to_string());
     }

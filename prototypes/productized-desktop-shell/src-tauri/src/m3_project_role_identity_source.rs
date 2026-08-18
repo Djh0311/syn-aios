@@ -11,8 +11,8 @@ use crate::m1_project_index::{M1ProjectId, M1_ORDINARY_APP_DATA_DIR_NAME};
 use crate::m3_role_session::{
     owner_fingerprint_for_components, RoleSessionId, ServerResolvedBinding, Sha256Digest,
 };
-use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::{Component, Path, PathBuf};
@@ -54,8 +54,7 @@ const M3_PERMISSION_PROFILE_ID: &str = "m3.project-role.permission.deny-default.
 const M3_ZERO_EXECUTION_CHANNEL_MATERIAL: &str =
     "syn.m3.project-role-identity-source.v1|channel|none";
 const M3_DENIED_CAPABILITIES: &[&str] = &["execution", "provider", "runner", "grant"];
-const M3_PERMISSION_CONSTRAINTS: &[&str] =
-    &["zero-execution-authority", "not-an-execution-grant"];
+const M3_PERMISSION_CONSTRAINTS: &[&str] = &["zero-execution-authority", "not-an-execution-grant"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum M3ProjectRole {
@@ -199,7 +198,9 @@ impl ExclusiveSourceLock {
     fn acquire(path: &Path) -> Result<Self, M3ProjectRoleIdentitySourceError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|_| {
-                M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_lock_dir_create_failed")
+                M3ProjectRoleIdentitySourceError::new(
+                    "m3_project_role_identity_source_lock_dir_create_failed",
+                )
             })?;
         }
         for _ in 0..M3_IDENTITY_SOURCE_LOCK_RETRY_LIMIT {
@@ -354,7 +355,9 @@ impl M3ProjectRoleIdentitySourceStore {
             M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_parent_required")
         })?;
         fs::create_dir_all(parent).map_err(|_| {
-            M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_dir_create_failed")
+            M3ProjectRoleIdentitySourceError::new(
+                "m3_project_role_identity_source_dir_create_failed",
+            )
         })?;
         let temp_path = parent.join(format!(
             ".m3-project-role-identity-source.established.{}.tmp",
@@ -379,9 +382,7 @@ impl M3ProjectRoleIdentitySourceStore {
             })?;
         }
         fs::rename(&temp_path, &self.established_marker_path).map_err(|_| {
-            M3ProjectRoleIdentitySourceError::new(
-                "m3_project_role_identity_source_replace_failed",
-            )
+            M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_replace_failed")
         })?;
         let dir = File::open(parent).map_err(|_| {
             M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_dir_open_failed")
@@ -392,7 +393,9 @@ impl M3ProjectRoleIdentitySourceStore {
         Ok(())
     }
 
-    fn load_or_empty(&self) -> Result<IdentitySourceStoreDocument, M3ProjectRoleIdentitySourceError> {
+    fn load_or_empty(
+        &self,
+    ) -> Result<IdentitySourceStoreDocument, M3ProjectRoleIdentitySourceError> {
         match fs::symlink_metadata(&self.store_path) {
             Ok(metadata) if metadata.file_type().is_file() => self.load_required(),
             Ok(_) => Err(M3ProjectRoleIdentitySourceError::new(
@@ -416,7 +419,9 @@ impl M3ProjectRoleIdentitySourceStore {
         }
     }
 
-    fn load_required(&self) -> Result<IdentitySourceStoreDocument, M3ProjectRoleIdentitySourceError> {
+    fn load_required(
+        &self,
+    ) -> Result<IdentitySourceStoreDocument, M3ProjectRoleIdentitySourceError> {
         match fs::symlink_metadata(&self.store_path) {
             Ok(metadata) if metadata.file_type().is_file() => {}
             Ok(_) => {
@@ -458,7 +463,9 @@ impl M3ProjectRoleIdentitySourceStore {
             M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_parent_required")
         })?;
         fs::create_dir_all(parent).map_err(|_| {
-            M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_dir_create_failed")
+            M3ProjectRoleIdentitySourceError::new(
+                "m3_project_role_identity_source_dir_create_failed",
+            )
         })?;
         let text = serde_json::to_string_pretty(document).map_err(|_| {
             M3ProjectRoleIdentitySourceError::new(
@@ -488,9 +495,7 @@ impl M3ProjectRoleIdentitySourceStore {
             })?;
         }
         fs::rename(&temp_path, &self.store_path).map_err(|_| {
-            M3ProjectRoleIdentitySourceError::new(
-                "m3_project_role_identity_source_replace_failed",
-            )
+            M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_replace_failed")
         })?;
         let dir = File::open(parent).map_err(|_| {
             M3ProjectRoleIdentitySourceError::new("m3_project_role_identity_source_dir_open_failed")
@@ -502,9 +507,7 @@ impl M3ProjectRoleIdentitySourceStore {
     }
 }
 
-fn admit_ordinary_app_data_root(
-    root: &Path,
-) -> Result<PathBuf, M3ProjectRoleIdentitySourceError> {
+fn admit_ordinary_app_data_root(root: &Path) -> Result<PathBuf, M3ProjectRoleIdentitySourceError> {
     if !root.is_absolute()
         || root
             .components()
@@ -530,8 +533,7 @@ fn admit_ordinary_app_data_root(
             "m3_project_role_identity_source_root_identity_changed",
         ));
     }
-    if canonical.file_name().and_then(|name| name.to_str()) != Some(M1_ORDINARY_APP_DATA_DIR_NAME)
-    {
+    if canonical.file_name().and_then(|name| name.to_str()) != Some(M1_ORDINARY_APP_DATA_DIR_NAME) {
         return Err(M3ProjectRoleIdentitySourceError::new(
             "m3_project_role_identity_source_root_identity_mismatch",
         ));
@@ -552,7 +554,11 @@ fn derive_identity_record(
     }
     let actor_id = sealed_ref(
         "actor",
-        &format!("{M3_IDENTITY_SOURCE_DOMAIN}|actor|{}|{}", project_id, role.as_str()),
+        &format!(
+            "{M3_IDENTITY_SOURCE_DOMAIN}|actor|{}|{}",
+            project_id,
+            role.as_str()
+        ),
     )?;
     let role_ref = sealed_ref(
         "role",
@@ -589,7 +595,11 @@ fn derive_identity_record(
     .map_err(|_| M3ProjectRoleIdentitySourceError::new(M3_IDENTITY_SOURCE_TAMPERED))?;
     let role_session_id = sealed_ref(
         "session",
-        &format!("{M3_IDENTITY_SOURCE_DOMAIN}|session|{}|{}", project_id, role.as_str()),
+        &format!(
+            "{M3_IDENTITY_SOURCE_DOMAIN}|session|{}|{}",
+            project_id,
+            role.as_str()
+        ),
     )?;
     let mut record = StoredIdentityRecord {
         state: IdentityRecordState::Prepared,
@@ -627,10 +637,7 @@ fn deny_default_permission() -> DenyDefaultPermissionRecord {
     }
 }
 
-fn sealed_ref(
-    namespace: &str,
-    material: &str,
-) -> Result<String, M3ProjectRoleIdentitySourceError> {
+fn sealed_ref(namespace: &str, material: &str) -> Result<String, M3ProjectRoleIdentitySourceError> {
     reject_forbidden_material(material)?;
     let digest = Sha256Digest::of_bytes(material.as_bytes());
     Ok(format!("{namespace}:sha256:{}", digest.as_str()))
@@ -685,9 +692,8 @@ fn integrity_hash_for(
 fn hash_components(fields: &[&str]) -> Result<String, M3ProjectRoleIdentitySourceError> {
     let mut hasher = Sha256::new();
     for field in fields {
-        let byte_len = u32::try_from(field.as_bytes().len()).map_err(|_| {
-            M3ProjectRoleIdentitySourceError::new(M3_IDENTITY_SOURCE_TAMPERED)
-        })?;
+        let byte_len = u32::try_from(field.as_bytes().len())
+            .map_err(|_| M3ProjectRoleIdentitySourceError::new(M3_IDENTITY_SOURCE_TAMPERED))?;
         hasher.update(byte_len.to_be_bytes());
         hasher.update(field.as_bytes());
     }
@@ -870,7 +876,10 @@ fn bundle_from_record(record: &StoredIdentityRecord) -> M3ProjectRoleIdentityBun
     }
 }
 
-fn bundle_matches_record(bundle: &M3ProjectRoleIdentityBundle, record: &StoredIdentityRecord) -> bool {
+fn bundle_matches_record(
+    bundle: &M3ProjectRoleIdentityBundle,
+    record: &StoredIdentityRecord,
+) -> bool {
     bundle.project_id == record.project_id
         && bundle.role == record.role
         && bundle.actor_id == record.actor_id

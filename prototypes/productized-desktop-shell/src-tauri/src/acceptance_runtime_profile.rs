@@ -1259,7 +1259,8 @@ fn m2_reference_gate_is_armed_for(
         return Err(format!("m2_reference_gate_size_invalid:{gate}"));
     }
     let binding: M2ReferenceCommandGateBinding = serde_json::from_slice(
-        &fs::read(&path).map_err(|error| format!("m2_reference_gate_read_failed:{gate}:{error}"))?,
+        &fs::read(&path)
+            .map_err(|error| format!("m2_reference_gate_read_failed:{gate}:{error}"))?,
     )
     .map_err(|_| format!("m2_reference_gate_binding_invalid:{gate}"))?;
     if binding.operation != operation

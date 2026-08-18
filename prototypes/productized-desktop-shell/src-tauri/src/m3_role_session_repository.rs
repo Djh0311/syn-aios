@@ -1905,10 +1905,9 @@ impl M3RoleSessionSqliteRepository {
                 M3RoleSessionRepositoryError::sqlite("m3_active_project_role_prepare", error)
             })?;
         let rows = statement
-            .query_map(
-                params![role_ref.as_str(), scope_ref.as_str()],
-                |row| row.get::<_, String>(0),
-            )
+            .query_map(params![role_ref.as_str(), scope_ref.as_str()], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(|error| {
                 M3RoleSessionRepositoryError::sqlite("m3_active_project_role_query", error)
             })?;

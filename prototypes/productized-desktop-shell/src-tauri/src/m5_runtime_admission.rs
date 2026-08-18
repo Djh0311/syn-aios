@@ -9,7 +9,9 @@ use crate::m5_gateway_traits::{
 };
 use crate::m5_m3_identity::{policy_decision_ref_for_action, WHITELISTED_COMMAND};
 use crate::m5_orchestration_identity::GrantId;
-use crate::m5_orchestration_store::{DispatchRecord, M5OrchestrationStore, PlanAuthorizationRecord};
+use crate::m5_orchestration_store::{
+    DispatchRecord, M5OrchestrationStore, PlanAuthorizationRecord,
+};
 use crate::m5_prepared_attempt::{AttemptState, PreparedAttempt};
 use crate::m5_project_supervisor::{load_supervisor_proposal, SupervisorBinding};
 
@@ -110,11 +112,7 @@ impl AdmittedRuntimeCapability {
         }
         if self.grant_id != grant.grant_id.as_str()
             || self.grant_id != dispatch.grant_id
-            || attempt
-                .grant_id
-                .as_ref()
-                .map(|id| id.as_str())
-                != Some(self.grant_id.as_str())
+            || attempt.grant_id.as_ref().map(|id| id.as_str()) != Some(self.grant_id.as_str())
         {
             return Err("admission_grant_join_failed".to_string());
         }

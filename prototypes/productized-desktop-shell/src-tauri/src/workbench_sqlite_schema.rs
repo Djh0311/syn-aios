@@ -198,16 +198,14 @@ fn initialize_workbench_sqlite_db(path: &Path, path_kind: &str) -> Result<(), St
         )
     })?;
 
-    let connection = Connection::open_with_flags(
-        path,
-        OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW,
-    )
-    .map_err(|error| {
-        format!(
-            "open {path_kind} workbench sqlite failed {}: {error}",
-            path.display()
-        )
-    })?;
+    let connection =
+        Connection::open_with_flags(path, OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW)
+            .map_err(|error| {
+            format!(
+                "open {path_kind} workbench sqlite failed {}: {error}",
+                path.display()
+            )
+        })?;
     connection
         .execute_batch("PRAGMA foreign_keys = ON;")
         .map_err(|error| format!("enable sqlite foreign keys failed: {error}"))?;
@@ -241,9 +239,10 @@ pub(crate) fn admit_temp_or_fixture_sqlite_path(path: &Path) -> Result<PathBuf, 
     if !path.is_absolute() {
         return Err(reject());
     }
-    if path.components().any(|component| {
-        matches!(component, Component::CurDir | Component::ParentDir)
-    }) {
+    if path
+        .components()
+        .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+    {
         return Err(reject());
     }
 

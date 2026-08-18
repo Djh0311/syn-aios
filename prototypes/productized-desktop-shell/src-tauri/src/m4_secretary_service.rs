@@ -2190,8 +2190,7 @@ mod tests {
             );
         }
         assert_eq!(
-            outcome.local_objects.personal_actions[0].title,
-            "USER_TEXT_SHOULD_NOT_SURFACE",
+            outcome.local_objects.personal_actions[0].title, "USER_TEXT_SHOULD_NOT_SURFACE",
             "the renderer-only local object retains the user-authored title"
         );
 

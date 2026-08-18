@@ -994,7 +994,11 @@ fn validate_pattern_candidate_owners(
     trusted: &TrustedCanonicalProject,
     mismatch_code: &str,
 ) -> Result<(), String> {
-    allow_optional_owner_project_id(candidate.scope.project_id.as_deref(), trusted, mismatch_code)?;
+    allow_optional_owner_project_id(
+        candidate.scope.project_id.as_deref(),
+        trusted,
+        mismatch_code,
+    )?;
     for member in &candidate.member_refs {
         allow_optional_owner_project_id(member.project_id.as_deref(), trusted, mismatch_code)?;
     }
@@ -1025,7 +1029,10 @@ fn rewrite_pattern_candidate_owners(
     }
 }
 
-fn rewrite_pattern_report_owners(report: &mut MemoryClusterReport, trusted: &TrustedCanonicalProject) {
+fn rewrite_pattern_report_owners(
+    report: &mut MemoryClusterReport,
+    trusted: &TrustedCanonicalProject,
+) {
     let legacy = legacy_owner_project_id(trusted);
     for project_id in &mut report.project_ids {
         if project_id == &legacy {
@@ -1033,7 +1040,9 @@ fn rewrite_pattern_report_owners(report: &mut MemoryClusterReport, trusted: &Tru
         }
     }
     let mut seen = BTreeSet::new();
-    report.project_ids.retain(|project_id| seen.insert(project_id.clone()));
+    report
+        .project_ids
+        .retain(|project_id| seen.insert(project_id.clone()));
     for member in &mut report.member_refs {
         rewrite_optional_owner_project_id(&mut member.project_id, trusted);
     }
@@ -1422,8 +1431,8 @@ mod m5r08_m1_tests {
         )
         .expect("canonical write");
         assert_eq!(output.store_revision, 1);
-        let store = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z")
-            .expect("load");
+        let store =
+            crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z").expect("load");
         assert_eq!(store.project_id.as_deref(), Some(canonical));
         assert_ne!(
             store.project_id.as_deref(),
@@ -1462,8 +1471,8 @@ mod m5r08_m1_tests {
             "write-m5r08-mature-formal-unused",
         )
         .expect("legacy migrate");
-        let store = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z")
-            .expect("load");
+        let store =
+            crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z").expect("load");
         assert_eq!(store.project_id.as_deref(), Some(canonical));
         let kept = store
             .mature_pattern_candidates
@@ -1505,8 +1514,8 @@ mod m5r08_m1_tests {
             "{error}"
         );
         assert_eq!(fs::read(&sidecar).expect("after"), before);
-        let store = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z")
-            .expect("load");
+        let store =
+            crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z").expect("load");
         assert_eq!(store.revision, 0);
         assert_eq!(store.project_id.as_deref(), Some(foreign));
         assert!(store.audit_events.is_empty());
@@ -1546,8 +1555,8 @@ mod m5r08_m1_tests {
             .iter()
             .any(|candidate| candidate.candidate_id == historical.candidate_id));
         assert_eq!(fs::read(&sidecar).expect("after"), before);
-        let store = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z")
-            .expect("load");
+        let store =
+            crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z").expect("load");
         assert_eq!(store.project_id.as_deref(), Some(legacy.as_str()));
         let _ = fs::remove_dir_all(dir);
     }
@@ -1608,10 +1617,7 @@ mod m5r08_m1_tests {
         assert!(production.contains("TrustedCanonicalProject"));
         assert!(production.contains("preview_mature_patterns_for_canonical_project"));
         assert!(production.contains("record_mature_pattern_decision_for_canonical_project"));
-        assert!(!production.contains(concat!(
-            "store.project_id = Some(",
-            "crate::project_id"
-        )));
+        assert!(!production.contains(concat!("store.project_id = Some(", "crate::project_id")));
         assert!(production.contains("store.project_id = Some(trusted.project_id.clone())"));
         assert!(production.contains("project_id: Some(trusted.project_id.clone())"));
         assert!(production.contains("existing == crate::project_id(&trusted.project_root)"));
@@ -1817,8 +1823,8 @@ mod m5r09_tests {
             "write-m5r09-mature-formal-unused",
         )
         .expect("legacy nested migrate");
-        let store = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z")
-            .expect("load");
+        let store =
+            crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z").expect("load");
         assert_eq!(store.project_id.as_deref(), Some(canonical));
         assert_no_legacy_owner(&store, &legacy, canonical);
         let _ = fs::remove_dir_all(dir);
@@ -1831,10 +1837,7 @@ mod m5r09_tests {
         let root = "/tmp/m5r09-mature-mixed-foreign";
         let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa32";
         let foreign = "project:ffffffff-ffff-4fff-8fff-ffffffffffff";
-        let mut candidate = sample_candidate(
-            "mature-pattern-candidate:v1:m5r09",
-            Some(canonical),
-        );
+        let mut candidate = sample_candidate("mature-pattern-candidate:v1:m5r09", Some(canonical));
         candidate.member_refs = vec![sample_member(Some(foreign))];
         let mut store = store_with(
             Some(canonical),
@@ -1880,14 +1883,14 @@ mod m5r09_tests {
         assert!(error.contains(foreign), "{error}");
         assert_eq!(fs::read(&sidecar).expect("after"), before);
         assert_eq!(formal_sidecar.exists(), formal_existed);
-        let after = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z")
-            .expect("load");
+        let after =
+            crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z").expect("load");
         assert_eq!(after.revision, 4);
         assert_eq!(after.audit_events.len(), 1);
         assert_eq!(after.mature_pattern_candidates.len(), 1);
         assert_eq!(after.cluster_reports.len(), 1);
-        let formal = crate::formal_memory_store::load_store(&path, "2026-08-18T00:00:03Z")
-            .expect("formal");
+        let formal =
+            crate::formal_memory_store::load_store(&path, "2026-08-18T00:00:03Z").expect("formal");
         assert!(formal.records.is_empty());
         assert_eq!(formal.revision, 0);
         let _ = fs::remove_dir_all(dir);
@@ -1905,10 +1908,7 @@ mod m5r09_tests {
             &path,
             &store_with(
                 None,
-                vec![sample_candidate(
-                    "mature-pattern-candidate:v1:m5r09",
-                    None,
-                )],
+                vec![sample_candidate("mature-pattern-candidate:v1:m5r09", None)],
                 vec![],
             ),
         );
@@ -1947,8 +1947,8 @@ mod m5r09_tests {
             "write-m5r09-mature-formal-unused",
         )
         .expect("record wrapper");
-        let store = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:03Z")
-            .expect("load");
+        let store =
+            crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:03Z").expect("load");
         assert_eq!(store.project_id.as_deref(), Some(fixture));
         assert_ne!(store.project_id.as_deref(), Some(path_derived.as_str()));
         let decided = store

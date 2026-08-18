@@ -77,10 +77,7 @@ impl ValidatedObjectId {
         }
 
         // 8. Absolute path check (Windows drive letter)
-        if raw.len() >= 2
-            && raw.as_bytes()[0].is_ascii_alphabetic()
-            && raw.as_bytes()[1] == b':'
-        {
+        if raw.len() >= 2 && raw.as_bytes()[0].is_ascii_alphabetic() && raw.as_bytes()[1] == b':' {
             return Err("path_guard_rejected: object ID 含 Windows 盘符".to_string());
         }
 

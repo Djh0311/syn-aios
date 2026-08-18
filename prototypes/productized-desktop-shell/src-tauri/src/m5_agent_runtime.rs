@@ -424,16 +424,17 @@ mod tests {
         let (grant, mut cell) = workcell(&store);
         cell.workcell_id = format!("wc-{}", grant.project_id);
         let mut runtime = SynNativeAgentRuntime::new();
-        let receipt = runtime
-            .execute(&cell, &grant, RuntimeFault::None)
-            .unwrap();
+        let receipt = runtime.execute(&cell, &grant, RuntimeFault::None).unwrap();
         let expected = attempt_scoped_receipt_id(cell.attempt_id.as_str(), grant.grant_id.as_str());
         assert_eq!(receipt.receipt_id.as_str(), expected);
         assert_ne!(
             receipt.receipt_id.as_str(),
             format!("rr-wc-{}", grant.project_id)
         );
-        assert!(receipt.receipt_id.as_str().contains(cell.attempt_id.as_str()));
+        assert!(receipt
+            .receipt_id
+            .as_str()
+            .contains(cell.attempt_id.as_str()));
         assert!(receipt
             .receipt_id
             .as_str()

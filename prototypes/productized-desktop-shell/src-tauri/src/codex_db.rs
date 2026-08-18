@@ -299,9 +299,9 @@ const NO_PROJECT_PATH_PREFIXES: &[&str] = &["/Users/yoyi/Documents/Codex"];
 /// its own project_root.
 fn is_no_project_cwd(cwd: &str) -> bool {
     let trimmed = cwd.trim();
-    NO_PROJECT_PATH_PREFIXES.iter().any(|prefix| {
-        trimmed == *prefix || trimmed.starts_with(&format!("{prefix}/"))
-    })
+    NO_PROJECT_PATH_PREFIXES
+        .iter()
+        .any(|prefix| trimmed == *prefix || trimmed.starts_with(&format!("{prefix}/")))
 }
 
 /// codex stores the entire first user message in `threads.title` (observed mean
@@ -313,7 +313,11 @@ fn truncate_display_title(raw: &str) -> String {
     const MAX_CHARS: usize = 120;
     let trimmed = raw.trim();
     let first_line = trimmed.lines().next().unwrap_or(trimmed).trim();
-    let base = if first_line.is_empty() { trimmed } else { first_line };
+    let base = if first_line.is_empty() {
+        trimmed
+    } else {
+        first_line
+    };
     let is_single_line = base.chars().count() == trimmed.chars().count();
     if is_single_line && base.chars().count() <= MAX_CHARS {
         return base.to_string();
@@ -931,37 +935,63 @@ mod tests {
         .expect("read page");
 
         let ids: Vec<&str> = page.rows.iter().map(|row| row.thread_id.as_str()).collect();
-        assert!(ids.contains(&"real-vscode"), "top-level vscode session must stay");
+        assert!(
+            ids.contains(&"real-vscode"),
+            "top-level vscode session must stay"
+        );
         assert!(ids.contains(&"thread-1"), "fixture cli session must stay");
         assert!(
             !ids.iter().any(|id| id.starts_with("subagent-")),
             "subagent child threads must be hidden from the session list: {ids:?}",
         );
-        assert_eq!(page.rows.len(), 2, "only the two non-subagent sessions remain");
+        assert_eq!(
+            page.rows.len(),
+            2,
+            "only the two non-subagent sessions remain"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
     #[test]
     fn truncate_display_title_collapses_long_first_message() {
         let short = "第一句话标题";
-        assert_eq!(truncate_display_title(short), short, "short titles pass through unchanged");
+        assert_eq!(
+            truncate_display_title(short),
+            short,
+            "short titles pass through unchanged"
+        );
         let renamed = "用户重命名标题";
-        assert_eq!(truncate_display_title(renamed), renamed, "deliberate short renames untouched");
+        assert_eq!(
+            truncate_display_title(renamed),
+            renamed,
+            "deliberate short renames untouched"
+        );
 
         let multiline = "首行摘要\n第二行不应进入标题";
-        assert_eq!(truncate_display_title(multiline), "首行摘要…", "multi-line collapses to first line");
+        assert_eq!(
+            truncate_display_title(multiline),
+            "首行摘要…",
+            "multi-line collapses to first line"
+        );
 
         let huge: String = "话".repeat(76_000);
         let truncated = truncate_display_title(&huge);
         assert!(truncated.ends_with('…'), "huge title is ellipsised");
-        assert!(truncated.chars().count() <= 121, "huge title capped at 120 chars + ellipsis");
+        assert!(
+            truncated.chars().count() <= 121,
+            "huge title capped at 120 chars + ellipsis"
+        );
     }
 
     #[test]
     fn is_no_project_cwd_matches_only_scratch_root_and_descendants() {
         assert!(is_no_project_cwd("/Users/yoyi/Documents/Codex"));
-        assert!(is_no_project_cwd("/Users/yoyi/Documents/Codex/2026-05-09/ai"));
-        assert!(is_no_project_cwd("  /Users/yoyi/Documents/Codex/new-chat  "));
+        assert!(is_no_project_cwd(
+            "/Users/yoyi/Documents/Codex/2026-05-09/ai"
+        ));
+        assert!(is_no_project_cwd(
+            "  /Users/yoyi/Documents/Codex/new-chat  "
+        ));
         // A sibling dir that merely shares the prefix string is NOT under it.
         assert!(!is_no_project_cwd("/Users/yoyi/Documents/CodexProjects"));
         assert!(!is_no_project_cwd("/Users/yoyi/workspace/product-line"));
@@ -974,7 +1004,15 @@ mod tests {
         fs::create_dir_all(&dir).expect("create temp dir");
         let db_path = dir.join("state_5.sqlite");
         create_threads_db(&db_path); // thread-1 cwd '/tmp/project' → real project
-        insert_thread_with_cwd(&db_path, "scratch-root", "直接聊天根", "/Users/yoyi/Documents/Codex", 5_000, 0, 1);
+        insert_thread_with_cwd(
+            &db_path,
+            "scratch-root",
+            "直接聊天根",
+            "/Users/yoyi/Documents/Codex",
+            5_000,
+            0,
+            1,
+        );
         insert_thread_with_cwd(
             &db_path,
             "scratch-dated",
@@ -1012,8 +1050,16 @@ mod tests {
                 .unwrap_or_else(|| panic!("row {id} missing"))
         };
 
-        assert_eq!(row("scratch-root").project_root, None, "Documents/Codex root is no-project");
-        assert_eq!(row("scratch-dated").project_root, None, "below Documents/Codex is no-project");
+        assert_eq!(
+            row("scratch-root").project_root,
+            None,
+            "Documents/Codex root is no-project"
+        );
+        assert_eq!(
+            row("scratch-dated").project_root,
+            None,
+            "below Documents/Codex is no-project"
+        );
         assert_eq!(
             row("real-workspace").project_root,
             Some("/Users/yoyi/workspace/product-line".to_string()),

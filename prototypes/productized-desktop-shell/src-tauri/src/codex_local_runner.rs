@@ -171,8 +171,13 @@ impl crate::CodexResumeRunner for RealWorkflowNodeCodexRunner {
         prompt: &str,
         last_message_path: &Path,
         options: &crate::CodexResumeRequestOptions,
-    ) -> Result<(crate::CodexResumeRunResult, crate::WorkflowNodeDispatchExecutionOptions), String>
-    {
+    ) -> Result<
+        (
+            crate::CodexResumeRunResult,
+            crate::WorkflowNodeDispatchExecutionOptions,
+        ),
+        String,
+    > {
         // safe_probe 是只读探针，不真跑 codex。
         if options.prompt_kind == "safe_probe" {
             return Err("safe_probe 不走真实 codex 执行".to_string());
@@ -223,8 +228,8 @@ impl crate::CodexResumeRunner for RealWorkflowNodeCodexRunner {
                 strategy: "required".to_string(),
                 required: true,
                 expected_sources: vec!["worker_report_candidate".to_string()],
-                unavailable_behavior:
-                    "readback_unavailable_or_failed_keeps_result_count_null".to_string(),
+                unavailable_behavior: "readback_unavailable_or_failed_keeps_result_count_null"
+                    .to_string(),
                 trust_policy: "workbench_managed_refs_only_no_full_transcript_by_default"
                     .to_string(),
                 warnings: vec![],
@@ -343,7 +348,10 @@ pub(crate) fn readonly_codex_consult(
         .cloned()
         .collect();
     if !blocking.is_empty() {
-        return Err(format!("consultant_readonly_blocked:{}", blocking.join(",")));
+        return Err(format!(
+            "consultant_readonly_blocked:{}",
+            blocking.join(",")
+        ));
     }
     let command_plan = command_plan_for(&request);
     let last_message_path = readonly_consult_last_message_path(prompt);
@@ -1834,8 +1842,7 @@ mod tests {
 
     impl UniqueTestTempDir {
         fn create(prefix: &str) -> Self {
-            static SEQUENCE: std::sync::atomic::AtomicU64 =
-                std::sync::atomic::AtomicU64::new(0);
+            static SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             const MAX_CREATE_ATTEMPTS: usize = 128;
 
             for _ in 0..MAX_CREATE_ATTEMPTS {
@@ -1978,10 +1985,16 @@ mod tests {
             &last_message_path,
             &options,
         );
-        println!("[REAL_RUN] last_message_path = {}", last_message_path.display());
+        println!(
+            "[REAL_RUN] last_message_path = {}",
+            last_message_path.display()
+        );
         println!("[REAL_RUN] result = {result:?}");
         let (run, _opts) = result.expect("adapter real run should succeed");
-        println!("[REAL_RUN] exit_code={} timed_out={}", run.exit_code, run.timed_out);
+        println!(
+            "[REAL_RUN] exit_code={} timed_out={}",
+            run.exit_code, run.timed_out
+        );
         assert_eq!(run.exit_code, 0, "codex exit code should be 0");
     }
 
@@ -2032,10 +2045,9 @@ mod tests {
         );
         // 确定性握手：spawn 登记通道在父进程同步点记下真实子进程 pid，
         // 不依赖子进程自报 pid 文件是否赶在超时杀之前被调度执行。
-        let pid = crate::exec_process_registry::test_take_spawned_codex_process_group(
-            &spawned_run_id,
-        )
-        .expect("spawned mock child pid registered at spawn");
+        let pid =
+            crate::exec_process_registry::test_take_spawned_codex_process_group(&spawned_run_id)
+                .expect("spawned mock child pid registered at spawn");
         // 子进程自报的 pid 文件若已落盘（正常调度路径），必须与登记 pid 一致；
         // 极端调度延迟下文件可能不存在，此时回收核验仍由登记 pid 独立完成。
         if let Ok(recorded) = fs::read_to_string(&pid_path) {

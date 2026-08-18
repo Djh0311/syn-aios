@@ -17,7 +17,8 @@ use crate::m3_role_session::{
 };
 use crate::m3_role_session_repository::{
     CreateRoleSessionCommand, M3CommandMetadata, M3OrdinaryRoleSessionRepositoryConfig,
-    M3RoleSessionSnapshotQuery, M3RoleSessionSqliteRepository, M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH,
+    M3RoleSessionSnapshotQuery, M3RoleSessionSqliteRepository,
+    M3_ORDINARY_ROLE_SESSION_RELATIVE_PATH,
 };
 use std::path::Path;
 
@@ -108,10 +109,9 @@ impl M3ProjectRoleSessionAuthorityHandle {
         verifier: M1TypedProjectIdVerifierHandle,
         app_data_root: &Path,
     ) -> Result<Self, M3ProjectRoleSessionAuthorityError> {
-        let identity_source = M3ProjectRoleIdentitySourceHandle::install_ordinary_product(
-            app_data_root,
-        )
-        .map_err(|error| M3ProjectRoleSessionAuthorityError::new(error.code))?;
+        let identity_source =
+            M3ProjectRoleIdentitySourceHandle::install_ordinary_product(app_data_root)
+                .map_err(|error| M3ProjectRoleSessionAuthorityError::new(error.code))?;
         Ok(Self {
             verifier: Some(verifier),
             identity_source: Some(identity_source),
@@ -247,9 +247,8 @@ impl M3ProjectRoleSessionAuthorityHandle {
             .map_err(|error| M3ProjectRoleSessionAuthorityError::new(error.code))?;
         let repository = Self::open_repository(source, false)?;
         reject_duplicate_active_sessions(&repository, &bundle)?;
-        let session = Self::load_matching_session(&repository, &bundle)?.ok_or_else(|| {
-            M3ProjectRoleSessionAuthorityError::new(M3_SESSION_UNAVAILABLE)
-        })?;
+        let session = Self::load_matching_session(&repository, &bundle)?
+            .ok_or_else(|| M3ProjectRoleSessionAuthorityError::new(M3_SESSION_UNAVAILABLE))?;
         view_from_bundle_and_session(&bundle, &session)
     }
 }
@@ -345,7 +344,10 @@ fn opaque_ref(
         .map_err(|_| M3ProjectRoleSessionAuthorityError::new(M3_SESSION_UNAVAILABLE))
 }
 
-fn opaque_string(namespace: &str, material: &str) -> Result<String, M3ProjectRoleSessionAuthorityError> {
+fn opaque_string(
+    namespace: &str,
+    material: &str,
+) -> Result<String, M3ProjectRoleSessionAuthorityError> {
     use sha2::{Digest, Sha256};
     let mut hasher = Sha256::new();
     hasher.update(material.as_bytes());
@@ -608,11 +610,17 @@ mod m3_project_role_session_authority_tests {
         let before = m3_role_session_count(&root);
         let port = M3ProjectRoleSessionAuthorityHandle::install_without_verifier();
         assert_code(
-            port.provision(&request(project_id.clone(), M3ProjectRole::ProjectSupervisor)),
+            port.provision(&request(
+                project_id.clone(),
+                M3ProjectRole::ProjectSupervisor,
+            )),
             M3_PROJECT_ID_VERIFIER_UNAVAILABLE,
         );
         assert_code(
-            port.load(&request(project_id.clone(), M3ProjectRole::ProjectSupervisor)),
+            port.load(&request(
+                project_id.clone(),
+                M3ProjectRole::ProjectSupervisor,
+            )),
             M3_PROJECT_ID_VERIFIER_UNAVAILABLE,
         );
         assert_code(
@@ -633,7 +641,10 @@ mod m3_project_role_session_authority_tests {
         let port = M3ProjectRoleSessionAuthorityHandle::install_with_verifier_only(verifier);
         let before = m3_role_session_count(&root);
         assert_code(
-            port.provision(&request(project_id.clone(), M3ProjectRole::ProjectSupervisor)),
+            port.provision(&request(
+                project_id.clone(),
+                M3ProjectRole::ProjectSupervisor,
+            )),
             M3_IDENTITY_SOURCE_UNAVAILABLE,
         );
         assert_code(
@@ -641,7 +652,10 @@ mod m3_project_role_session_authority_tests {
             M3_IDENTITY_SOURCE_UNAVAILABLE,
         );
         assert_code(
-            port.restore(&restore_request(project_id, M3ProjectRole::IndependentReviewer)),
+            port.restore(&restore_request(
+                project_id,
+                M3ProjectRole::IndependentReviewer,
+            )),
             M3_IDENTITY_SOURCE_UNAVAILABLE,
         );
         assert_eq!(m3_role_session_count(&root), before);
@@ -715,10 +729,8 @@ mod m3_project_role_session_authority_tests {
         assert_ne!(first.owner_fingerprint, reviewer.owner_fingerprint);
         assert_eq!(m3_role_session_count(&root), before + 3);
 
-        let store = std::fs::read_to_string(
-            root.join("m3/project-role-identity-source-v1.json"),
-        )
-        .expect("read identity source");
+        let store = std::fs::read_to_string(root.join("m3/project-role-identity-source-v1.json"))
+            .expect("read identity source");
         assert!(!store.contains(root.to_string_lossy().as_ref()));
         assert!(!store.contains("ExecutionGrant"));
         assert!(store.contains("\"allow_capabilities\": []"));
@@ -968,11 +980,16 @@ mod m3_project_role_session_authority_tests {
             .expect("ordinary m3 on b");
         let before_b = m3_role_session_count(&root_b);
         assert_code(
-            port_b.provision(&request(foreign_id.clone(), M3ProjectRole::ProjectSupervisor)),
+            port_b.provision(&request(
+                foreign_id.clone(),
+                M3ProjectRole::ProjectSupervisor,
+            )),
             M1_PROJECT_ID_FOREIGN_ROOT,
         );
         assert_eq!(m3_role_session_count(&root_b), before_b);
-        assert!(!root_b.join("m3/project-role-identity-source-v1.json").exists());
+        assert!(!root_b
+            .join("m3/project-role-identity-source-v1.json")
+            .exists());
 
         let root = ordinary_named_root();
         let state = ordinary_app_state(&root);

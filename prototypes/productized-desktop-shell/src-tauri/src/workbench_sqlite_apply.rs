@@ -164,17 +164,16 @@ fn apply_source_root_to_db(
         // exact source id used by later DB-primary upserts; otherwise a
         // WorkItem created after import cannot join its revision meta. Temp
         // imports retain root-scoped identities so fixtures never alias.
-        let source_id = if use_canonical_workflow_owner_source
-            && source.source_kind == "workflow_state"
-        {
-            crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_REPOSITORY_SOURCE_ID
-                .to_string()
-        } else {
-            format!(
-                "source:{}:{}:{}",
-                source.source_kind, dry_run.source_root_hash, source.source_path_hash
-            )
-        };
+        let source_id =
+            if use_canonical_workflow_owner_source && source.source_kind == "workflow_state" {
+                crate::workbench_sqlite_repository::WORKFLOW_STATE_SIDECAR_REPOSITORY_SOURCE_ID
+                    .to_string()
+            } else {
+                format!(
+                    "source:{}:{}:{}",
+                    source.source_kind, dry_run.source_root_hash, source.source_path_hash
+                )
+            };
         let warnings_json = serde_json::to_string(&source.warnings)
             .map_err(|error| format!("serialize source warnings failed: {error}"))?;
         let inserted = transaction

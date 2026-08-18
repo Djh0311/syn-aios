@@ -147,8 +147,7 @@ struct GrantMaterial<'a> {
 /// This is a server-side capability, not a worker-provided tool name: only an
 /// explicitly user-confirmed authorization containing it may enter the M2
 /// grant route.  Historic M1 scopes do not contain it and remain no-grant.
-pub(crate) const EXECUTION_GRANT_LEDGER_V2_CAPABILITY: &str =
-    "server_execution_grant_ledger_v2";
+pub(crate) const EXECUTION_GRANT_LEDGER_V2_CAPABILITY: &str = "server_execution_grant_ledger_v2";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct ExecutionGrantAuthorizationSource {

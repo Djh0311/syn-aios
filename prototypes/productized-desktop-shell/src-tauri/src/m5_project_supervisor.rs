@@ -634,7 +634,10 @@ mod tests {
             .unwrap();
         assert_eq!(created, 0);
         let source = include_str!("m5_project_supervisor.rs");
-        assert!(!source.contains(&format!("CREATE TABLE IF NOT EXISTS m5_{}", "role_sessions")));
+        assert!(!source.contains(&format!(
+            "CREATE TABLE IF NOT EXISTS m5_{}",
+            "role_sessions"
+        )));
     }
 
     #[test]

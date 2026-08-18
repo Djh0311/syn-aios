@@ -501,12 +501,42 @@ pub(crate) fn validate_m2_schema_contract(connection: &Connection) -> Result<(),
     for (table, from, referenced_table, to) in [
         ("command_receipts", "command_id", "commands", "command_id"),
         ("events", "command_id", "command_receipts", "command_id"),
-        ("events", "correlation_id", "correlation_chains", "correlation_id"),
-        ("audit_records", "command_id", "command_receipts", "command_id"),
-        ("outbox_items", "owning_command_id", "command_receipts", "command_id"),
-        ("outbox_items", "owning_command_receipt_ref", "command_receipts", "receipt_id"),
-        ("current_snapshots", "projector_id", "projectors", "projector_id"),
-        ("projection_checkpoints", "projector_id", "projectors", "projector_id"),
+        (
+            "events",
+            "correlation_id",
+            "correlation_chains",
+            "correlation_id",
+        ),
+        (
+            "audit_records",
+            "command_id",
+            "command_receipts",
+            "command_id",
+        ),
+        (
+            "outbox_items",
+            "owning_command_id",
+            "command_receipts",
+            "command_id",
+        ),
+        (
+            "outbox_items",
+            "owning_command_receipt_ref",
+            "command_receipts",
+            "receipt_id",
+        ),
+        (
+            "current_snapshots",
+            "projector_id",
+            "projectors",
+            "projector_id",
+        ),
+        (
+            "projection_checkpoints",
+            "projector_id",
+            "projectors",
+            "projector_id",
+        ),
     ] {
         let pragma = format!("PRAGMA foreign_key_list('{table}')");
         let mut statement = connection
@@ -526,13 +556,15 @@ pub(crate) fn validate_m2_schema_contract(connection: &Connection) -> Result<(),
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("m2_schema_fk_collect_failed:{table}:{error}"))?
             .into_iter()
-            .any(|(actual_table, actual_from, actual_to, on_update, on_delete)| {
-                actual_table == referenced_table
-                    && actual_from == from
-                    && actual_to == to
-                    && on_update == "RESTRICT"
-                    && on_delete == "RESTRICT"
-            });
+            .any(
+                |(actual_table, actual_from, actual_to, on_update, on_delete)| {
+                    actual_table == referenced_table
+                        && actual_from == from
+                        && actual_to == to
+                        && on_update == "RESTRICT"
+                        && on_delete == "RESTRICT"
+                },
+            );
         if !found {
             return Err(format!(
                 "m2_schema_drift_missing_or_wrong_fk:{table}.{from}->{referenced_table}.{to}:RESTRICT"
@@ -559,37 +591,121 @@ pub(crate) fn validate_m2_schema_contract(connection: &Connection) -> Result<(),
             .count();
     }
     if declared_fk_count != 8 {
-        return Err(format!("m2_schema_drift_fk_count:{declared_fk_count}:expected=8"));
+        return Err(format!(
+            "m2_schema_drift_fk_count:{declared_fk_count}:expected=8"
+        ));
     }
 
     for (table, index, expected_columns, expected_unique) in [
-        ("command_receipts", "idx_receipt_status", &["status"][..], false),
-        ("command_receipts", "idx_receipt_actor", &["actor_id"][..], false),
-        ("command_receipts", "idx_command_receipts_correlation", &["correlation_id"][..], false),
+        (
+            "command_receipts",
+            "idx_receipt_status",
+            &["status"][..],
+            false,
+        ),
+        (
+            "command_receipts",
+            "idx_receipt_actor",
+            &["actor_id"][..],
+            false,
+        ),
+        (
+            "command_receipts",
+            "idx_command_receipts_correlation",
+            &["correlation_id"][..],
+            false,
+        ),
         ("events", "idx_event_type", &["event_type"][..], false),
         ("events", "idx_event_occurred", &["occurred_at"][..], false),
         ("events", "idx_event_scope", &["scope_ref"][..], false),
         ("events", "idx_events_command", &["command_id"][..], false),
-        ("events", "idx_events_correlation", &["correlation_id"][..], false),
+        (
+            "events",
+            "idx_events_correlation",
+            &["correlation_id"][..],
+            false,
+        ),
         ("audit_records", "idx_audit_action", &["action"][..], false),
-        ("audit_records", "idx_audit_occurred", &["occurred_at"][..], false),
-        ("audit_records", "idx_audit_records_command", &["command_id"][..], false),
-        ("audit_records", "idx_audit_records_correlation", &["correlation_id"][..], false),
+        (
+            "audit_records",
+            "idx_audit_occurred",
+            &["occurred_at"][..],
+            false,
+        ),
+        (
+            "audit_records",
+            "idx_audit_records_command",
+            &["command_id"][..],
+            false,
+        ),
+        (
+            "audit_records",
+            "idx_audit_records_correlation",
+            &["correlation_id"][..],
+            false,
+        ),
         ("outbox_items", "idx_outbox_status", &["status"][..], false),
-        ("outbox_items", "idx_outbox_lease", &["expires_at"][..], false),
-        ("outbox_items", "idx_outbox_items_command", &["owning_command_id"][..], false),
-        ("outbox_items", "idx_outbox_items_effect", &["effect_id"][..], false),
-        ("current_snapshots", "idx_snapshot_watermark", &["source_watermark"][..], false),
-        ("current_snapshots", "idx_current_snapshots_projector", &["projector_id"][..], false),
-        ("projection_checkpoints", "idx_checkpoint_watermark", &["source_watermark"][..], false),
-        ("projection_checkpoints", "idx_projection_checkpoints_status", &["status"][..], false),
-        ("unknown_quarantine", "idx_unknown_quarantine_state", &["resolution_state"][..], false),
-        ("unknown_quarantine", "idx_unknown_quarantine_observed", &["observed_at"][..], false),
+        (
+            "outbox_items",
+            "idx_outbox_lease",
+            &["expires_at"][..],
+            false,
+        ),
+        (
+            "outbox_items",
+            "idx_outbox_items_command",
+            &["owning_command_id"][..],
+            false,
+        ),
+        (
+            "outbox_items",
+            "idx_outbox_items_effect",
+            &["effect_id"][..],
+            false,
+        ),
+        (
+            "current_snapshots",
+            "idx_snapshot_watermark",
+            &["source_watermark"][..],
+            false,
+        ),
+        (
+            "current_snapshots",
+            "idx_current_snapshots_projector",
+            &["projector_id"][..],
+            false,
+        ),
+        (
+            "projection_checkpoints",
+            "idx_checkpoint_watermark",
+            &["source_watermark"][..],
+            false,
+        ),
+        (
+            "projection_checkpoints",
+            "idx_projection_checkpoints_status",
+            &["status"][..],
+            false,
+        ),
+        (
+            "unknown_quarantine",
+            "idx_unknown_quarantine_state",
+            &["resolution_state"][..],
+            false,
+        ),
+        (
+            "unknown_quarantine",
+            "idx_unknown_quarantine_observed",
+            &["observed_at"][..],
+            false,
+        ),
     ] {
         let index_unique = connection
             .prepare(&format!("PRAGMA index_list('{table}')"))
             .map_err(|error| format!("m2_schema_index_prepare_failed:{table}:{error}"))?
-            .query_map([], |row| Ok((row.get::<_, String>(1)?, row.get::<_, i64>(2)? != 0)))
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, i64>(2)? != 0))
+            })
             .map_err(|error| format!("m2_schema_index_query_failed:{table}:{error}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("m2_schema_index_collect_failed:{table}:{error}"))?
@@ -604,14 +720,19 @@ pub(crate) fn validate_m2_schema_contract(connection: &Connection) -> Result<(),
         let actual_columns = connection
             .prepare(&format!("PRAGMA index_info('{index}')"))
             .map_err(|error| format!("m2_schema_index_info_prepare_failed:{index}:{error}"))?
-            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(2)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(2)?))
+            })
             .map_err(|error| format!("m2_schema_index_info_query_failed:{index}:{error}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("m2_schema_index_info_collect_failed:{index}:{error}"))?
             .into_iter()
             .map(|(_, column)| column)
             .collect::<Vec<_>>();
-        let expected_columns = expected_columns.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let expected_columns = expected_columns
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
         if actual_columns != expected_columns {
             return Err(format!("m2_schema_drift_index_columns:{table}.{index}"));
         }
@@ -634,7 +755,9 @@ pub(crate) fn validate_m2_schema_contract(connection: &Connection) -> Result<(),
             .prepare(&pragma)
             .map_err(|error| format!("m2_schema_unique_prepare_failed:{table}:{error}"))?;
         let index_names = statement
-            .query_map([], |row| Ok((row.get::<_, String>(1)?, row.get::<_, i64>(2)?)))
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, i64>(2)?))
+            })
             .map_err(|error| format!("m2_schema_unique_query_failed:{table}:{error}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("m2_schema_unique_collect_failed:{table}:{error}"))?;
@@ -646,11 +769,17 @@ pub(crate) fn validate_m2_schema_contract(connection: &Connection) -> Result<(),
             let info = format!("PRAGMA index_info('{index_name}')");
             let mut columns = connection
                 .prepare(&info)
-                .map_err(|error| format!("m2_schema_unique_info_prepare_failed:{index_name}:{error}"))?
+                .map_err(|error| {
+                    format!("m2_schema_unique_info_prepare_failed:{index_name}:{error}")
+                })?
                 .query_map([], |row| row.get::<_, String>(2))
-                .map_err(|error| format!("m2_schema_unique_info_query_failed:{index_name}:{error}"))?
+                .map_err(|error| {
+                    format!("m2_schema_unique_info_query_failed:{index_name}:{error}")
+                })?
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| format!("m2_schema_unique_info_collect_failed:{index_name}:{error}"))?;
+                .map_err(|error| {
+                    format!("m2_schema_unique_info_collect_failed:{index_name}:{error}")
+                })?;
             if columns == expected_columns {
                 matched = true;
                 break;
@@ -820,14 +949,20 @@ mod tests {
                 .expect("query FK catalog")
                 .count();
         }
-        assert_eq!(foreign_key_count, 8, "the frozen M2 contract has exactly eight FKs");
+        assert_eq!(
+            foreign_key_count, 8,
+            "the frozen M2 contract has exactly eight FKs"
+        );
 
         connection
             .execute_batch("DROP INDEX idx_event_scope")
             .expect("damage scratch catalog after marker exists");
         let drift = apply_m2_schema(&connection)
             .expect_err("a migration marker cannot mask an actual catalog drift");
-        assert_eq!(drift, "m2_schema_drift_missing_index:events.idx_event_scope");
+        assert_eq!(
+            drift,
+            "m2_schema_drift_missing_index:events.idx_event_scope"
+        );
     }
 
     #[test]
@@ -856,7 +991,10 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("inspect untouched legacy catalog");
-        assert_eq!(created_m2_tables, 0, "fail-closed means no implicit rewrite");
+        assert_eq!(
+            created_m2_tables, 0,
+            "fail-closed means no implicit rewrite"
+        );
     }
 
     #[test]
@@ -894,7 +1032,10 @@ mod tests {
                     |row| row.get(0),
                 )
                 .expect("inspect untouched legacy catalog");
-            assert_eq!(created_m2_tables, 0, "fail-closed means no implicit rewrite");
+            assert_eq!(
+                created_m2_tables, 0,
+                "fail-closed means no implicit rewrite"
+            );
         }
     }
 
@@ -913,13 +1054,11 @@ mod tests {
             connection
         };
 
-        let wrong_action = M2_ADDITIVE_SCHEMA_DDL
-            .join(";\n")
-            .replacen(
-                "ON UPDATE RESTRICT ON DELETE RESTRICT",
-                "ON UPDATE RESTRICT ON DELETE CASCADE",
-                1,
-            );
+        let wrong_action = M2_ADDITIVE_SCHEMA_DDL.join(";\n").replacen(
+            "ON UPDATE RESTRICT ON DELETE RESTRICT",
+            "ON UPDATE RESTRICT ON DELETE CASCADE",
+            1,
+        );
         let connection = build_damaged_catalog("m2-schema-wrong-fk-action", wrong_action);
         assert!(
             validate_m2_schema_contract(&connection)

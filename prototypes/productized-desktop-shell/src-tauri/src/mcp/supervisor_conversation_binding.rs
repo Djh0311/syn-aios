@@ -236,7 +236,9 @@ pub(crate) fn binding_error_variants_for_test() -> [ConversationTurnBindingError
         ConversationTurnBindingError::InactiveLifecycle(ConversationTurnLifecycle::Failed),
         ConversationTurnBindingError::ThreadUnbound,
         ConversationTurnBindingError::ContextMismatch("project_id"),
-        ConversationTurnBindingError::Capability(CapabilityAuthorizationError::InvalidAccessContext),
+        ConversationTurnBindingError::Capability(
+            CapabilityAuthorizationError::InvalidAccessContext,
+        ),
     ]
 }
 
@@ -858,7 +860,10 @@ mod tests {
 
         // 12 个变体逐个锁死取值——改名即失败，外部才敢按值比较。
         assert_eq!(
-            variants.iter().map(|error| error.family()).collect::<Vec<_>>(),
+            variants
+                .iter()
+                .map(|error| error.family())
+                .collect::<Vec<_>>(),
             vec![
                 "binding_rejected_missing_field",
                 "binding_rejected_invalid_project_root",

@@ -806,10 +806,7 @@ pub fn resolve_identity(
                 "read_project".to_string(),
                 "write_project_files".to_string(),
             ],
-            vec![
-                "dispatch_workers".to_string(),
-                "review_workers".to_string(),
-            ],
+            vec!["dispatch_workers".to_string(), "review_workers".to_string()],
         ),
         RoleKind::User => (
             vec![
@@ -920,10 +917,7 @@ pub enum PolicyDecision {
 }
 
 /// Check if a specific capability is allowed by the permission profile.
-pub fn policy_check_capability(
-    profile: &PermissionProfile,
-    capability: &str,
-) -> PolicyDecision {
+pub fn policy_check_capability(profile: &PermissionProfile, capability: &str) -> PolicyDecision {
     // Check deny list first (explicit deny wins)
     for denied in &profile.deny_capabilities {
         if denied == "*" || denied == capability {
@@ -949,10 +943,7 @@ pub fn policy_check_capability(
 }
 
 /// Check if a write to a specific path is allowed.
-pub fn policy_check_write(
-    identity: &IdentitySnapshot,
-    _target_path: &str,
-) -> PolicyDecision {
+pub fn policy_check_write(identity: &IdentitySnapshot, _target_path: &str) -> PolicyDecision {
     // System role bypasses write checks (for bootstrap/testing)
     if identity.role_ref.kind == RoleKind::System {
         return PolicyDecision::Allowed;
@@ -960,14 +951,14 @@ pub fn policy_check_write(
 
     // Read-only channels cannot write
     if identity.execution_channel.side_effect_mode == SideEffectMode::ReadOnly {
-        return PolicyDecision::Denied(
-            "policy_denied: 只读通道不允许写入".to_string(),
-        );
+        return PolicyDecision::Denied("policy_denied: 只读通道不允许写入".to_string());
     }
 
     // Check capability
     policy_check_capability(
-        &identity.permission_snapshot_ref.profile_id
+        &identity
+            .permission_snapshot_ref
+            .profile_id
             .split(':')
             .nth(1)
             .map(|_| PermissionProfile {
@@ -1009,8 +1000,7 @@ pub fn validate_session_permission_integrity(
             if snapshot.permission_snapshot_ref.profile_id != original.profile_id {
                 return Err(format!(
                     "permission_drift_detected: 原始 profile '{}' ≠ 当前解析 profile '{}'",
-                    original.profile_id,
-                    snapshot.permission_snapshot_ref.profile_id
+                    original.profile_id, snapshot.permission_snapshot_ref.profile_id
                 ));
             }
             if snapshot.permission_snapshot_ref.snapshot_hash != original.snapshot_hash {
@@ -1100,8 +1090,14 @@ mod tests {
         assert_eq!(RoleKind::from_str("worker"), Some(RoleKind::Worker));
         assert_eq!(RoleKind::from_str("user"), Some(RoleKind::User));
         assert_eq!(RoleKind::from_str("system"), Some(RoleKind::System));
-        assert_eq!(RoleKind::from_str("project_director"), Some(RoleKind::ProjectSupervisor));
-        assert_eq!(RoleKind::from_str("global_director"), Some(RoleKind::GlobalSupervisor));
+        assert_eq!(
+            RoleKind::from_str("project_director"),
+            Some(RoleKind::ProjectSupervisor)
+        );
+        assert_eq!(
+            RoleKind::from_str("global_director"),
+            Some(RoleKind::GlobalSupervisor)
+        );
     }
 
     #[test]
@@ -1126,7 +1122,10 @@ mod tests {
                 assert_eq!(snapshot.actor_id.0, "worker-001");
                 assert_eq!(snapshot.role_ref.kind, RoleKind::Worker);
                 assert_eq!(snapshot.execution_channel.kind, ChannelKind::Development);
-                assert_eq!(snapshot.execution_channel.side_effect_mode, SideEffectMode::WriteLocal);
+                assert_eq!(
+                    snapshot.execution_channel.side_effect_mode,
+                    SideEffectMode::WriteLocal
+                );
             }
             other => panic!("Expected Resolved, got {other:?}"),
         }
@@ -1134,25 +1133,13 @@ mod tests {
 
     #[test]
     fn resolve_identity_empty_actor() {
-        let result = resolve_identity(
-            "",
-            "/path",
-            "worker",
-            "development",
-            false,
-        );
+        let result = resolve_identity("", "/path", "worker", "development", false);
         assert!(matches!(result, IdentityResolution::Denied(_)));
     }
 
     #[test]
     fn resolve_identity_invalid_role_uses_default() {
-        let result = resolve_identity(
-            "actor-001",
-            "/path",
-            "hacker",
-            "development",
-            false,
-        );
+        let result = resolve_identity("actor-001", "/path", "hacker", "development", false);
         // 未知角色兜底 TemporaryAgent（内核对该角色 allow 空、deny *，fail-safe 零权限）
         match result {
             IdentityResolution::Resolved(snapshot) => {
@@ -1169,13 +1156,7 @@ mod tests {
 
     #[test]
     fn resolve_identity_invalid_channel_uses_default() {
-        let result = resolve_identity(
-            "actor-001",
-            "/path",
-            "worker",
-            "invalid_channel",
-            false,
-        );
+        let result = resolve_identity("actor-001", "/path", "worker", "invalid_channel", false);
         // 未知通道兜底 Daily=ReadOnly（fail-safe），不得落到 WriteLocal
         match result {
             IdentityResolution::Resolved(snapshot) => {
@@ -1509,36 +1490,25 @@ mod tests {
 
     #[test]
     fn session_permission_integrity_ok() {
-        let snapshot = resolve_identity(
-            "worker-001",
-            "/path",
-            "worker",
-            "development",
-            false,
-        );
+        let snapshot = resolve_identity("worker-001", "/path", "worker", "development", false);
         if let IdentityResolution::Resolved(s) = snapshot {
             assert!(validate_session_permission_integrity(
                 &s.permission_snapshot_ref,
                 "worker",
                 "development",
-            ).is_ok());
+            )
+            .is_ok());
         }
     }
 
     #[test]
     fn session_permission_drift_detected() {
-        let snapshot = resolve_identity(
-            "worker-001",
-            "/path",
-            "worker",
-            "development",
-            false,
-        );
+        let snapshot = resolve_identity("worker-001", "/path", "worker", "development", false);
         if let IdentityResolution::Resolved(s) = snapshot {
             // Try to claim a different role
             let result = validate_session_permission_integrity(
                 &s.permission_snapshot_ref,
-                "user",  // different role
+                "user", // different role
                 "development",
             );
             assert!(result.is_err());
@@ -1549,7 +1519,10 @@ mod tests {
 
     #[test]
     fn stable_id_normalizes() {
-        assert_eq!(stable_id("/Users/yoyi/Documents/mario test"), "users-yoyi-documents-mario-test");
+        assert_eq!(
+            stable_id("/Users/yoyi/Documents/mario test"),
+            "users-yoyi-documents-mario-test"
+        );
         assert_eq!(stable_id("UPPER"), "upper");
         assert_eq!(stable_id("a--b"), "a-b");
     }

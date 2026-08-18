@@ -22,20 +22,42 @@
 /// must be rejected or scrubbed before entering event/audit/product-DTO.
 const SENSITIVE_PATTERNS: &[&str] = &[
     // Credentials and tokens
-    "token", "secret", "password", "passwd", "credential", "auth_token",
-    "access_token", "refresh_token", "api_key", "apikey", "api-key",
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "credential",
+    "auth_token",
+    "access_token",
+    "refresh_token",
+    "api_key",
+    "apikey",
+    "api-key",
     // OAuth
-    "oauth", "bearer", "authorization",
+    "oauth",
+    "bearer",
+    "authorization",
     // Environment and config
-    ".env", "env_file", "environment_variable",
+    ".env",
+    "env_file",
+    "environment_variable",
     // Provider responses
-    "provider_response", "raw_response", "upstream_response",
+    "provider_response",
+    "raw_response",
+    "upstream_response",
     // Transcripts and prompts (full content)
-    "full_transcript", "prompt_body", "rollout_body",
+    "full_transcript",
+    "prompt_body",
+    "rollout_body",
     // SSH and keys
-    "private_key", "ssh_key", "id_rsa", "id_ed25519",
+    "private_key",
+    "ssh_key",
+    "id_rsa",
+    "id_ed25519",
     // Keychain and password stores
-    "keychain", "keyring", "keytar",
+    "keychain",
+    "keyring",
+    "keytar",
 ];
 
 /// Content classification result.
@@ -54,7 +76,10 @@ pub fn classify_content(text: &str) -> ContentClassification {
     let lower = text.to_lowercase();
 
     // Check for raw transcript / prompt body markers
-    if lower.contains("full_transcript") || lower.contains("prompt_body") || lower.contains("rollout_body") {
+    if lower.contains("full_transcript")
+        || lower.contains("prompt_body")
+        || lower.contains("rollout_body")
+    {
         return ContentClassification::Forbidden {
             reason: "raw transcript/prompt content forbidden in events".to_string(),
         };
@@ -70,7 +95,11 @@ pub fn classify_content(text: &str) -> ContentClassification {
     }
 
     // Check for base64-encoded secrets (rough heuristic: long strings of [A-Za-z0-9+/=])
-    if text.len() > 100 && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=') {
+    if text.len() > 100
+        && text
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
+    {
         return ContentClassification::Sensitive {
             reason: "content appears to be base64-encoded (possible secret)".to_string(),
         };
@@ -107,7 +136,10 @@ pub fn scrub_json_value(value: &serde_json::Value) -> serde_json::Value {
                 let lower_key = key.to_lowercase();
                 let is_sensitive = SENSITIVE_PATTERNS.iter().any(|p| lower_key.contains(p));
                 if is_sensitive {
-                    scrubbed.insert(key.clone(), serde_json::Value::String("[REDACTED]".to_string()));
+                    scrubbed.insert(
+                        key.clone(),
+                        serde_json::Value::String("[REDACTED]".to_string()),
+                    );
                 } else {
                     scrubbed.insert(key.clone(), scrub_json_value(val));
                 }
@@ -342,7 +374,10 @@ mod tests {
 
     #[test]
     fn safe_content_passes() {
-        assert_eq!(classify_content("just a normal string"), ContentClassification::Safe);
+        assert_eq!(
+            classify_content("just a normal string"),
+            ContentClassification::Safe
+        );
     }
 
     #[test]

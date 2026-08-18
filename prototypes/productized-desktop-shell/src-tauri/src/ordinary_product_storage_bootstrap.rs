@@ -50,8 +50,7 @@ pub(crate) fn has_ordinary_product_workflow_state_path_identity(path: &Path) -> 
     workflow_root.file_name().and_then(|name| name.to_str()) == Some("workflow-state")
         && product_root.file_name().and_then(|name| name.to_str())
             == Some(ORDINARY_PRODUCT_DATA_DIR_NAME)
-        && fs::canonicalize(workflow_root)
-            .is_ok_and(|canonical| canonical == workflow_root)
+        && fs::canonicalize(workflow_root).is_ok_and(|canonical| canonical == workflow_root)
         && fs::canonicalize(product_root).is_ok_and(|canonical| canonical == product_root)
 }
 
@@ -296,7 +295,9 @@ pub(crate) fn initialize_for_ordinary_startup(workflow_state_path: &Path) -> Res
                 })?;
             let expected = db_primary_config(
                 workflow_state_path,
-                &product_root.join("runtime-artifacts").join(WORKBENCH_DB_FILE_NAME),
+                &product_root
+                    .join("runtime-artifacts")
+                    .join(WORKBENCH_DB_FILE_NAME),
             );
             if config != &expected {
                 return Err("ordinary_product_storage_config_identity_mismatch".to_string());
@@ -787,11 +788,9 @@ mod tests {
                     .expect("writer candidate");
                 candidate["updated_at"] =
                     serde_json::Value::String("writer-during-cutover".to_string());
-                let error = crate::write_validated_workflow_state(
-                    &paths.workflow_state_path,
-                    &candidate,
-                )
-                .expect_err("writer must not pass an active cutover lock");
+                let error =
+                    crate::write_validated_workflow_state(&paths.workflow_state_path, &candidate)
+                        .expect_err("writer must not pass an active cutover lock");
                 assert!(error.contains("workflow_state_store_locked"));
                 Ok(())
             },
@@ -868,10 +867,9 @@ mod tests {
             .expect("foreign runtime root");
         let sentinel = b"foreign-profile-db-must-not-be-opened";
         fs::write(&foreign_db, sentinel).expect("foreign DB sentinel");
-        let config_path = crate::workbench_sqlite_storage_mode::storage_mode_path(
-            &paths_a.workflow_state_path,
-        )
-        .expect("profile A config path");
+        let config_path =
+            crate::workbench_sqlite_storage_mode::storage_mode_path(&paths_a.workflow_state_path)
+                .expect("profile A config path");
         fs::create_dir_all(config_path.parent().expect("profile A config parent"))
             .expect("profile A runtime root");
         fs::write(

@@ -134,8 +134,9 @@ pub(crate) fn execution_grant_source_from_authorization_record_json(
     workflow_id: &str,
     timestamp_ms: i64,
 ) -> Result<crate::mcp::execution_grant::ExecutionGrantAuthorizationSource, String> {
-    let authorization: PlanAuthorization = serde_json::from_str(record_json)
-        .map_err(|error| format!("execution_grant_db_primary_authorization_parse_failed:{error}"))?;
+    let authorization: PlanAuthorization = serde_json::from_str(record_json).map_err(|error| {
+        format!("execution_grant_db_primary_authorization_parse_failed:{error}")
+    })?;
     let authorization_store_revision = authorization.updated_at_ms;
     execution_grant_source_from_authorization(
         authorization,
@@ -184,29 +185,31 @@ fn execution_grant_source_from_authorization(
     {
         return Err("execution_grant_authorization_expired".to_string());
     }
-    Ok(crate::mcp::execution_grant::ExecutionGrantAuthorizationSource {
-        authorization_id: authorization.authorization_id.clone(),
-        authorization_store_revision,
-        authorization_source_hash,
-        project_id: authorization.project_id.clone(),
-        workflow_id: authorization.workflow_id.clone(),
-        allowed_work_item_types: authorization.scope.allowed_task_package_kinds.clone(),
-        allowed_role_ids: authorization.scope.allowed_role_ids.clone(),
-        allowed_agent_ids: authorization.scope.allowed_agent_ids.clone(),
-        allowed_read_roots: authorization.scope.allowed_read_roots.clone(),
-        allowed_write_roots: authorization.scope.allowed_write_roots.clone(),
-        allowed_tools: authorization.scope.allowed_tools.clone(),
-        allowed_checks: authorization.scope.allowed_checks.clone(),
-        stop_conditions: authorization
-            .scope
-            .stop_conditions
-            .iter()
-            .map(|condition| condition.condition_id.clone())
-            .collect(),
-        expires_at_ms: authorization.expires_at_ms,
-        max_worker_dispatches: authorization.scope.max_worker_dispatches,
-        max_runtime_minutes: authorization.scope.max_runtime_minutes,
-    })
+    Ok(
+        crate::mcp::execution_grant::ExecutionGrantAuthorizationSource {
+            authorization_id: authorization.authorization_id.clone(),
+            authorization_store_revision,
+            authorization_source_hash,
+            project_id: authorization.project_id.clone(),
+            workflow_id: authorization.workflow_id.clone(),
+            allowed_work_item_types: authorization.scope.allowed_task_package_kinds.clone(),
+            allowed_role_ids: authorization.scope.allowed_role_ids.clone(),
+            allowed_agent_ids: authorization.scope.allowed_agent_ids.clone(),
+            allowed_read_roots: authorization.scope.allowed_read_roots.clone(),
+            allowed_write_roots: authorization.scope.allowed_write_roots.clone(),
+            allowed_tools: authorization.scope.allowed_tools.clone(),
+            allowed_checks: authorization.scope.allowed_checks.clone(),
+            stop_conditions: authorization
+                .scope
+                .stop_conditions
+                .iter()
+                .map(|condition| condition.condition_id.clone())
+                .collect(),
+            expires_at_ms: authorization.expires_at_ms,
+            max_worker_dispatches: authorization.scope.max_worker_dispatches,
+            max_runtime_minutes: authorization.scope.max_runtime_minutes,
+        },
+    )
 }
 
 pub(crate) fn create_authorization(

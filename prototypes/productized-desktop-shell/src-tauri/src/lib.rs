@@ -3655,7 +3655,10 @@ mod tests {
             &fixture_task_package_render_fields(project_root),
         );
         assert_eq!(input.project_id.as_deref(), Some(canonical));
-        assert_ne!(input.project_id.as_deref(), Some(project_id(project_root).as_str()));
+        assert_ne!(
+            input.project_id.as_deref(),
+            Some(project_id(project_root).as_str())
+        );
     }
 
     #[test]

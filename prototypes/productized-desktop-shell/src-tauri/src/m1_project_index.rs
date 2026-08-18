@@ -2471,8 +2471,8 @@ mod tests {
     }
 
     #[test]
-    fn m5r09_m1_enrollment_backend_unenrolled_constructs_and_corrupt_fail_closed_without_registry_write()
-    {
+    fn m5r09_m1_enrollment_backend_unenrolled_constructs_and_corrupt_fail_closed_without_registry_write(
+    ) {
         let root = ordinary_named_root();
         fs::write(
             root.join("codex-index.json"),
@@ -2661,7 +2661,10 @@ mod tests {
             .arg(&source_path)
             .status()
             .expect("spawn mkfifo");
-        assert!(status.success(), "mkfifo must create the identity source fifo");
+        assert!(
+            status.success(),
+            "mkfifo must create the identity source fifo"
+        );
 
         let (tx, rx) = std::sync::mpsc::channel();
         let replay_root = root.clone();
@@ -2679,9 +2682,7 @@ mod tests {
             M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
         );
         assert_eq!(ctor, M1_ORDINARY_IDENTITY_SOURCE_MALFORMED);
-        let metadata = source_path
-            .symlink_metadata()
-            .expect("fifo path remains");
+        let metadata = source_path.symlink_metadata().expect("fifo path remains");
         assert!(!metadata.file_type().is_file());
         assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
         assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
@@ -2817,10 +2818,11 @@ mod tests {
                 ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO,
                 APPLE_BSD_SYMLINK_ERRNO
             );
-            let linux_android =
-                std::io::Error::from_raw_os_error(LINUX_ANDROID_SYMLINK_ERRNO);
+            let linux_android = std::io::Error::from_raw_os_error(LINUX_ANDROID_SYMLINK_ERRNO);
             let apple_bsd = std::io::Error::from_raw_os_error(APPLE_BSD_SYMLINK_ERRNO);
-            assert!(ordinary_identity_source_open_rejected_symlink(&linux_android));
+            assert!(ordinary_identity_source_open_rejected_symlink(
+                &linux_android
+            ));
             assert!(!ordinary_identity_source_open_rejected_symlink(&apple_bsd));
         }
 
@@ -2845,11 +2847,12 @@ mod tests {
                 ORDINARY_IDENTITY_SOURCE_SYMLINK_OPEN_ERRNO,
                 LINUX_ANDROID_SYMLINK_ERRNO
             );
-            let linux_android =
-                std::io::Error::from_raw_os_error(LINUX_ANDROID_SYMLINK_ERRNO);
+            let linux_android = std::io::Error::from_raw_os_error(LINUX_ANDROID_SYMLINK_ERRNO);
             let apple_bsd = std::io::Error::from_raw_os_error(APPLE_BSD_SYMLINK_ERRNO);
             assert!(ordinary_identity_source_open_rejected_symlink(&apple_bsd));
-            assert!(!ordinary_identity_source_open_rejected_symlink(&linux_android));
+            assert!(!ordinary_identity_source_open_rejected_symlink(
+                &linux_android
+            ));
         }
     }
 

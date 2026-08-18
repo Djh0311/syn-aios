@@ -71,8 +71,7 @@ fn enroll_m1_project_identity_with_state(
 /// Fixed no-request projection of the already installed C09 isolated runtime.
 /// The renderer cannot select a profile, owner, scope, model, path or fixture.
 #[tauri::command]
-fn load_m4c09_acceptance_status(
-) -> Result<m4_acceptance::M4C09AcceptanceStatusDto, String> {
+fn load_m4c09_acceptance_status() -> Result<m4_acceptance::M4C09AcceptanceStatusDto, String> {
     m4_acceptance::load_acceptance_status()
 }
 
@@ -146,8 +145,7 @@ fn m4_unavailable_daily_report(
     reason: &str,
 ) -> m4_secretary_read_model::M4SecretaryDailyReportEnvelope {
     m4_secretary_read_model::M4SecretaryDailyReportEnvelope::Unavailable {
-        schema_version:
-            m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION.to_string(),
+        schema_version: m4_secretary_read_model::M4_SECRETARY_DAILY_SCHEMA_VERSION.to_string(),
         reason: reason.to_string(),
     }
 }
@@ -245,9 +243,9 @@ async fn load_secretary_daily_report(
             ));
         };
         return Ok(tauri::async_runtime::spawn_blocking(move || {
-            repository.refresh_and_read_daily_report().unwrap_or_else(|_| {
-                m4_unavailable_daily_report("M4_DAILY_REPORT_UNAVAILABLE")
-            })
+            repository
+                .refresh_and_read_daily_report()
+                .unwrap_or_else(|_| m4_unavailable_daily_report("M4_DAILY_REPORT_UNAVAILABLE"))
         })
         .await
         .unwrap_or_else(|_| m4_unavailable_daily_report("M4_DAILY_REPORT_UNAVAILABLE")));
@@ -279,14 +277,10 @@ async fn recover_secretary_daily_catch_up(
         return Ok(tauri::async_runtime::spawn_blocking(move || {
             repository
                 .recover_daily_catch_up(&catch_up_truncation_id)
-                .unwrap_or_else(|_| {
-                    m4_unavailable_daily_report("M4_CATCH_UP_RECOVERY_UNAVAILABLE")
-                })
+                .unwrap_or_else(|_| m4_unavailable_daily_report("M4_CATCH_UP_RECOVERY_UNAVAILABLE"))
         })
         .await
-        .unwrap_or_else(|_| {
-            m4_unavailable_daily_report("M4_CATCH_UP_RECOVERY_UNAVAILABLE")
-        }));
+        .unwrap_or_else(|_| m4_unavailable_daily_report("M4_CATCH_UP_RECOVERY_UNAVAILABLE")));
     }
     #[cfg(test)]
     {
@@ -477,10 +471,11 @@ mod m2a_execution_report_ingress_tests {
             ),
         ] {
             assert_non_execution_join_rejected_before_any_persistence(&path, &request, &before);
-            let entries = std::fs::read_dir(&dir)
-                .expect("list temp dir")
-                .count();
-            assert_eq!(entries, 1, "rejection must not create backup, DB, or sidecar files");
+            let entries = std::fs::read_dir(&dir).expect("list temp dir").count();
+            assert_eq!(
+                entries, 1,
+                "rejection must not create backup, DB, or sidecar files"
+            );
         }
         let _ = std::fs::remove_dir_all(dir);
     }
@@ -6275,9 +6270,9 @@ fn record_external_worker_structured_report_at(
     reject_non_execution_worker_report_execution_join(request)?;
     match request.report_kind.trim() {
         "manual" | "offline" => record_worker_structured_report_at(path, request),
-        "execution" => Err(
-            "execution_worker_report_requires_server_verified_grant_path".to_string(),
-        ),
+        "execution" => {
+            Err("execution_worker_report_requires_server_verified_grant_path".to_string())
+        }
         _ => Err("worker_structured_report_kind_invalid".to_string()),
     }
 }
@@ -8106,19 +8101,15 @@ fn authorized_prepared_dispatch_for_execution(
     {
         return Err("prepared dispatch 的授权检查未完整放行，已拒绝启动 worker".to_string());
     }
-    let m2_execution_grant_required = match optional_string_from(
-        dispatch,
-        "execution_grant_envelope_schema",
-    ) {
-        None => false,
-        Some(schema) if schema == "execution-grant-ledger.v2" => true,
-        Some(_) => {
-            return Err(
+    let m2_execution_grant_required =
+        match optional_string_from(dispatch, "execution_grant_envelope_schema") {
+            None => false,
+            Some(schema) if schema == "execution-grant-ledger.v2" => true,
+            Some(_) => return Err(
                 "已授权 prepared dispatch 的 execution grant schema 不受支持，已拒绝启动 worker"
                     .to_string(),
-            )
-        }
-    };
+            ),
+        };
     let (authorization_binding_id, authorization_native_thread_id, thread_binding_deferred) =
         if m2_execution_grant_required {
             let thread_binding_deferred = dispatch
@@ -8127,18 +8118,20 @@ fn authorized_prepared_dispatch_for_execution(
                 .ok_or_else(|| {
                     "已授权 prepared dispatch 缺延迟绑定声明，已拒绝启动 worker".to_string()
                 })?;
-            let authorization_binding_schema = optional_string_from(
-                dispatch,
-                "authorization_binding_snapshot_schema",
-            )
-            .ok_or_else(|| {
-                "已授权 prepared dispatch 缺授权绑定快照 schema，已拒绝启动 worker".to_string()
-            })?;
+            let authorization_binding_schema =
+                optional_string_from(dispatch, "authorization_binding_snapshot_schema")
+                    .ok_or_else(|| {
+                        "已授权 prepared dispatch 缺授权绑定快照 schema，已拒绝启动 worker"
+                            .to_string()
+                    })?;
             if authorization_binding_schema != "c4-prepared-binding-snapshot.v1" {
-                return Err("已授权 prepared dispatch 的授权绑定快照 schema 不受支持，已拒绝启动 worker".to_string());
+                return Err(
+                    "已授权 prepared dispatch 的授权绑定快照 schema 不受支持，已拒绝启动 worker"
+                        .to_string(),
+                );
             }
-            let authorization_binding_mode = optional_string_from(dispatch, "authorization_binding_mode")
-                .ok_or_else(|| {
+            let authorization_binding_mode =
+                optional_string_from(dispatch, "authorization_binding_mode").ok_or_else(|| {
                     "已授权 prepared dispatch 缺授权绑定模式，已拒绝启动 worker".to_string()
                 })?;
             let expected_binding_mode = if thread_binding_deferred {
@@ -8147,11 +8140,13 @@ fn authorized_prepared_dispatch_for_execution(
                 "exact"
             };
             if authorization_binding_mode != expected_binding_mode {
-                return Err("已授权 prepared dispatch 的授权绑定模式与延迟声明不一致，已拒绝启动 worker".to_string());
+                return Err(
+                    "已授权 prepared dispatch 的授权绑定模式与延迟声明不一致，已拒绝启动 worker"
+                        .to_string(),
+                );
             }
-            let authorization_binding_id = dispatch
-                .get("authorization_binding_id")
-                .ok_or_else(|| {
+            let authorization_binding_id =
+                dispatch.get("authorization_binding_id").ok_or_else(|| {
                     "已授权 prepared dispatch 缺授权绑定快照，已拒绝启动 worker".to_string()
                 })?;
             let authorization_native_thread_id = dispatch
@@ -8160,7 +8155,8 @@ fn authorized_prepared_dispatch_for_execution(
                     "已授权 prepared dispatch 缺授权主体快照，已拒绝启动 worker".to_string()
                 })?;
             if thread_binding_deferred {
-                if !authorization_binding_id.is_null() || !authorization_native_thread_id.is_null() {
+                if !authorization_binding_id.is_null() || !authorization_native_thread_id.is_null()
+                {
                     return Err(
                         "延迟绑定 prepared dispatch 的授权快照不应预置主体，已拒绝启动 worker"
                             .to_string(),
@@ -8184,8 +8180,9 @@ fn authorized_prepared_dispatch_for_execution(
     Ok(PreparedDispatchAuthorization {
         authorization_id: authorization_id.to_string(),
         authorization_check,
-        prepared_dispatch_id: optional_string_from(dispatch, "dispatch_id")
-            .ok_or_else(|| "已授权 prepared dispatch 缺 dispatch_id，已拒绝启动 worker".to_string())?,
+        prepared_dispatch_id: optional_string_from(dispatch, "dispatch_id").ok_or_else(|| {
+            "已授权 prepared dispatch 缺 dispatch_id，已拒绝启动 worker".to_string()
+        })?,
         authorization_binding_id,
         authorization_native_thread_id,
         thread_binding_deferred,
@@ -8622,10 +8619,10 @@ fn get_project_workflow_nodes(
         .and_then(Value::as_array)
         .map(|wfs| {
             wfs.iter().any(|wf| {
-                let wid_match =
-                    optional_string_from(wf, "workflow_id").as_deref() == Some(workflow_id.as_str());
-                let pid_match =
-                    optional_string_from(wf, "project_id").as_deref() == Some(expected_pid.as_str());
+                let wid_match = optional_string_from(wf, "workflow_id").as_deref()
+                    == Some(workflow_id.as_str());
+                let pid_match = optional_string_from(wf, "project_id").as_deref()
+                    == Some(expected_pid.as_str());
                 wid_match && pid_match
             })
         })
@@ -8966,8 +8963,8 @@ mod fnd004a_ownership_tests {
                 wfs.iter().any(|wf| {
                     let wid_match =
                         optional_string_from(wf, "workflow_id").as_deref() == Some(workflow_id);
-                    let pid_match =
-                        optional_string_from(wf, "project_id").as_deref() == Some(expected_pid.as_str());
+                    let pid_match = optional_string_from(wf, "project_id").as_deref()
+                        == Some(expected_pid.as_str());
                     wid_match && pid_match
                 })
             })
@@ -9027,7 +9024,10 @@ mod fnd004a_ownership_tests {
 
         let result = list_project_workflows_at(&path, "/Users/yoyi/test-project").unwrap();
         assert_eq!(result.len(), 1, "无 project_id 的老记录不应出现");
-        assert_eq!(result[0]["workflow_id"], "workflow:users-yoyi-test-project:456");
+        assert_eq!(
+            result[0]["workflow_id"],
+            "workflow:users-yoyi-test-project:456"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -9069,7 +9069,10 @@ mod fnd004a_ownership_tests {
         );
         assert!(result.is_err(), "应拒绝不属于请求项目的 workflow");
         let err = result.unwrap_err();
-        assert!(err.contains("fnd004a_rejected"), "错误应包含 fnd004a_rejected: {err}");
+        assert!(
+            err.contains("fnd004a_rejected"),
+            "错误应包含 fnd004a_rejected: {err}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }

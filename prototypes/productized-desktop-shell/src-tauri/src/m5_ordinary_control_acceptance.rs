@@ -468,10 +468,26 @@ fn compose_backend_receipt(
     let independent_reviewer = independent_reviewer_from_authority(&worker, &reviewer, &chain);
     let exact_chain_complete = chain.is_complete(&project_id, &independent_reviewer);
     let mut join_carriers = serde_json::Map::new();
-    insert_opt(&mut join_carriers, "project_id", chain.join_project_id.clone());
-    insert_opt(&mut join_carriers, "orchestration_id", chain.orchestration_id.clone());
-    insert_opt(&mut join_carriers, "workflow_run_id", chain.workflow_run_id.clone());
-    insert_opt(&mut join_carriers, "work_item_id", chain.work_item_id.clone());
+    insert_opt(
+        &mut join_carriers,
+        "project_id",
+        chain.join_project_id.clone(),
+    );
+    insert_opt(
+        &mut join_carriers,
+        "orchestration_id",
+        chain.orchestration_id.clone(),
+    );
+    insert_opt(
+        &mut join_carriers,
+        "workflow_run_id",
+        chain.workflow_run_id.clone(),
+    );
+    insert_opt(
+        &mut join_carriers,
+        "work_item_id",
+        chain.work_item_id.clone(),
+    );
     insert_opt(&mut join_carriers, "node_id", chain.node_id.clone());
     insert_opt(&mut join_carriers, "attempt_id", chain.attempt_id.clone());
     insert_opt(&mut join_carriers, "grant_id", chain.grant_id.clone());
@@ -504,7 +520,10 @@ fn compose_backend_receipt(
         "composition".into(),
         serde_json::Value::String(ORDINARY_CONTROL_COMPOSITION.into()),
     );
-    body.insert("not_legacy_composition".into(), serde_json::Value::Bool(true));
+    body.insert(
+        "not_legacy_composition".into(),
+        serde_json::Value::Bool(true),
+    );
     body.insert("not_stage_closeout".into(), serde_json::Value::Bool(true));
     body.insert(
         "ordinary_disposable_fixture_only".into(),
@@ -538,7 +557,11 @@ fn compose_backend_receipt(
         "project_id".into(),
         serde_json::Value::String(project_id.clone()),
     );
-    insert_opt(&mut body, "binding_id", binding.as_ref().map(|item| item.0.clone()));
+    insert_opt(
+        &mut body,
+        "binding_id",
+        binding.as_ref().map(|item| item.0.clone()),
+    );
     insert_opt(
         &mut body,
         "role_session_id",
@@ -580,7 +603,11 @@ fn compose_backend_receipt(
         "authorization_decision_id",
         chain.authorization_decision_id.clone(),
     );
-    insert_opt(&mut body, "authorization_id", chain.authorization_id.clone());
+    insert_opt(
+        &mut body,
+        "authorization_id",
+        chain.authorization_id.clone(),
+    );
     insert_opt(&mut body, "workflow_run_id", chain.workflow_run_id.clone());
     insert_opt(&mut body, "work_item_id", chain.work_item_id.clone());
     insert_opt(&mut body, "attempt_id", chain.attempt_id.clone());
@@ -682,10 +709,16 @@ fn compose_backend_receipt(
     Ok(serde_json::Value::Object(body))
 }
 
-fn insert_opt(map: &mut serde_json::Map<String, serde_json::Value>, key: &str, value: Option<String>) {
+fn insert_opt(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: Option<String>,
+) {
     map.insert(
         key.into(),
-        value.map(serde_json::Value::String).unwrap_or(serde_json::Value::Null),
+        value
+            .map(serde_json::Value::String)
+            .unwrap_or(serde_json::Value::Null),
     );
 }
 
@@ -1051,11 +1084,7 @@ fn load_exact_chain(
                     chain.execution_readback_id = Some(readback.receipt_id.clone());
                     chain.terminal_readback = matches!(
                         readback.derived_attempt_state.as_str(),
-                        "SUCCEEDED"
-                            | "FAILED"
-                            | "CANCELLED"
-                            | "TIMED_OUT"
-                            | "UNKNOWN_READBACK"
+                        "SUCCEEDED" | "FAILED" | "CANCELLED" | "TIMED_OUT" | "UNKNOWN_READBACK"
                     );
                 }
             }
@@ -1301,11 +1330,7 @@ fn store_counts(store: &M5OrchestrationStore, project_id: &str) -> Result<StoreC
     })
 }
 
-fn project_count(
-    store: &M5OrchestrationStore,
-    sql: &str,
-    project_id: &str,
-) -> Result<i64, String> {
+fn project_count(store: &M5OrchestrationStore, sql: &str, project_id: &str) -> Result<i64, String> {
     match store
         .connection()
         .query_row(sql, [project_id], |row| row.get::<_, i64>(0))
@@ -1956,8 +1981,14 @@ mod tests {
             .get("fact_id")
             .and_then(serde_json::Value::as_str)
             .is_some());
-        assert_eq!(body.get("claims").and_then(serde_json::Value::as_i64), Some(1));
-        assert_eq!(body.get("reviews").and_then(serde_json::Value::as_i64), Some(1));
+        assert_eq!(
+            body.get("claims").and_then(serde_json::Value::as_i64),
+            Some(1)
+        );
+        assert_eq!(
+            body.get("reviews").and_then(serde_json::Value::as_i64),
+            Some(1)
+        );
         assert_eq!(
             body.get("result_decisions")
                 .and_then(serde_json::Value::as_i64),
@@ -1992,7 +2023,10 @@ mod tests {
             body.get("project_id").and_then(serde_json::Value::as_str),
             Some(opened.project_id.as_str())
         );
-        assert!(body.get("grant_id").and_then(serde_json::Value::as_str).is_some());
+        assert!(body
+            .get("grant_id")
+            .and_then(serde_json::Value::as_str)
+            .is_some());
         assert!(body
             .get("claim_id")
             .and_then(serde_json::Value::as_str)
