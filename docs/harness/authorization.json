@@ -1,1 +1,8 @@
-{"schemaVersion":1,"authorized":false}
+{
+  "schemaVersion": 1,
+  "authorized": true,
+  "leaf": "docs/harness/leaves/M6D04-secretary-consult-handoff.md",
+  "stage": "stage-15",
+  "executionReceipt": "u-bf5cbe4117b9c087c7f1",
+  "expiresAt": "2026-08-19T16:35:42.000Z"
+}

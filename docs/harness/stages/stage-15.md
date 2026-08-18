@@ -74,8 +74,8 @@
 - [x] M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置（内容 `4147454`、记账 `cf1cb25`；独立检查点 `stage-15-m6p00-20260819-0342` PASS）
 - [x] M6D01 跨项目与成员合同冻结（ORG-001，只写合同；内容 `80ddebd`，主管自复核 PASS）→ CP1
 - [x] M6D02 顶层 Global Supervisor 持久 RoleSession（ORG-003；内容 `651a8fb`，主管自复核 PASS）→ **CP1 独立 verdict `stage-15-cp1-20260819-0521` PASS**
-- [ ] M6D03 只读跨项目 query 与 advisory（ORG-002；current）→ CP2
-- [ ] M6D04 Secretary consult Handoff（ORG-004）→ **CP2 停点**
+- [x] M6D03 只读跨项目 query 与 advisory（ORG-002；owner 前置 `977770f`、内容 `60a8e19`，主管自复核 PASS）→ CP2
+- [ ] M6D04 Secretary consult Handoff（ORG-004；current）→ **CP2 停点**
 - [ ] M6D05 稳定成员目录（ORG-005）→ CP3
 - [ ] M6D06 临时 agent 历史投影（ORG-006）→ **CP3 停点**
 - [ ] M6D07 独立多视角会诊（ORG-006A）

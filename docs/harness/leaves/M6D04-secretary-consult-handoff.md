@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`PLANNED` / `NOT_STARTED`。stage-15 检查点 CP2 的第二叶，本叶做完即到 CP2，必须停下交包。
+状态：`CURRENT` / `NOT_STARTED`。stage-15 检查点 CP2 的第二叶；M6D03 已由主管自复核放行并归档。本叶做完即到 CP2，必须收口交包并由同一长驻 Codex 前台阻塞启动独立验收官。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-004、第 3 节 `ConsultHandoff` 不变量（from/to、scope、refs、question、receipt；无项目写权限）；M3 Handoff 为唯一 owner；判据以 M6D01 冻结合同为准。
 
@@ -20,7 +20,7 @@
 8. 定向测试覆盖：发起 / 接受 / 拒绝、幂等、缺字段拒绝、零项目写、回源 refs 完整；
 9. `cargo check --lib --offline` 与本叶定向测试在 disposable checkout 上通过，记录真实数字与退出码，证据绑定候选 SHA；
 10. 独立内容提交，写域精确，`git diff --check` 通过；
-11. 本叶做完即到 **CP2 检查点**：主管自复核放行并收口后，authorization 打回精确 closed，在 `/home/synadmin/workspace/.syn-gates/open/` 写 `stage-15-cp2-<YYYYMMDD-HHMM>.md` 交包（含 M6D03 与 M6D04 两叶），然后停下等总指导验收。不得自行进入 M6D05。
+11. 本叶做完即到 **CP2 检查点**：主管自复核放行并收口后，authorization 打回精确 closed，在 `/home/synadmin/workspace/.syn-gates/open/` 写 `stage-15-cp2-<YYYYMMDD-HHMM>.md` 交包（含 M6D03 与 M6D04 两叶），由同一长驻 Codex 前台阻塞启动零上下文 Cursor Opus 验收官并每两分钟心跳。PASS 才处理交包并进入 M6D05；FAIL 只按点名范围返修；无有效 verdict 或连续两次 FAIL 按协议 halt。不得在 PASS 前自行进入 M6D05。
 
 证据：只在 disposable checkout 上产出定向证据，绑定候选 SHA。只用 fake roles / provider 与合成 summary。本叶不做 GUI、不接真实 provider / 消息 / 账号。
 

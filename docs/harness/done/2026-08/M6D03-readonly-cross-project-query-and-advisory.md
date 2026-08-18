@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`CURRENT` / `NOT_STARTED`。stage-15 检查点 CP2 的第一叶。CP1 已由独立 verdict `stage-15-cp1-20260819-0521.verdict.md` PASS 放行；本叶完成后直接进入 M6D04，不提前越过 CP2。
+状态：`SUPERVISOR_SELF_REVIEW_PASS` / `ARCHIVED` / `CP2_SEGMENT_CONTINUES`。stage-15 检查点 CP2 的第一叶。owner exact-join 前置内容 `977770f115f6a416a9466c59728ab9ecfc04b669` 与 advisory 内容候选 `60a8e198f7319c8d175754079d08c61ddb88614c` / tree `e4539f211f1c160906b4c05f41f75041a6e5134b` 已按七项判据放行；本叶归档后直接进入 M6D04，M6D04 收口前不越过 CP2。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-002、第 3 节 `ProjectSummary` 与 `CrossProjectAdvisory` / `AdvisoryApplicationProjection` 不变量、第 7 节关键验收（write-spy / hash baseline）；ProjectSummary 输入固定依 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节与 `docs/contracts/m5-project-summary-projection-v1.md`；判据以 M6D01 冻结合同为准。
 
