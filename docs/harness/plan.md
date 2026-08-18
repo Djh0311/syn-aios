@@ -20,7 +20,7 @@
 - [ ] 阶段14 M5 项目主管与执行闭环（候选原型 WIP / NOT_ACCEPTED / NOT_MAINLINE）
 - [ ] 阶段15 M6 全局主管与内部组织（候选原型 WIP / NOT_ACCEPTED / NOT_MAINLINE，M5 验收前不激活）
 
-当前优先级（2026-08-18 修正）：M5 和 M6 当前为 `M5/M6 CANDIDATE WIP / UNIT-LEVEL PROTOTYPE / NOT_ACCEPTED / NOT_MAINLINE`。现有 57（M5 定向）/ 33（M6 定向）单测只是候选原型单测基线，未绑定任何阶段退出。`stage-14`（M5）已建立为真实活动阶段；REC-00、M5R01–M5R06 已归档，按真实 M1 缺口重开的 M5R00 内容候选 `99a5afc` 已于 2026-08-18 通过独立验收并归档；唯一 current leaf 为 M5R07（项目 UI、普通产品组合与阶段候选），且必须带入 M5R00 验收结论列出的 D1 正式身份消费与 D2 启动来源铺设欠账。`stage-15`（M6）仍为 PLANNED，须在 M5 独立验收后另建。stage-12 仍开着，D0C04 / D0C05 保持 unfinished 且本轮不执行；M7–M11、Headless Core、Primary 与 authority epoch 均未激活，后续仍须用户以自然语言明确开始。
+当前优先级（2026-08-18 修正）：M5 和 M6 当前仍不是已发布或已部署状态。`stage-14`（M5）保持活动；REC-00、M5R00、M5R01–M5R06 已归档，M5R07 修订标准候选 `7cab372` / tree `df6b743` 已由最新独立结论 `M5R07-20260818-1344.verdict.md` 判定 PASS 并归档。独立结论同时列出不反写该 PASS 的后续欠账，故唯一 current leaf 现为 M5R08（M1 消费面、attempt-scoped runtime 幂等与验收欠账收敛）；stage-14 尚未关闭，也未宣布 M5 里程碑完成。`stage-15`（M6）未建立、未激活。stage-12 仍开着，D0C04 / D0C05 保持 unfinished 且本轮不执行；M7–M11、Headless Core、Primary 与 authority epoch 均未激活，后续仍须用户以自然语言明确开始。
 
 ## M5 + M6 当前状态（2026-08-16 修正，非完成声明）
 

@@ -74,5 +74,12 @@
 - [x] M5R04 普通项目的持久 Project Supervisor
 - [x] M5R05 受控执行、恢复与 runtime conformance
 - [x] M5R06 ProjectSummary 正式投影
-- [ ] M5R07 项目 UI、隔离 App 与阶段候选（唯一 current；已有 scoped PASS 全部保留，继续完成普通产品组合，并带入 M5R00 验收列出的 D1 正式身份消费与 D2 启动来源铺设欠账）
+- [x] M5R07 项目 UI、隔离 App 与阶段候选（修订标准候选 `7cab372` / tree `df6b743` 已由 `M5R07-20260818-1344.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout 或 M5 完成）
+- [ ] M5R08 M1 消费面、attempt-scoped runtime 幂等与验收欠账收敛（唯一 current；只处理 M5R07 PASS verdict 明列的后续欠账，不反写 M5R07）
 - [ ] M5 独立验收与 closeout
+
+## 2026-08-18 M5R07 独立验收后的继续边界
+
+- M5R07 的独立 PASS 只放行候选 `7cab37203fe70fe69f696e45fc6a12b314d1fd84` / tree `df6b7432f2a1e5d56eb434e4c5ed979a4f4144b1` 及记账 `0b7b5e1` / `a85278a`；不反向重验或改写其 scoped PASS。
+- 最新 verdict 的欠账 1、2 是 M6 实际前置；欠账 3、5、6、7、9 必须在 closeout 前诚实结清。欠账 4 与 8 仍分别绑定旧壳若分发前的验收 driver 剥离，以及新壳 F5 的窗口像素证据；M5R08 只做本仓可关闭部分与精确下游交接，不启动壳采纳。
+- stage-14 本次不关闭；M5R08 达到自身标准后仍须 authorization closed、写仓外节点请求并停止，等待独立验收。

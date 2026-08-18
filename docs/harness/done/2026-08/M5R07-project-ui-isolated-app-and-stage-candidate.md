@@ -1,12 +1,12 @@
 # M5R07 项目 UI、隔离 App 与阶段候选
 
-> **2026-08-18 恢复为唯一 current**：M5R00 内容候选 `99a5afc` / tree `08669b0` 已通过独立验收并归档。已获得的全部 M5R07 scoped independent PASS 继续有效，不得反向写成 FAIL。验收标准按 `docs/harness/stages/stage-14.md` 的 2026-08-18 修订执行：界面类证据已取消，组合类六项必须真实通过，真桌面像素证据记为新壳 F5 欠项。
+> **2026-08-18 独立验收 PASS 并归档**：最新结论 `/home/synadmin/workspace/.syn-gates/verdicts/M5R07-20260818-1344.verdict.md` 已独立验收修订标准候选 `7cab372` / tree `df6b743`，并仅放行该候选及记账 `0b7b5e1` / `a85278a`。全部既有 scoped independent PASS 继续有效，不反向写成 FAIL；本归档不等于 stage-14 closeout、M5 完成、M6 激活或壳采纳。
 
 阶段：stage-14 M5 项目主管与执行闭环（事实重整与产品闭环）
 
 目标：用冻结 DTO 接现有项目壳，不重写 execution kernel 或页面布局；在隔离 app-data / scratch 上证明完整闭环；形成只含 M5 投影的 candidate series 后保持 `AWAITING_INDEPENDENT_ACCEPTANCE`。不自行关闭 stage-14，不宣布 M5 完成。
 
-状态：`AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。M5R07 修订标准的 final 内容候选是 `7cab37203fe70fe69f696e45fc6a12b314d1fd84`（tree `df6b7432f2a1e5d56eb434e4c5ed979a4f4144b1`），fresh evidence 在 `/home/synadmin/workspace/.syn-gates/evidence/M5R07-7cab372/`；尚未获得本节点的独立验收。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的旧 evidence 内容/载体已获 Git/Harness scoped independent PASS，非本次修订标准候选、非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`、U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 与 U02 ordinary disposable positive Tauri candidate exact `0952c83d20304cd589a8c641d6d30120d04d91f4` 已获 scoped PASS；均不是 stage closeout。不得把上述 scoped PASS 或本次候选写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
+状态：`INDEPENDENT_ACCEPTANCE_PASS` / `ARCHIVED` / `NOT_STAGE_CLOSEOUT` / `NOT_M5_COMPLETE`。M5R07 修订标准的 final 内容候选是 `7cab37203fe70fe69f696e45fc6a12b314d1fd84`（tree `df6b7432f2a1e5d56eb434e4c5ed979a4f4144b1`），fresh evidence 在 `/home/synadmin/workspace/.syn-gates/evidence/M5R07-7cab372/`；独立结论为 `/home/synadmin/workspace/.syn-gates/verdicts/M5R07-20260818-1344.verdict.md`。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的旧 evidence 内容/载体已获 Git/Harness scoped independent PASS，非本次修订标准候选、非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`、U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 与 U02 ordinary disposable positive Tauri candidate exact `0952c83d20304cd589a8c641d6d30120d04d91f4` 已获 scoped PASS；均不是 stage closeout。不得把上述 scoped PASS 或本次候选写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。
 
 来源收据：用户明确把提示内剩余工作做完；M5R06 PASS（`867fd20`）。
 
@@ -29,11 +29,12 @@
 1. ordinary disposable positive Tauri PASS：server fixture 预登记 M1 alias + M3 authority，真实 Vite + Tauri + Xvfb 走默认 `jiaoban` DOM 与两次进程；它不是 legacy production composition，也没有窗口截图。
 2. shared isolated 真实 Vite+Tauri/Xvfb 只证明 authority-unavailable fail-closed；`NO_UI_PASS` / `NO_WINDOW_CAPTURE`；scene / resume / second launch `NOT_EXECUTED`。
 
-当前剩余事项（不得反向写成既有 scoped candidate FAIL，也不得 close）：
+独立验收结论与欠账转交：
 
-1. 本 leaf 的产品与证据完成项（1–8）已在内容候选 `7cab372` 的 detached disposable checkout 上得到直接证据；D3 后续欠项也已按第 9 项如实保留。仍须等待总指导独立验收。独立 PASS 之前不得归档 leaf、关闭 stage-14、宣布 M5 完成或进入 M6 / 壳采纳。
-2. 真桌面窗口像素证据仍按 stage-14 修订记为新壳 F5 欠项，不属于 M5R07 当前完成标准；本候选明确 `NO_WINDOW_CAPTURE`。
-3. M1 来源静态校验与读取之间的 TOCTOU 按 M5R00 PASS 结论保留为后续非阻断欠项；M5R07 未修改 M1 实现，不冒充已修复。
+1. 本 leaf 的产品与证据完成项（1–8）已在内容候选 `7cab372` 的 detached disposable checkout 上得到直接证据，并由 `M5R07-20260818-1344.verdict.md` 判定 PASS；本 leaf 据此归档。
+2. verdict 明列的本仓产品、流程与 WIP 归责欠账已转入唯一 current `M5R08-m1-consumption-runtime-idempotency-and-acceptance-debts`，不改变 M5R07 的 PASS。
+3. 真桌面窗口像素证据仍按 stage-14 修订记为新壳 F5 欠项；本候选明确 `NO_WINDOW_CAPTURE`，没有冒充已经完成。
+4. stage-14 仍开；M5R08 独立验收前不得宣布 M5 完成、进入 M6 或壳采纳。
 
 证据：`7cab372` fresh checkout 上 `cargo check --lib --offline` exit 0，`m5_` 180/180、task-memory 15/15、M1 ordinary source 5/5、typecheck/build 均 PASS；真实 Xvfb launcher exit 0，拒绝零业务副作用，失败后新 lineage，完整 Proposal 到 ResultUserDecision/ProjectFact exact chain 成立，独立 reviewer 成立，binding/project/三类 RoleSession/对象 ID/计数/M1 registry 跨重启一致，duplicate runtime 零第二 effect。原始 logs、phase receipts 与 SQLite 在 `/home/synadmin/workspace/.syn-gates/evidence/M5R07-7cab372/`；这是隔离合成输入上的普通产品组合事实，不冒充真实用户老项目、日常运行、部署、发布或独立验收。前驱 `ab5c46e` 的 179/180 失败日志保留并由 `7cab372` 的单文件测试边界修复转绿。shared-isolated 始终只作 authority-unavailable negative regression。不得自动进入 M6 或 closeout。
 
