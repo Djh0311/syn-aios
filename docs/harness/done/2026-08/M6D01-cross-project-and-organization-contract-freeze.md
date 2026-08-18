@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`CURRENT` / `NOT_STARTED`。stage-15 检查点 CP1 的第一叶。前置已满足：M6P00 内容 `4147454`、记账 `cf1cb25` 获独立 verdict `stage-15-m6p00-20260819-0342.verdict.md` PASS。
+状态：`SUPERVISOR_SELF_REVIEW_PASS` / `ARCHIVED`。stage-15 检查点 CP1 的第一叶。内容候选 `80ddebdf17889035bc7acde423e32ad6de6f17bb` / tree `9b9ed64be8f8cf6f02c0436ec9883631fe55b56e` 已按七项判据放行；本结论只到静态合同与 fixtures，不是 CP1 PASS、service/runtime/UI 实现或发布。
 
 来源收据：`docs/plans/2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md` 第 4 节 SYN-ORG-001 与第 3 节对象/owner/不变量表；执行引用字段集固定依 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节；用户 2026-08-18 22:41 要求总指导一次排完 M6 并设中间检查点。
 
@@ -23,6 +23,8 @@
 11. 本叶做完不停，直接进 M6D02（同属 CP1）。
 
 证据：合同与 fixtures 的自洽性检查；如仓库已有 fixture 校验脚本则运行并记录真实退出码。本叶不需要 `cargo` 证据，也不做 GUI、不接真实 provider 或账号。
+
+收口事实（2026-08-19）：11 个 machine-readable JSON 合同块与 41 个 fixtures（13 positive / 28 negative）在 detached candidate 上逐例校验 exit 0；`git diff --check` exit 0；M1 manifest 的 parent/candidate blob 均为 `ac2c08ae102bf9d276a70f1ace072242cf8d0fdb`；Rust 路径变化数为 0。旧 M1 verifier 在候选与干净父提交上均只报完全相同的 12 个既有 `SOURCE_WORKTREE_DRIFT`、exit 1，日志 SHA-256 相同，不伪装成绿色也不归因于本叶。原始证据根为 `.syn-gates/evidence/M6D01-80ddebd/`。
 
 允许动：
 

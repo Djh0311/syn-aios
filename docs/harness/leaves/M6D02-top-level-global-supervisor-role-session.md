@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`PLANNED` / `NOT_STARTED`。stage-15 检查点 CP1 的第二叶，本叶做完即到 CP1，必须停下交包。
+状态：`CURRENT` / `NOT_STARTED`。stage-15 检查点 CP1 的第二叶。前置 M6D01 内容 `80ddebdf17889035bc7acde423e32ad6de6f17bb` 已获主管自复核 PASS；本叶做完即到 CP1，必须收口交包并由同一 Codex 前台阻塞独立验收。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-003、第 3 节 `GlobalSupervisorSession` 不变量（global scope、只读默认、provider handle 非授权）；M6D01 冻结的合同为唯一判据；用户 2026-08-18 22:41 的排叶与检查点要求。
 
@@ -19,7 +19,7 @@
 7. 定向测试覆盖：持久化往返、重启同一身份、scope 隔离反例、只读默认、损坏/缺失 fail-closed；
 8. `cargo check --lib --offline` 与本叶定向测试在 disposable checkout 上通过，记录真实 passed / failed 与退出码，证据绑定候选 SHA；
 9. 独立内容提交，写域精确，`git diff --check` 通过；
-10. 本叶做完即到 **CP1 检查点**：主管自复核放行并收口后，把 authorization 打回精确 closed，在 `/home/synadmin/workspace/.syn-gates/open/` 写 `stage-15-cp1-<YYYYMMDD-HHMM>.md` 交包，然后停下等总指导验收。不得自行进入 M6D03。
+10. 本叶做完即到 **CP1 检查点**：主管自复核放行并收口后，把 authorization 打回精确 closed，在 `/home/synadmin/workspace/.syn-gates/open/` 写 `stage-15-cp1-<YYYYMMDD-HHMM>.md` 交包；同一长驻 Codex 前台阻塞启动零上下文 Cursor Opus 验收官并每两分钟心跳。PASS 才处理交包、分流欠账并进入 M6D03；FAIL 只按点名范围返修。同一检查点连续两次 FAIL、verdict 缺失或首行不可读则写 halt 交包并停止。不得绕过 CP1。
 
 证据：只在 disposable checkout 上产出定向证据，绑定候选 SHA。本叶不做 GUI、不做窗口截图、不接真实 provider 或账号。
 
