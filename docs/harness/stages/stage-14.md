@@ -75,7 +75,8 @@
 - [x] M5R05 受控执行、恢复与 runtime conformance
 - [x] M5R06 ProjectSummary 正式投影
 - [x] M5R07 项目 UI、隔离 App 与阶段候选（修订标准候选 `7cab372` / tree `df6b743` 已由 `M5R07-20260818-1344.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout 或 M5 完成）
-- [ ] M5R08 M1 消费面、attempt-scoped runtime 幂等与验收欠账收敛（唯一 current；内容候选 `09e9b32` / tree `657f7db` 已通过本叶验证并等待独立验收；不反写 M5R07，不等于 closeout）
+- [x] M5R08 M1 消费面、attempt-scoped runtime 幂等与验收欠账收敛（内容候选 `09e9b32` / tree `657f7db` 与记账 `00e766a` / tree `b9c8f5f` 已由 `M5R08-20260818-1536.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout 或 M5 完成）
+- [ ] M5R09 M1 登记生产者与 closeout 前欠账加固（唯一 current；逐条承接 M5R08 verdict 的 8 项欠账；不反写 M5R08，不进入 M6 或壳采纳）
 - [ ] M5 独立验收与 closeout
 
 ## 2026-08-18 M5R07 独立验收后的继续边界
@@ -88,4 +89,10 @@
 
 - 内容候选 `09e9b323c26046b750209424aa7aca77e9c7aadb` / tree `657f7db696d3004eb3f6c5921e365df468ce617a` 已把 verdict 的本仓工程/记账欠账收敛到本叶允许域；完整 carrier 与标准映射见 `docs/harness/reports/M5R08-candidate-and-evidence-v1.md`。
 - 新鲜 disposable 证据：`cargo check` 0；M1/memory/mature/runtime/ordinary-source/runner-registry 定向全绿；完整 `m5_` 188/188；前端 typecheck、默认 production build、显式 acceptance build 均 0；默认 bundle 无 M5R07 marker，显式 bundle 有 marker；candidate range `git diff --check` 0。
-- M5R08 仍为 current、`AWAITING_INDEPENDENT_ACCEPTANCE`。stage-14 不关闭，M5 不宣布完成，M6/stage-15/syn-shell 不激活。
+- 在该候选节点时，M5R08 仍为 current、`AWAITING_INDEPENDENT_ACCEPTANCE`；其后续生命周期只按下节最新 PASS 结论迁移。stage-14 不关闭，M5 不宣布完成，M6/stage-15/syn-shell 不激活。
+
+## 2026-08-18 M5R08 独立验收后的继续边界
+
+- 最新独立结论 `M5R08-20260818-1536.verdict.md` 仅放行内容候选 `09e9b323c26046b750209424aa7aca77e9c7aadb` / tree `657f7db696d3004eb3f6c5921e365df468ce617a` 与记账 `00e766a6af8ff37160a660268ddccf1a72a8b2a1` / tree `b9c8f5fc925a8afa6b43ff521faae59df1e020f5`，据此归档 M5R08；stage-14 与 M5 closeout 未放行。
+- 唯一 current leaf M5R09 逐条承接 verdict 的 8 项欠账：M1 登记生产者是 M6 前硬前置，nested legacy identity 与 canonical 测试入口同叶收敛；平台 no-follow、报告措辞、精确 duplicate-effect 反例与 WIP manifest 分层在 closeout 前收敛。
+- `syn-shell` F2 接收 F3/F5 交接仍是未发生的下游责任。M5R09 只保留明确接收边界，不进入壳仓、不激活 F2/F3/F5。
