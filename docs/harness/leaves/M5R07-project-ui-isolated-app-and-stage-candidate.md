@@ -1,14 +1,25 @@
 # M5R07 项目 UI、隔离 App 与阶段候选
 
-> **2026-08-18 挂起（不是失败、不是撤销）**：用户把 M1 纳入 M5 验收前置，M5R00 按真实 M1 缺口重开为唯一 current leaf，本叶暂离 current 等待。已获得的全部 scoped independent PASS 继续有效，不得反向写成 FAIL。M5R00 通过独立验收后本叶拉回 current 继续。届时的验收标准按 `docs/harness/stages/stage-14.md` 的 2026-08-18 修订执行：界面类证据已取消，组合类六项必须真实通过，真桌面像素证据记为新壳 F5 欠项。下文正文保持原样，未按新标准改写。
+> **2026-08-18 恢复为唯一 current**：M5R00 内容候选 `99a5afc` / tree `08669b0` 已通过独立验收并归档。已获得的全部 M5R07 scoped independent PASS 继续有效，不得反向写成 FAIL。验收标准按 `docs/harness/stages/stage-14.md` 的 2026-08-18 修订执行：界面类证据已取消，组合类六项必须真实通过，真桌面像素证据记为新壳 F5 欠项。
 
 阶段：stage-14 M5 项目主管与执行闭环（事实重整与产品闭环）
 
 目标：用冻结 DTO 接现有项目壳，不重写 execution kernel 或页面布局；在隔离 app-data / scratch 上证明完整闭环；形成只含 M5 投影的 candidate series 后保持 `AWAITING_INDEPENDENT_ACCEPTANCE`。不自行关闭 stage-14，不宣布 M5 完成。
 
-状态：`AWAITING_INDEPENDENT_ACCEPTANCE` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的 evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`、U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 与 U02 ordinary disposable positive Tauri candidate exact `0952c83d20304cd589a8c641d6d30120d04d91f4` 已获 scoped PASS；均不是 stage closeout。不得把上述 scoped PASS 写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
+状态：`CURRENT` / `NOT_CLOSEOUT` / `NOT_M5_COMPLETE`。`1433d51466e59352cc8859e1c47f176da04f25b0` 是 gateway/Dispatch readback scoped predecessor（已独立 scoped PASS，不是 evidence-binding，也不是 closeout）。implementation exact `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`（tree exact `dbdeaedaf28f42bbbff7b38ca8764b3332929d5b`）已获产品 + Git/Harness scoped independent PASS。fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 的 evidence 内容/载体已获 Git/Harness scoped independent PASS，非 closeout。U01a 默认入口 candidate exact `f962038e725ba4e24b2699a46cd1a8d274f13ae6`、U01b 安全有限 control candidate exact `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`、U01c terminal retry 新 lineage candidate exact `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7` 与 U02 ordinary disposable positive Tauri candidate exact `0952c83d20304cd589a8c641d6d30120d04d91f4` 已获 scoped PASS；均不是 stage closeout。不得把上述 scoped PASS 写成 M5 / stage 完成。stage-14 仍开；authorization closed；M6 未激活。不得 close。
 
 来源收据：用户明确把提示内剩余工作做完；M5R06 PASS（`867fd20`）。
+
+本轮做完的标准（2026-08-18 修订，并纳入 M5R00 独立验收欠账）：
+
+1. 普通产品真实启动路径取得并消费 M1 正式项目身份；运行期不得继续用 `project_id(project_root_value)` 的路径派生值填充项目身份（D1），不得依赖测试 fixture 预登记。
+2. 在隔离 app-data / scratch 验收启动前，以明确、可复现的产品输入铺设 `m1-ordinary-project-identity-source-v1.json`，并把其产生方式、来源与边界写清（D2）；来源缺失、损坏或不可用仍须 fail-closed，不得静默 fallback、path 派生或自动导入 legacy index。
+3. 真实 Tauri 二进制使用普通 `AppState` 装配与 command 注册，不以测试专用 composition 冒充普通产品。
+4. 用户拒绝保持零 spawn、零业务 mutation。
+5. 强杀并重启后，持久状态、项目身份与绑定保持一致。
+6. 端口返回精确对象引用，可回到权威事实；只证明端口语义，不要求旧壳像素或点击证据。
+7. 以现成旧壳作为真实非测试客户端，把 `Proposal → AuthorizationDecision → Authorization → Run/WorkItem + worker RoleSession binding → PreparedAttempt → Grant → Dispatch → runtime → RuntimeReceipt/ExecutedReport → independent Review → ResultUserDecision` 最小端到端走通一次。
+8. 已有后端定向矩阵继续通过；在 disposable checkout 上形成绑定不可变候选 SHA 的新鲜原始 receipts、候选报告与精确写域提交，随后 authorization closed 并停在独立验收节点。
 
 产品：正式 M5 authority → Grant → Dispatch readback → runtime → RecordExecutionAttemptReadback → terminal-gated EXECUTED claim。U01a 保持默认 `jiaoban` 与三栏布局，把左侧主工作面接到唯一正式 `ProjectSupervisorPanel`；U01b 增加 server-owned load/apply control、durable revision/CAS/replay，并只开放可证明的 STOP / RESUME；U01c 对 authoritative FAILED/TIMED_OUT 且可证明无 effect 的终态创建全新 Attempt / Grant / Dispatch / effect lineage，RETRY 本身不执行 runtime，旧链保持 immutable；U02 用普通 disposable AppState 的 server-only fixture 显式登记 M1 exact alias、建立 M3 三角色，并经真实 Vite + Tauri + Xvfb 走默认 `jiaoban`、拒绝零副作用、失败后新 lineage、显式 runtime、重复 runtime 零第二 effect、重启同 binding/project。U02 不等于 legacy production M1 composition。M6 排除。不改 worker_report.rs / 页面布局 / execution kernel；不把定向测试数写成阶段完成。
 
@@ -17,11 +28,11 @@
 1. ordinary disposable positive Tauri PASS：server fixture 预登记 M1 alias + M3 authority，真实 Vite + Tauri + Xvfb 走默认 `jiaoban` DOM 与两次进程；它不是 legacy production composition，也没有窗口截图。
 2. shared isolated 真实 Vite+Tauri/Xvfb 只证明 authority-unavailable fail-closed；`NO_UI_PASS` / `NO_WINDOW_CAPTURE`；scene / resume / second launch `NOT_EXECUTED`。
 
-当前直接 blocker（不得反向写成既有 scoped candidate FAIL，也不得 close）：
+当前剩余缺口（不得反向写成既有 scoped candidate FAIL，也不得 close）：
 
-1. M1 owner。ordinary legacy `ProjectRecord` 到 M1 canonical/exact alias 的可信创建/迁移/ordinary GUI composition 缺失。必须另行适用授权；M5 不得自动登记/fallback。真正 legacy ordinary GUI composition 与最终 stage closeout 仍受本项阻塞。
+1. M5R00 已解决普通启动取得 M1 正式身份的前置并通过独立验收；M5R07 仍须完成 D1 运行期正式身份消费、D2 验收启动来源铺设，以及修订标准要求的一次普通产品组合闭环与新鲜 evidence-binding。
 
-证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b / U01c 尚无 fresh evidence-binding。U02 exact-base overlay 上 `cargo check --lib --offline`、ordinary fixture 4/4、typecheck、build 均 PASS；真实 Xvfb launcher exit 0，binding/project 跨重启一致且 duplicate runtime 零第二 effect。该 `/tmp` receipt 是 scoped acceptance 事实，不冒充独立 evidence-binding。下一停点是另行适用的 M1 production composition 修包；shared-isolated 始终只作 authority-unavailable negative regression。不得自动进入 M1 修正、M6 或 closeout。
+证据：fresh evidence final tip exact `0e0fcb26233dfbe618129ea05160b835f660f74b` 仍只绑定 `f51c3f64`；U01a / U01b / U01c 尚无 fresh evidence-binding。U02 exact-base overlay 上 `cargo check --lib --offline`、ordinary fixture 4/4、typecheck、build 均 PASS；真实 Xvfb launcher exit 0，binding/project 跨重启一致且 duplicate runtime 零第二 effect。该 `/tmp` receipt 是 scoped acceptance 事实，不冒充独立 evidence-binding。下一停点是 M5R07 修订标准的候选与独立验收节点；shared-isolated 始终只作 authority-unavailable negative regression。不得自动进入 M6 或 closeout。
 
 载体：U01a `f962038e725ba4e24b2699a46cd1a8d274f13ae6`；U01b `70a15a9c2741b364e0fef38d60ab5d5daad4bea3`；U01c `23642bbdfe14f9d5d5d83dc4089c3c86503fdfe7`；U02 `0952c83d20304cd589a8c641d6d30120d04d91f4`（均 scoped PASS；非 stage closeout）。implementation `f51c3f64ed21d83730f47b26b86587e1c9b7fe6b`；fresh evidence final tip `0e0fcb26233dfbe618129ea05160b835f660f74b`；gateway predecessor `1433d51466e59352cc8859e1c47f176da04f25b0`。
 

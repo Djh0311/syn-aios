@@ -67,12 +67,12 @@
 ## 叶子
 
 - [x] REC-00 事实恢复门：R0 恢复载体、分层归责、Harness 重建、前置矩阵与路由
-- [ ] M5R00 前置实现与 adapter 修正（2026-08-18 按真实 M1 缺口重开；内容候选 `99a5afc` / tree `08669b0` 已完成本叶直接标准，当前 `AWAITING_INDEPENDENT_ACCEPTANCE`，未归档、非 closeout）
+- [x] M5R00 前置实现与 adapter 修正（内容候选 `99a5afc` / tree `08669b0` 于 2026-08-18 通过独立验收并归档；仅放行本叶，不是 stage closeout）
 - [x] M5R01 执行合同矫正与旧数据映射
 - [x] M5R02 持久编排核心与 ExecutionGrant
 - [x] M5R03 WorkerReport、独立审查与事实提升
 - [x] M5R04 普通项目的持久 Project Supervisor
 - [x] M5R05 受控执行、恢复与 runtime conformance
 - [x] M5R06 ProjectSummary 正式投影
-- [ ] M5R07 项目 UI、隔离 App 与阶段候选（2026-08-18 挂起，等 M5R00 前置完成后拉回 current；已有 scoped PASS 全部保留，非 FAIL、非撤销）
+- [ ] M5R07 项目 UI、隔离 App 与阶段候选（唯一 current；已有 scoped PASS 全部保留，继续完成普通产品组合，并带入 M5R00 验收列出的 D1 正式身份消费与 D2 启动来源铺设欠账）
 - [ ] M5 独立验收与 closeout
