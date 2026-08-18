@@ -9494,3 +9494,225 @@ mod m5r08_m1_command_tests {
         let _ = fs::remove_dir_all(parent);
     }
 }
+
+#[cfg(test)]
+mod m5r09_m1_enrollment_command_tests {
+    use super::*;
+    use crate::m1_project_index;
+    use serde_json::json;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn temp_parent(prefix: &str) -> PathBuf {
+        let parent = std::env::temp_dir().join(format!(
+            "syn-m5r09-m1-cmd-{}-{}-{}",
+            prefix,
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&parent).expect("temp parent");
+        parent
+    }
+
+    fn unenrolled_state_with_index_seed(
+        prefix: &str,
+        index_body: &str,
+    ) -> (PathBuf, PathBuf, PathBuf, PathBuf, AppState) {
+        let parent = temp_parent(prefix);
+        let app_data_root = parent.join(m1_project_index::M1_ORDINARY_APP_DATA_DIR_NAME);
+        fs::create_dir_all(&app_data_root).expect("app data root");
+        let app_data_root = fs::canonicalize(&app_data_root).expect("canonicalize app data");
+        let parent = app_data_root.parent().expect("parent").to_path_buf();
+        let seed_dir = parent.join("synthetic-ordinary-product-seeds");
+        fs::create_dir_all(&seed_dir).expect("seeds");
+        let index_seed = seed_dir.join("codex-index.json");
+        let tasks_seed = seed_dir.join("README.md");
+        fs::write(&index_seed, index_body).expect("index seed");
+        fs::write(&tasks_seed, "# synthetic ordinary tasks\n").expect("tasks seed");
+        let state = AppState::try_new_with_tauri_ordinary_product_seeds(
+            &app_data_root,
+            &index_seed,
+            &tasks_seed,
+        )
+        .expect("unenrolled ordinary AppState");
+        (parent, app_data_root, index_seed, tasks_seed, state)
+    }
+
+    fn assert_m1_files_absent(app_data_root: &Path) {
+        assert!(!app_data_root
+            .join(m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME)
+            .exists());
+        assert!(!app_data_root
+            .join(m1_project_index::M1_ORDINARY_REGISTRY_RELATIVE_PATH)
+            .exists());
+        assert!(!app_data_root.join(".m1-project-index.established").exists());
+    }
+
+    fn source_entry_count(app_data_root: &Path) -> usize {
+        let document: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(
+                app_data_root.join(m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            )
+            .expect("read identity source"),
+        )
+        .expect("parse identity source");
+        document
+            .get("projects")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len)
+            .expect("source projects")
+    }
+
+    fn assert_opaque_project_id(project_id: &str, project_root: &str) {
+        let rest = project_id
+            .strip_prefix("project:")
+            .expect("canonical project prefix");
+        let uuid = uuid::Uuid::parse_str(rest).expect("opaque uuid");
+        assert_eq!(uuid.get_version(), Some(uuid::Version::Random));
+        assert_eq!(project_id, format!("project:{uuid}"));
+        assert_ne!(project_id, project_root);
+        assert!(!project_id.contains(project_root));
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_command_unique_exact_root_reads_installed_index_and_is_idempotent() {
+        let project_root = "/tmp/syn-m5r09-m1-cmd-exact-root";
+        let index_body = format!(r#"{{"projects":[{{"project_root":"{project_root}"}}]}}"#);
+        let (parent, app_data_root, index_seed, tasks_seed, state) =
+            unenrolled_state_with_index_seed("unique", &index_body);
+        assert_m1_files_absent(&app_data_root);
+        fs::write(&index_seed, r#"{"projects":[]}"#).expect("empty original seed");
+        assert_ne!(state.index_path, index_seed);
+        let installed = fs::read_to_string(&state.index_path).expect("installed index");
+        assert!(installed.contains(project_root));
+        let emptied = fs::read_to_string(&index_seed).expect("emptied seed");
+        assert!(!emptied.contains(project_root));
+
+        let created = enroll_m1_project_identity_with_state(
+            M1ProjectIdentityEnrollmentRequest {
+                project_root: project_root.to_string(),
+            },
+            &state,
+        )
+        .expect("first enroll");
+        assert_eq!(created.status, "created");
+        assert_eq!(created.exact_alias, project_root);
+        assert_eq!(created.source_ref, format!("product-index:{project_root}"));
+        assert_eq!(created.source_revision, 1);
+        assert_eq!(created.registry_revision, 1);
+        assert_opaque_project_id(&created.project_id, project_root);
+
+        let repeated = enroll_m1_project_identity_with_state(
+            M1ProjectIdentityEnrollmentRequest {
+                project_root: project_root.to_string(),
+            },
+            &state,
+        )
+        .expect("repeat enroll");
+        assert_eq!(repeated.status, "already_enrolled");
+        assert_eq!(repeated.project_id, created.project_id);
+        assert_eq!(repeated.source_ref, created.source_ref);
+        assert_eq!(repeated.source_revision, created.source_revision);
+        assert_eq!(repeated.registry_revision, created.registry_revision);
+        assert_eq!(source_entry_count(&app_data_root), 1);
+
+        drop(state);
+        let rebuilt = AppState::try_new_with_tauri_ordinary_product_seeds(
+            &app_data_root,
+            &index_seed,
+            &tasks_seed,
+        )
+        .expect("rebuild AppState");
+        let after_rebuild = enroll_m1_project_identity_with_state(
+            M1ProjectIdentityEnrollmentRequest {
+                project_root: project_root.to_string(),
+            },
+            &rebuilt,
+        )
+        .expect("rebuild enroll");
+        assert_eq!(after_rebuild.status, "already_enrolled");
+        assert_eq!(after_rebuild.project_id, created.project_id);
+        assert_eq!(after_rebuild.source_revision, created.source_revision);
+        assert_eq!(after_rebuild.registry_revision, created.registry_revision);
+        assert_eq!(source_entry_count(&app_data_root), 1);
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_command_zero_and_duplicate_exact_root_reject_without_m1_files() {
+        let (zero_parent, zero_root, _, _, zero_state) =
+            unenrolled_state_with_index_seed("zero", r#"{"projects":[]}"#);
+        let zero_err = match enroll_m1_project_identity_with_state(
+            M1ProjectIdentityEnrollmentRequest {
+                project_root: "/tmp/syn-m5r09-m1-cmd-zero-root".to_string(),
+            },
+            &zero_state,
+        ) {
+            Ok(_) => panic!("zero match"),
+            Err(error) => error,
+        };
+        assert_eq!(zero_err, "m1_enrollment_product_index_exact_match_required");
+        assert_m1_files_absent(&zero_root);
+        let _ = fs::remove_dir_all(zero_parent);
+
+        let dup_root = "/tmp/syn-m5r09-m1-cmd-dup-root";
+        let dup_body = format!(
+            r#"{{"projects":[{{"project_root":"{dup_root}"}},{{"project_root":"{dup_root}"}}]}}"#
+        );
+        let (dup_parent, dup_app_root, _, _, dup_state) =
+            unenrolled_state_with_index_seed("dup", &dup_body);
+        let dup_err = match enroll_m1_project_identity_with_state(
+            M1ProjectIdentityEnrollmentRequest {
+                project_root: dup_root.to_string(),
+            },
+            &dup_state,
+        ) {
+            Ok(_) => panic!("duplicate match"),
+            Err(error) => error,
+        };
+        assert_eq!(dup_err, "m1_enrollment_product_index_exact_match_required");
+        assert_m1_files_absent(&dup_app_root);
+        let _ = fs::remove_dir_all(dup_parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_command_request_accepts_only_project_root() {
+        let accepted = serde_json::from_value::<M1ProjectIdentityEnrollmentRequest>(json!({
+            "project_root": "/tmp/syn-m5r09-m1-cmd-serde-root"
+        }))
+        .expect("project_root only");
+        assert_eq!(accepted.project_root, "/tmp/syn-m5r09-m1-cmd-serde-root");
+
+        assert!(serde_json::from_value::<M1ProjectIdentityEnrollmentRequest>(json!({
+            "project_root": "/tmp/syn-m5r09-m1-cmd-serde-root",
+            "project_id": "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        }))
+        .is_err());
+
+        assert!(serde_json::from_value::<M1ProjectIdentityEnrollmentRequest>(json!({
+            "project_root": "/tmp/syn-m5r09-m1-cmd-serde-root",
+            "source_ref": "product-index:/tmp/syn-m5r09-m1-cmd-serde-root"
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_command_registry_and_production_span_boundaries() {
+        assert!(include_str!("command_registry.rs").contains("enroll_m1_project_identity,"));
+        let source = include_str!("commands.rs");
+        let start = source
+            .find("fn enroll_m1_project_identity(")
+            .expect("command fn");
+        let span_source = &source[start..];
+        let end = span_source
+            .find("/// Fixed no-request")
+            .expect("fixed no-request boundary");
+        let span = &span_source[..end];
+        assert!(span.contains("read_index"));
+        assert!(span.contains("parse_projects"));
+        assert!(span.contains("enroll_ordinary_project"));
+        assert!(!span.contains("project_id("));
+        assert!(!span.contains("stable_id("));
+        assert!(!span.contains("legacy"));
+    }
+}
