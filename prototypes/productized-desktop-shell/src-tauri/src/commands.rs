@@ -1759,7 +1759,7 @@ fn resolve_supervisor_conversation_context(
     context: &ConversationTransportContextRequest,
 ) -> Result<ResolvedSupervisorConversationContext, String> {
     let project_root = canonical_conversation_project_root(&context.project_root)?;
-    let expected_project_id = project_id(&project_root);
+    let expected_project_id = resolve_m1_canonical_project_id(state, &project_root)?;
     if let Some(project_id) = context.project_id.as_deref() {
         if require_conversation_identifier(project_id, "project_id")? != expected_project_id {
             return Err("conversation_transport_supervisor_project_id_mismatch".to_string());
@@ -5923,14 +5923,21 @@ fn record_plan_authorization_user_confirmation(
     request: RecordPlanAuthorizationUserConfirmationInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<RecordPlanAuthorizationOutput, String> {
+    record_plan_authorization_user_confirmation_with_state(&request, &state)
+}
+
+fn record_plan_authorization_user_confirmation_with_state(
+    request: &RecordPlanAuthorizationUserConfirmationInput,
+    state: &AppState,
+) -> Result<RecordPlanAuthorizationOutput, String> {
+    let project_id_value = resolve_m1_canonical_project_id(state, &request.project_root)?;
     let result = plan_authorization_store::record_user_confirmation(
         &state.workflow_state_path,
-        &request,
+        request,
         unix_timestamp_ms(),
         &format!("write-plan-authorization-user-{}", unix_timestamp_nanos()),
     )?;
     let captured_at = unix_timestamp_string();
-    let project_id_value = project_id(&request.project_root);
     let workflow_id_value = default_workflow_id(&request.project_root);
     let ctx = memory_daily_loop::MemoryDailyLoopContext {
         project_root: &request.project_root,
@@ -5943,7 +5950,7 @@ fn record_plan_authorization_user_confirmation(
     };
     l5_capture_governance_best_effort(
         &state.workflow_state_path,
-        memory_daily_loop::plan_authorization_capture_input(&ctx, &request),
+        memory_daily_loop::plan_authorization_capture_input(&ctx, request),
         &captured_at,
         "plan-auth",
     );
@@ -6125,9 +6132,11 @@ fn run_project_workflow_automation_phase_a(
     request: ProjectWorkflowAutomationInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<ProjectWorkflowAutomationResult, String> {
+    let canonical_project_id = resolve_m1_canonical_project_id(&state, &request.project_root)?;
     project_workflow_automation::run_project_workflow_automation_phase_a_at(
         &state.workflow_state_path,
         &request,
+        &canonical_project_id,
         &unix_timestamp_string(),
         &format!(
             "write-j2-project-workflow-automation-{}",
@@ -7036,16 +7045,27 @@ fn generate_task_package_file_with_state(
     )
 }
 
-fn resolve_m1_canonical_project_id_for_task_package(
-    state: &AppState,
-    project_root: &str,
-) -> Result<String, String> {
+fn resolve_m1_canonical_project_id(state: &AppState, project_root: &str) -> Result<String, String> {
     let port = state
         .m1_project_index_read_port()
         .ok_or_else(|| m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE.to_string())?;
     port.resolve_exact_alias(project_root)
         .map(|project_id| project_id.as_str().to_string())
         .map_err(|error| error.code)
+}
+
+fn resolve_m1_canonical_project_id_for_task_package(
+    state: &AppState,
+    project_root: &str,
+) -> Result<String, String> {
+    resolve_m1_canonical_project_id(state, project_root)
+}
+
+fn resolve_m1_canonical_project_id_for_workflow_execution(
+    state: &AppState,
+    project_root: &str,
+) -> Result<String, String> {
+    resolve_m1_canonical_project_id(state, project_root)
 }
 
 fn generate_task_package_file_for_index_project_with_canonical_project_id(
@@ -7087,12 +7107,195 @@ fn inspect_task_package_dispatch_readiness(
     request: TaskPackageDispatchReadinessRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<TaskPackageDispatchReadiness, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_workflow_execution(&state, &request.project_root)?;
     let index = read_index(&state)?;
-    inspect_task_package_dispatch_readiness_for_index_project_at(
+    inspect_task_package_dispatch_readiness_for_index_project_with_canonical_project_id_at(
         &state.workflow_state_path,
         &index,
         &request,
+        &canonical_project_id,
     )
+}
+
+fn inspect_task_package_dispatch_readiness_for_index_project_with_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    request: &TaskPackageDispatchReadinessRequest,
+    canonical_project_id: &str,
+) -> Result<TaskPackageDispatchReadiness, String> {
+    let project = find_index_project(index, &request.project_root)
+        .ok_or_else(|| "项目不在当前索引内，已拒绝检查任务包派发准备状态".to_string())?;
+    inspect_task_package_dispatch_readiness_with_canonical_project_id_at(
+        path,
+        &project,
+        request,
+        canonical_project_id,
+    )
+}
+
+fn inspect_task_package_dispatch_readiness_with_canonical_project_id_at(
+    path: &Path,
+    project: &ProjectRecord,
+    request: &TaskPackageDispatchReadinessRequest,
+    canonical_project_id: &str,
+) -> Result<TaskPackageDispatchReadiness, String> {
+    if !path.exists() {
+        return Err("工作流状态文件不存在；无法检查任务包派发准备状态".to_string());
+    }
+    let value = read_workflow_state_value(path)?;
+    let validation_warnings = validate_workflow_state(&value);
+    if !validation_warnings.is_empty() {
+        return Err(format!(
+            "当前状态文件未通过 schema 校验：{}",
+            validation_warnings.join(", ")
+        ));
+    }
+    let workflow_id = default_workflow_id(&request.project_root);
+    if canonical_workflow_record_index(&value, &workflow_id, canonical_project_id)?.is_none() {
+        return Err("当前项目还没有本地 workflow；无法检查任务包派发准备状态".to_string());
+    }
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &workflow_id,
+        &request.work_item_id,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法检查任务包派发准备状态".to_string())?;
+    let work_item = value
+        .get("work_items")
+        .and_then(Value::as_array)
+        .and_then(|items| items.get(work_item_index))
+        .ok_or_else(|| {
+            "当前 workflow 下找不到该 work item；无法检查任务包派发准备状态".to_string()
+        })?;
+    let artifact_index = canonical_task_package_artifact_record_index(
+        &value,
+        &request.work_item_id,
+        work_item,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| {
+        "当前 work item 找不到 task_package artifact；无法检查任务包派发准备状态".to_string()
+    })?;
+    let artifact = value
+        .get("artifacts")
+        .and_then(Value::as_array)
+        .and_then(|artifacts| artifacts.get(artifact_index))
+        .ok_or_else(|| {
+            "当前 work item 找不到 task_package artifact；无法检查任务包派发准备状态".to_string()
+        })?;
+    let fields = task_package_fields_from(
+        work_item,
+        artifact,
+        project,
+        &workflow_id,
+        &request.work_item_id,
+    );
+    let artifact_path = optional_string_from(artifact, "path");
+    let artifact_id = optional_string_from(artifact, "artifact_id");
+    let mut blocking_reasons = dispatch_blocking_reasons(&fields, artifact_path.as_deref());
+    let memory_injection_summary =
+        task_memory_injection::summary_from_artifact_with_current_revisions(
+            path,
+            artifact,
+            &unix_timestamp_string(),
+        )?;
+    let authorization_check = inspect_task_package_authorization_with_canonical_project_id_at(
+        path,
+        project,
+        &workflow_id,
+        work_item,
+        artifact,
+        &fields,
+        "inspect_only",
+        canonical_project_id,
+    )?;
+    if authorization_check.status != "authorized" {
+        blocking_reasons.extend(authorization_check.reasons.clone());
+    }
+    let mut warnings = dispatch_warning_reasons(artifact, artifact_path.as_deref());
+    warnings.extend(
+        memory_injection_summary
+            .warnings
+            .iter()
+            .map(|warning| format!("memory packet: {warning}")),
+    );
+    warnings.extend(
+        memory_injection_summary
+            .stale_reasons
+            .iter()
+            .map(|reason| format!("memory packet stale: {reason}")),
+    );
+    if bool_value(artifact, "stale") {
+        blocking_reasons.push("任务包已 stale；派发前必须重新检查并生成新版本。".to_string());
+    }
+    if memory_injection_summary.stale && memory_injection_summary.snapshot_id.is_some() {
+        blocking_reasons.push("任务包记忆快照已 stale；派发前必须重新生成任务包。".to_string());
+    }
+    if optional_string_from(artifact, "model_id").is_none() {
+        blocking_reasons.push("缺模型；系统不会自动选择模型。".to_string());
+    }
+    if string_array(artifact, "report_format").is_empty() {
+        blocking_reasons.push("缺 report format；必须回传格式未登记。".to_string());
+    }
+    if bool_value(artifact, "requires_harness")
+        && string_array(artifact, "harness_requirements").is_empty()
+    {
+        blocking_reasons.push("节点要求 harness 但没有配置。".to_string());
+    }
+    if bool_value(artifact, "requires_tools")
+        && string_array(artifact, "callable_tool_capabilities").is_empty()
+    {
+        blocking_reasons.push("节点需要工具但没有工具白名单。".to_string());
+    }
+    if bool_value(artifact, "requires_knowledge_refs")
+        && string_array(artifact, "available_knowledge_refs").is_empty()
+    {
+        blocking_reasons.push("任务包声明需要知识库引用，但没有显式引用。".to_string());
+    }
+    if bool_value(artifact, "requires_memory_refs")
+        && string_array(artifact, "available_memory_refs").is_empty()
+    {
+        blocking_reasons.push("任务包声明需要记忆作为依据，但没有确认记忆引用。".to_string());
+    }
+    if bool_value(artifact, "requires_memory_refs")
+        && memory_injection_summary.snapshot_id.is_none()
+    {
+        blocking_reasons.push("任务包声明需要记忆作为依据，但记忆快照缺失。".to_string());
+    }
+    if bool_value(artifact, "requires_memory_refs")
+        && memory_injection_summary.snapshot_id.is_some()
+        && memory_injection_summary.included_count == 0
+    {
+        blocking_reasons
+            .push("任务包声明需要记忆作为依据，但快照 included 正式记忆为空。".to_string());
+    }
+    let status = if optional_string_from(artifact, "dispatch_readiness_status").as_deref()
+        == Some("blocked")
+    {
+        "blocked".to_string()
+    } else if blocking_reasons.is_empty() {
+        "ready".to_string()
+    } else {
+        "not_ready".to_string()
+    };
+    if status == "blocked" && blocking_reasons.is_empty() {
+        blocking_reasons.push("任务包已被显式标记为 blocked。".to_string());
+    }
+    Ok(TaskPackageDispatchReadiness {
+        project_root: request.project_root.clone(),
+        workflow_id,
+        work_item_id: request.work_item_id.clone(),
+        artifact_id,
+        artifact_path,
+        status: status.clone(),
+        blocking_reasons,
+        warnings,
+        can_generate_next_version: status == "ready",
+        memory_injection_summary,
+        authorization_check: Some(authorization_check),
+    })
 }
 
 fn inspect_task_package_dispatch_readiness_for_index_project_at(
@@ -7149,8 +7352,35 @@ fn bind_workflow_node_codex_session(
     request: WorkflowNodeSessionBindRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateMutationResult, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_workflow_execution(&state, &request.project_root)?;
     let index = read_index(&state)?;
-    bind_workflow_node_codex_session_for_index_at(&state.workflow_state_path, &index, &request)
+    bind_workflow_node_codex_session_for_index_with_canonical_project_id_at(
+        &state.workflow_state_path,
+        &index,
+        &request,
+        &canonical_project_id,
+    )
+}
+
+fn bind_workflow_node_codex_session_for_index_with_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    request: &WorkflowNodeSessionBindRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowStateMutationResult, String> {
+    if find_index_project(index, &request.project_root).is_none() {
+        return Err("项目不在当前索引内，已拒绝绑定节点会话".to_string());
+    }
+    let session = find_index_thread_or_sqlite(index, &request.thread_id)
+        .ok_or_else(|| "会话不在当前索引内（含实时 sqlite），已拒绝绑定节点会话".to_string())?;
+    bind_workflow_node_codex_session_with_canonical_project_id_at(
+        path,
+        request,
+        &session,
+        &WorkflowNodeSessionBindingProvenance::user_selected_existing(),
+        canonical_project_id,
+    )
 }
 
 fn bind_workflow_node_codex_session_for_index_at(
@@ -7309,6 +7539,8 @@ fn execute_workflow_node_dispatch(
     request: WorkflowNodeDispatchExecuteRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_workflow_execution(&state, &request.project_root)?;
     // path-lock 闸:仅固定测试项目放行(2026-06-22 P3-A 去 env belt)。非测试真实项目
     // → 维持原 blocked、零变化。沙箱仍由 command_plan_for 强制(测试目录,字节未动)。
     if !workflow_engine_test_project_unsealed(&request.project_root) {
@@ -7321,12 +7553,34 @@ fn execute_workflow_node_dispatch(
     let index = read_index(&state)?;
     let readback_db_path = codex_db::default_state_db_path();
     let runner = codex_local_runner::RealWorkflowNodeCodexRunner;
-    execute_workflow_node_dispatch_for_index_at(
+    execute_workflow_node_dispatch_for_index_with_canonical_project_id_at(
         &state.workflow_state_path,
         &index,
         &readback_db_path,
         &runner,
         &request,
+        &canonical_project_id,
+    )
+}
+
+fn execute_workflow_node_dispatch_for_index_with_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &WorkflowNodeDispatchExecuteRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    if find_index_project(index, &request.project_root).is_none() {
+        return Err("项目不在当前索引内，已拒绝执行节点派发".to_string());
+    }
+    execute_workflow_node_dispatch_with_canonical_project_id_at(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        request,
+        canonical_project_id,
     )
 }
 
@@ -7554,6 +7808,10 @@ fn execute_project_workflow_node(
     request: ProjectWorkflowNodeRunRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    // M6P00 guarded legacy: this command remains confined to the fixed workflow-engine
+    // test project, so its downstream path-derived fixture ownership stays compatible.
+    // Remove this exception and require M1 canonical resolution before this command is
+    // ever unsealed for an ordinary project.
     if !workflow_engine_test_project_unsealed(&request.project_root) {
         return Err(legacy_product_command_blocked_message(
             "execute_project_workflow_node",
@@ -8289,12 +8547,24 @@ fn list_project_workflows(
     project_root: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<Value>, String> {
-    if !state.workflow_state_path.exists() {
+    let canonical_project_id = resolve_m1_canonical_project_id(&state, &project_root)?;
+    list_project_workflows_for_canonical(
+        &state.workflow_state_path,
+        &project_root,
+        &canonical_project_id,
+    )
+}
+
+fn list_project_workflows_for_canonical(
+    path: &Path,
+    project_root: &str,
+    canonical_project_id: &str,
+) -> Result<Vec<Value>, String> {
+    if !path.exists() {
         return Ok(vec![]);
     }
-    let value = read_workflow_state_value(&state.workflow_state_path)?;
-    let pid = project_id(&project_root);
-    let default_id = default_workflow_id(&project_root);
+    let value = read_workflow_state_value(path)?;
+    let default_id = default_workflow_id(project_root);
     let nodes = value
         .get("nodes")
         .and_then(Value::as_array)
@@ -8310,10 +8580,11 @@ fn list_project_workflows(
         let Some(wid) = optional_string_from(&wf, "workflow_id") else {
             continue;
         };
-        // SYN-FND-004A: 归属判定只认 project_id 精确匹配。
+        // SYN-FND-004A: 归属判定只认 canonical project_id 精确匹配。
         // 旧的 wid.contains(&slug) 兼容判定已删除——模糊匹配不作为归属真源。
         // 无法归属的 workflow 不自动猜 owner，跳过即可。
-        let belongs = optional_string_from(&wf, "project_id").as_deref() == Some(pid.as_str());
+        let belongs =
+            optional_string_from(&wf, "project_id").as_deref() == Some(canonical_project_id);
         if !belongs {
             continue;
         }
@@ -8340,12 +8611,18 @@ fn submit_project_workflow_draft(
     request: SubmitProjectWorkflowDraftRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateMutationResult, String> {
-    submit_project_workflow_draft_at(&state.workflow_state_path, &request)
+    let canonical_project_id = resolve_m1_canonical_project_id(&state, &request.project_root)?;
+    submit_project_workflow_draft_for_canonical(
+        &state.workflow_state_path,
+        &request,
+        &canonical_project_id,
+    )
 }
 
-fn submit_project_workflow_draft_at(
+fn submit_project_workflow_draft_for_canonical(
     path: &Path,
     request: &SubmitProjectWorkflowDraftRequest,
+    canonical_project_id: &str,
 ) -> Result<WorkflowStateMutationResult, String> {
     // E 测试项目·轻档：写回当前仅限固定测试项目；非测试项目的工作流定义仍不碰。
     if !workflow_engine_test_project_unsealed(&request.project_root) {
@@ -8384,6 +8661,23 @@ fn submit_project_workflow_draft_at(
     };
     if !is_new && !workflow_exists(&value, &workflow_id) {
         return Err("要更新的工作流不存在；无法写回".to_string());
+    }
+    if !is_new {
+        let owner = value
+            .get("workflows")
+            .and_then(Value::as_array)
+            .and_then(|workflows| {
+                workflows.iter().find(|workflow| {
+                    optional_string_from(workflow, "workflow_id").as_deref()
+                        == Some(workflow_id.as_str())
+                })
+            })
+            .and_then(|workflow| optional_string_from(workflow, "project_id"));
+        if owner.as_deref() != Some(canonical_project_id) {
+            return Err(format!(
+                "fnd004a_rejected: workflow '{workflow_id}' 不属于项目 '{canonical_project_id}'，拒绝更新"
+            ));
+        }
     }
 
     // 草案节点 → workflow-state 节点（结构字段供读模型/显示 + canvas_payload 原样存供往返）。
@@ -8488,7 +8782,7 @@ fn submit_project_workflow_draft_at(
     if is_new {
         ensure_array_mut(&mut value, "workflows")?.push(json!({
           "workflow_id": workflow_id,
-          "project_id": project_id(&request.project_root),
+          "project_id": canonical_project_id,
           "title": title,
           "state": "draft",
           "source_kind": "canvas_submitted",
@@ -8605,13 +8899,25 @@ fn get_project_workflow_nodes(
     workflow_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<Value, String> {
-    if !state.workflow_state_path.exists() {
+    let canonical_project_id = resolve_m1_canonical_project_id(&state, &project_root)?;
+    get_project_workflow_nodes_for_canonical(
+        &state.workflow_state_path,
+        &canonical_project_id,
+        &workflow_id,
+    )
+}
+
+fn get_project_workflow_nodes_for_canonical(
+    path: &Path,
+    canonical_project_id: &str,
+    workflow_id: &str,
+) -> Result<Value, String> {
+    if !path.exists() {
         return Ok(json!({ "nodes": [], "edges": [] }));
     }
 
-    // SYN-FND-004A: 验证 workflow 归属——从 project_root 派生 project_id，检查 workflow 的 project_id
-    let expected_pid = project_id(&project_root);
-    let value = read_workflow_state_value(&state.workflow_state_path)?;
+    // SYN-FND-004A: 验证 workflow 归属——只认传入的 canonical project id。
+    let value = read_workflow_state_value(path)?;
 
     // 查找目标 workflow 并验证归属
     let workflow_belongs = value
@@ -8619,10 +8925,10 @@ fn get_project_workflow_nodes(
         .and_then(Value::as_array)
         .map(|wfs| {
             wfs.iter().any(|wf| {
-                let wid_match = optional_string_from(wf, "workflow_id").as_deref()
-                    == Some(workflow_id.as_str());
-                let pid_match = optional_string_from(wf, "project_id").as_deref()
-                    == Some(expected_pid.as_str());
+                let wid_match =
+                    optional_string_from(wf, "workflow_id").as_deref() == Some(workflow_id);
+                let pid_match =
+                    optional_string_from(wf, "project_id").as_deref() == Some(canonical_project_id);
                 wid_match && pid_match
             })
         })
@@ -8630,7 +8936,7 @@ fn get_project_workflow_nodes(
 
     if !workflow_belongs {
         return Err(format!(
-            "fnd004a_rejected: workflow '{workflow_id}' 不属于项目 '{expected_pid}'，拒绝返回节点"
+            "fnd004a_rejected: workflow '{workflow_id}' 不属于项目 '{canonical_project_id}'，拒绝返回节点"
         ));
     }
 
@@ -8642,7 +8948,7 @@ fn get_project_workflow_nodes(
         .cloned()
         .unwrap_or_default()
     {
-        if optional_string_from(&n, "workflow_id").as_deref() != Some(workflow_id.as_str()) {
+        if optional_string_from(&n, "workflow_id").as_deref() != Some(workflow_id) {
             continue;
         }
         let node_id = optional_string_from(&n, "node_id").unwrap_or_default();
@@ -8680,7 +8986,7 @@ fn get_project_workflow_nodes(
         .iter()
         .enumerate()
     {
-        if optional_string_from(e, "workflow_id").as_deref() != Some(workflow_id.as_str()) {
+        if optional_string_from(e, "workflow_id").as_deref() != Some(workflow_id) {
             continue;
         }
         let from_c = optional_string_from(e, "from_node_id").and_then(|nid| {
@@ -8718,11 +9024,30 @@ fn record_workflow_dispatch_director_review(
     request: WorkflowDispatchDirectorReviewRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateMutationResult, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_workflow_execution(&state, &request.project_root)?;
     let index = read_index(&state)?;
-    record_workflow_dispatch_director_review_for_index_at(
+    record_workflow_dispatch_director_review_for_index_with_canonical_project_id_at(
         &state.workflow_state_path,
         &index,
         &request,
+        &canonical_project_id,
+    )
+}
+
+fn record_workflow_dispatch_director_review_for_index_with_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    request: &WorkflowDispatchDirectorReviewRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowStateMutationResult, String> {
+    if find_index_project(index, &request.project_root).is_none() {
+        return Err("项目不在当前索引内，已拒绝记录总指导回收意见".to_string());
+    }
+    record_workflow_dispatch_director_review_with_canonical_project_id_at(
+        path,
+        request,
+        canonical_project_id,
     )
 }
 
@@ -8762,8 +9087,27 @@ fn prepare_offline_role_dispatch(
     request: OfflineRoleDispatchRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_workflow_execution(&state, &request.project_root)?;
     let index = read_index(&state)?;
-    prepare_offline_role_dispatch_for_index_at(&state.workflow_state_path, &index, &request)
+    prepare_offline_role_dispatch_for_index_with_canonical_project_id_at(
+        &state.workflow_state_path,
+        &index,
+        &request,
+        &canonical_project_id,
+    )
+}
+
+fn prepare_offline_role_dispatch_for_index_with_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    request: &OfflineRoleDispatchRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    if find_index_project(index, &request.project_root).is_none() {
+        return Err("项目不在当前索引内，已拒绝记录离线角色派发".to_string());
+    }
+    prepare_offline_role_dispatch_with_canonical_project_id_at(path, request, canonical_project_id)
 }
 
 fn prepare_offline_role_dispatch_for_index_at(
@@ -8782,8 +9126,31 @@ fn record_offline_role_result_handoff(
     request: OfflineRoleResultHandoffRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_workflow_execution(&state, &request.project_root)?;
     let index = read_index(&state)?;
-    record_offline_role_result_handoff_for_index_at(&state.workflow_state_path, &index, &request)
+    record_offline_role_result_handoff_for_index_with_canonical_project_id_at(
+        &state.workflow_state_path,
+        &index,
+        &request,
+        &canonical_project_id,
+    )
+}
+
+fn record_offline_role_result_handoff_for_index_with_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    request: &OfflineRoleResultHandoffRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    if find_index_project(index, &request.project_root).is_none() {
+        return Err("项目不在当前索引内，已拒绝记录离线角色回传".to_string());
+    }
+    record_offline_role_result_handoff_with_canonical_project_id_at(
+        path,
+        request,
+        canonical_project_id,
+    )
 }
 
 fn record_offline_role_result_handoff_for_index_at(
@@ -8802,8 +9169,27 @@ fn record_offline_director_review(
     request: OfflineDirectorReviewRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<WorkflowStateMutationResult, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_workflow_execution(&state, &request.project_root)?;
     let index = read_index(&state)?;
-    record_offline_director_review_for_index_at(&state.workflow_state_path, &index, &request)
+    record_offline_director_review_for_index_with_canonical_project_id_at(
+        &state.workflow_state_path,
+        &index,
+        &request,
+        &canonical_project_id,
+    )
+}
+
+fn record_offline_director_review_for_index_with_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    request: &OfflineDirectorReviewRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowStateMutationResult, String> {
+    if find_index_project(index, &request.project_root).is_none() {
+        return Err("项目不在当前索引内，已拒绝记录离线总指导回收".to_string());
+    }
+    record_offline_director_review_with_canonical_project_id_at(path, request, canonical_project_id)
 }
 
 fn record_offline_director_review_for_index_at(
@@ -8899,83 +9285,25 @@ fn reveal_indexed_rollout(
 mod fnd004a_ownership_tests {
     use super::*;
 
-    /// list_project_workflows 的 _at 版本，用于测试
+    /// Legacy fixture helper: path-derived owner. Expires when these
+    /// fixtures persist canonical M1 ids and call
+    /// list_project_workflows_for_canonical directly.
     fn list_project_workflows_at(
         path: &std::path::Path,
         project_root: &str,
     ) -> Result<Vec<Value>, String> {
-        if !path.exists() {
-            return Ok(vec![]);
-        }
-        let value = read_workflow_state_value(path)?;
-        let pid = project_id(project_root);
-        let default_id = default_workflow_id(project_root);
-        let nodes = value
-            .get("nodes")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
-        let mut out = Vec::new();
-        for wf in value
-            .get("workflows")
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-        {
-            let Some(wid) = optional_string_from(&wf, "workflow_id") else {
-                continue;
-            };
-            let belongs = optional_string_from(&wf, "project_id").as_deref() == Some(pid.as_str());
-            if !belongs {
-                continue;
-            }
-            let node_count = nodes
-                .iter()
-                .filter(|n| optional_string_from(n, "workflow_id").as_deref() == Some(wid.as_str()))
-                .count();
-            out.push(json!({
-              "workflow_id": wid,
-              "title": optional_string_from(&wf, "title").unwrap_or_default(),
-              "state": optional_string_from(&wf, "state").unwrap_or_default(),
-              "node_count": node_count,
-              "is_default": wid == default_id,
-            }));
-        }
-        Ok(out)
+        list_project_workflows_for_canonical(path, project_root, &project_id(project_root))
     }
 
-    /// get_project_workflow_nodes 的 _at 版本，用于测试
+    /// Legacy fixture helper: path-derived owner. Expires when these
+    /// fixtures persist canonical M1 ids and call
+    /// get_project_workflow_nodes_for_canonical directly.
     fn get_project_workflow_nodes_at(
         path: &std::path::Path,
         project_root: &str,
         workflow_id: &str,
     ) -> Result<Value, String> {
-        if !path.exists() {
-            return Ok(json!({ "nodes": [], "edges": [] }));
-        }
-        let expected_pid = project_id(project_root);
-        let value = read_workflow_state_value(path)?;
-
-        let workflow_belongs = value
-            .get("workflows")
-            .and_then(Value::as_array)
-            .map(|wfs| {
-                wfs.iter().any(|wf| {
-                    let wid_match =
-                        optional_string_from(wf, "workflow_id").as_deref() == Some(workflow_id);
-                    let pid_match = optional_string_from(wf, "project_id").as_deref()
-                        == Some(expected_pid.as_str());
-                    wid_match && pid_match
-                })
-            })
-            .unwrap_or(false);
-
-        if !workflow_belongs {
-            return Err(format!(
-                "fnd004a_rejected: workflow '{workflow_id}' 不属于项目 '{expected_pid}'，拒绝返回节点"
-            ));
-        }
-        Ok(json!({ "nodes": [], "edges": [] }))
+        get_project_workflow_nodes_for_canonical(path, &project_id(project_root), workflow_id)
     }
 
     fn temp_test_dir(label: &str) -> PathBuf {
@@ -9717,5 +10045,1162 @@ mod m5r09_m1_enrollment_command_tests {
         assert!(!span.contains("project_id("));
         assert!(!span.contains("stable_id("));
         assert!(!span.contains("legacy"));
+    }
+}
+
+// Legacy fixture for crate-root tests that still persist path-derived owners.
+// Expires when those tests pass an explicit canonical ProjectId into
+// submit_project_workflow_draft_for_canonical.
+#[cfg(test)]
+fn submit_project_workflow_draft_at(
+    path: &Path,
+    request: &SubmitProjectWorkflowDraftRequest,
+) -> Result<WorkflowStateMutationResult, String> {
+    submit_project_workflow_draft_for_canonical(path, request, &project_id(&request.project_root))
+}
+
+#[cfg(test)]
+mod m6p00_project_workflow_tests {
+    use super::*;
+    use crate::m1_project_index;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "syn-m6p00-pw-{}-{}-{}",
+            prefix,
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    fn state_without_m1(dir: &Path) -> AppState {
+        let workflow = dir.join("workflow-state.v0.json");
+        fs::write(&workflow, "{}").expect("workflow");
+        AppState {
+            index_path: dir.join("codex-index.json"),
+            tasks_path: dir.join("tasks.md"),
+            workflow_state_path: workflow,
+            m3_role_session_read_runtime: Default::default(),
+            m1_project_index: None,
+            m3_project_role_session_authority: None,
+            m5_store_path: None,
+        }
+    }
+
+    fn ordinary_state_with_alias(alias: &str) -> (PathBuf, AppState, String) {
+        let parent = temp_dir("ordinary");
+        let app_data_root = parent.join(m1_project_index::M1_ORDINARY_APP_DATA_DIR_NAME);
+        fs::create_dir_all(&app_data_root).expect("app data");
+        let app_data_root = fs::canonicalize(&app_data_root).expect("canon");
+        let source = serde_json::json!({
+            "schema_version": m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_SCHEMA_VERSION,
+            "source_id": "syn-m6p00-pw-synthetic-source",
+            "source_revision": 1,
+            "projects": [{
+                "entry_id": "syn-m6p00-pw-entry-1",
+                "mode": "migrate_legacy_project",
+                "source_ref": "synthetic://m6p00-pw",
+                "exact_alias": alias
+            }]
+        });
+        fs::write(
+            app_data_root.join(m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            format!("{source}\n"),
+        )
+        .expect("write source");
+        let seed_dir = parent.join("seeds");
+        fs::create_dir_all(&seed_dir).expect("seeds");
+        let index_seed = seed_dir.join("codex-index.json");
+        let tasks_seed = seed_dir.join("README.md");
+        fs::write(
+            &index_seed,
+            serde_json::json!({"projects":[{"project_root": alias}]}).to_string(),
+        )
+        .expect("index");
+        fs::write(&tasks_seed, "# synthetic\n").expect("tasks");
+        let state = AppState::try_new_with_tauri_ordinary_product_seeds(
+            &app_data_root,
+            &index_seed,
+            &tasks_seed,
+        )
+        .expect("state");
+        let canonical = state
+            .m1_project_index_read_port()
+            .expect("m1 port")
+            .resolve_exact_alias(alias)
+            .expect("resolve alias")
+            .as_str()
+            .to_string();
+        (parent, state, canonical)
+    }
+
+    fn write_mixed_workflows(path: &Path, canonical: &str, path_derived: &str, foreign: &str) {
+        let state = json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "updated_at": "test",
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [
+                {
+                    "workflow_id": "workflow:path-derived",
+                    "project_id": path_derived,
+                    "title": "path derived",
+                    "state": "active"
+                },
+                {
+                    "workflow_id": "workflow:foreign",
+                    "project_id": foreign,
+                    "title": "foreign",
+                    "state": "active"
+                },
+                {
+                    "workflow_id": "workflow:canonical",
+                    "project_id": canonical,
+                    "title": "canonical",
+                    "state": "active"
+                }
+            ],
+            "nodes": [
+                {
+                    "node_id": "workflow:canonical:node:director",
+                    "workflow_id": "workflow:canonical",
+                    "node_type": "director",
+                    "title": "主管",
+                    "state": "draft"
+                }
+            ],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [],
+            "capabilities": [],
+            "harness_resources": []
+        });
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("workflow parent");
+        }
+        fs::write(path, serde_json::to_string_pretty(&state).unwrap()).unwrap();
+    }
+
+    fn fixture_project(project_root: &str) -> ProjectRecord {
+        ProjectRecord {
+            project_root: project_root.to_string(),
+            name: "m6p00 fixture".to_string(),
+            active_hint: true,
+            thread_count: 0,
+            active_thread_count: 0,
+            archived_thread_count: 0,
+            latest_updated_at_ms: None,
+            authority_files: vec![],
+            handoff_files: vec![],
+            evidence_files: vec![],
+            harness_candidates: vec![],
+            harness_resources: vec![],
+            context_warnings: vec![],
+            warnings: vec![],
+        }
+    }
+
+    fn director_draft() -> Vec<Value> {
+        vec![
+            json!({"id":"d1","kind":"director","label":"主管","prompt":"统筹","position":{"x":1,"y":2}}),
+            json!({"id":"a1","kind":"subagent","label":"开发","prompt":"写代码","position":{"x":3,"y":4}}),
+        ]
+    }
+
+    fn m6p00_rewrite_explicit_workflow_owners(path: &Path, canonical_project_id: &str) {
+        let mut value: Value =
+            serde_json::from_str(&fs::read_to_string(path).expect("workflow state"))
+                .expect("workflow json");
+        for collection in [
+            "projects",
+            "workflows",
+            "nodes",
+            "edges",
+            "work_items",
+            "artifacts",
+            "reviews",
+            "workflow_node_session_bindings",
+            "workflow_node_dispatches",
+        ] {
+            if let Some(records) = value.get_mut(collection).and_then(Value::as_array_mut) {
+                for record in records {
+                    if record.get("project_id").is_some() {
+                        record["project_id"] = Value::String(canonical_project_id.to_string());
+                    }
+                }
+            }
+        }
+        fs::write(path, serde_json::to_string_pretty(&value).unwrap()).expect("rewrite owners");
+    }
+
+    fn m6p00_dispatch_index(project_root: &str, thread_id: &str) -> Value {
+        json!({
+            "projects": [{"project_root": project_root}],
+            "threads": [{
+                "thread_id": thread_id,
+                "project_root": project_root,
+                "title": format!("Session {thread_id}"),
+                "rollout_exists": true,
+                "rollout_path": format!("/tmp/{thread_id}.jsonl")
+            }]
+        })
+    }
+
+    fn m6p00_offline_request(project_root: &str, work_item_id: &str) -> OfflineRoleDispatchRequest {
+        OfflineRoleDispatchRequest {
+            project_root: project_root.to_string(),
+            work_item_id: work_item_id.to_string(),
+            target_role_id: "codex-dev".to_string(),
+            target_role_label: "开发线".to_string(),
+            task_title: "M6P00 canonical offline dispatch".to_string(),
+            objective: "verify canonical owner without external execution".to_string(),
+            execution_cwd: project_root.to_string(),
+            allowed_reads: vec![project_root.to_string()],
+            allowed_writes: vec![format!("{project_root}/README.md")],
+            forbidden_actions: vec!["no real provider".to_string()],
+            acceptance_criteria: vec!["canonical owner persists".to_string()],
+            timeout_seconds: 60,
+            required_return: vec!["result".to_string()],
+            raw_block: "synthetic offline dispatch".to_string(),
+        }
+    }
+
+    fn m6p00_create_canonical_plan_authorization(
+        path: &Path,
+        project_root: &str,
+        canonical_project_id: &str,
+    ) {
+        let workflow_id = default_workflow_id(project_root);
+        let timestamp = unix_timestamp_ms();
+        let created = plan_authorization_store::create_authorization(
+            path,
+            &CreatePlanAuthorizationInput {
+                project_root: project_root.to_string(),
+                project_id: Some(canonical_project_id.to_string()),
+                workflow_id: Some(workflow_id.clone()),
+                source_proposal_id: Some("proposal:m6p00-canonical".to_string()),
+                title: "M6P00 canonical authorization".to_string(),
+                goal_summary: "synthetic canonical dispatch acceptance".to_string(),
+                scope: AuthorizedExecutionScope {
+                    project_id: canonical_project_id.to_string(),
+                    workflow_id,
+                    allowed_role_ids: vec![
+                        "codex-dev".to_string(),
+                        "director".to_string(),
+                        "project_director".to_string(),
+                    ],
+                    allowed_agent_ids: vec![],
+                    allowed_read_roots: vec![project_root.to_string()],
+                    allowed_write_roots: vec![project_root.to_string()],
+                    allowed_tools: vec!["codex_exec_resume".to_string()],
+                    allowed_checks: vec![],
+                    allowed_task_package_kinds: vec![
+                        "safe_probe".to_string(),
+                        "offline_role_dispatch".to_string(),
+                    ],
+                    max_worker_dispatches: Some(8),
+                    max_runtime_minutes: Some(60),
+                    stop_conditions: vec![PlanAuthorizationStopCondition {
+                        condition_id: "m6p00-user-confirmation".to_string(),
+                        kind: "requires_user_confirmation".to_string(),
+                        summary: "synthetic stop".to_string(),
+                        requires_user_confirmation: true,
+                    }],
+                },
+                actor_id: "m6p00-director".to_string(),
+                actor_role: "project_director".to_string(),
+                expires_at_ms: None,
+                expected_store_revision: None,
+            },
+            timestamp,
+            &format!("write-m6p00-canonical-auth-{}", unix_timestamp_nanos()),
+        )
+        .expect("canonical authorization create");
+        let authorization_id = created.authorization.authorization_id.clone();
+        let confirmed = plan_authorization_store::record_user_confirmation(
+            path,
+            &RecordPlanAuthorizationUserConfirmationInput {
+                project_root: project_root.to_string(),
+                authorization_id: authorization_id.clone(),
+                actor_id: "m6p00-user".to_string(),
+                confirmation_summary: "synthetic confirmation".to_string(),
+                expected_store_revision: Some(created.store_revision),
+            },
+            timestamp + 1,
+            &format!("write-m6p00-canonical-user-{}", unix_timestamp_nanos()),
+        )
+        .expect("canonical authorization confirmation");
+        plan_authorization_store::record_global_boundary_review(
+            path,
+            &RecordPlanAuthorizationGlobalBoundaryReviewInput {
+                project_root: project_root.to_string(),
+                authorization_id,
+                actor_id: "m6p00-global-director".to_string(),
+                review_status: "approved".to_string(),
+                summary: "synthetic canonical boundary approved".to_string(),
+                source_proposal_id: Some("proposal:m6p00-canonical".to_string()),
+                checklist: Some(GlobalBoundaryReviewChecklist {
+                    architecture_boundary_checked: true,
+                    cross_project_impact_checked: true,
+                    permission_scope_checked: true,
+                    read_write_scope_checked: true,
+                    tool_and_check_scope_checked: true,
+                    memory_boundary_checked: true,
+                    stop_conditions_checked: true,
+                    acceptance_criteria_checked: true,
+                }),
+                findings: vec![],
+                reviewed_scope_fingerprint: None,
+                expected_store_revision: Some(confirmed.store_revision),
+            },
+            timestamp + 2,
+            &format!("write-m6p00-canonical-boundary-{}", unix_timestamp_nanos()),
+        )
+        .expect("canonical boundary review");
+    }
+
+    fn m6p00_ready_work_item_fixture(
+        prefix: &str,
+        project_root: &str,
+        canonical_project_id: &str,
+    ) -> (PathBuf, PathBuf, String) {
+        let dir = temp_dir(prefix);
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(project_root)).expect("bootstrap");
+        create_task_draft_at(
+            &path,
+            &TaskDraftRequest {
+                project_root: project_root.to_string(),
+                title: format!("M6P00 {prefix}"),
+                objective: "canonical workflow fixture".to_string(),
+                assigned_role: Some("codex-dev".to_string()),
+            },
+        )
+        .expect("draft");
+        let value: Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).expect("state json");
+        let work_item_id =
+            optional_string_from(&value["work_items"][0], "work_item_id").expect("work item id");
+        update_work_item_state_at(
+            &path,
+            &WorkItemStateUpdateRequest {
+                project_root: project_root.to_string(),
+                work_item_id: work_item_id.clone(),
+                next_state: "ready_to_dispatch".to_string(),
+                client_request_ref: None,
+                command_id: None,
+                idempotency_key: None,
+                expected_revision: None,
+            },
+        )
+        .expect("ready");
+        m6p00_rewrite_explicit_workflow_owners(&path, canonical_project_id);
+        (dir, path, work_item_id)
+    }
+
+    #[test]
+    fn m6p00_project_workflow_list_and_get_select_only_canonical() {
+        let dir = temp_dir("list-get");
+        let path = dir.join("workflow-state.v0.json");
+        let root = "/tmp/m6p00-pw-list-get";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa60";
+        let path_derived = project_id(root);
+        let foreign = "project:ffffffff-ffff-4fff-8fff-ffffffffffff";
+        write_mixed_workflows(&path, canonical, &path_derived, foreign);
+        let listed = list_project_workflows_for_canonical(&path, root, canonical).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0]["workflow_id"], "workflow:canonical");
+        let got = get_project_workflow_nodes_for_canonical(&path, canonical, "workflow:canonical")
+            .unwrap();
+        assert_eq!(got["nodes"].as_array().unwrap().len(), 1);
+        let path_err =
+            get_project_workflow_nodes_for_canonical(&path, canonical, "workflow:path-derived")
+                .unwrap_err();
+        assert!(path_err.contains("fnd004a_rejected"), "{path_err}");
+        let foreign_err =
+            get_project_workflow_nodes_for_canonical(&path, canonical, "workflow:foreign")
+                .unwrap_err();
+        assert!(foreign_err.contains("fnd004a_rejected"), "{foreign_err}");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_project_workflow_submit_new_persists_canonical_id() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = temp_dir("submit-new");
+        let path = dir.join("workflow-state.v0.json");
+        bootstrap_project_workflow_at(&path, &fixture_project(test_root)).expect("bootstrap");
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa61";
+        assert_ne!(canonical, project_id(test_root).as_str());
+        let request = SubmitProjectWorkflowDraftRequest {
+            project_root: test_root.to_string(),
+            workflow_id: None,
+            title: "canonical 新建".to_string(),
+            nodes: director_draft(),
+            edges: vec![json!({"id":"e1","from":"d1","to":"a1"})],
+        };
+        submit_project_workflow_draft_for_canonical(&path, &request, canonical).expect("new draft");
+        let after: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let created = after["workflows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|workflow| {
+                optional_string_from(workflow, "title").as_deref() == Some("canonical 新建")
+            })
+            .expect("created workflow");
+        assert_eq!(
+            optional_string_from(created, "project_id").as_deref(),
+            Some(canonical)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_project_workflow_submit_update_foreign_and_path_derived_zero_write() {
+        let test_root = WORKFLOW_ENGINE_TEST_PROJECT_ROOT;
+        let dir = temp_dir("submit-update");
+        let path = dir.join("workflow-state.v0.json");
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa62";
+        let path_derived = project_id(test_root);
+        let foreign = "project:dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+        write_mixed_workflows(&path, canonical, &path_derived, foreign);
+        let before = fs::read(&path).expect("before");
+        for (workflow_id, label) in [
+            ("workflow:foreign", "foreign"),
+            ("workflow:path-derived", "path-derived"),
+        ] {
+            let request = SubmitProjectWorkflowDraftRequest {
+                project_root: test_root.to_string(),
+                workflow_id: Some(workflow_id.to_string()),
+                title: format!("should not update {label}"),
+                nodes: director_draft(),
+                edges: vec![json!({"id":"e1","from":"d1","to":"a1"})],
+            };
+            let error = submit_project_workflow_draft_for_canonical(&path, &request, canonical)
+                .expect_err(label);
+            assert!(error.contains("fnd004a_rejected"), "{label}: {error}");
+            assert_eq!(
+                fs::read(&path).expect("after"),
+                before,
+                "{label} zero write"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_project_workflow_supervisor_ownership_uses_canonical() {
+        let alias_dir = temp_dir("supervisor-alias");
+        let alias = fs::canonicalize(&alias_dir)
+            .expect("canon alias")
+            .display()
+            .to_string();
+        let (parent, state, canonical) = ordinary_state_with_alias(&alias);
+        let path_derived = project_id(&alias);
+        write_mixed_workflows(
+            &state.workflow_state_path,
+            &canonical,
+            &path_derived,
+            "project:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+        );
+        let ok = resolve_supervisor_conversation_context(
+            &state,
+            &ConversationTransportContextRequest {
+                project_root: alias.clone(),
+                project_id: Some(canonical.clone()),
+                workflow_id: Some("workflow:canonical".to_string()),
+            },
+        )
+        .expect("canonical owner");
+        assert_eq!(ok.project_id, canonical);
+        let claim_err = match resolve_supervisor_conversation_context(
+            &state,
+            &ConversationTransportContextRequest {
+                project_root: alias.clone(),
+                project_id: Some(path_derived),
+                workflow_id: Some("workflow:canonical".to_string()),
+            },
+        ) {
+            Ok(_) => panic!("path-derived claim must fail closed"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            claim_err,
+            "conversation_transport_supervisor_project_id_mismatch"
+        );
+        let owner_err = match resolve_supervisor_conversation_context(
+            &state,
+            &ConversationTransportContextRequest {
+                project_root: alias,
+                project_id: None,
+                workflow_id: Some("workflow:path-derived".to_string()),
+            },
+        ) {
+            Ok(_) => panic!("path-derived workflow must fail closed"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            owner_err,
+            "conversation_transport_supervisor_workflow_ownership_mismatch"
+        );
+        let _ = fs::remove_dir_all(parent);
+        let _ = fs::remove_dir_all(alias_dir);
+    }
+
+    #[test]
+    fn m6p00_workflow_execution_canonical_binding_context_authorization_and_offline_records() {
+        let root = "/tmp/m6p00-workflow-execution-canonical";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa70";
+        assert_ne!(canonical, project_id(root));
+        let (dir, path, work_item_id) =
+            m6p00_ready_work_item_fixture("execution-canonical", root, canonical);
+        m6p00_create_canonical_plan_authorization(&path, root, canonical);
+        let index = m6p00_dispatch_index(root, "thread-m6p00-canonical");
+        let readiness =
+            inspect_task_package_dispatch_readiness_for_index_project_with_canonical_project_id_at(
+                &path,
+                &index,
+                &TaskPackageDispatchReadinessRequest {
+                    project_root: root.to_string(),
+                    work_item_id: work_item_id.clone(),
+                },
+                canonical,
+            )
+            .expect("canonical readiness authorization");
+        assert!(readiness.authorization_check.is_some());
+        let node_id = format!("{}:node:codex-dev", default_workflow_id(root));
+        let bind_request = WorkflowNodeSessionBindRequest {
+            project_root: root.to_string(),
+            node_id: node_id.clone(),
+            work_item_id: Some(work_item_id.clone()),
+            thread_id: "thread-m6p00-canonical".to_string(),
+        };
+        bind_workflow_node_codex_session_for_index_with_canonical_project_id_at(
+            &path,
+            &index,
+            &bind_request,
+            canonical,
+        )
+        .expect("canonical binding");
+
+        let context = workflow_node_dispatch_context_with_canonical_project_id(
+            &path,
+            &index,
+            &WorkflowNodeDispatchPrepareRequest {
+                project_root: root.to_string(),
+                node_id: node_id.clone(),
+                work_item_id: work_item_id.clone(),
+                prompt_kind: "safe_probe".to_string(),
+                user_reviewed_instruction: None,
+            },
+            canonical,
+        )
+        .expect("canonical context");
+        assert_eq!(context.project_id, canonical);
+        let guard = inspect_workflow_node_dispatch_authorization(&path, &context)
+            .expect("canonical authorization input");
+        assert_eq!(guard.status, "authorized");
+
+        let dispatch = prepare_offline_role_dispatch_with_canonical_project_id_at(
+            &path,
+            &m6p00_offline_request(root, &work_item_id),
+            canonical,
+        )
+        .expect("canonical offline dispatch");
+        record_offline_role_result_handoff_with_canonical_project_id_at(
+            &path,
+            &OfflineRoleResultHandoffRequest {
+                project_root: root.to_string(),
+                work_item_id: work_item_id.clone(),
+                dispatch_id: dispatch.dispatch.dispatch_id.clone(),
+                target_role_id: "codex-dev".to_string(),
+                summary: "synthetic canonical handoff".to_string(),
+                markdown: "canonical handoff body".to_string(),
+            },
+            canonical,
+        )
+        .expect("canonical handoff");
+        record_workflow_dispatch_director_review_with_canonical_project_id_at(
+            &path,
+            &WorkflowDispatchDirectorReviewRequest {
+                project_root: root.to_string(),
+                work_item_id: work_item_id.clone(),
+                dispatch_id: dispatch.dispatch.dispatch_id.clone(),
+                decision: "accepted".to_string(),
+                summary: "canonical director review".to_string(),
+            },
+            canonical,
+        )
+        .expect("canonical director review");
+        record_offline_director_review_with_canonical_project_id_at(
+            &path,
+            &OfflineDirectorReviewRequest {
+                project_root: root.to_string(),
+                work_item_id: work_item_id.clone(),
+                dispatch_id: dispatch.dispatch.dispatch_id.clone(),
+                decision: "accepted".to_string(),
+                summary: "canonical offline review".to_string(),
+            },
+            canonical,
+        )
+        .expect("canonical offline review");
+
+        let value: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        for collection in [
+            "workflow_node_session_bindings",
+            "workflow_node_dispatches",
+            "reviews",
+        ] {
+            let records = value[collection].as_array().expect(collection);
+            assert!(!records.is_empty(), "{collection}");
+            assert!(records.iter().all(|record| {
+                optional_string_from(record, "project_id").as_deref() == Some(canonical)
+            }));
+        }
+        let handoff = value["artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|artifact| {
+                optional_string_from(artifact, "artifact_type").as_deref() == Some("handoff")
+            })
+            .expect("handoff artifact");
+        assert_eq!(
+            optional_string_from(handoff, "project_id").as_deref(),
+            Some(canonical)
+        );
+        let auth_store = plan_authorization_store::load_store(&path, unix_timestamp_ms())
+            .expect("authorization store");
+        assert!(auth_store
+            .audit_events
+            .iter()
+            .all(|event| event.project_id == canonical));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_workflow_execution_mixed_same_key_selects_only_canonical_owner() {
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa71";
+        let path_derived = "project:path-derived";
+        let foreign = "project:ffffffff-ffff-4fff-8fff-ffffffffffff";
+        let value = json!({
+            "workflows": [
+                {"workflow_id":"wf","project_id":path_derived},
+                {"workflow_id":"wf","project_id":foreign},
+                {"workflow_id":"wf","project_id":canonical}
+            ],
+            "nodes": [
+                {"workflow_id":"wf","node_id":"wf:node:dev","project_id":foreign},
+                {"workflow_id":"wf","node_id":"wf:node:dev","project_id":canonical}
+            ],
+            "work_items": [
+                {"workflow_id":"wf","work_item_id":"wi","project_id":path_derived},
+                {"workflow_id":"wf","work_item_id":"wi","project_id":canonical}
+            ],
+            "workflow_node_session_bindings": [
+                {"workflow_id":"wf","node_id":"wf:node:dev","work_item_id":"wi","lifecycle":"active","project_id":foreign},
+                {"workflow_id":"wf","node_id":"wf:node:dev","work_item_id":"wi","lifecycle":"active","project_id":canonical}
+            ],
+            "workflow_node_dispatches": [
+                {"dispatch_id":"dispatch:same","project_id":path_derived},
+                {"dispatch_id":"dispatch:same","project_id":canonical}
+            ]
+        });
+        assert_eq!(
+            canonical_workflow_record_index(&value, "wf", canonical).unwrap(),
+            Some(2)
+        );
+        assert_eq!(
+            canonical_node_record_index(&value, "wf", "wf:node:dev", canonical).unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            canonical_work_item_record_index(&value, "wf", "wi", canonical).unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            canonical_binding_record_index(&value, "wf", "wf:node:dev", Some("wi"), canonical,)
+                .unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            canonical_dispatch_record_index(&value, "dispatch:same", canonical).unwrap(),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn m6p00_workflow_execution_mixed_same_key_mutations_leave_foreign_records_unchanged() {
+        let root = "/tmp/m6p00-workflow-execution-mixed-mutation";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa73";
+        let foreign = "project:ffffffff-ffff-4fff-8fff-fffffffffff3";
+        let (dir, path, work_item_id) =
+            m6p00_ready_work_item_fixture("execution-mixed-mutation", root, canonical);
+        let workflow_id = default_workflow_id(root);
+        let node_id = format!("{workflow_id}:node:codex-dev");
+        let index = m6p00_dispatch_index(root, "thread-m6p00-mixed-mutation");
+        bind_workflow_node_codex_session_for_index_with_canonical_project_id_at(
+            &path,
+            &index,
+            &WorkflowNodeSessionBindRequest {
+                project_root: root.to_string(),
+                node_id: node_id.clone(),
+                work_item_id: Some(work_item_id.clone()),
+                thread_id: "thread-m6p00-mixed-mutation".to_string(),
+            },
+            canonical,
+        )
+        .expect("canonical binding");
+
+        let mut value: Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).expect("workflow state");
+        for (collection, target_field, target_id) in [
+            ("workflows", "workflow_id", workflow_id.as_str()),
+            ("nodes", "node_id", node_id.as_str()),
+            ("work_items", "work_item_id", work_item_id.as_str()),
+            (
+                "workflow_node_session_bindings",
+                "node_id",
+                node_id.as_str(),
+            ),
+        ] {
+            let records = value[collection].as_array_mut().expect(collection);
+            let canonical_index = records
+                .iter()
+                .position(|record| {
+                    optional_string_from(record, target_field).as_deref() == Some(target_id)
+                })
+                .expect("canonical record to duplicate");
+            records[canonical_index]["project_id"] = Value::String(canonical.to_string());
+            let mut foreign_record = records[canonical_index].clone();
+            foreign_record["project_id"] = Value::String(foreign.to_string());
+            foreign_record["updated_at"] = Value::String("foreign-sentinel".to_string());
+            if collection == "workflow_node_session_bindings" {
+                foreign_record["binding_id"] =
+                    Value::String("binding:m6p00-foreign-sentinel".to_string());
+            }
+            records.insert(0, foreign_record);
+        }
+        if let Some(artifacts) = value.get_mut("artifacts").and_then(Value::as_array_mut) {
+            if let Some(canonical_index) = artifacts.iter().position(|artifact| {
+                optional_string_from(artifact, "artifact_type").as_deref() == Some("task_package")
+            }) {
+                artifacts[canonical_index]["project_id"] = Value::String(canonical.to_string());
+                let mut foreign_artifact = artifacts[canonical_index].clone();
+                foreign_artifact["project_id"] = Value::String(foreign.to_string());
+                foreign_artifact["artifact_id"] =
+                    Value::String("artifact:m6p00-foreign-sentinel".to_string());
+                foreign_artifact["updated_at"] = Value::String("foreign-sentinel".to_string());
+                artifacts.insert(0, foreign_artifact);
+            }
+        }
+        fs::write(&path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+
+        let context = workflow_node_dispatch_context_with_canonical_project_id(
+            &path,
+            &index,
+            &WorkflowNodeDispatchPrepareRequest {
+                project_root: root.to_string(),
+                node_id: node_id.clone(),
+                work_item_id: work_item_id.clone(),
+                prompt_kind: "safe_probe".to_string(),
+                user_reviewed_instruction: None,
+            },
+            canonical,
+        )
+        .expect("mixed owner context selects canonical records");
+        let started = write_started_dispatch(&path, &context)
+            .expect("mixed owner start mutates canonical records only");
+        assert_eq!(started.project_id, canonical);
+
+        let after_start: Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).expect("started state");
+        let owned_record = |collection: &str, target_field: &str, target_id: &str, owner: &str| {
+            after_start[collection]
+                .as_array()
+                .and_then(|records| {
+                    records.iter().find(|record| {
+                        optional_string_from(record, target_field).as_deref() == Some(target_id)
+                            && optional_string_from(record, "project_id").as_deref() == Some(owner)
+                    })
+                })
+                .cloned()
+                .expect("owned record")
+        };
+        let foreign_work_item = owned_record("work_items", "work_item_id", &work_item_id, foreign);
+        let canonical_work_item =
+            owned_record("work_items", "work_item_id", &work_item_id, canonical);
+        assert_eq!(
+            optional_string_from(&foreign_work_item, "state").as_deref(),
+            Some("ready_to_dispatch")
+        );
+        assert_eq!(
+            optional_string_from(&foreign_work_item, "updated_at").as_deref(),
+            Some("foreign-sentinel")
+        );
+        assert_eq!(
+            optional_string_from(&canonical_work_item, "state").as_deref(),
+            Some("running")
+        );
+        let foreign_node = owned_record("nodes", "node_id", &node_id, foreign);
+        let canonical_node = owned_record("nodes", "node_id", &node_id, canonical);
+        assert_eq!(
+            optional_string_from(&foreign_node, "updated_at").as_deref(),
+            Some("foreign-sentinel")
+        );
+        assert_eq!(
+            optional_string_from(&canonical_node, "state").as_deref(),
+            Some("running")
+        );
+
+        let mut value = after_start;
+        let dispatches = value["workflow_node_dispatches"]
+            .as_array_mut()
+            .expect("dispatches");
+        let mut foreign_dispatch = dispatches
+            .iter()
+            .find(|dispatch| {
+                optional_string_from(dispatch, "dispatch_id").as_deref()
+                    == Some(started.dispatch_id.as_str())
+                    && optional_string_from(dispatch, "project_id").as_deref() == Some(canonical)
+            })
+            .cloned()
+            .expect("canonical running dispatch");
+        foreign_dispatch["project_id"] = Value::String(foreign.to_string());
+        foreign_dispatch["warnings"] = json!(["foreign-sentinel"]);
+        dispatches.insert(0, foreign_dispatch);
+        fs::write(&path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+
+        let failed = write_failed_dispatch(
+            &path,
+            &started.dispatch_id,
+            canonical,
+            -1,
+            vec!["canonical-test-failure".to_string()],
+        )
+        .expect("mixed owner failure mutates canonical dispatch only");
+        assert_eq!(failed.dispatch.project_id, canonical);
+        assert_eq!(failed.dispatch.state, "failed");
+        let after_failure: Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).expect("failed state");
+        let foreign_dispatch = after_failure["workflow_node_dispatches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|dispatch| {
+                optional_string_from(dispatch, "dispatch_id").as_deref()
+                    == Some(started.dispatch_id.as_str())
+                    && optional_string_from(dispatch, "project_id").as_deref() == Some(foreign)
+            })
+            .expect("foreign dispatch");
+        assert_eq!(
+            optional_string_from(foreign_dispatch, "state").as_deref(),
+            Some("running")
+        );
+        assert_eq!(
+            string_array(foreign_dispatch, "warnings"),
+            vec!["foreign-sentinel".to_string()]
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_workflow_execution_foreign_workflow_rejects_state_and_authorization_zero_write() {
+        let root = "/tmp/m6p00-workflow-execution-foreign";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa72";
+        let (dir, path, work_item_id) =
+            m6p00_ready_work_item_fixture("execution-foreign", root, canonical);
+        m6p00_create_canonical_plan_authorization(&path, root, canonical);
+        let mut value: Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let workflow_id = default_workflow_id(root);
+        let workflow = value["workflows"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|workflow| {
+                optional_string_from(workflow, "workflow_id").as_deref()
+                    == Some(workflow_id.as_str())
+            })
+            .unwrap();
+        workflow["project_id"] = Value::String(project_id(root));
+        fs::write(&path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+        let sidecar = plan_authorization_store::sidecar_path(&path).unwrap();
+        let before_state = fs::read(&path).unwrap();
+        let before_sidecar = fs::read(&sidecar).unwrap();
+        let before_names = fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        let error = prepare_offline_role_dispatch_with_canonical_project_id_at(
+            &path,
+            &m6p00_offline_request(root, &work_item_id),
+            canonical,
+        )
+        .expect_err("path-derived workflow owner must fail closed");
+        assert!(
+            error.contains(M6P00_WORKFLOW_PROJECT_ID_MISMATCH),
+            "{error}"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before_state);
+        assert_eq!(fs::read(&sidecar).unwrap(), before_sidecar);
+        let after_names = fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(after_names, before_names, "no backup or sidecar write");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_workflow_execution_foreign_task_package_rejects_before_authorization_write() {
+        let root = "/tmp/m6p00-workflow-execution-foreign-artifact";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa74";
+        let foreign = "project:ffffffff-ffff-4fff-8fff-fffffffffff4";
+        let (dir, path, work_item_id) =
+            m6p00_ready_work_item_fixture("execution-foreign-artifact", root, canonical);
+        m6p00_create_canonical_plan_authorization(&path, root, canonical);
+        let mut value: Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).expect("workflow state");
+        let artifact = value["artifacts"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|artifact| {
+                optional_string_from(artifact, "artifact_type").as_deref() == Some("task_package")
+            })
+            .expect("task package artifact");
+        artifact["project_id"] = Value::String(foreign.to_string());
+        fs::write(&path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+
+        let sidecar = plan_authorization_store::sidecar_path(&path).unwrap();
+        let before_state = fs::read(&path).unwrap();
+        let before_sidecar = fs::read(&sidecar).unwrap();
+        let before_names = fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        let error = prepare_offline_role_dispatch_with_canonical_project_id_at(
+            &path,
+            &m6p00_offline_request(root, &work_item_id),
+            canonical,
+        )
+        .expect_err("foreign task package owner must fail closed");
+        assert!(
+            error.contains(&format!(
+                "{M6P00_WORKFLOW_PROJECT_ID_MISMATCH}:task_package_artifact"
+            )),
+            "{error}"
+        );
+        assert_eq!(fs::read(&path).unwrap(), before_state);
+        assert_eq!(fs::read(&sidecar).unwrap(), before_sidecar);
+        let after_names = fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(after_names, before_names, "no backup or sidecar write");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_workflow_execution_command_resolver_failures_are_zero_write_and_spans_have_no_fallback(
+    ) {
+        let dir = temp_dir("execution-resolver");
+        let state = state_without_m1(&dir);
+        let before = fs::read(&state.workflow_state_path).unwrap();
+        let unavailable = resolve_m1_canonical_project_id_for_workflow_execution(
+            &state,
+            "/tmp/m6p00-workflow-unavailable",
+        )
+        .unwrap_err();
+        assert_eq!(unavailable, m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE);
+        assert_eq!(fs::read(&state.workflow_state_path).unwrap(), before);
+
+        let alias_dir = temp_dir("execution-resolver-alias");
+        let alias = fs::canonicalize(&alias_dir).unwrap().display().to_string();
+        let (parent, installed, _) = ordinary_state_with_alias(&alias);
+        assert_eq!(
+            resolve_m1_canonical_project_id_for_workflow_execution(
+                &installed,
+                "/tmp/m6p00-workflow-unknown",
+            )
+            .unwrap_err(),
+            "m1_alias_unknown"
+        );
+        assert_eq!(
+            resolve_m1_canonical_project_id_for_workflow_execution(&installed, "").unwrap_err(),
+            "m1_alias_malformed"
+        );
+
+        let commands = include_str!("commands.rs");
+        for command in [
+            "fn inspect_task_package_dispatch_readiness(",
+            "fn bind_workflow_node_codex_session(",
+            "fn execute_workflow_node_dispatch(",
+            "fn record_workflow_dispatch_director_review(",
+            "fn prepare_offline_role_dispatch(",
+            "fn record_offline_role_result_handoff(",
+            "fn record_offline_director_review(",
+        ] {
+            let start = commands.find(command).expect(command);
+            let span = commands[start..]
+                .split("\nfn ")
+                .next()
+                .expect("command span");
+            assert!(
+                span.contains("resolve_m1_canonical_project_id_for_workflow_execution"),
+                "{command}"
+            );
+            assert!(
+                !span.contains("project_id(&request.project_root)"),
+                "{command}"
+            );
+        }
+        for (source, function) in [
+            (
+                include_str!("workflow_run_dispatch_entrypoints.rs"),
+                "fn bind_workflow_node_codex_session_with_canonical_project_id_at(",
+            ),
+            (
+                include_str!("workflow_run_dispatch_entrypoints.rs"),
+                "fn workflow_node_dispatch_context_with_canonical_project_id(",
+            ),
+            (
+                include_str!("workflow_execution_entrypoints.rs"),
+                "fn prepare_offline_role_dispatch_with_canonical_project_id_at(",
+            ),
+            (
+                include_str!("workflow_execution_entrypoints.rs"),
+                "fn record_offline_role_result_handoff_with_canonical_project_id_at(",
+            ),
+            (
+                include_str!("workflow_execution_entrypoints.rs"),
+                "fn record_offline_director_review_with_canonical_project_id_at(",
+            ),
+        ] {
+            let start = source.find(function).expect(function);
+            let span = source[start..]
+                .split("\nfn ")
+                .next()
+                .expect("function span");
+            assert!(
+                !span.contains("project_id(&request.project_root)"),
+                "{function}"
+            );
+        }
+        let _ = fs::remove_dir_all(dir);
+        let _ = fs::remove_dir_all(parent);
+        let _ = fs::remove_dir_all(alias_dir);
+    }
+
+    #[test]
+    fn m6p00_project_workflow_m1_unavailable_and_missing_alias_zero_write() {
+        let dir = temp_dir("m1-fail");
+        let state = state_without_m1(&dir);
+        let sidecar =
+            plan_authorization_store::sidecar_path(&state.workflow_state_path).expect("sidecar");
+        if let Some(parent) = sidecar.parent() {
+            fs::create_dir_all(parent).ok();
+        }
+        fs::write(&sidecar, b"{\"schema_version\":\"seed\"}").expect("seed sidecar");
+        let before = fs::read(&sidecar).expect("before");
+        let error = record_plan_authorization_user_confirmation_with_state(
+            &RecordPlanAuthorizationUserConfirmationInput {
+                project_root: "/tmp/m6p00-pw-missing".to_string(),
+                authorization_id: "auth:unused".to_string(),
+                actor_id: "user".to_string(),
+                confirmation_summary: "should not write".to_string(),
+                expected_store_revision: None,
+            },
+            &state,
+        )
+        .expect_err("unavailable");
+        assert_eq!(error, m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE);
+        assert_eq!(fs::read(&sidecar).expect("after"), before);
+        let empty = resolve_m1_canonical_project_id(&state, "");
+        assert_eq!(
+            empty.unwrap_err(),
+            m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE
+        );
+
+        let alias_dir = temp_dir("m1-installed");
+        let alias = fs::canonicalize(&alias_dir)
+            .expect("canon")
+            .display()
+            .to_string();
+        let (parent, installed, _) = ordinary_state_with_alias(&alias);
+        let missing = resolve_m1_canonical_project_id(&installed, "/tmp/m6p00-pw-unknown-alias");
+        assert_eq!(missing.unwrap_err(), "m1_alias_unknown");
+        let malformed = resolve_m1_canonical_project_id(&installed, "");
+        assert_eq!(malformed.unwrap_err(), "m1_alias_malformed");
+        let _ = fs::remove_dir_all(dir);
+        let _ = fs::remove_dir_all(parent);
+        let _ = fs::remove_dir_all(alias_dir);
+    }
+
+    #[test]
+    fn m6p00_project_workflow_production_does_not_mint_path_derived_id() {
+        let source = include_str!("commands.rs");
+        let production_end = source
+            .find("#[cfg(test)]\nmod fnd004a_ownership_tests")
+            .expect("test module");
+        let production = &source[..production_end];
+        for name in [
+            "fn resolve_supervisor_conversation_context(",
+            "fn record_plan_authorization_user_confirmation(",
+            "fn run_project_workflow_automation_phase_a(",
+            "fn list_project_workflows(",
+            "fn submit_project_workflow_draft(",
+            "fn get_project_workflow_nodes(",
+        ] {
+            assert!(production.contains(name), "missing {name}");
+        }
+        assert!(production.contains("resolve_m1_canonical_project_id"));
+        assert!(production.contains("resolve_exact_alias"));
+        let list_span = production[production.find("fn list_project_workflows(").unwrap()..]
+            .split("fn submit_project_workflow_draft(")
+            .next()
+            .unwrap();
+        assert!(!list_span.contains("project_id(&project_root)"));
+        let get_span = production[production.find("fn get_project_workflow_nodes(").unwrap()..]
+            .split("fn read_workflow_node_dispatch_result(")
+            .next()
+            .unwrap();
+        assert!(!get_span.contains("project_id(&project_root)"));
+        let submit_span = production[production
+            .find("fn submit_project_workflow_draft(")
+            .unwrap()..]
+            .split("fn get_project_workflow_nodes(")
+            .next()
+            .unwrap();
+        assert!(!submit_span.contains("project_id(&request.project_root)"));
+        let resolve_span = production[production
+            .find("fn resolve_supervisor_conversation_context(")
+            .unwrap()..]
+            .split("fn indexed_project_root_matches(")
+            .next()
+            .unwrap();
+        assert!(!resolve_span.contains("project_id(&project_root)"));
+        let auth_span = production[production
+            .find("fn record_plan_authorization_user_confirmation(")
+            .unwrap()..]
+            .split("fn record_plan_authorization_global_boundary_review(")
+            .next()
+            .unwrap();
+        assert!(!auth_span.contains("project_id(&request.project_root)"));
+        let phase_span = production[production
+            .find("fn run_project_workflow_automation_phase_a(")
+            .unwrap()..]
+            .split("fn run_project_workflow_automation_j2_b_b1(")
+            .next()
+            .unwrap();
+        assert!(!phase_span.contains("project_id(&request.project_root)"));
     }
 }

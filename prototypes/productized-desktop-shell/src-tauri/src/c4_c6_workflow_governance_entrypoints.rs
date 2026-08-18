@@ -569,6 +569,25 @@ fn record_project_director_process_fact_decision_at(
     path: &Path,
     request: &ProjectDirectorProcessFactDecisionInput,
 ) -> Result<ProjectDirectorProcessFactDecisionResult, String> {
+    record_project_director_process_fact_decision_core(path, request, None)
+}
+
+fn record_project_director_process_fact_decision_with_canonical_project_id_at(
+    path: &Path,
+    request: &ProjectDirectorProcessFactDecisionInput,
+    canonical_project_id: &str,
+) -> Result<ProjectDirectorProcessFactDecisionResult, String> {
+    if canonical_project_id.trim().is_empty() || request.project_id != canonical_project_id {
+        return Err("project_workflow_automation_project_id_mismatch".to_string());
+    }
+    record_project_director_process_fact_decision_core(path, request, Some(canonical_project_id))
+}
+
+fn record_project_director_process_fact_decision_core(
+    path: &Path,
+    request: &ProjectDirectorProcessFactDecisionInput,
+    canonical_project_id: Option<&str>,
+) -> Result<ProjectDirectorProcessFactDecisionResult, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法记录过程事实确认".to_string());
     }
@@ -607,8 +626,37 @@ fn record_project_director_process_fact_decision_at(
     let mut observations = Vec::new();
     let mut observation_store_revision = request.expected_observation_store_revision;
     if request.decision == "confirm_process_fact" {
+        if let Some(canonical_project_id) = canonical_project_id {
+            validate_observation_project_registered(path, &request.project_root)?;
+            for fact in &request.accepted_facts {
+                validate_process_fact_candidate(fact, request)?;
+                for source in &fact.source_refs {
+                    if source
+                        .project_id
+                        .as_deref()
+                        .is_some_and(|owner| owner.trim() != canonical_project_id)
+                    {
+                        return Err(
+                            "cross-project process fact source 需要用户确认，项目主管不能单独确认"
+                                .to_string(),
+                        );
+                    }
+                    if source
+                        .workflow_id
+                        .as_deref()
+                        .is_some_and(|workflow_id| workflow_id.trim() != request.workflow_id)
+                    {
+                        return Err(
+                            "process fact source workflow 与当前 workflow 不匹配".to_string()
+                        );
+                    }
+                }
+            }
+        }
         for fact in &request.accepted_facts {
-            validate_process_fact_candidate(fact, request)?;
+            if canonical_project_id.is_none() {
+                validate_process_fact_candidate(fact, request)?;
+            }
             let observation_input = CreateObservationInput {
                 project_root: request.project_root.clone(),
                 project_id: Some(request.project_id.clone()),
@@ -624,16 +672,25 @@ fn record_project_director_process_fact_decision_at(
                 reason: request.summary.trim().to_string(),
                 expected_store_revision: observation_store_revision,
             };
-            let output = create_observation_at(
-                path,
-                &observation_input,
-                &timestamp,
-                &format!(
-                    "write-c5-process-fact-observation-{}-{}",
-                    stable_id(&fact.process_fact_id),
-                    unix_timestamp_nanos()
-                ),
-            )?;
+            let observation_write_id = format!(
+                "write-c5-process-fact-observation-{}-{}",
+                stable_id(&fact.process_fact_id),
+                unix_timestamp_nanos()
+            );
+            let output = if canonical_project_id.is_some() {
+                // M6P00 canonical path: M1 has already resolved the owner at the
+                // formal project-workflow command.  We retain project-root
+                // registration and exact nested-owner checks above, then avoid
+                // the guarded legacy path-derived comparison in create_observation_at.
+                observation_store::create_observation(
+                    path,
+                    &observation_input,
+                    &timestamp,
+                    &observation_write_id,
+                )
+            } else {
+                create_observation_at(path, &observation_input, &timestamp, &observation_write_id)
+            }?;
             observation_store_revision = Some(output.store_revision);
             observations.push(output.observation);
         }

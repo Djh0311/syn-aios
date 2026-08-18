@@ -1472,6 +1472,172 @@ impl WorkflowNodeSessionBindingProvenance {
     }
 }
 
+const M6P00_WORKFLOW_PROJECT_ID_MISMATCH: &str = "m6p00_workflow_project_id_mismatch";
+
+/// Select a target record in the canonical project namespace.  Same-key
+/// path-derived or foreign records are never treated as an idempotent hit.
+/// Ownerless records remain a guarded legacy fixture only; any explicit
+/// non-canonical owner wins over that fixture and fails closed.  This fallback
+/// expires when the workflow-state schema migration stamps project_id on
+/// nodes, work items, bindings, dispatches, and task-package artifacts.
+fn canonical_owned_record_index<F>(
+    value: &Value,
+    collection: &str,
+    canonical_project_id: &str,
+    target: &str,
+    matches_target: F,
+) -> Result<Option<usize>, String>
+where
+    F: Fn(&Value) -> bool,
+{
+    let Some(records) = value.get(collection).and_then(Value::as_array) else {
+        return Ok(None);
+    };
+    let mut ownerless = None;
+    let mut explicit_mismatch = None;
+    for (index, record) in records.iter().enumerate() {
+        if !matches_target(record) {
+            continue;
+        }
+        match optional_string_from(record, "project_id") {
+            Some(owner) if owner == canonical_project_id => return Ok(Some(index)),
+            Some(owner) => {
+                explicit_mismatch.get_or_insert(owner);
+            }
+            None => {
+                ownerless.get_or_insert(index);
+            }
+        }
+    }
+    if let Some(owner) = explicit_mismatch {
+        return Err(format!(
+            "{M6P00_WORKFLOW_PROJECT_ID_MISMATCH}:{target}:expected={canonical_project_id}:actual={owner}"
+        ));
+    }
+    Ok(ownerless)
+}
+
+fn canonical_workflow_record_index(
+    value: &Value,
+    workflow_id: &str,
+    canonical_project_id: &str,
+) -> Result<Option<usize>, String> {
+    canonical_owned_record_index(
+        value,
+        "workflows",
+        canonical_project_id,
+        "workflow",
+        |workflow| optional_string_from(workflow, "workflow_id").as_deref() == Some(workflow_id),
+    )
+}
+
+fn canonical_node_record_index(
+    value: &Value,
+    workflow_id: &str,
+    node_id: &str,
+    canonical_project_id: &str,
+) -> Result<Option<usize>, String> {
+    canonical_owned_record_index(value, "nodes", canonical_project_id, "node", |node| {
+        optional_string_from(node, "workflow_id").as_deref() == Some(workflow_id)
+            && optional_string_from(node, "node_id").as_deref() == Some(node_id)
+    })
+}
+
+fn canonical_work_item_record_index(
+    value: &Value,
+    workflow_id: &str,
+    work_item_id: &str,
+    canonical_project_id: &str,
+) -> Result<Option<usize>, String> {
+    canonical_owned_record_index(
+        value,
+        "work_items",
+        canonical_project_id,
+        "work_item",
+        |work_item| {
+            optional_string_from(work_item, "workflow_id").as_deref() == Some(workflow_id)
+                && optional_string_from(work_item, "work_item_id").as_deref() == Some(work_item_id)
+        },
+    )
+}
+
+fn canonical_binding_record_index(
+    value: &Value,
+    workflow_id: &str,
+    node_id: &str,
+    work_item_id: Option<&str>,
+    canonical_project_id: &str,
+) -> Result<Option<usize>, String> {
+    canonical_owned_record_index(
+        value,
+        "workflow_node_session_bindings",
+        canonical_project_id,
+        "workflow_node_session_binding",
+        |binding| {
+            optional_string_from(binding, "workflow_id").as_deref() == Some(workflow_id)
+                && optional_string_from(binding, "node_id").as_deref() == Some(node_id)
+                && optional_string_from(binding, "lifecycle").as_deref() == Some("active")
+                && optional_string_from(binding, "work_item_id").as_deref() == work_item_id
+        },
+    )
+}
+
+fn canonical_dispatch_record_index(
+    value: &Value,
+    dispatch_id: &str,
+    canonical_project_id: &str,
+) -> Result<Option<usize>, String> {
+    canonical_owned_record_index(
+        value,
+        "workflow_node_dispatches",
+        canonical_project_id,
+        "workflow_node_dispatch",
+        |dispatch| optional_string_from(dispatch, "dispatch_id").as_deref() == Some(dispatch_id),
+    )
+}
+
+fn canonical_task_package_artifact_record_index(
+    value: &Value,
+    work_item_id: &str,
+    work_item: &Value,
+    canonical_project_id: &str,
+) -> Result<Option<usize>, String> {
+    let source_artifact_id = optional_string_from(work_item, "source_ref");
+    canonical_owned_record_index(
+        value,
+        "artifacts",
+        canonical_project_id,
+        "task_package_artifact",
+        |artifact| {
+            optional_string_from(artifact, "artifact_type").as_deref() == Some("task_package")
+                && (optional_string_from(artifact, "source_ref").as_deref() == Some(work_item_id)
+                    || source_artifact_id.as_deref().is_some_and(|source_id| {
+                        optional_string_from(artifact, "artifact_id").as_deref() == Some(source_id)
+                    }))
+        },
+    )
+}
+
+fn update_canonical_node_state_for_id(
+    value: &mut Value,
+    workflow_id: &str,
+    node_id: &str,
+    canonical_project_id: &str,
+    state: &str,
+    timestamp: &str,
+) -> Result<(), String> {
+    let node_index =
+        canonical_node_record_index(value, workflow_id, node_id, canonical_project_id)?;
+    if let Some(node_index) = node_index {
+        let node = array_mut(value, "nodes")?
+            .get_mut(node_index)
+            .ok_or_else(|| "canonical workflow node disappeared before update".to_string())?;
+        node["state"] = Value::String(state.to_string());
+        node["updated_at"] = Value::String(timestamp.to_string());
+    }
+    Ok(())
+}
+
 fn bind_workflow_node_codex_session_at(
     path: &Path,
     request: &WorkflowNodeSessionBindRequest,
@@ -1491,13 +1657,32 @@ fn bind_workflow_node_codex_session_with_provenance_at(
     session: &SessionRecord,
     provenance: &WorkflowNodeSessionBindingProvenance,
 ) -> Result<WorkflowStateMutationResult, String> {
+    // Legacy fixture/guarded callers still persist the historical path-derived
+    // owner.  This wrapper expires when those callers receive the M1 canonical
+    // ProjectId explicitly.  Formal M6P00 commands bypass it.
+    migrate_legacy_workflow_node_session_binding_ids_at(path)?;
+    bind_workflow_node_codex_session_with_canonical_project_id_at(
+        path,
+        request,
+        session,
+        provenance,
+        &project_id(&request.project_root),
+    )
+}
+
+fn bind_workflow_node_codex_session_with_canonical_project_id_at(
+    path: &Path,
+    request: &WorkflowNodeSessionBindRequest,
+    session: &SessionRecord,
+    provenance: &WorkflowNodeSessionBindingProvenance,
+    canonical_project_id: &str,
+) -> Result<WorkflowStateMutationResult, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法绑定节点会话".to_string());
     }
 
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
-    migrate_legacy_workflow_node_session_binding_ids_at(path)?;
     let mut value = read_workflow_state_value(path)?;
     ensure_workflow_node_session_bindings_array(&mut value)?;
     let validation_warnings = validate_workflow_state(&value);
@@ -1516,26 +1701,35 @@ fn bind_workflow_node_codex_session_with_provenance_at(
         .map(|(prefix, _)| prefix.to_string())
         .filter(|prefix| !prefix.is_empty())
         .unwrap_or_else(|| default_workflow_id(&request.project_root));
-    if !workflow_exists(&value, &workflow_id) {
+    if canonical_workflow_record_index(&value, &workflow_id, canonical_project_id)?.is_none() {
         return Err("当前项目还没有本地 workflow；无法绑定节点会话".to_string());
     }
-    if !node_exists(&value, &workflow_id, &request.node_id) {
+    if canonical_node_record_index(&value, &workflow_id, &request.node_id, canonical_project_id)?
+        .is_none()
+    {
         return Err("当前 workflow 下找不到该 node；无法绑定节点会话".to_string());
     }
     if let Some(work_item_id) = request.work_item_id.as_deref() {
-        if find_work_item(&value, &workflow_id, work_item_id).is_none() {
+        if canonical_work_item_record_index(
+            &value,
+            &workflow_id,
+            work_item_id,
+            canonical_project_id,
+        )?
+        .is_none()
+        {
             return Err("当前 workflow 下找不到该 work item；无法绑定节点会话".to_string());
         }
     }
 
-    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
-
-    let existing_active_index = workflow_node_session_binding_index(
+    let existing_active_index = canonical_binding_record_index(
         &value,
         &workflow_id,
         &request.node_id,
         request.work_item_id.as_deref(),
-    );
+        canonical_project_id,
+    )?;
+    let backup = crate::workflow_state_store::backup_file(path, &timestamp)?;
     let before_state = existing_active_index
         .and_then(|index| {
             value
@@ -1565,7 +1759,7 @@ fn bind_workflow_node_codex_session_with_provenance_at(
     }
     let binding = json!({
       "binding_id": binding_id,
-      "project_id": project_id(&request.project_root),
+      "project_id": canonical_project_id,
       "workflow_id": workflow_id,
       "node_id": request.node_id,
       "work_item_id": request.work_item_id,
@@ -1960,13 +2154,34 @@ fn execute_workflow_node_dispatch_at(
     runner: &dyn CodexResumeRunner,
     request: &WorkflowNodeDispatchExecuteRequest,
 ) -> Result<WorkflowNodeDispatchResult, String> {
-    execute_workflow_node_dispatch_with_authorization_at(
+    // Guarded legacy/fixed-test route.  Formal M6P00 commands call the
+    // canonical variant below and never mint this path-derived owner.
+    execute_workflow_node_dispatch_with_canonical_project_id_at(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        request,
+        &project_id(&request.project_root),
+    )
+}
+
+fn execute_workflow_node_dispatch_with_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &WorkflowNodeDispatchExecuteRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    execute_workflow_node_dispatch_with_authorization_and_canonical_project_id_at(
         path,
         index,
         readback_db_path,
         runner,
         request,
         None,
+        canonical_project_id,
     )
 }
 
@@ -1978,6 +2193,27 @@ fn execute_workflow_node_dispatch_with_authorization_at(
     request: &WorkflowNodeDispatchExecuteRequest,
     prepared_authorization: Option<&PreparedDispatchAuthorization>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    // Guarded legacy/fixed-test route; see the canonical variant below.
+    execute_workflow_node_dispatch_with_authorization_and_canonical_project_id_at(
+        path,
+        index,
+        readback_db_path,
+        runner,
+        request,
+        prepared_authorization,
+        &project_id(&request.project_root),
+    )
+}
+
+fn execute_workflow_node_dispatch_with_authorization_and_canonical_project_id_at(
+    path: &Path,
+    index: &Value,
+    readback_db_path: &Path,
+    runner: &dyn CodexResumeRunner,
+    request: &WorkflowNodeDispatchExecuteRequest,
+    prepared_authorization: Option<&PreparedDispatchAuthorization>,
+    canonical_project_id: &str,
+) -> Result<WorkflowNodeDispatchResult, String> {
     let prepare_request = WorkflowNodeDispatchPrepareRequest {
         project_root: request.project_root.clone(),
         node_id: request.node_id.clone(),
@@ -1985,19 +2221,25 @@ fn execute_workflow_node_dispatch_with_authorization_at(
         prompt_kind: request.prompt_kind.clone(),
         user_reviewed_instruction: request.user_reviewed_instruction.clone(),
     };
-    let mut context = workflow_node_dispatch_context(path, index, &prepare_request)?;
+    let mut context = workflow_node_dispatch_context_with_canonical_project_id(
+        path,
+        index,
+        &prepare_request,
+        canonical_project_id,
+    )?;
     if let Some(prepared_authorization) = prepared_authorization {
         if prepared_authorization.m2_execution_grant_required {
             // The M2 grant route must attach to the exact work-item binding
             // created by C1.  Frozen M1 prepared dispatches continue to use
             // their existing role-binding behavior and never mint a grant.
             let current = read_workflow_state_value(path)?;
-            let binding_index = workflow_node_session_binding_index(
+            let binding_index = canonical_binding_record_index(
                 &current,
                 &context.workflow_id,
                 &context.node_id,
                 Some(&context.work_item_id),
-            )
+                canonical_project_id,
+            )?
             .ok_or_else(|| "execution_grant_exact_work_item_binding_required".to_string())?;
             let exact_binding = current
                 .get("workflow_node_session_bindings")
@@ -2067,11 +2309,18 @@ fn execute_workflow_node_dispatch_with_authorization_at(
                 Some(stats) => stats,
                 None => dispatch_readback_stats(Some(index), readback_db_path, &context)?,
             };
-            write_completed_dispatch(path, &dispatch_id, result.exit_code, stats)
+            write_completed_dispatch(
+                path,
+                &dispatch_id,
+                &context.project_id,
+                result.exit_code,
+                stats,
+            )
         }
         Ok((result, _options)) => write_failed_dispatch(
             path,
             &dispatch_id,
+            &context.project_id,
             result.exit_code,
             classify_codex_resume_failure(
                 result.exit_code,
@@ -2083,6 +2332,7 @@ fn execute_workflow_node_dispatch_with_authorization_at(
         Err(error) => write_failed_dispatch(
             path,
             &dispatch_id,
+            &context.project_id,
             -1,
             classify_codex_resume_failure(-1, false, &context.user_reviewed_instruction, &error),
         ),
@@ -2169,6 +2419,22 @@ fn workflow_node_dispatch_context(
     index: &Value,
     request: &WorkflowNodeDispatchPrepareRequest,
 ) -> Result<WorkflowNodeDispatchContext, String> {
+    // Guarded legacy/fixed-test route.  Formal commands supply the canonical
+    // M1 identity to the variant below.
+    workflow_node_dispatch_context_with_canonical_project_id(
+        path,
+        index,
+        request,
+        &project_id(&request.project_root),
+    )
+}
+
+fn workflow_node_dispatch_context_with_canonical_project_id(
+    path: &Path,
+    index: &Value,
+    request: &WorkflowNodeDispatchPrepareRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowNodeDispatchContext, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法准备节点派发".to_string());
     }
@@ -2182,23 +2448,45 @@ fn workflow_node_dispatch_context(
         .map(|(prefix, _)| prefix.to_string())
         .filter(|prefix| !prefix.is_empty())
         .unwrap_or_else(|| default_workflow_id(&request.project_root));
-    if !workflow_exists(&value, &workflow_id) {
+    if canonical_workflow_record_index(&value, &workflow_id, canonical_project_id)?.is_none() {
         return Err("当前项目还没有本地 workflow；无法准备节点派发".to_string());
     }
-    if !node_exists(&value, &workflow_id, &request.node_id) {
+    if canonical_node_record_index(&value, &workflow_id, &request.node_id, canonical_project_id)?
+        .is_none()
+    {
         return Err("当前 workflow 下找不到该 node；无法准备节点派发".to_string());
     }
-    let work_item = find_work_item(&value, &workflow_id, &request.work_item_id)
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &workflow_id,
+        &request.work_item_id,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法准备节点派发".to_string())?;
+    let work_item = value
+        .get("work_items")
+        .and_then(Value::as_array)
+        .and_then(|work_items| work_items.get(work_item_index))
         .ok_or_else(|| "当前 workflow 下找不到该 work item；无法准备节点派发".to_string())?;
     let work_item_state =
         optional_string_from(work_item, "state").unwrap_or_else(|| "unknown".to_string());
-    let binding_index = workflow_node_session_binding_index(
+    let exact_binding_index = canonical_binding_record_index(
         &value,
         &workflow_id,
         &request.node_id,
         Some(&request.work_item_id),
-    )
-    .or_else(|| workflow_node_session_binding_index(&value, &workflow_id, &request.node_id, None))
+        canonical_project_id,
+    )?;
+    let binding_index = match exact_binding_index {
+        Some(index) => Some(index),
+        None => canonical_binding_record_index(
+            &value,
+            &workflow_id,
+            &request.node_id,
+            None,
+            canonical_project_id,
+        )?,
+    }
     .ok_or_else(|| "当前工作流节点没有 active Codex 会话绑定；无法派发".to_string())?;
     let binding = value
         .get("workflow_node_session_bindings")
@@ -2235,7 +2523,14 @@ fn workflow_node_dispatch_context(
     } else {
         return Err(format!("未知派发模式：{prompt_kind}"));
     };
-    let memory_snapshot = find_task_package_artifact(&value, &request.work_item_id, work_item)
+    let memory_artifact_index = canonical_task_package_artifact_record_index(
+        &value,
+        &request.work_item_id,
+        work_item,
+        canonical_project_id,
+    )?;
+    let memory_snapshot = memory_artifact_index
+        .and_then(|index| value.get("artifacts").and_then(Value::as_array)?.get(index))
         .and_then(task_memory_injection::snapshot_from_artifact);
     let prompt_preview = memory_snapshot
         .as_ref()
@@ -2266,7 +2561,7 @@ fn workflow_node_dispatch_context(
     }
 
     Ok(WorkflowNodeDispatchContext {
-        project_id: project_id(&request.project_root),
+        project_id: canonical_project_id.to_string(),
         workflow_id,
         node_id: request.node_id.clone(),
         work_item_id: request.work_item_id.clone(),
@@ -2299,12 +2594,37 @@ fn inspect_task_package_authorization_at(
     fields: &RenderTaskPackageFields,
     dispatch_kind: &str,
 ) -> Result<AutoDispatchGuardResult, String> {
+    // Legacy readiness helper retained for crate-root fixtures.  The formal
+    // command resolves M1 first and calls the canonical variant below.  Remove
+    // this wrapper when the old lifecycle fixture accepts an explicit owner.
+    inspect_task_package_authorization_with_canonical_project_id_at(
+        path,
+        project,
+        workflow_id,
+        work_item,
+        artifact,
+        fields,
+        dispatch_kind,
+        &project_id(&project.project_root),
+    )
+}
+
+fn inspect_task_package_authorization_with_canonical_project_id_at(
+    path: &Path,
+    _project: &ProjectRecord,
+    workflow_id: &str,
+    work_item: &Value,
+    artifact: &Value,
+    fields: &RenderTaskPackageFields,
+    dispatch_kind: &str,
+    canonical_project_id: &str,
+) -> Result<AutoDispatchGuardResult, String> {
     let work_item_id = fields.work_item_id.clone();
     let target_role_id = optional_string_from(work_item, "assigned_role_id")
         .or_else(|| optional_string_from(artifact, "target_role"))
         .unwrap_or_else(|| assigned_line_id(&fields.assigned_line).to_string());
     let input = AutoDispatchGuardInput {
-        project_id: project_id(&project.project_root),
+        project_id: canonical_project_id.to_string(),
         workflow_id: workflow_id.to_string(),
         work_item_id,
         task_package_id: optional_string_from(artifact, "artifact_id"),

@@ -136,13 +136,12 @@ fn clip(text: &str, max_chars: usize) -> String {
 /// → Err（调用方软着陆成 unavailable）。
 pub(crate) fn load_review_input(
     state_path: &Path,
-    project_root: &str,
+    canonical_project_id: &str,
     workflow_id: &str,
     chain_started_at: &str,
 ) -> Result<SupervisorReviewInput, String> {
     let value = crate::read_workflow_state_value(state_path)?;
-    let pid = crate::project_id(project_root);
-    // 1. 本轮链记录（精确匹配）。
+    // 1. 本轮链记录（canonical project id + workflow_id + started_at 精确匹配）。
     let run = value
         .get("workflow_chain_runs")
         .and_then(serde_json::Value::as_array)
@@ -150,7 +149,7 @@ pub(crate) fn load_review_input(
             runs.iter().find(|run| {
                 crate::optional_string_from(run, "workflow_id").as_deref() == Some(workflow_id)
                     && crate::optional_string_from(run, "project_id").as_deref()
-                        == Some(pid.as_str())
+                        == Some(canonical_project_id)
                     && crate::optional_string_from(run, "started_at").as_deref()
                         == Some(chain_started_at)
             })
@@ -425,6 +424,7 @@ pub(crate) struct GlobalSupervisorReviewOutcome {
 pub(crate) fn run_global_supervisor_review_core<F>(
     state_path: &Path,
     request: &RunGlobalSupervisorReviewRequest,
+    canonical_project_id: &str,
     consult: F,
 ) -> GlobalSupervisorReviewOutcome
 where
@@ -440,15 +440,25 @@ where
             warnings,
         };
     }
-    // 1. 幂等命中：已有记录且非 force → 原样返回（不 consult·不写盘）。
+    // 1. 幂等命中：已有 canonical 记录且非 force → 原样返回（不 consult·不写盘）。
+    // 同键 foreign 记录不得返回、覆盖或泄露。
     let (store, load_warnings) =
         global_supervisor_review_store::load_store_soft(state_path, timestamp_ms);
     warnings.extend(load_warnings);
+    if let Some(blocked) = reject_foreign_same_key_review(
+        &store,
+        &request.workflow_id,
+        &request.chain_started_at,
+        canonical_project_id,
+    ) {
+        return blocked;
+    }
     if !request.force {
-        if let Some(existing) = global_supervisor_review_store::find_review(
+        if let Some(existing) = find_canonical_review(
             &store,
             &request.workflow_id,
             &request.chain_started_at,
+            canonical_project_id,
         ) {
             return GlobalSupervisorReviewOutcome {
                 status: existing.status.clone(),
@@ -461,7 +471,7 @@ where
     // 2. 读盘组输入（链轮找不到 → unavailable、不落盘：键不对落了也是垃圾）。
     let input = match load_review_input(
         state_path,
-        &request.project_root,
+        canonical_project_id,
         &request.workflow_id,
         &request.chain_started_at,
     ) {
@@ -482,7 +492,7 @@ where
             "global-supervisor-review:{}:{}",
             request.workflow_id, request.chain_started_at
         ),
-        project_id: crate::project_id(&request.project_root),
+        project_id: canonical_project_id.to_string(),
         workflow_id: request.workflow_id.clone(),
         chain_started_at: request.chain_started_at.clone(),
         model: GLOBAL_SUPERVISOR_MODEL_LABEL.to_string(),
@@ -557,16 +567,25 @@ pub(crate) async fn run_global_supervisor_review(
     request: RunGlobalSupervisorReviewRequest,
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<GlobalSupervisorReviewOutcome, String> {
+    let canonical_project_id = resolve_global_supervisor_canonical_project_id(
+        state.m1_project_index_read_port(),
+        &request.project_root,
+    )?;
     // 真 consult 长耗时 → spawn_blocking 不冻 UI（同合流/咨询范本）；path 在 await 前取。
     let path = state.workflow_state_path.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        run_global_supervisor_review_core(&path, &request, |project_root, prompt| {
-            crate::codex_local_runner::readonly_codex_consult(
-                project_root,
-                prompt,
-                Some(GLOBAL_SUPERVISOR_CONSULT_TIMEOUT_MS),
-            )
-        })
+        run_global_supervisor_review_core(
+            &path,
+            &request,
+            &canonical_project_id,
+            |project_root, prompt| {
+                crate::codex_local_runner::readonly_codex_consult(
+                    project_root,
+                    prompt,
+                    Some(GLOBAL_SUPERVISOR_CONSULT_TIMEOUT_MS),
+                )
+            },
+        )
     })
     .await
     .map_err(|error| format!("复核执行线程异常：{error}"))
@@ -624,6 +643,7 @@ pub(crate) fn normalize_boundary_verdict(raw: &str) -> String {
 /// B2 复核输入（全从盘读·一份 pending 方案的要点）。
 #[derive(Debug, Clone, Default)]
 pub(crate) struct BoundaryReviewInput {
+    pub(crate) project_id: String,
     pub(crate) proposal_title: String,
     pub(crate) user_goal: String,
     pub(crate) goal_summary: String,
@@ -651,6 +671,7 @@ pub(crate) fn load_boundary_review_input(
         .find(|proposal| proposal.proposal_id == proposal_id)
         .ok_or_else(|| "没找到这份方案（可能已被替换或清理）".to_string())?;
     Ok(BoundaryReviewInput {
+        project_id: proposal.project_id.clone(),
         proposal_title: proposal.title.clone(),
         user_goal: proposal.user_goal.clone(),
         goal_summary: proposal.goal_summary.clone(),
@@ -764,6 +785,7 @@ pub(crate) struct GlobalSupervisorBoundaryReviewOutcome {
 pub(crate) fn run_global_supervisor_boundary_review_core<F>(
     state_path: &Path,
     request: &RunGlobalSupervisorBoundaryReviewRequest,
+    canonical_project_id: &str,
     consult: F,
 ) -> GlobalSupervisorBoundaryReviewOutcome
 where
@@ -779,13 +801,19 @@ where
             warnings,
         };
     }
-    // 1. 幂等命中：已有记录且非 force → 原样返回（不 consult·不写盘）。
+    // 1. 幂等命中：已有 canonical 记录且非 force → 原样返回（不 consult·不写盘）。
+    // 同键 foreign 记录不得返回、覆盖或泄露。
     let (store, load_warnings) =
         global_supervisor_review_store::load_store_soft(state_path, timestamp_ms);
     warnings.extend(load_warnings);
+    if let Some(blocked) =
+        reject_foreign_same_key_boundary_review(&store, &request.proposal_id, canonical_project_id)
+    {
+        return blocked;
+    }
     if !request.force {
         if let Some(existing) =
-            global_supervisor_review_store::find_boundary_review(&store, &request.proposal_id)
+            find_canonical_boundary_review(&store, &request.proposal_id, canonical_project_id)
         {
             return GlobalSupervisorBoundaryReviewOutcome {
                 status: existing.status.clone(),
@@ -807,11 +835,19 @@ where
             };
         }
     };
+    if input.project_id != canonical_project_id {
+        return GlobalSupervisorBoundaryReviewOutcome {
+            status: "unavailable".to_string(),
+            review: None,
+            reason: Some("边界意见不可用：方案不属于当前项目".to_string()),
+            warnings,
+        };
+    }
     let prompt = build_boundary_prompt(&input);
     // 3. consult（只读）→ 解析 → 归一化；失败落「不可用」记录（可重试）。
     let base_record = GlobalSupervisorBoundaryReviewRecord {
         review_id: format!("global-supervisor-boundary-review:{}", request.proposal_id),
-        project_id: crate::project_id(&request.project_root),
+        project_id: canonical_project_id.to_string(),
         proposal_id: request.proposal_id.clone(),
         model: GLOBAL_SUPERVISOR_MODEL_LABEL.to_string(),
         profile_version: GLOBAL_SUPERVISOR_BOUNDARY_PROFILE_VERSION.to_string(),
@@ -869,19 +905,117 @@ pub(crate) async fn run_global_supervisor_boundary_review(
     request: RunGlobalSupervisorBoundaryReviewRequest,
     state: tauri::State<'_, crate::AppState>,
 ) -> Result<GlobalSupervisorBoundaryReviewOutcome, String> {
+    let canonical_project_id = resolve_global_supervisor_canonical_project_id(
+        state.m1_project_index_read_port(),
+        &request.project_root,
+    )?;
     // 真 consult 长耗时 → spawn_blocking 不冻 UI（同 B1/咨询范本）；path 在 await 前取（不用死锚默认）。
     let path = state.workflow_state_path.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        run_global_supervisor_boundary_review_core(&path, &request, |project_root, prompt| {
-            crate::codex_local_runner::readonly_codex_consult(
-                project_root,
-                prompt,
-                Some(GLOBAL_SUPERVISOR_CONSULT_TIMEOUT_MS),
-            )
-        })
+        run_global_supervisor_boundary_review_core(
+            &path,
+            &request,
+            &canonical_project_id,
+            |project_root, prompt| {
+                crate::codex_local_runner::readonly_codex_consult(
+                    project_root,
+                    prompt,
+                    Some(GLOBAL_SUPERVISOR_CONSULT_TIMEOUT_MS),
+                )
+            },
+        )
     })
     .await
     .map_err(|error| format!("边界意见执行线程异常：{error}"))
+}
+
+fn resolve_global_supervisor_canonical_project_id(
+    port: Option<&dyn crate::m1_project_index::M1ProjectIndexReadPort>,
+    project_root: &str,
+) -> Result<String, String> {
+    let port =
+        port.ok_or_else(|| crate::m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE.to_string())?;
+    port.resolve_exact_alias(project_root)
+        .map(|project_id| project_id.as_str().to_string())
+        .map_err(|error| error.code)
+}
+
+fn find_canonical_review<'a>(
+    store: &'a global_supervisor_review_store::GlobalSupervisorReviewStoreV1,
+    workflow_id: &str,
+    chain_started_at: &str,
+    canonical_project_id: &str,
+) -> Option<&'a GlobalSupervisorReviewRecord> {
+    store.reviews.iter().find(|review| {
+        review.workflow_id == workflow_id
+            && review.chain_started_at == chain_started_at
+            && review.project_id == canonical_project_id
+    })
+}
+
+fn reject_foreign_same_key_review(
+    store: &global_supervisor_review_store::GlobalSupervisorReviewStoreV1,
+    workflow_id: &str,
+    chain_started_at: &str,
+    canonical_project_id: &str,
+) -> Option<GlobalSupervisorReviewOutcome> {
+    let has_canonical = store.reviews.iter().any(|review| {
+        review.workflow_id == workflow_id
+            && review.chain_started_at == chain_started_at
+            && review.project_id == canonical_project_id
+    });
+    if has_canonical {
+        return None;
+    }
+    let has_foreign = store.reviews.iter().any(|review| {
+        review.workflow_id == workflow_id
+            && review.chain_started_at == chain_started_at
+            && review.project_id != canonical_project_id
+    });
+    if !has_foreign {
+        return None;
+    }
+    Some(GlobalSupervisorReviewOutcome {
+        status: "unavailable".to_string(),
+        review: None,
+        reason: Some("复核不可用：已有其他项目的同键复核记录".to_string()),
+        warnings: Vec::new(),
+    })
+}
+
+fn find_canonical_boundary_review<'a>(
+    store: &'a global_supervisor_review_store::GlobalSupervisorReviewStoreV1,
+    proposal_id: &str,
+    canonical_project_id: &str,
+) -> Option<&'a GlobalSupervisorBoundaryReviewRecord> {
+    store.boundary_reviews.iter().find(|review| {
+        review.proposal_id == proposal_id && review.project_id == canonical_project_id
+    })
+}
+
+fn reject_foreign_same_key_boundary_review(
+    store: &global_supervisor_review_store::GlobalSupervisorReviewStoreV1,
+    proposal_id: &str,
+    canonical_project_id: &str,
+) -> Option<GlobalSupervisorBoundaryReviewOutcome> {
+    let has_canonical = store.boundary_reviews.iter().any(|review| {
+        review.proposal_id == proposal_id && review.project_id == canonical_project_id
+    });
+    if has_canonical {
+        return None;
+    }
+    let has_foreign = store.boundary_reviews.iter().any(|review| {
+        review.proposal_id == proposal_id && review.project_id != canonical_project_id
+    });
+    if !has_foreign {
+        return None;
+    }
+    Some(GlobalSupervisorBoundaryReviewOutcome {
+        status: "unavailable".to_string(),
+        review: None,
+        reason: Some("边界意见不可用：已有其他项目的同键边界意见".to_string()),
+        warnings: Vec::new(),
+    })
 }
 
 #[cfg(test)]
@@ -1054,7 +1188,8 @@ mod tests {
     fn load_input_scopes_reports_to_this_round() {
         let dir = tmp_dir("scope");
         let path = write_fixture_state(&dir, "/p/root");
-        let input = load_review_input(&path, "/p/root", "wf-1", "1000").expect("输入应组出来");
+        let input = load_review_input(&path, &crate::project_id("/p/root"), "wf-1", "1000")
+            .expect("输入应组出来");
         assert_eq!(input.chain_state, "completed");
         assert_eq!(
             input.reports.len(),
@@ -1067,7 +1202,8 @@ mod tests {
             .all(|report| report.work_item_id != "wi-old"));
         assert_eq!(input.task_nodes.len(), 2, "任务节点按 :node:task: 前缀圈");
         // 链轮找不到 → Err 人话。
-        let err = load_review_input(&path, "/p/root", "wf-1", "9999").expect_err("错轮应报");
+        let err = load_review_input(&path, &crate::project_id("/p/root"), "wf-1", "9999")
+            .expect_err("错轮应报");
         assert!(err.contains("没找到这一轮"), "人话：{err}");
         // prompt 组装含关键素材与契约。
         let prompt = build_supervisor_prompt(&input);
@@ -1085,7 +1221,8 @@ mod tests {
         let dir = tmp_dir("round-scope-regression");
         let path = write_round_scope_regression_fixture_state(&dir, "/p/root");
 
-        let input = load_review_input(&path, "/p/root", "wf-1", "1000").expect("输入应组出来");
+        let input = load_review_input(&path, &crate::project_id("/p/root"), "wf-1", "1000")
+            .expect("输入应组出来");
 
         assert_eq!(input.reports.len(), 1, "同轮 dispatch 的晚 1ms 口供应保留");
         assert_eq!(input.reports[0].work_item_id, "wi-current");
@@ -1139,7 +1276,8 @@ mod tests {
         )
         .expect("write state");
 
-        let input = load_review_input(&path, "/p/root", "wf-1", "1000").expect("输入应组出来");
+        let input = load_review_input(&path, &crate::project_id("/p/root"), "wf-1", "1000")
+            .expect("输入应组出来");
 
         assert_eq!(
             input.reports.len(),
@@ -1167,7 +1305,12 @@ mod tests {
             chain_started_at: "1000".to_string(),
             force: false,
         };
-        let first = run_global_supervisor_review_core(&path, &request, consult);
+        let first = run_global_supervisor_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            consult,
+        );
         assert_eq!(first.status, "ready", "{:?}", first.reason);
         assert_eq!(calls.get(), 1);
         let review = first.review.expect("ready 应带记录");
@@ -1180,7 +1323,12 @@ mod tests {
         );
         assert_eq!(review.profile_version, GLOBAL_SUPERVISOR_PROFILE_VERSION);
         // 第二次（非 force）：幂等命中，consult 不再被调。
-        let second = run_global_supervisor_review_core(&path, &request, consult);
+        let second = run_global_supervisor_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            consult,
+        );
         assert_eq!(second.status, "ready");
         assert_eq!(calls.get(), 1, "幂等命中不得重烧 consult");
         // force：重跑。
@@ -1188,7 +1336,12 @@ mod tests {
             force: true,
             ..request.clone()
         };
-        let third = run_global_supervisor_review_core(&path, &forced, consult);
+        let third = run_global_supervisor_review_core(
+            &path,
+            &forced,
+            &crate::project_id(&forced.project_root),
+            consult,
+        );
         assert_eq!(third.status, "ready");
         assert_eq!(calls.get(), 2, "force 才重跑");
         let _ = fs::remove_dir_all(dir);
@@ -1211,7 +1364,12 @@ mod tests {
             chain_started_at: "1000".to_string(),
             force: false,
         };
-        let outcome = run_global_supervisor_review_core(&path, &request, failing);
+        let outcome = run_global_supervisor_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            failing,
+        );
         assert_eq!(outcome.status, "unavailable");
         let reason = outcome.reason.clone().expect("应带人话原因");
         assert!(reason.contains("额度用完"), "供给类人话直取：{reason}");
@@ -1225,7 +1383,12 @@ mod tests {
             .expect("不可用也落记录");
         assert_eq!(saved.status, "unavailable");
         // 非 force 再来：幂等命中（不重烧）。
-        let again = run_global_supervisor_review_core(&path, &request, failing);
+        let again = run_global_supervisor_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            failing,
+        );
         assert_eq!(again.status, "unavailable");
         assert_eq!(calls.get(), 1, "unavailable 也参与幂等·自动路不重烧");
         // force + 供给恢复 → ready 覆盖同键记录。
@@ -1234,7 +1397,12 @@ mod tests {
             force: true,
             ..request.clone()
         };
-        let retried = run_global_supervisor_review_core(&path, &forced, recovered);
+        let retried = run_global_supervisor_review_core(
+            &path,
+            &forced,
+            &crate::project_id(&forced.project_root),
+            recovered,
+        );
         assert_eq!(retried.status, "ready");
         let (store2, _) = global_supervisor_review_store::load_store_soft(&path, 9_999);
         assert_eq!(store2.reviews.len(), 1, "同键覆盖不追加");
@@ -1255,7 +1423,12 @@ mod tests {
             chain_started_at: "1000".to_string(),
             force: false,
         };
-        let outcome = run_global_supervisor_review_core(&path, &request, no_contract);
+        let outcome = run_global_supervisor_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            no_contract,
+        );
         assert_eq!(outcome.status, "unavailable");
         assert!(outcome.reason.clone().unwrap_or_default().contains("契约"));
         let (store, _) = global_supervisor_review_store::load_store_soft(&path, 9_000);
@@ -1267,7 +1440,12 @@ mod tests {
             chain_started_at: "424242".to_string(),
             force: false,
         };
-        let outcome2 = run_global_supervisor_review_core(&path, &missing, no_contract);
+        let outcome2 = run_global_supervisor_review_core(
+            &path,
+            &missing,
+            &crate::project_id(&missing.project_root),
+            no_contract,
+        );
         assert_eq!(outcome2.status, "unavailable");
         assert!(outcome2.reason.unwrap_or_default().contains("没找到这一轮"));
         let (store2, _) = global_supervisor_review_store::load_store_soft(&path, 9_100);
@@ -1324,9 +1502,14 @@ mod tests {
             // 真跑要真 consult：force 穿透可能已存在的记录（此前真机可能已自动复核过）。
             force: true,
         };
-        let outcome = run_global_supervisor_review_core(&state_path, &request, |root, prompt| {
-            crate::codex_local_runner::readonly_codex_consult(root, prompt, Some(420_000))
-        });
+        let outcome = run_global_supervisor_review_core(
+            &state_path,
+            &request,
+            &crate::project_id(&request.project_root),
+            |root, prompt| {
+                crate::codex_local_runner::readonly_codex_consult(root, prompt, Some(420_000))
+            },
+        );
         println!(
             "[B1_REAL] status={} reason={:?}",
             outcome.status, outcome.reason
@@ -1520,7 +1703,12 @@ mod tests {
             proposal_id: "prop-1".to_string(),
             force: false,
         };
-        let first = run_global_supervisor_boundary_review_core(&path, &request, consult);
+        let first = run_global_supervisor_boundary_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            consult,
+        );
         assert_eq!(first.status, "ready", "{:?}", first.reason);
         assert_eq!(calls.get(), 1);
         let review = first.review.expect("ready 应带记录");
@@ -1532,7 +1720,12 @@ mod tests {
             "B2 档案版本落记录"
         );
         // 幂等命中：第二次非 force 不再 consult。
-        let second = run_global_supervisor_boundary_review_core(&path, &request, consult);
+        let second = run_global_supervisor_boundary_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            consult,
+        );
         assert_eq!(second.status, "ready");
         assert_eq!(calls.get(), 1, "幂等命中不得重烧 consult");
         // force 重跑。
@@ -1540,7 +1733,12 @@ mod tests {
             force: true,
             ..request.clone()
         };
-        let third = run_global_supervisor_boundary_review_core(&path, &forced, consult);
+        let third = run_global_supervisor_boundary_review_core(
+            &path,
+            &forced,
+            &crate::project_id(&forced.project_root),
+            consult,
+        );
         assert_eq!(third.status, "ready");
         assert_eq!(calls.get(), 2, "force 才重跑");
         // 落库单条（同 proposal_id 覆盖不追加）+ B2 内嵌审计在。
@@ -1575,7 +1773,12 @@ mod tests {
             proposal_id: "prop-1".to_string(),
             force: false,
         };
-        let outcome = run_global_supervisor_boundary_review_core(&path, &request, failing);
+        let outcome = run_global_supervisor_boundary_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            failing,
+        );
         assert_eq!(outcome.status, "unavailable");
         let reason = outcome.reason.clone().expect("应带人话原因");
         assert!(reason.contains("额度用完"), "供给类人话直取：{reason}");
@@ -1584,7 +1787,12 @@ mod tests {
             "前缀应剥掉"
         );
         // unavailable 也落记录（可重试）+ 参与幂等（自动路不重烧）。
-        let again = run_global_supervisor_boundary_review_core(&path, &request, failing);
+        let again = run_global_supervisor_boundary_review_core(
+            &path,
+            &request,
+            &crate::project_id(&request.project_root),
+            failing,
+        );
         assert_eq!(again.status, "unavailable");
         assert_eq!(calls.get(), 1, "unavailable 也参与幂等·自动路不重烧");
         // force + 供给恢复 → ready 覆盖同 proposal_id。
@@ -1593,7 +1801,12 @@ mod tests {
             force: true,
             ..request.clone()
         };
-        let retried = run_global_supervisor_boundary_review_core(&path, &forced, recovered);
+        let retried = run_global_supervisor_boundary_review_core(
+            &path,
+            &forced,
+            &crate::project_id(&forced.project_root),
+            recovered,
+        );
         assert_eq!(retried.status, "ready");
         let (store, _) = global_supervisor_review_store::load_store_soft(&path, 9_999);
         assert_eq!(store.boundary_reviews.len(), 1, "同键覆盖不追加");
@@ -1603,7 +1816,12 @@ mod tests {
             proposal_id: "prop-nope".to_string(),
             force: false,
         };
-        let out2 = run_global_supervisor_boundary_review_core(&path, &missing, recovered);
+        let out2 = run_global_supervisor_boundary_review_core(
+            &path,
+            &missing,
+            &crate::project_id(&missing.project_root),
+            recovered,
+        );
         assert_eq!(out2.status, "unavailable");
         assert!(out2.reason.unwrap_or_default().contains("没找到这份方案"));
         let (store2, _) = global_supervisor_review_store::load_store_soft(&path, 9_998);
@@ -1671,10 +1889,14 @@ mod tests {
             proposal_id: proposal.proposal_id.clone(),
             force: true,
         };
-        let outcome =
-            run_global_supervisor_boundary_review_core(&state_path, &request, |root, prompt| {
+        let outcome = run_global_supervisor_boundary_review_core(
+            &state_path,
+            &request,
+            &crate::project_id(&request.project_root),
+            |root, prompt| {
                 crate::codex_local_runner::readonly_codex_consult(root, prompt, Some(420_000))
-            });
+            },
+        );
         println!(
             "[B2_REAL] status={} reason={:?}",
             outcome.status, outcome.reason
@@ -1709,5 +1931,618 @@ mod tests {
             .any(|event| event.event_type == "global_supervisor_boundary_review_recorded"));
         let auth_after = fs::metadata(&auth_path).and_then(|m| m.modified()).ok();
         assert_eq!(auth_before, auth_after, ".codex 凭据不许被碰");
+    }
+
+    fn write_fixture_state_with_project_id(dir: &Path, project_id: &str) -> PathBuf {
+        let store = serde_json::json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "updated_at": "seed",
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [{"workflow_id": "wf-1"}],
+            "nodes": [
+                {"workflow_id": "wf-1", "node_id": "wf-1:node:codex-dev", "state": "completed"},
+                {"workflow_id": "wf-1", "node_id": "wf-1:node:task:aaa", "state": "completed"},
+                {"workflow_id": "wf-1", "node_id": "wf-1:node:task:bbb", "state": "completed"}
+            ],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [
+                {
+                    "event_id": "r1", "event_type": "worker_structured_report_recorded",
+                    "workflow_id": "wf-1", "work_item_id": "wi-1", "dispatch_id": "d-current-1", "created_at": "1500",
+                    "executed_what": "建了 index.html 小游戏", "changed_what": "/t/index.html",
+                    "acceptance_status": "reported_completed",
+                    "evidence_refs": ["文件存在且能打开"], "open_issues": []
+                },
+                {
+                    "event_id": "r2", "event_type": "worker_structured_report_recorded",
+                    "workflow_id": "wf-1", "work_item_id": "wi-2", "dispatch_id": "d-current-2", "created_at": "1800",
+                    "executed_what": "无法启动浏览器，未完成手动验收", "changed_what": "（无产出）",
+                    "acceptance_status": "needs_rework",
+                    "evidence_refs": [], "open_issues": ["浏览器起不来"]
+                }
+            ],
+            "capabilities": [],
+            "harness_resources": [],
+            "workflow_chain_runs": [{
+                "chain_run_id": "chain-1", "project_id": project_id, "workflow_id": "wf-1",
+                "state": "completed", "stop_requested": false,
+                "started_at": "1000", "ended_at": "2000",
+                "nodes": [
+                    {"node_id": "wf-1:node:codex-dev", "state": "completed", "dispatch_id": null, "message": null},
+                    {"node_id": "wf-1:node:task:aaa", "state": "completed", "dispatch_id": "d-current-1", "message": null},
+                    {"node_id": "wf-1:node:task:bbb", "state": "completed", "dispatch_id": "d-current-2", "message": null}
+                ]
+            }]
+        });
+        let path = dir.join("workflow-state.v0.json");
+        fs::write(&path, serde_json::to_string_pretty(&store).unwrap()).expect("write state");
+        path
+    }
+
+    fn write_proposal_fixture_with_project_id(
+        state_path: &Path,
+        project_id: &str,
+        proposal_id: &str,
+        user_goal: &str,
+        write_roots: &[&str],
+    ) {
+        let sidecar = crate::project_consultation_proposal_store::sidecar_path(state_path)
+            .expect("proposal sidecar path");
+        if let Some(parent) = sidecar.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let store = serde_json::json!({
+            "schema_version": "project_consultation_proposal_store.v1",
+            "revision": 1,
+            "proposals": [{
+                "proposal_id": proposal_id,
+                "schema_version": "project_consultation_proposal.v1",
+                "project_id": project_id,
+                "workflow_id": "wf-1",
+                "title": "加个暂停功能",
+                "user_goal": user_goal,
+                "goal_summary": "给游戏加暂停键",
+                "proposed_steps": ["建议你考虑加暂停", "可以研究一下键盘事件监听"],
+                "scope_draft": {
+                    "allowed_role_ids": [],
+                    "allowed_agent_ids": [],
+                    "allowed_read_roots": [],
+                    "allowed_write_roots": write_roots,
+                    "allowed_tools": [],
+                    "allowed_checks": [],
+                    "allowed_task_package_kinds": [],
+                    "stop_conditions": [],
+                    "max_worker_dispatches": null,
+                    "max_runtime_minutes": null
+                },
+                "risks": [],
+                "acceptance_criteria": ["打开游戏能按 P 键暂停"],
+                "status": "pending_user_confirmation",
+                "plan_authorization_id": null,
+                "created_by_role": "project_consultant",
+                "suggest_workflow": false,
+                "created_at_ms": 1000,
+                "updated_at_ms": 1000
+            }],
+            "decisions": [],
+            "audit_events": [],
+            "updated_at_ms": 1000,
+            "warnings": []
+        });
+        fs::write(&sidecar, serde_json::to_string_pretty(&store).unwrap())
+            .expect("write proposal sidecar");
+    }
+
+    fn write_review_sidecar(state_path: &Path, body: serde_json::Value) -> PathBuf {
+        let sidecar =
+            global_supervisor_review_store::sidecar_path(state_path).expect("review sidecar");
+        if let Some(parent) = sidecar.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        fs::write(&sidecar, serde_json::to_string_pretty(&body).unwrap()).expect("write review");
+        sidecar
+    }
+
+    fn write_mixed_owner_chain_state(
+        dir: &Path,
+        canonical: &str,
+        path_derived: &str,
+        foreign: &str,
+    ) -> PathBuf {
+        let store = serde_json::json!({
+            "schema_version": "workflow_state_v0",
+            "workflow_version": 1,
+            "updated_at": "seed",
+            "projects": [],
+            "agent_adapters": [],
+            "workflows": [{"workflow_id": "wf-1"}],
+            "nodes": [],
+            "edges": [],
+            "work_items": [],
+            "artifacts": [],
+            "reviews": [],
+            "audit_events": [
+                {
+                    "event_id": "path", "event_type": "worker_structured_report_recorded",
+                    "workflow_id": "wf-1", "work_item_id": "wi-path", "dispatch_id": "d-path", "created_at": "1500",
+                    "executed_what": "PATH_DERIVED_SIGNAL", "changed_what": "/t/path.txt",
+                    "acceptance_status": "reported_completed", "evidence_refs": [], "open_issues": []
+                },
+                {
+                    "event_id": "foreign", "event_type": "worker_structured_report_recorded",
+                    "workflow_id": "wf-1", "work_item_id": "wi-foreign", "dispatch_id": "d-foreign", "created_at": "1500",
+                    "executed_what": "FOREIGN_SIGNAL", "changed_what": "/t/foreign.txt",
+                    "acceptance_status": "reported_completed", "evidence_refs": [], "open_issues": []
+                },
+                {
+                    "event_id": "canonical", "event_type": "worker_structured_report_recorded",
+                    "workflow_id": "wf-1", "work_item_id": "wi-canonical", "dispatch_id": "d-canonical", "created_at": "1500",
+                    "executed_what": "CANONICAL_ONLY_SIGNAL", "changed_what": "/t/canonical.txt",
+                    "acceptance_status": "reported_completed", "evidence_refs": [], "open_issues": []
+                }
+            ],
+            "capabilities": [],
+            "harness_resources": [],
+            "workflow_chain_runs": [
+                {
+                    "chain_run_id": "chain-path", "project_id": path_derived, "workflow_id": "wf-1",
+                    "state": "failed", "stop_requested": false,
+                    "started_at": "1000", "ended_at": "2000",
+                    "nodes": [
+                        {"node_id": "wf-1:node:task:path", "state": "failed", "dispatch_id": "d-path", "message": null}
+                    ]
+                },
+                {
+                    "chain_run_id": "chain-foreign", "project_id": foreign, "workflow_id": "wf-1",
+                    "state": "stopped", "stop_requested": false,
+                    "started_at": "1000", "ended_at": "2000",
+                    "nodes": [
+                        {"node_id": "wf-1:node:task:foreign", "state": "stopped", "dispatch_id": "d-foreign", "message": null}
+                    ]
+                },
+                {
+                    "chain_run_id": "chain-canonical", "project_id": canonical, "workflow_id": "wf-1",
+                    "state": "completed", "stop_requested": false,
+                    "started_at": "1000", "ended_at": "2000",
+                    "nodes": [
+                        {"node_id": "wf-1:node:task:canonical", "state": "completed", "dispatch_id": "d-canonical", "message": null}
+                    ]
+                }
+            ]
+        });
+        let path = dir.join("workflow-state.v0.json");
+        fs::write(&path, serde_json::to_string_pretty(&store).unwrap()).expect("write mixed");
+        path
+    }
+
+    struct ResolveExactAliasStub {
+        missing_code: &'static str,
+    }
+
+    impl crate::m1_project_index::M1ProjectIndexReadPort for ResolveExactAliasStub {
+        fn resolve_canonical_project_id(
+            &self,
+            _claim: &str,
+        ) -> Result<
+            crate::m1_project_index::M1ProjectId,
+            crate::m1_project_index::M1ProjectIndexError,
+        > {
+            Err(crate::m1_project_index::M1ProjectIndexError::new(
+                self.missing_code,
+            ))
+        }
+
+        fn resolve_exact_alias(
+            &self,
+            alias: &str,
+        ) -> Result<
+            crate::m1_project_index::M1ProjectId,
+            crate::m1_project_index::M1ProjectIndexError,
+        > {
+            if alias.trim().is_empty() {
+                return Err(crate::m1_project_index::M1ProjectIndexError::new(
+                    "m1_alias_malformed",
+                ));
+            }
+            Err(crate::m1_project_index::M1ProjectIndexError::new(
+                self.missing_code,
+            ))
+        }
+
+        fn resolve_project_root_ref(
+            &self,
+            _project_root_ref: &crate::m1_project_index::M1ProjectRootRef,
+        ) -> Result<
+            crate::m1_project_index::M1ProjectId,
+            crate::m1_project_index::M1ProjectIndexError,
+        > {
+            Err(crate::m1_project_index::M1ProjectIndexError::new(
+                self.missing_code,
+            ))
+        }
+    }
+
+    #[test]
+    fn global_supervisor_canonical_chain_run_preferred_over_path_derived_and_foreign() {
+        let dir = tmp_dir("mixed-chain");
+        let root = "/tmp/m6p00-gs-mixed-chain";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa40";
+        let path_derived = crate::project_id(root);
+        let foreign = "project:ffffffff-ffff-4fff-8fff-ffffffffffff";
+        assert_ne!(canonical, path_derived.as_str());
+        let path = write_mixed_owner_chain_state(&dir, canonical, &path_derived, foreign);
+        let input = load_review_input(&path, canonical, "wf-1", "1000").expect("canonical run");
+        assert_eq!(input.chain_state, "completed");
+        assert_eq!(input.reports.len(), 1);
+        assert_eq!(input.reports[0].executed_what, "CANONICAL_ONLY_SIGNAL");
+        assert!(input
+            .reports
+            .iter()
+            .all(|report| report.executed_what != "PATH_DERIVED_SIGNAL"
+                && report.executed_what != "FOREIGN_SIGNAL"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_project_summary_path_derived_scope_cannot_read_canonical_summary() {
+        use crate::m5_orchestration_store::M5OrchestrationStore;
+        use crate::m5_project_summary::{
+            rebuild_project_summary, PersistentProjectSummaryPort, ProjectSummaryQueryPort,
+            QueryError, SummaryConsumer,
+        };
+
+        let root = "/tmp/m6p00-project-summary-canonical";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa46";
+        let path_derived = crate::project_id(root);
+        assert_ne!(canonical, path_derived.as_str());
+
+        let store = M5OrchestrationStore::open_in_memory().expect("in-memory M5 store");
+        rebuild_project_summary(&store, canonical, 2_000).expect("canonical summary rebuild");
+        let snapshot = || {
+            let connection = store.connection();
+            let count = connection
+                .query_row("SELECT COUNT(*) FROM m5_project_summaries", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .expect("summary row count");
+            let fields = connection
+                .query_row(
+                    "SELECT project_id, orchestration_id, schema_version, version, watermark_ms, \
+                            summary_hash, source_refs_json, fact_count, unverified_claim_count, \
+                            open_run_count, rebuilt_at_ms \
+                     FROM m5_project_summaries WHERE project_id=?1",
+                    [canonical],
+                    |row| {
+                        Ok(vec![
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, i64>(3)?.to_string(),
+                            row.get::<_, i64>(4)?.to_string(),
+                            row.get::<_, String>(5)?,
+                            row.get::<_, String>(6)?,
+                            row.get::<_, i64>(7)?.to_string(),
+                            row.get::<_, i64>(8)?.to_string(),
+                            row.get::<_, i64>(9)?.to_string(),
+                            row.get::<_, i64>(10)?.to_string(),
+                        ])
+                    },
+                )
+                .expect("canonical summary row");
+            (count, fields)
+        };
+        let before = snapshot();
+        let port = PersistentProjectSummaryPort::new(&store);
+        let path_scoped_consumer = SummaryConsumer {
+            role_session_id: "role-session:m6p00:path-derived".to_string(),
+            role: "global_supervisor".to_string(),
+            scope_project_id: path_derived,
+            expires_at_ms: 9_000,
+        };
+
+        let denied = port
+            .get_summary(canonical, &path_scoped_consumer, 3_000)
+            .expect_err("path-derived scope must not read canonical summary");
+        assert_eq!(
+            denied,
+            QueryError::InsufficientPermission("cross_project_summary_denied".to_string())
+        );
+        assert_eq!(snapshot(), before, "denied query must be exact zero-write");
+
+        let canonical_consumer = SummaryConsumer {
+            role_session_id: "role-session:m6p00:canonical".to_string(),
+            role: "global_supervisor".to_string(),
+            scope_project_id: canonical.to_string(),
+            expires_at_ms: 9_000,
+        };
+        let summary = port
+            .get_summary(canonical, &canonical_consumer, 3_000)
+            .expect("canonical scope may read canonical summary");
+        assert_eq!(summary.project_id, canonical);
+        assert_eq!(snapshot(), before, "successful query must remain read-only");
+    }
+
+    #[test]
+    fn global_supervisor_boundary_foreign_proposal_zero_consult_zero_write() {
+        let dir = tmp_dir("b2-foreign-proposal");
+        let path = write_fixture_state(&dir, "/p/root");
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa41";
+        let foreign = "project:dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+        write_proposal_fixture_with_project_id(&path, foreign, "prop-1", "帮我动手加暂停功能", &[]);
+        let sidecar = global_supervisor_review_store::sidecar_path(&path).expect("review sidecar");
+        let before = if sidecar.exists() {
+            fs::read(&sidecar).expect("before")
+        } else {
+            Vec::new()
+        };
+        let calls = Cell::new(0usize);
+        let consult = |_root: &str, _prompt: &str| {
+            calls.set(calls.get() + 1);
+            Ok(GOOD_BOUNDARY.to_string())
+        };
+        let request = RunGlobalSupervisorBoundaryReviewRequest {
+            project_root: "/p/root".to_string(),
+            proposal_id: "prop-1".to_string(),
+            force: false,
+        };
+        let outcome =
+            run_global_supervisor_boundary_review_core(&path, &request, canonical, consult);
+        assert_eq!(outcome.status, "unavailable");
+        assert!(
+            outcome
+                .reason
+                .clone()
+                .unwrap_or_default()
+                .contains("方案不属于当前项目"),
+            "{:?}",
+            outcome.reason
+        );
+        assert!(outcome.review.is_none(), "foreign proposal must not leak");
+        assert_eq!(calls.get(), 0, "zero consult");
+        let after = if sidecar.exists() {
+            fs::read(&sidecar).expect("after")
+        } else {
+            Vec::new()
+        };
+        assert_eq!(after, before, "review store exact zero write");
+        let (store, _) = global_supervisor_review_store::load_store_soft(&path, 9_000);
+        assert!(store.boundary_reviews.is_empty());
+        assert!(store.boundary_audit_events.is_empty());
+        assert_eq!(store.revision, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn global_supervisor_foreign_review_same_key_is_not_idempotent_hit() {
+        let dir = tmp_dir("b1-foreign-review");
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa42";
+        let foreign = "project:cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+        let path = write_fixture_state_with_project_id(&dir, canonical);
+        let sidecar = write_review_sidecar(
+            &path,
+            serde_json::json!({
+                "schema_version": "global_supervisor_review_store.v1",
+                "revision": 4,
+                "updated_at_ms": 1000,
+                "reviews": [{
+                    "review_id": "global-supervisor-review:wf-1:1000",
+                    "project_id": foreign,
+                    "workflow_id": "wf-1",
+                    "chain_started_at": "1000",
+                    "status": "ready",
+                    "overall": "pass",
+                    "summary": "FOREIGN_REVIEW_LEAK",
+                    "suggested_action": "none",
+                    "human_note": "",
+                    "tasks": [],
+                    "unavailable_reason": null,
+                    "model": GLOBAL_SUPERVISOR_MODEL_LABEL,
+                    "profile_version": GLOBAL_SUPERVISOR_PROFILE_VERSION,
+                    "created_at_ms": 1000,
+                    "updated_at_ms": 1000
+                }],
+                "audit_events": [{
+                    "event_id": "seed",
+                    "event_type": "global_supervisor_review_recorded",
+                    "workflow_id": "wf-1",
+                    "chain_started_at": "1000",
+                    "review_status": "ready",
+                    "actor_ref": "seed",
+                    "created_at_ms": 1000
+                }],
+                "boundary_reviews": [],
+                "boundary_audit_events": []
+            }),
+        );
+        let before = fs::read(&sidecar).expect("before");
+        let calls = Cell::new(0usize);
+        let consult = |_root: &str, _prompt: &str| {
+            calls.set(calls.get() + 1);
+            Ok(GOOD_REVIEW.to_string())
+        };
+        let request = RunGlobalSupervisorReviewRequest {
+            project_root: "/p/root".to_string(),
+            workflow_id: "wf-1".to_string(),
+            chain_started_at: "1000".to_string(),
+            force: false,
+        };
+        let outcome = run_global_supervisor_review_core(&path, &request, canonical, consult);
+        assert_eq!(outcome.status, "unavailable");
+        assert!(outcome.review.is_none(), "must not leak foreign review");
+        assert_eq!(calls.get(), 0);
+        assert_eq!(fs::read(&sidecar).expect("after"), before);
+        let (store, _) = global_supervisor_review_store::load_store_soft(&path, 9_000);
+        assert_eq!(store.revision, 4);
+        assert_eq!(store.reviews.len(), 1);
+        assert_eq!(store.reviews[0].project_id, foreign);
+        assert_eq!(store.reviews[0].summary, "FOREIGN_REVIEW_LEAK");
+        assert_eq!(store.audit_events.len(), 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn global_supervisor_boundary_foreign_review_same_key_is_not_idempotent_hit() {
+        let dir = tmp_dir("b2-foreign-review");
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa43";
+        let foreign = "project:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+        let path = write_fixture_state_with_project_id(&dir, canonical);
+        write_proposal_fixture_with_project_id(
+            &path,
+            canonical,
+            "prop-1",
+            "帮我动手加暂停功能",
+            &[],
+        );
+        let sidecar = write_review_sidecar(
+            &path,
+            serde_json::json!({
+                "schema_version": "global_supervisor_review_store.v1",
+                "revision": 2,
+                "updated_at_ms": 1000,
+                "reviews": [],
+                "audit_events": [],
+                "boundary_reviews": [{
+                    "review_id": "global-supervisor-boundary-review:prop-1",
+                    "project_id": foreign,
+                    "proposal_id": "prop-1",
+                    "status": "ready",
+                    "verdict": "looks_ok",
+                    "points": ["FOREIGN_BOUNDARY_LEAK"],
+                    "summary": "FOREIGN_BOUNDARY_LEAK",
+                    "unavailable_reason": null,
+                    "model": GLOBAL_SUPERVISOR_MODEL_LABEL,
+                    "profile_version": GLOBAL_SUPERVISOR_BOUNDARY_PROFILE_VERSION,
+                    "created_at_ms": 1000,
+                    "updated_at_ms": 1000
+                }],
+                "boundary_audit_events": [{
+                    "event_id": "seed-b2",
+                    "event_type": "global_supervisor_boundary_review_recorded",
+                    "proposal_id": "prop-1",
+                    "review_status": "ready",
+                    "actor_ref": "seed",
+                    "created_at_ms": 1000
+                }]
+            }),
+        );
+        let before = fs::read(&sidecar).expect("before");
+        let calls = Cell::new(0usize);
+        let consult = |_root: &str, _prompt: &str| {
+            calls.set(calls.get() + 1);
+            Ok(GOOD_BOUNDARY.to_string())
+        };
+        let request = RunGlobalSupervisorBoundaryReviewRequest {
+            project_root: "/p/root".to_string(),
+            proposal_id: "prop-1".to_string(),
+            force: false,
+        };
+        let outcome =
+            run_global_supervisor_boundary_review_core(&path, &request, canonical, consult);
+        assert_eq!(outcome.status, "unavailable");
+        assert!(outcome.review.is_none());
+        assert_eq!(calls.get(), 0);
+        assert_eq!(fs::read(&sidecar).expect("after"), before);
+        let (store, _) = global_supervisor_review_store::load_store_soft(&path, 9_000);
+        assert_eq!(store.revision, 2);
+        assert_eq!(store.boundary_reviews.len(), 1);
+        assert_eq!(store.boundary_reviews[0].project_id, foreign);
+        assert_eq!(store.boundary_audit_events.len(), 1);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn global_supervisor_canonical_b1_persists_canonical_project_id() {
+        let dir = tmp_dir("b1-canonical-persist");
+        let root = "/tmp/m6p00-gs-b1-canonical";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa44";
+        assert_ne!(canonical, crate::project_id(root).as_str());
+        let path = write_fixture_state_with_project_id(&dir, canonical);
+        let request = RunGlobalSupervisorReviewRequest {
+            project_root: root.to_string(),
+            workflow_id: "wf-1".to_string(),
+            chain_started_at: "1000".to_string(),
+            force: false,
+        };
+        let outcome =
+            run_global_supervisor_review_core(&path, &request, canonical, |_root, _prompt| {
+                Ok(GOOD_REVIEW.to_string())
+            });
+        assert_eq!(outcome.status, "ready", "{:?}", outcome.reason);
+        let review = outcome.review.expect("ready");
+        assert_eq!(review.project_id, canonical);
+        assert_ne!(review.project_id, crate::project_id(root));
+        let (store, _) = global_supervisor_review_store::load_store_soft(&path, 9_000);
+        assert_eq!(store.reviews.len(), 1);
+        assert_eq!(store.reviews[0].project_id, canonical);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn global_supervisor_canonical_b2_persists_canonical_project_id() {
+        let dir = tmp_dir("b2-canonical-persist");
+        let root = "/tmp/m6p00-gs-b2-canonical";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa45";
+        assert_ne!(canonical, crate::project_id(root).as_str());
+        let path = write_fixture_state_with_project_id(&dir, canonical);
+        write_proposal_fixture_with_project_id(
+            &path,
+            canonical,
+            "prop-1",
+            "帮我动手加暂停功能",
+            &[],
+        );
+        let request = RunGlobalSupervisorBoundaryReviewRequest {
+            project_root: root.to_string(),
+            proposal_id: "prop-1".to_string(),
+            force: false,
+        };
+        let outcome = run_global_supervisor_boundary_review_core(
+            &path,
+            &request,
+            canonical,
+            |_root, _prompt| Ok(GOOD_BOUNDARY.to_string()),
+        );
+        assert_eq!(outcome.status, "ready", "{:?}", outcome.reason);
+        let review = outcome.review.expect("ready");
+        assert_eq!(review.project_id, canonical);
+        assert_ne!(review.project_id, crate::project_id(root));
+        let (store, _) = global_supervisor_review_store::load_store_soft(&path, 9_000);
+        assert_eq!(store.boundary_reviews.len(), 1);
+        assert_eq!(store.boundary_reviews[0].project_id, canonical);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn global_supervisor_official_resolve_unavailable_and_missing_alias() {
+        let missing = resolve_global_supervisor_canonical_project_id(None, "/tmp/any-root");
+        assert_eq!(
+            missing.unwrap_err(),
+            crate::m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE
+        );
+        let stub = ResolveExactAliasStub {
+            missing_code: "m1_alias_unknown",
+        };
+        let unknown = resolve_global_supervisor_canonical_project_id(Some(&stub), "/tmp/any-root");
+        assert_eq!(unknown.unwrap_err(), "m1_alias_unknown");
+        let empty = resolve_global_supervisor_canonical_project_id(Some(&stub), "");
+        assert_eq!(empty.unwrap_err(), "m1_alias_malformed");
+    }
+
+    #[test]
+    fn global_supervisor_production_does_not_mint_path_derived_project_id() {
+        let source = include_str!("global_supervisor_agent.rs");
+        let production_end = source.find("#[cfg(test)]\nmod tests").expect("test module");
+        let production = &source[..production_end];
+        assert!(production.contains("resolve_global_supervisor_canonical_project_id"));
+        assert!(production.contains("m1_project_index_read_port"));
+        assert!(production.contains("resolve_exact_alias"));
+        assert!(production.contains("canonical_project_id"));
+        assert!(!production.contains("crate::project_id(project_root)"));
+        assert!(!production.contains("crate::project_id(&request.project_root)"));
     }
 }

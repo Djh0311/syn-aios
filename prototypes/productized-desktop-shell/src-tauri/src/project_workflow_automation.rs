@@ -1,18 +1,19 @@
 use serde_json::{json, Value};
+#[cfg(test)]
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
 use crate::{
     array_mut, backup_workflow_state_file, codex_local_runner, default_workflow_id, find_work_item,
-    i64_value, memory_capture_bus, node_exists, optional_string_from, project_id,
+    i64_value, memory_capture_bus, node_exists, optional_string_from,
     read_workflow_state_value, real_execution_command,
-    record_project_director_process_fact_decision_at, record_worker_structured_report_at,
-    stable_id, utils::hash::sha256_hex, validate_workflow_state,
-    workflow_audit::audit_event_identity, workflow_exists, write_m5b_batch1_workflow_state,
-    CaptureMemoryEventInput, CodexControlCommandInput, MemoryCaptureSourceRef, MemoryScope,
-    ObservationSourceRef, PrepareRealExecutionProductCommandInput,
-    PreviewRealExecutionProductCommandInput, ProcessFactCandidate,
-    ProjectDirectorProcessFactDecisionInput, ProjectWorkflowAutomationInput,
+    record_project_director_process_fact_decision_with_canonical_project_id_at,
+    record_worker_structured_report_at, stable_id, utils::hash::sha256_hex,
+    validate_workflow_state, workflow_audit::audit_event_identity, workflow_exists,
+    write_m5b_batch1_workflow_state, CaptureMemoryEventInput, CodexControlCommandInput,
+    MemoryCaptureSourceRef, MemoryScope, ObservationSourceRef,
+    PrepareRealExecutionProductCommandInput, PreviewRealExecutionProductCommandInput,
+    ProcessFactCandidate, ProjectDirectorProcessFactDecisionInput, ProjectWorkflowAutomationInput,
     ProjectWorkflowAutomationJ2BB1Input, ProjectWorkflowAutomationJ2BB1Output,
     ProjectWorkflowAutomationJ2BB2Input, ProjectWorkflowAutomationJ2BB2Output,
     ProjectWorkflowAutomationK3BInput, ProjectWorkflowAutomationK3BOutput,
@@ -22,6 +23,9 @@ use crate::{
     RunRealExecutionProductCommandNewSessionPhaseBInput, RunRealExecutionProductCommandPhaseAInput,
     RunRealExecutionProductCommandPhaseBInput, WorkerStructuredReportInput,
 };
+
+#[cfg(test)]
+use crate::project_id;
 
 const J2_SCHEMA: &str = "project_workflow_automation.v1";
 const J2_EVENT_TYPE: &str = "project_workflow_automation_phase_a_recorded";
@@ -106,18 +110,21 @@ const K3_B_B2_READBACK_MARKER: &str = "K3_B2_ISOLATED_WORKFLOW_WRITE_OK_2026_06_
 pub(crate) fn run_project_workflow_automation_phase_a_at(
     workflow_state_path: &Path,
     input: &ProjectWorkflowAutomationInput,
+    canonical_project_id: &str,
     timestamp: &str,
     write_id: &str,
 ) -> Result<ProjectWorkflowAutomationResult, String> {
     validate_input(input)?;
+    if let Some(claim) = input.project_id.as_deref() {
+        if claim != canonical_project_id {
+            return Err("project_workflow_automation_project_id_mismatch".to_string());
+        }
+    }
     let workflow_id = input
         .workflow_id
         .clone()
         .unwrap_or_else(|| default_workflow_id(&input.project_root));
-    let project_id_value = input
-        .project_id
-        .clone()
-        .unwrap_or_else(|| project_id(&input.project_root));
+    let project_id_value = canonical_project_id.to_string();
     let mut value = read_workflow_state_value(workflow_state_path)?;
     if let Some(expected) = input.expected_workflow_revision {
         let current = i64_value(&value, "workflow_version").unwrap_or_default();
@@ -404,8 +411,11 @@ pub(crate) fn run_project_workflow_automation_phase_a_at(
         &phase_a,
         timestamp,
     );
-    let process_fact =
-        record_project_director_process_fact_decision_at(workflow_state_path, &process_fact_input)?;
+    let process_fact = record_project_director_process_fact_decision_with_canonical_project_id_at(
+        workflow_state_path,
+        &process_fact_input,
+        &project_id_value,
+    )?;
     apply_process_fact_to_plan(&mut plan, &process_fact);
     let capture_result = capture_process_fact_event(
         workflow_state_path,
@@ -3678,6 +3688,7 @@ mod tests {
         let result = run_project_workflow_automation_phase_a_at(
             &path,
             &fixture_input(&project.project_root),
+            &project_id(&project.project_root),
             "2026-06-09T00:00:00Z",
             "write-j2a-test",
         )
@@ -3767,6 +3778,7 @@ mod tests {
         let err = run_project_workflow_automation_phase_a_at(
             &path,
             &input,
+            &project_id(&project.project_root),
             "2026-06-09T00:00:00Z",
             "write-j2a-non-user",
         )
@@ -3793,6 +3805,7 @@ mod tests {
         run_project_workflow_automation_phase_a_at(
             &path,
             &input,
+            &project_id(&project.project_root),
             "2026-06-09T00:00:00Z",
             "write-j2a-duplicate-first",
         )
@@ -3801,6 +3814,7 @@ mod tests {
         let duplicate = run_project_workflow_automation_phase_a_at(
             &path,
             &input,
+            &project_id(&project.project_root),
             "2026-06-09T00:01:00Z",
             "write-j2a-duplicate-second",
         )
@@ -3850,6 +3864,7 @@ mod tests {
         let result = run_project_workflow_automation_phase_a_at(
             &path,
             &fixture_input("/tmp/j2a-missing-workflow"),
+            &project_id("/tmp/j2a-missing-workflow"),
             "2026-06-09T00:00:00Z",
             "write-j2a-missing-workflow",
         )
@@ -3869,6 +3884,116 @@ mod tests {
         assert_eq!(result.read_model.blocked_count, 5);
 
         let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_project_workflow_phase_a_caller_claim_mismatch_zero_write() {
+        let dir = temp_path("claim-mismatch");
+        fs::create_dir_all(&dir).expect("temp dir should create");
+        let path = dir.join("workflow-state.v0.json");
+        let project = fixture_project("/tmp/m6p00-phase-a-mismatch");
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should bootstrap");
+        let before_state = fs::read(&path).expect("state before");
+        let mut input = fixture_input(&project.project_root);
+        input.project_id = Some("project:ffffffff-ffff-4fff-8fff-ffffffffffff".to_string());
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa50";
+        let error = run_project_workflow_automation_phase_a_at(
+            &path,
+            &input,
+            canonical,
+            "2026-08-19T00:00:00Z",
+            "write-m6p00-phase-a-mismatch",
+        )
+        .expect_err("caller claim must not override canonical");
+        assert_eq!(error, "project_workflow_automation_project_id_mismatch");
+        assert_eq!(fs::read(&path).expect("state after"), before_state);
+        assert!(
+            !observation_store::sidecar_path(&path)
+                .expect("observation sidecar path")
+                .exists(),
+            "claim mismatch must not write observation"
+        );
+        assert!(
+            !memory_capture_bus::sidecar_path(&path)
+                .expect("capture sidecar path")
+                .exists(),
+            "claim mismatch must not write capture"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_project_workflow_phase_a_persists_canonical_project_id() {
+        let dir = temp_path("canonical-persist");
+        fs::create_dir_all(&dir).expect("temp dir should create");
+        let path = dir.join("workflow-state.v0.json");
+        let root = "/tmp/m6p00-phase-a-canonical";
+        let project = fixture_project(root);
+        bootstrap_project_workflow_at(&path, &project).expect("workflow should bootstrap");
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa51";
+        assert_ne!(canonical, project_id(root).as_str());
+        let result = run_project_workflow_automation_phase_a_at(
+            &path,
+            &fixture_input(root),
+            canonical,
+            "2026-08-19T00:00:00Z",
+            "write-m6p00-phase-a-canonical",
+        )
+        .expect("canonical Phase-A should write");
+        assert_eq!(result.status, "phase_a_closed_loop_recorded");
+        assert_eq!(result.plan.project_id, canonical);
+        let capture_store = memory_capture_bus::load_store(&path, "2026-08-19T00:00:00Z")
+            .expect("capture store should load");
+        assert_eq!(capture_store.project_id.as_deref(), Some(canonical));
+        assert!(capture_store
+            .events
+            .iter()
+            .all(|event| event.project_id.as_deref() == Some(canonical)));
+        let observation_store = crate::observation_store::load_store(&path, "2026-08-19T00:00:00Z")
+            .expect("observation store should load");
+        assert!(!observation_store.observations.is_empty());
+        assert!(observation_store.observations.iter().all(|observation| {
+            observation.project_id.as_deref() == Some(canonical)
+                && observation.scope.project_id.as_deref() == Some(canonical)
+                && observation.source_refs.iter().all(|source| {
+                    source
+                        .project_id
+                        .as_deref()
+                        .is_none_or(|owner| owner == canonical)
+                })
+        }));
+        let workflow_state = read_workflow_state_value(&path).expect("workflow state should load");
+        assert!(workflow_state["reviews"]
+            .as_array()
+            .expect("reviews")
+            .iter()
+            .filter(|review| {
+                optional_string_from(review, "reviewer_role").as_deref() == Some("project_director")
+            })
+            .all(|review| {
+                optional_string_from(review, "project_id").as_deref() == Some(canonical)
+            }));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_project_workflow_phase_a_production_does_not_fallback_to_path_derived() {
+        let source = include_str!("project_workflow_automation.rs");
+        let start = source
+            .find("pub(crate) fn run_project_workflow_automation_phase_a_at(")
+            .expect("phase-a core");
+        let rest = &source[start..];
+        let end = rest
+            .find("\npub(crate) fn run_project_workflow_automation_j2_b_b1_at(")
+            .expect("next production fn");
+        let production = &rest[..end];
+        assert!(production.contains("canonical_project_id"));
+        assert!(production.contains(
+            "record_project_director_process_fact_decision_with_canonical_project_id_at"
+        ));
+        assert!(production.contains("project_workflow_automation_project_id_mismatch"));
+        assert!(!production.contains("unwrap_or_else(|| project_id(&input.project_root))"));
+        assert!(!production.contains("project_id(&input.project_root)"));
     }
 
     #[test]

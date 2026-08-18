@@ -82,6 +82,32 @@ fn ensure_valid_dispatch_state(value: &Value) -> Result<(), String> {
     Ok(())
 }
 
+fn dispatch_result_from_state_with_canonical_project_id(
+    path: &Path,
+    backup_path: Option<PathBuf>,
+    audit_event_id: &str,
+    dispatch_id: &str,
+    canonical_project_id: &str,
+    message: &str,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    let snapshot = read_workflow_state_snapshot(path)?;
+    let value = read_workflow_state_value(path)?;
+    let dispatch_index =
+        canonical_dispatch_record_index(&value, dispatch_id, canonical_project_id)?
+            .ok_or_else(|| "写入 canonical 派发记录后重新读取失败".to_string())?;
+    let dispatch =
+        parse_workflow_node_dispatch_record(&value["workflow_node_dispatches"][dispatch_index])?;
+    Ok(WorkflowNodeDispatchResult {
+        message: message.to_string(),
+        path: path.display().to_string(),
+        backup_path: backup_path.map(|path| path.display().to_string()),
+        audit_event_id: audit_event_id.to_string(),
+        product_command_boundary: legacy_product_command_boundary("workflow_node_dispatch_result"),
+        dispatch,
+        snapshot,
+    })
+}
+
 fn validate_user_reviewed_instruction(
     instruction: &UserReviewedInstructionInput,
 ) -> Result<(), String> {
@@ -405,11 +431,12 @@ fn write_prepared_dispatch(
     }));
     value["updated_at"] = Value::String(timestamp);
     write_validated_workflow_state(path, &value)?;
-    dispatch_result_from_state(
+    dispatch_result_from_state_with_canonical_project_id(
         path,
         Some(backup),
         &audit_event_id,
         &dispatch_id,
+        &context.project_id,
         "已准备节点派发。",
     )
 }
@@ -492,11 +519,12 @@ fn write_prepared_dispatch_db_primary(
         || {
             let backup = backup_workflow_state_file(path, &timestamp)?;
             write_validated_workflow_state(path, &value)?;
-            dispatch_result_from_state(
+            dispatch_result_from_state_with_canonical_project_id(
                 path,
                 Some(backup),
                 &audit_event_id,
                 &dispatch_id,
+                &context.project_id,
                 "已准备节点派发。",
             )
         },
@@ -618,12 +646,13 @@ fn validate_current_execution_grant_binding(
     if context.plan_authorization_id.is_none() {
         return Ok(());
     }
-    let binding_index = workflow_node_session_binding_index(
+    let binding_index = canonical_binding_record_index(
         value,
         &context.workflow_id,
         &context.node_id,
         Some(&context.work_item_id),
-    )
+        &context.project_id,
+    )?
     .ok_or_else(|| "execution_grant_exact_work_item_binding_required".to_string())?;
     let binding = value
         .get("workflow_node_session_bindings")
@@ -667,8 +696,10 @@ fn reserve_prepared_dispatch_in_value(
             dispatches
                 .iter()
                 .filter(|candidate| {
-                    optional_string_from(candidate, "plan_authorization_id").as_deref()
-                        == Some(authorization_id)
+                    optional_string_from(candidate, "project_id").as_deref()
+                        == Some(context.project_id.as_str())
+                        && optional_string_from(candidate, "plan_authorization_id").as_deref()
+                            == Some(authorization_id)
                         && candidate
                             .get("execution_grant")
                             .is_some_and(|execution_grant| !execution_grant.is_null())
@@ -679,12 +710,12 @@ fn reserve_prepared_dispatch_in_value(
     if i64::try_from(reserved_count).unwrap_or(i64::MAX) >= max_dispatches {
         return Err("execution_grant_worker_quota_exhausted".to_string());
     }
+    let prepared_index =
+        canonical_dispatch_record_index(value, prepared_dispatch_id, &context.project_id)?
+            .ok_or_else(|| "execution_grant_prepared_dispatch_not_found".to_string())?;
     let dispatches = array_mut(value, "workflow_node_dispatches")?;
     let prepared = dispatches
-        .iter_mut()
-        .find(|candidate| {
-            optional_string_from(candidate, "dispatch_id").as_deref() == Some(prepared_dispatch_id)
-        })
+        .get_mut(prepared_index)
         .ok_or_else(|| "execution_grant_prepared_dispatch_not_found".to_string())?;
     if optional_string_from(prepared, "state").as_deref() != Some("prepared")
         || optional_string_from(prepared, "plan_authorization_id").as_deref()
@@ -756,8 +787,13 @@ fn write_started_dispatch(
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
     ensure_workflow_node_dispatches_array(&mut value)?;
-    let work_item_index = find_work_item_index(&value, &context.workflow_id, &context.work_item_id)
-        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法执行节点派发".to_string())?;
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &context.workflow_id,
+        &context.work_item_id,
+        &context.project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法执行节点派发".to_string())?;
     let before_state = optional_string_from(&value["work_items"][work_item_index], "state")
         .unwrap_or_else(|| "unknown".to_string());
     control_core::validate_dispatch_start(&before_state)?;
@@ -848,7 +884,14 @@ fn write_started_dispatch(
         work_item["current_node_id"] = Value::String(context.node_id.clone());
         work_item["updated_at"] = Value::String(timestamp.clone());
     }
-    update_node_state_for_id(&mut value, &context.node_id, "running", &timestamp)?;
+    update_canonical_node_state_for_id(
+        &mut value,
+        &context.workflow_id,
+        &context.node_id,
+        &context.project_id,
+        "running",
+        &timestamp,
+    )?;
     let (actor_ref, permission_level, reason) = dispatch_started_audit_actor_and_reason(
         context.plan_authorization_id.as_deref(),
         &context.prompt_kind,
@@ -868,10 +911,10 @@ fn write_started_dispatch(
     value["updated_at"] = Value::String(timestamp);
     write_validated_workflow_state(path, &value)?;
     let updated = read_workflow_state_value(path)?;
-    parse_workflow_node_dispatch_record(
-        find_workflow_node_dispatch(&updated, &dispatch_id)
-            .ok_or_else(|| "写入 running 派发记录后校验失败".to_string())?,
-    )
+    let dispatch_index =
+        canonical_dispatch_record_index(&updated, &dispatch_id, &context.project_id)?
+            .ok_or_else(|| "写入 running 派发记录后校验失败".to_string())?;
+    parse_workflow_node_dispatch_record(&updated["workflow_node_dispatches"][dispatch_index])
 }
 
 fn write_started_dispatch_db_primary(
@@ -883,8 +926,13 @@ fn write_started_dispatch_db_primary(
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
     ensure_workflow_node_dispatches_array(&mut value)?;
-    let work_item_index = find_work_item_index(&value, &context.workflow_id, &context.work_item_id)
-        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法执行节点派发".to_string())?;
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &context.workflow_id,
+        &context.work_item_id,
+        &context.project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法执行节点派发".to_string())?;
     let before_state = optional_string_from(&value["work_items"][work_item_index], "state")
         .unwrap_or_else(|| "unknown".to_string());
     control_core::validate_dispatch_start(&before_state)?;
@@ -969,7 +1017,14 @@ fn write_started_dispatch_db_primary(
         work_item["current_node_id"] = Value::String(context.node_id.clone());
         work_item["updated_at"] = Value::String(timestamp.clone());
     }
-    update_node_state_for_id(&mut value, &context.node_id, "running", &timestamp)?;
+    update_canonical_node_state_for_id(
+        &mut value,
+        &context.workflow_id,
+        &context.node_id,
+        &context.project_id,
+        "running",
+        &timestamp,
+    )?;
     let audit_event_id = crate::workflow_audit::audit_event_identity(
         "workflow-node-dispatch-started",
         &dispatch_id,
@@ -999,14 +1054,17 @@ fn write_started_dispatch_db_primary(
         .and_then(|items| items.get(work_item_index))
         .cloned()
         .ok_or_else(|| "DB 主写找不到更新后的 work item".to_string())?;
+    let node_after_index = canonical_node_record_index(
+        &value,
+        &context.workflow_id,
+        &context.node_id,
+        &context.project_id,
+    )?
+    .ok_or_else(|| "DB 主写找不到更新后的 canonical workflow node".to_string())?;
     let node_after = value
         .get("nodes")
         .and_then(Value::as_array)
-        .and_then(|nodes| {
-            nodes.iter().find(|node| {
-                optional_string_from(node, "node_id").as_deref() == Some(context.node_id.as_str())
-            })
-        })
+        .and_then(|nodes| nodes.get(node_after_index))
         .cloned()
         .ok_or_else(|| "DB 主写找不到更新后的 workflow node".to_string())?;
     let repository_audit = crate::workbench_sqlite_repository::RepositoryAuditEntry {
@@ -1069,9 +1127,11 @@ fn write_started_dispatch_db_primary(
             let _backup = backup_workflow_state_file(path, &timestamp)?;
             write_validated_workflow_state(path, &value)?;
             let updated = read_workflow_state_value(path)?;
+            let dispatch_index =
+                canonical_dispatch_record_index(&updated, &dispatch_id, &context.project_id)?
+                    .ok_or_else(|| "写入 running 派发记录后校验失败".to_string())?;
             parse_workflow_node_dispatch_record(
-                find_workflow_node_dispatch(&updated, &dispatch_id)
-                    .ok_or_else(|| "写入 running 派发记录后校验失败".to_string())?,
+                &updated["workflow_node_dispatches"][dispatch_index],
             )
         },
     )
@@ -1080,6 +1140,7 @@ fn write_started_dispatch_db_primary(
 fn write_completed_dispatch(
     path: &Path,
     dispatch_id: &str,
+    canonical_project_id: &str,
     exit_code: i32,
     stats: CodexDispatchReadbackStats,
 ) -> Result<WorkflowNodeDispatchResult, String> {
@@ -1090,9 +1151,9 @@ fn write_completed_dispatch(
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
-    let backup = backup_workflow_state_file(path, &timestamp)?;
-    let dispatch_index = find_workflow_node_dispatch_index(&value, dispatch_id)
-        .ok_or_else(|| "找不到 running 节点派发记录；无法完成派发".to_string())?;
+    let dispatch_index =
+        canonical_dispatch_record_index(&value, dispatch_id, canonical_project_id)?
+            .ok_or_else(|| "找不到 running 节点派发记录；无法完成派发".to_string())?;
     let work_item_id = optional_string_from(
         &value["workflow_node_dispatches"][dispatch_index],
         "work_item_id",
@@ -1126,8 +1187,13 @@ fn write_completed_dispatch(
         .is_some_and(|grant_id| !grant_id.trim().is_empty());
     let next_dispatch_state = "completed";
     let next_work_item_state = "ready_for_review";
-    let work_item_index = find_work_item_index(&value, &workflow_id, &work_item_id)
-        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法完成节点派发".to_string())?;
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &workflow_id,
+        &work_item_id,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法完成节点派发".to_string())?;
     let work_item_state = optional_string_from(&value["work_items"][work_item_index], "state")
         .unwrap_or_else(|| "unknown".to_string());
     control_core::validate_dispatch_completion_transition(&work_item_state, next_work_item_state)?;
@@ -1144,6 +1210,7 @@ fn write_completed_dispatch(
         .as_deref()
         .and_then(|path| fs::read_to_string(path).ok())
         .map(|text| compact_last_message_summary(&text));
+    let backup = backup_workflow_state_file(path, &timestamp)?;
 
     {
         let dispatches = array_mut(&mut value, "workflow_node_dispatches")?;
@@ -1173,15 +1240,19 @@ fn write_completed_dispatch(
         work_item["updated_at"] = Value::String(timestamp.clone());
     }
     let review_node_id = workflow_node_for_work_item_state(&workflow_id, next_work_item_state);
-    update_node_state_for_id(
+    update_canonical_node_state_for_id(
         &mut value,
+        &workflow_id,
         &review_node_id,
+        canonical_project_id,
         next_work_item_state,
         &timestamp,
     )?;
-    update_node_state_for_id(
+    update_canonical_node_state_for_id(
         &mut value,
+        &workflow_id,
         &dispatch_node_id,
+        canonical_project_id,
         next_work_item_state,
         &timestamp,
     )?;
@@ -1259,6 +1330,8 @@ fn write_completed_dispatch(
                 .find(|candidate| {
                     optional_string_from(candidate, "attempt_id").as_deref()
                         == Some(canonical_attempt_id.as_str())
+                        && optional_string_from(candidate, "project_id").as_deref()
+                            == Some(canonical_project_id)
                 })
                 .ok_or_else(|| "execution_grant_attempt_ledger_missing".to_string())?;
             if optional_string_from(attempt, "state").as_deref() != Some("running") {
@@ -1287,11 +1360,12 @@ fn write_completed_dispatch(
     }
     value["updated_at"] = Value::String(timestamp);
     write_m5b_batch1_workflow_state(path, "workflow_node_dispatch_completed", &value)?;
-    dispatch_result_from_state(
+    dispatch_result_from_state_with_canonical_project_id(
         path,
         Some(backup),
         &audit_event_id,
         dispatch_id,
+        canonical_project_id,
         "节点派发完成，工作项已进入待回收；worker report 如有仅能由独立 claim command 入账。",
     )
 }
@@ -1299,6 +1373,7 @@ fn write_completed_dispatch(
 fn write_failed_dispatch(
     path: &Path,
     dispatch_id: &str,
+    canonical_project_id: &str,
     exit_code: i32,
     warnings: Vec<String>,
 ) -> Result<WorkflowNodeDispatchResult, String> {
@@ -1309,9 +1384,9 @@ fn write_failed_dispatch(
     let timestamp = unix_timestamp_string();
     let timestamp_ms = unix_timestamp_ms();
     let mut value = read_workflow_state_value(path)?;
-    let backup = backup_workflow_state_file(path, &timestamp)?;
-    let dispatch_index = find_workflow_node_dispatch_index(&value, dispatch_id)
-        .ok_or_else(|| "找不到 running 节点派发记录；无法标记失败".to_string())?;
+    let dispatch_index =
+        canonical_dispatch_record_index(&value, dispatch_id, canonical_project_id)?
+            .ok_or_else(|| "找不到 running 节点派发记录；无法标记失败".to_string())?;
     let work_item_id = optional_string_from(
         &value["workflow_node_dispatches"][dispatch_index],
         "work_item_id",
@@ -1335,8 +1410,13 @@ fn write_failed_dispatch(
             "节点派发记录不是 running，控制核心已拒绝标记失败：{dispatch_state}"
         ));
     }
-    let work_item_index = find_work_item_index(&value, &workflow_id, &work_item_id)
-        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法标记失败".to_string())?;
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &workflow_id,
+        &work_item_id,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法标记失败".to_string())?;
     let prompt_kind = optional_string_from(
         &value["workflow_node_dispatches"][dispatch_index],
         "prompt_kind",
@@ -1364,6 +1444,7 @@ fn write_failed_dispatch(
     } else {
         warnings.join(", ")
     };
+    let backup = backup_workflow_state_file(path, &timestamp)?;
     // A grant-owned dispatch already created one canonical running attempt at
     // reservation time.  A failed worker result must close that exact attempt;
     // creating a second `attempt:<dispatch>:timestamp` would leave the
@@ -1395,7 +1476,14 @@ fn write_failed_dispatch(
         work_item["current_node_id"] = Value::String(dispatch_node_id.clone());
         work_item["updated_at"] = Value::String(timestamp.clone());
     }
-    update_node_state_for_id(&mut value, &dispatch_node_id, attempt_state, &timestamp)?;
+    update_canonical_node_state_for_id(
+        &mut value,
+        &workflow_id,
+        &dispatch_node_id,
+        canonical_project_id,
+        attempt_state,
+        &timestamp,
+    )?;
     if let Some(canonical_attempt_id) = canonical_attempt_id.as_deref() {
         let attempts = ensure_array_mut(&mut value, "execution_attempts")?;
         let attempt = attempts
@@ -1403,6 +1491,8 @@ fn write_failed_dispatch(
             .find(|candidate| {
                 optional_string_from(candidate, "attempt_id").as_deref()
                     == Some(canonical_attempt_id)
+                    && optional_string_from(candidate, "project_id").as_deref()
+                        == Some(canonical_project_id)
             })
             .ok_or_else(|| "execution_grant_attempt_ledger_missing".to_string())?;
         if optional_string_from(attempt, "dispatch_id").as_deref() != Some(dispatch_id)
@@ -1482,11 +1572,12 @@ fn write_failed_dispatch(
     }));
     value["updated_at"] = Value::String(timestamp);
     write_m5b_batch1_workflow_state(path, "workflow_node_dispatch_failed", &value)?;
-    dispatch_result_from_state(
+    dispatch_result_from_state_with_canonical_project_id(
         path,
         Some(backup),
         &audit_event_id,
         dispatch_id,
+        canonical_project_id,
         "节点派发失败，已保留审计记录。",
     )
 }
@@ -1552,6 +1643,20 @@ fn record_workflow_dispatch_director_review_at(
     path: &Path,
     request: &WorkflowDispatchDirectorReviewRequest,
 ) -> Result<WorkflowStateMutationResult, String> {
+    // Guarded legacy/test callers retain path-derived fixtures.  Formal
+    // commands use the canonical variant below.
+    record_workflow_dispatch_director_review_with_canonical_project_id_at(
+        path,
+        request,
+        &project_id(&request.project_root),
+    )
+}
+
+fn record_workflow_dispatch_director_review_with_canonical_project_id_at(
+    path: &Path,
+    request: &WorkflowDispatchDirectorReviewRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowStateMutationResult, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法记录总指导回收意见".to_string());
     }
@@ -1572,15 +1677,31 @@ fn record_workflow_dispatch_director_review_at(
     }
 
     let workflow_id = default_workflow_id(&request.project_root);
-    if !workflow_exists(&value, &workflow_id) {
+    if canonical_workflow_record_index(&value, &workflow_id, canonical_project_id)?.is_none() {
         return Err("当前项目还没有本地 workflow；无法记录总指导回收意见".to_string());
     }
-    let work_item = find_work_item(&value, &workflow_id, &request.work_item_id)
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &workflow_id,
+        &request.work_item_id,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法记录总指导回收意见".to_string())?;
+    let work_item = value
+        .get("work_items")
+        .and_then(Value::as_array)
+        .and_then(|items| items.get(work_item_index))
         .ok_or_else(|| "当前 workflow 下找不到该 work item；无法记录总指导回收意见".to_string())?;
     let work_item_state =
         optional_string_from(work_item, "state").unwrap_or_else(|| "unknown".to_string());
     control_core::validate_director_review_work_item_state(&work_item_state)?;
-    let dispatch = find_workflow_node_dispatch(&value, &request.dispatch_id)
+    let dispatch_index =
+        canonical_dispatch_record_index(&value, &request.dispatch_id, canonical_project_id)?
+            .ok_or_else(|| "找不到该节点派发记录；无法记录总指导回收意见".to_string())?;
+    let dispatch = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .and_then(|dispatches| dispatches.get(dispatch_index))
         .ok_or_else(|| "找不到该节点派发记录；无法记录总指导回收意见".to_string())?;
     if optional_string_from(dispatch, "workflow_id").as_deref() != Some(workflow_id.as_str())
         || optional_string_from(dispatch, "work_item_id").as_deref()
@@ -1606,7 +1727,7 @@ fn record_workflow_dispatch_director_review_at(
     );
     let review = json!({
       "review_id": review_id,
-      "project_id": project_id(&request.project_root),
+      "project_id": canonical_project_id,
       "workflow_id": workflow_id,
       "work_item_id": request.work_item_id,
       "dispatch_id": request.dispatch_id,
@@ -1755,6 +1876,20 @@ fn prepare_offline_role_dispatch_at(
     path: &Path,
     request: &OfflineRoleDispatchRequest,
 ) -> Result<WorkflowNodeDispatchResult, String> {
+    // Guarded legacy/test callers retain path-derived fixtures.  Formal
+    // commands use the canonical variant below.
+    prepare_offline_role_dispatch_with_canonical_project_id_at(
+        path,
+        request,
+        &project_id(&request.project_root),
+    )
+}
+
+fn prepare_offline_role_dispatch_with_canonical_project_id_at(
+    path: &Path,
+    request: &OfflineRoleDispatchRequest,
+    canonical_project_id: &str,
+) -> Result<WorkflowNodeDispatchResult, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法记录离线角色派发".to_string());
     }
@@ -1771,25 +1906,58 @@ fn prepare_offline_role_dispatch_at(
         ));
     }
     let workflow_id = default_workflow_id(&request.project_root);
-    if !workflow_exists(&value, &workflow_id) {
+    if canonical_workflow_record_index(&value, &workflow_id, canonical_project_id)?.is_none() {
         return Err("当前项目还没有本地 workflow；无法记录离线角色派发".to_string());
     }
     let node_id = offline_role_node_id(&workflow_id, &request.target_role_id)?;
-    if !node_exists(&value, &workflow_id, &node_id) {
+    if canonical_node_record_index(&value, &workflow_id, &node_id, canonical_project_id)?.is_none()
+    {
         return Err("当前 workflow 下找不到目标角色 node；无法记录离线角色派发".to_string());
     }
-    let work_item = find_work_item(&value, &workflow_id, &request.work_item_id)
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &workflow_id,
+        &request.work_item_id,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法记录离线角色派发".to_string())?;
+    let work_item = value
+        .get("work_items")
+        .and_then(Value::as_array)
+        .and_then(|items| items.get(work_item_index))
         .ok_or_else(|| "当前 workflow 下找不到该 work item；无法记录离线角色派发".to_string())?;
     let work_item_state =
         optional_string_from(work_item, "state").unwrap_or_else(|| "unknown".to_string());
     control_core::validate_dispatch_prepare(&work_item_state)?;
-    if has_pending_offline_role_dispatch(&value, &workflow_id, &request.work_item_id) {
+    let memory_artifact_index = canonical_task_package_artifact_record_index(
+        &value,
+        &request.work_item_id,
+        work_item,
+        canonical_project_id,
+    )?;
+    let has_canonical_pending_dispatch = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .is_some_and(|dispatches| {
+            dispatches.iter().any(|dispatch| {
+                optional_string_from(dispatch, "project_id").as_deref()
+                    == Some(canonical_project_id)
+                    && optional_string_from(dispatch, "workflow_id").as_deref()
+                        == Some(workflow_id.as_str())
+                    && optional_string_from(dispatch, "work_item_id").as_deref()
+                        == Some(request.work_item_id.as_str())
+                    && optional_string_from(dispatch, "prompt_kind").as_deref()
+                        == Some("offline_role_dispatch")
+                    && optional_string_from(dispatch, "state").as_deref() == Some("prepared")
+            })
+        });
+    if has_canonical_pending_dispatch {
         return Err("同一工作项已有待回传的离线派发，已拒绝重复记录".to_string());
     }
     let authorization_check = plan_authorization_store::inspect_auto_dispatch_authorization(
         path,
         &AutoDispatchGuardInput {
-            project_id: project_id(&request.project_root),
+            project_id: canonical_project_id.to_string(),
             workflow_id: workflow_id.clone(),
             work_item_id: request.work_item_id.clone(),
             task_package_id: Some(format!("offline-role:{}", request.target_role_id)),
@@ -1817,7 +1985,8 @@ fn prepare_offline_role_dispatch_at(
         workflow_id, request.work_item_id, request.target_role_id
     );
     let dispatch_id = format!("offline-dispatch:{}:{}", stable_id(&context_id), timestamp);
-    let memory_snapshot = find_task_package_artifact(&value, &request.work_item_id, work_item)
+    let memory_snapshot = memory_artifact_index
+        .and_then(|index| value.get("artifacts").and_then(Value::as_array)?.get(index))
         .and_then(task_memory_injection::snapshot_from_artifact);
     let prompt_preview = memory_snapshot
         .as_ref()
@@ -1842,7 +2011,7 @@ fn prepare_offline_role_dispatch_at(
     }
     array_mut(&mut value, "workflow_node_dispatches")?.push(json!({
       "dispatch_id": dispatch_id,
-      "project_id": project_id(&request.project_root),
+      "project_id": canonical_project_id,
       "workflow_id": workflow_id,
       "node_id": node_id,
       "work_item_id": request.work_item_id,
@@ -1884,14 +2053,22 @@ fn prepare_offline_role_dispatch_at(
       "created_at": timestamp,
       "reason": "记录工作台内离线角色派发块；不启动 Codex、不执行 codex exec resume、不写 /Users/yoyi/.codex。"
     }));
-    update_node_state_for_id(&mut value, &node_id, "ready_to_dispatch", &timestamp)?;
+    update_canonical_node_state_for_id(
+        &mut value,
+        &workflow_id,
+        &node_id,
+        canonical_project_id,
+        "ready_to_dispatch",
+        &timestamp,
+    )?;
     value["updated_at"] = Value::String(timestamp);
     write_m5b_batch2_workflow_state(path, "offline_role_dispatch_prepared", &value)?;
-    dispatch_result_from_state(
+    dispatch_result_from_state_with_canonical_project_id(
         path,
         Some(backup),
         &audit_event_id,
         &dispatch_id,
+        canonical_project_id,
         "已记录离线角色派发；未启动 Codex。",
     )
 }
@@ -1899,6 +2076,20 @@ fn prepare_offline_role_dispatch_at(
 fn record_offline_role_result_handoff_at(
     path: &Path,
     request: &OfflineRoleResultHandoffRequest,
+) -> Result<WorkflowNodeDispatchResult, String> {
+    // Guarded legacy/test callers retain path-derived fixtures.  Formal
+    // commands use the canonical variant below.
+    record_offline_role_result_handoff_with_canonical_project_id_at(
+        path,
+        request,
+        &project_id(&request.project_root),
+    )
+}
+
+fn record_offline_role_result_handoff_with_canonical_project_id_at(
+    path: &Path,
+    request: &OfflineRoleResultHandoffRequest,
+    canonical_project_id: &str,
 ) -> Result<WorkflowNodeDispatchResult, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法记录离线角色回传".to_string());
@@ -1918,8 +2109,12 @@ fn record_offline_role_result_handoff_at(
         ));
     }
     let workflow_id = default_workflow_id(&request.project_root);
-    let dispatch_index = find_workflow_node_dispatch_index(&value, &request.dispatch_id)
-        .ok_or_else(|| "找不到离线角色派发记录；无法记录回传".to_string())?;
+    if canonical_workflow_record_index(&value, &workflow_id, canonical_project_id)?.is_none() {
+        return Err("当前项目还没有本地 workflow；无法记录离线回传".to_string());
+    }
+    let dispatch_index =
+        canonical_dispatch_record_index(&value, &request.dispatch_id, canonical_project_id)?
+            .ok_or_else(|| "找不到离线角色派发记录；无法记录回传".to_string())?;
     let dispatch = &value["workflow_node_dispatches"][dispatch_index];
     if optional_string_from(dispatch, "workflow_id").as_deref() != Some(workflow_id.as_str())
         || optional_string_from(dispatch, "work_item_id").as_deref()
@@ -1930,10 +2125,19 @@ fn record_offline_role_result_handoff_at(
     let dispatch_state =
         optional_string_from(dispatch, "state").unwrap_or_else(|| "unknown".to_string());
     control_core::validate_offline_role_handoff(&dispatch_state, "ready_for_review")?;
-    let work_item_index = find_work_item_index(&value, &workflow_id, &request.work_item_id)
-        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法记录离线回传".to_string())?;
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &workflow_id,
+        &request.work_item_id,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法记录离线回传".to_string())?;
     let node_id = optional_string_from(dispatch, "node_id")
         .ok_or_else(|| "离线派发记录缺 node_id；无法记录回传".to_string())?;
+    if canonical_node_record_index(&value, &workflow_id, &node_id, canonical_project_id)?.is_none()
+    {
+        return Err("当前 workflow 下找不到 canonical 离线角色 node；无法记录回传".to_string());
+    }
     let backup = backup_workflow_state_file(path, &timestamp)?;
     let artifact_id = format!(
         "artifact:{}:offline-handoff:{}",
@@ -1968,7 +2172,7 @@ fn record_offline_role_result_handoff_at(
     array_mut(&mut value, "artifacts")?.push(json!({
       "artifact_id": artifact_id,
       "artifact_type": "handoff",
-      "project_id": project_id(&request.project_root),
+      "project_id": canonical_project_id,
       "path": Value::Null,
       "title": format!("离线角色回传：{}", request.target_role_id.trim()),
       "brief": request.summary.trim(),
@@ -1982,10 +2186,20 @@ fn record_offline_role_result_handoff_at(
       "updated_at": timestamp,
       "warnings": ["offline_handoff_no_codex_resume"]
     }));
-    update_node_state_for_id(&mut value, &node_id, "ready_for_review", &timestamp)?;
-    update_node_state_for_id(
+    update_canonical_node_state_for_id(
         &mut value,
-        &workflow_node_for_work_item_state(&workflow_id, "ready_for_review"),
+        &workflow_id,
+        &node_id,
+        canonical_project_id,
+        "ready_for_review",
+        &timestamp,
+    )?;
+    let review_node_id = workflow_node_for_work_item_state(&workflow_id, "ready_for_review");
+    update_canonical_node_state_for_id(
+        &mut value,
+        &workflow_id,
+        &review_node_id,
+        canonical_project_id,
         "ready_for_review",
         &timestamp,
     )?;
@@ -2008,11 +2222,12 @@ fn record_offline_role_result_handoff_at(
     }));
     value["updated_at"] = Value::String(timestamp);
     write_m5b_batch2_workflow_state(path, "offline_role_result_handoff_recorded", &value)?;
-    dispatch_result_from_state(
+    dispatch_result_from_state_with_canonical_project_id(
         path,
         Some(backup),
         &audit_event_id,
         &request.dispatch_id,
+        canonical_project_id,
         "已记录离线角色回传，工作项进入待回收。",
     )
 }
@@ -2020,6 +2235,20 @@ fn record_offline_role_result_handoff_at(
 fn record_offline_director_review_at(
     path: &Path,
     request: &OfflineDirectorReviewRequest,
+) -> Result<WorkflowStateMutationResult, String> {
+    // Guarded legacy/test callers retain path-derived fixtures.  Formal
+    // commands use the canonical variant below.
+    record_offline_director_review_with_canonical_project_id_at(
+        path,
+        request,
+        &project_id(&request.project_root),
+    )
+}
+
+fn record_offline_director_review_with_canonical_project_id_at(
+    path: &Path,
+    request: &OfflineDirectorReviewRequest,
+    canonical_project_id: &str,
 ) -> Result<WorkflowStateMutationResult, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法记录离线总指导回收".to_string());
@@ -2037,12 +2266,26 @@ fn record_offline_director_review_at(
         ));
     }
     let workflow_id = default_workflow_id(&request.project_root);
-    let work_item_index = find_work_item_index(&value, &workflow_id, &request.work_item_id)
-        .ok_or_else(|| "当前 workflow 下找不到该 work item；无法记录离线总指导回收".to_string())?;
+    if canonical_workflow_record_index(&value, &workflow_id, canonical_project_id)?.is_none() {
+        return Err("当前项目还没有本地 workflow；无法记录离线总指导回收".to_string());
+    }
+    let work_item_index = canonical_work_item_record_index(
+        &value,
+        &workflow_id,
+        &request.work_item_id,
+        canonical_project_id,
+    )?
+    .ok_or_else(|| "当前 workflow 下找不到该 work item；无法记录离线总指导回收".to_string())?;
     let work_item_state = optional_string_from(&value["work_items"][work_item_index], "state")
         .unwrap_or_else(|| "unknown".to_string());
     control_core::validate_director_review_work_item_state(&work_item_state)?;
-    let dispatch = find_workflow_node_dispatch(&value, &request.dispatch_id)
+    let dispatch_index =
+        canonical_dispatch_record_index(&value, &request.dispatch_id, canonical_project_id)?
+            .ok_or_else(|| "找不到离线派发记录；无法记录离线总指导回收".to_string())?;
+    let dispatch = value
+        .get("workflow_node_dispatches")
+        .and_then(Value::as_array)
+        .and_then(|dispatches| dispatches.get(dispatch_index))
         .ok_or_else(|| "找不到离线派发记录；无法记录离线总指导回收".to_string())?;
     if optional_string_from(dispatch, "workflow_id").as_deref() != Some(workflow_id.as_str())
         || optional_string_from(dispatch, "work_item_id").as_deref()
@@ -2053,6 +2296,8 @@ fn record_offline_director_review_at(
     let dispatch_state =
         optional_string_from(dispatch, "state").unwrap_or_else(|| "unknown".to_string());
     control_core::validate_director_review(&work_item_state, &dispatch_state, &decision)?;
+    let handoff_refs =
+        offline_handoff_refs_for_dispatch(&value, &request.dispatch_id, canonical_project_id)?;
     let backup = backup_workflow_state_file(path, &timestamp)?;
     let review_id = format!(
         "review:{}:{}:offline:{}",
@@ -2060,10 +2305,9 @@ fn record_offline_director_review_at(
         stable_id(&request.work_item_id),
         timestamp
     );
-    let handoff_refs = offline_handoff_refs_for_dispatch(&value, &request.dispatch_id);
     array_mut(&mut value, "reviews")?.push(json!({
       "review_id": review_id,
-      "project_id": project_id(&request.project_root),
+      "project_id": canonical_project_id,
       "workflow_id": workflow_id,
       "work_item_id": request.work_item_id,
       "dispatch_id": request.dispatch_id,
@@ -2196,22 +2440,42 @@ fn offline_role_node_suffix(role_id: &str) -> Result<&'static str, String> {
     }
 }
 
-fn offline_handoff_refs_for_dispatch(value: &Value, dispatch_id: &str) -> Vec<String> {
-    value
-        .get("artifacts")
-        .and_then(Value::as_array)
-        .map(|artifacts| {
-            artifacts
-                .iter()
-                .filter(|artifact| {
-                    optional_string_from(artifact, "artifact_type").as_deref() == Some("handoff")
-                        && optional_string_from(artifact, "dispatch_id").as_deref()
-                            == Some(dispatch_id)
-                })
-                .filter_map(|artifact| optional_string_from(artifact, "artifact_id"))
-                .collect()
-        })
-        .unwrap_or_default()
+fn offline_handoff_refs_for_dispatch(
+    value: &Value,
+    dispatch_id: &str,
+    canonical_project_id: &str,
+) -> Result<Vec<String>, String> {
+    let Some(artifacts) = value.get("artifacts").and_then(Value::as_array) else {
+        return Ok(Vec::new());
+    };
+    let matching = artifacts.iter().filter(|artifact| {
+        optional_string_from(artifact, "artifact_type").as_deref() == Some("handoff")
+            && optional_string_from(artifact, "dispatch_id").as_deref() == Some(dispatch_id)
+    });
+    let mut canonical = Vec::new();
+    let mut ownerless = Vec::new();
+    let mut foreign = None;
+    for artifact in matching {
+        let Some(artifact_id) = optional_string_from(artifact, "artifact_id") else {
+            continue;
+        };
+        match optional_string_from(artifact, "project_id") {
+            Some(owner) if owner == canonical_project_id => canonical.push(artifact_id),
+            Some(owner) => {
+                foreign.get_or_insert(owner);
+            }
+            None => ownerless.push(artifact_id),
+        }
+    }
+    if !canonical.is_empty() {
+        return Ok(canonical);
+    }
+    if let Some(owner) = foreign {
+        return Err(format!(
+            "{M6P00_WORKFLOW_PROJECT_ID_MISMATCH}:handoff_artifact:expected={canonical_project_id}:actual={owner}"
+        ));
+    }
+    Ok(ownerless)
 }
 
 fn has_pending_offline_role_dispatch(value: &Value, workflow_id: &str, work_item_id: &str) -> bool {

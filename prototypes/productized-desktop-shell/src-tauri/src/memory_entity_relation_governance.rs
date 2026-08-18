@@ -489,10 +489,9 @@ fn derive_candidates(
             Some(project_id.clone()),
             Some(input.project_root.clone()),
             Some(input.project_root.clone()),
-            vec![manual_relation_source(
+            vec![project_owner_relation_source(
                 Some(project_id.clone()),
-                Some(input.project_root.clone()),
-                Some(input.project_root.clone()),
+                &input.project_root,
             )],
             "project_root_explicit",
             "项目 root 派生项目实体候选。",
@@ -1288,9 +1287,10 @@ fn validate_nested_owner_identities(
             NESTED_OWNER_MISMATCH,
         )?;
         for source in &candidate.source_refs {
-            allow_optional_owner_project_id(
-                source.source_id.as_deref(),
+            validate_memory_relation_source_owner(
+                source,
                 trusted,
+                &store.store_version,
                 NESTED_OWNER_MISMATCH,
             )?;
         }
@@ -1300,9 +1300,10 @@ fn validate_nested_owner_identities(
             continue;
         }
         for source in &entity.source_refs {
-            allow_optional_owner_project_id(
-                source.source_id.as_deref(),
+            validate_memory_relation_source_owner(
+                source,
                 trusted,
+                &store.store_version,
                 NESTED_OWNER_MISMATCH,
             )?;
         }
@@ -1316,18 +1317,20 @@ fn validate_nested_owner_identities(
     }
     for relation in &store.relations {
         for source in &relation.source_refs {
-            validate_optional_proven_owner_project_source_id(
-                source.source_id.as_deref(),
+            validate_memory_relation_source_owner(
+                source,
                 trusted,
+                &store.store_version,
                 NESTED_OWNER_MISMATCH,
             )?;
         }
     }
     for candidate in &store.relation_candidates {
         for source in &candidate.source_refs {
-            validate_optional_proven_owner_project_source_id(
-                source.source_id.as_deref(),
+            validate_memory_relation_source_owner(
+                source,
                 trusted,
+                &store.store_version,
                 NESTED_OWNER_MISMATCH,
             )?;
         }
@@ -1335,16 +1338,59 @@ fn validate_nested_owner_identities(
     Ok(())
 }
 
-fn validate_optional_proven_owner_project_source_id(
-    value: Option<&str>,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MemoryRelationSourceOwnerClass {
+    ProjectOwner,
+    NonProject,
+}
+
+const PROJECT_OWNER_AUTHORITY_LEVEL: &str = "project_owner";
+const LEGACY_PROJECT_OWNER_SOURCE_COMPAT_STORE_VERSION: &str = "memory_entity_relations.v1";
+
+fn classify_memory_relation_source_owner(
+    source: &MemoryRelationSource,
     trusted: &TrustedCanonicalProject,
+    store_version: &str,
+) -> MemoryRelationSourceOwnerClass {
+    if source.authority_level == PROJECT_OWNER_AUTHORITY_LEVEL {
+        return MemoryRelationSourceOwnerClass::ProjectOwner;
+    }
+    if is_legacy_project_owner_source(source, trusted, store_version) {
+        return MemoryRelationSourceOwnerClass::ProjectOwner;
+    }
+    MemoryRelationSourceOwnerClass::NonProject
+}
+
+fn is_legacy_project_owner_source(
+    source: &MemoryRelationSource,
+    trusted: &TrustedCanonicalProject,
+    store_version: &str,
+) -> bool {
+    // Exact historical project-source shape written before the explicit
+    // project-owner marker. Expires when store_version is no longer
+    // memory_entity_relations.v1; that later version must restamp remaining
+    // historical sources with authority_level "project_owner" first.
+    if store_version != LEGACY_PROJECT_OWNER_SOURCE_COMPAT_STORE_VERSION {
+        return false;
+    }
+    source.source_kind == MemoryRelationSourceKind::Manual
+        && source.authority_level == "manual"
+        && source.sensitive_level == "project"
+        && source.source_path.as_deref() == Some(trusted.project_root.as_str())
+        && source.source_title.as_deref() == Some(trusted.project_root.as_str())
+}
+
+fn validate_memory_relation_source_owner(
+    source: &MemoryRelationSource,
+    trusted: &TrustedCanonicalProject,
+    store_version: &str,
     mismatch_code: &str,
 ) -> Result<(), String> {
-    match value {
-        Some(value) if value == trusted.project_id || value == legacy_owner_project_id(trusted) => {
-            allow_owner_project_id(value, trusted, mismatch_code)
+    match classify_memory_relation_source_owner(source, trusted, store_version) {
+        MemoryRelationSourceOwnerClass::NonProject => Ok(()),
+        MemoryRelationSourceOwnerClass::ProjectOwner => {
+            allow_optional_owner_project_id(source.source_id.as_deref(), trusted, mismatch_code)
         }
-        _ => Ok(()),
     }
 }
 
@@ -1357,13 +1403,14 @@ fn rewrite_nested_owner_identities(
     let legacy_entity_id = project_owner_entity_id(&legacy);
     let canonical_key = project_owner_canonical_key(&trusted.project_id);
     let canonical_entity_id = project_owner_entity_id(&trusted.project_id);
+    let store_version = store.store_version.clone();
     for candidate in &mut store.entity_candidates {
         if candidate.entity_kind != MemoryEntityKind::Project {
             continue;
         }
         rewrite_optional_owner_project_id(&mut candidate.source_id, trusted);
         for source in &mut candidate.source_refs {
-            rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+            rewrite_project_owner_source_id(source, trusted, &store_version);
         }
         if candidate.normalized_key == legacy_key {
             candidate.normalized_key = canonical_key.clone();
@@ -1374,7 +1421,7 @@ fn rewrite_nested_owner_identities(
             continue;
         }
         for source in &mut entity.source_refs {
-            rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+            rewrite_project_owner_source_id(source, trusted, &store_version);
         }
         for alias in &mut entity.aliases {
             rewrite_optional_owner_project_id(&mut alias.source_id, trusted);
@@ -1388,15 +1435,27 @@ fn rewrite_nested_owner_identities(
     }
     for relation in &mut store.relations {
         for source in &mut relation.source_refs {
-            rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+            rewrite_project_owner_source_id(source, trusted, &store_version);
         }
     }
     for candidate in &mut store.relation_candidates {
         for source in &mut candidate.source_refs {
-            rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+            rewrite_project_owner_source_id(source, trusted, &store_version);
         }
     }
     remap_project_entity_id_refs(store, &legacy_entity_id, &canonical_entity_id);
+}
+
+fn rewrite_project_owner_source_id(
+    source: &mut MemoryRelationSource,
+    trusted: &TrustedCanonicalProject,
+    store_version: &str,
+) {
+    if classify_memory_relation_source_owner(source, trusted, store_version)
+        == MemoryRelationSourceOwnerClass::ProjectOwner
+    {
+        rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+    }
 }
 
 fn remap_project_entity_id_refs(
@@ -1531,6 +1590,20 @@ fn relation_source_from_memory_source(
         source_title: source.source_title.clone(),
         authority_level: source.authority_level.clone(),
         sensitive_level: source.sensitive_level.clone(),
+    }
+}
+
+fn project_owner_relation_source(
+    source_id: Option<String>,
+    project_root: &str,
+) -> MemoryRelationSource {
+    MemoryRelationSource {
+        source_kind: MemoryRelationSourceKind::Manual,
+        source_id,
+        source_path: Some(project_root.to_string()),
+        source_title: Some(project_root.to_string()),
+        authority_level: PROJECT_OWNER_AUTHORITY_LEVEL.to_string(),
+        sensitive_level: "project".to_string(),
     }
 }
 
@@ -2482,6 +2555,438 @@ mod m5r09_tests {
             .expect("load");
         assert_eq!(after.project_id.as_deref(), Some(fixture));
         assert_ne!(after.project_id.as_deref(), Some(path_derived.as_str()));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    fn explicit_project_owner_source(source_id: &str, root: &str) -> MemoryRelationSource {
+        MemoryRelationSource {
+            source_kind: MemoryRelationSourceKind::Manual,
+            source_id: Some(source_id.to_string()),
+            source_path: Some(root.to_string()),
+            source_title: Some(root.to_string()),
+            authority_level: "project_owner".to_string(),
+            sensitive_level: "project".to_string(),
+        }
+    }
+
+    fn knowledge_doc_source(source_id: &str) -> MemoryRelationSource {
+        MemoryRelationSource {
+            source_kind: MemoryRelationSourceKind::KnowledgeDoc,
+            source_id: Some(source_id.to_string()),
+            source_path: Some("/docs/architecture.md".to_string()),
+            source_title: Some("architecture".to_string()),
+            authority_level: "knowledge_doc".to_string(),
+            sensitive_level: "project".to_string(),
+        }
+    }
+
+    fn tool_source(source_id: &str) -> MemoryRelationSource {
+        MemoryRelationSource {
+            source_kind: MemoryRelationSourceKind::FormalMemory,
+            source_id: Some(source_id.to_string()),
+            source_path: None,
+            source_title: Some("Codex CLI".to_string()),
+            authority_level: "tool".to_string(),
+            sensitive_level: "project".to_string(),
+        }
+    }
+
+    fn session_source(source_id: &str) -> MemoryRelationSource {
+        MemoryRelationSource {
+            source_kind: MemoryRelationSourceKind::Manual,
+            source_id: Some(source_id.to_string()),
+            source_path: None,
+            source_title: Some("session m6p00".to_string()),
+            authority_level: "session".to_string(),
+            sensitive_level: "project".to_string(),
+        }
+    }
+
+    fn seed_memory_record_entity() -> MemoryEntity {
+        MemoryEntity {
+            entity_id: "entity:v1:memory_record:m6p00-seed".to_string(),
+            entity_kind: MemoryEntityKind::MemoryRecord,
+            canonical_key: "memory_record:m6p00-seed".to_string(),
+            display_name: "m6p00 seed".to_string(),
+            aliases: vec![],
+            source_refs: vec![],
+            status: "registered".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        }
+    }
+
+    fn seed_relation(source_refs: Vec<MemoryRelationSource>) -> MemoryRelation {
+        MemoryRelation {
+            relation_id: "relation:v1:m6p00".to_string(),
+            relation_kind: MemoryRelationKind::Entity,
+            subject_entity_id: "entity:v1:memory_record:m6p00-seed".to_string(),
+            object_entity_id: "entity:v1:memory_record:other".to_string(),
+            subject_label: "m6p00 seed".to_string(),
+            object_label: "other".to_string(),
+            predicate: "entity_reference".to_string(),
+            source_kind: MemoryRelationSourceKind::Manual,
+            source_refs,
+            status: MemoryRelationStatus::Confirmed,
+            confirmed_by: "user".to_string(),
+            confirmation_role: "user".to_string(),
+            confirmation_reason: "seed".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        }
+    }
+
+    fn seed_relation_candidate(source_refs: Vec<MemoryRelationSource>) -> MemoryRelationCandidate {
+        MemoryRelationCandidate {
+            candidate_id: "relation-candidate:v1:m6p00".to_string(),
+            relation_kind: MemoryRelationKind::Entity,
+            subject_entity_id: "entity:v1:memory_record:m6p00-seed".to_string(),
+            object_entity_id: "entity:v1:memory_record:other".to_string(),
+            subject_label: "m6p00 seed".to_string(),
+            object_label: "other".to_string(),
+            predicate: "entity_reference".to_string(),
+            source_kind: MemoryRelationSourceKind::Manual,
+            source_refs,
+            confidence_kind: "deterministic_source_ref".to_string(),
+            status: MemoryRelationStatus::Candidate,
+            requires_user_confirmation: false,
+            reason: "seed".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        }
+    }
+
+    fn seed_audit() -> MemoryRelationAuditEvent {
+        audit_event(
+            "historical",
+            "user-m6p00",
+            "user",
+            "memory_entity",
+            "entity:v1:memory_record:m6p00-seed",
+            None,
+            MemoryRelationStatus::Confirmed,
+            "seed",
+            "2026-08-18T00:00:00Z",
+            vec![],
+        )
+    }
+
+    fn assert_zero_write_counts(
+        path: &Path,
+        sidecar: &Path,
+        before: &[u8],
+        expected_revision: i64,
+        expected_audits: usize,
+        expected_entities: usize,
+        expected_relations: usize,
+        expected_entity_candidates: usize,
+        expected_relation_candidates: usize,
+        expected_merge_candidates: usize,
+    ) {
+        assert_eq!(fs::read(sidecar).expect("after"), before);
+        let after = crate::memory_entity_relation_store::load_store(path, "2026-08-18T00:00:03Z")
+            .expect("load");
+        assert_eq!(after.revision, expected_revision);
+        assert_eq!(after.audit_events.len(), expected_audits);
+        assert_eq!(after.registry.entities.len(), expected_entities);
+        assert_eq!(after.relations.len(), expected_relations);
+        assert_eq!(after.entity_candidates.len(), expected_entity_candidates);
+        assert_eq!(
+            after.relation_candidates.len(),
+            expected_relation_candidates
+        );
+        assert_eq!(after.merge_candidates.len(), expected_merge_candidates);
+    }
+
+    fn record_unused_alias(
+        path: &Path,
+        trusted_project: &TrustedCanonicalProject,
+        expected_revision: i64,
+        write_id: &str,
+    ) -> Result<RecordMemoryEntityAliasDecisionOutput, String> {
+        record_alias_decision_for_canonical_project(
+            path,
+            trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: trusted_project.project_root.clone(),
+                entity_candidate_id: "entity-candidate:v1:unused".to_string(),
+                decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                actor_id: "user-m6p00".to_string(),
+                actor_role: "user".to_string(),
+                reason: "m6p00 owner classification must fail closed".to_string(),
+                expected_store_revision: Some(expected_revision),
+            },
+            "2026-08-18T00:00:02Z",
+            write_id,
+        )
+    }
+
+    #[test]
+    fn m6p00_explicit_project_owner_foreign_id_on_relation_rejects_zero_write() {
+        let dir = temp_dir("m6p00-foreign-relation");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m6p00-foreign-relation";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa30";
+        let foreign = "project:ffffffff-ffff-4fff-8fff-ffffffffffff";
+        let mut store = empty_store(Some(canonical));
+        store.revision = 3;
+        store.registry.entities.push(seed_memory_record_entity());
+        store
+            .relations
+            .push(seed_relation(vec![explicit_project_owner_source(
+                foreign, root,
+            )]));
+        store.audit_events.push(seed_audit());
+        write_store(&path, &store);
+        let sidecar = crate::memory_entity_relation_store::sidecar_path(&path).expect("sidecar");
+        let before = fs::read(&sidecar).expect("before");
+        let trusted_project = TrustedCanonicalProject {
+            project_root: root.to_string(),
+            project_id: canonical.to_string(),
+        };
+        let error = record_unused_alias(&path, &trusted_project, 3, "write-m6p00-foreign-relation")
+            .expect_err("explicit foreign project owner on relation must fail closed");
+        assert!(
+            error.contains("memory_entity_relation_store_nested_project_id_mismatch"),
+            "{error}"
+        );
+        assert!(error.contains(foreign), "{error}");
+        assert_zero_write_counts(&path, &sidecar, &before, 3, 1, 1, 1, 0, 0, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_explicit_project_owner_foreign_id_on_relation_candidate_rejects_zero_write() {
+        let dir = temp_dir("m6p00-foreign-relation-candidate");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m6p00-foreign-relation-candidate";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa31";
+        let foreign = "project:eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+        let mut store = empty_store(Some(canonical));
+        store.revision = 3;
+        store.registry.entities.push(seed_memory_record_entity());
+        store.relation_candidates.push(seed_relation_candidate(vec![
+            explicit_project_owner_source(foreign, root),
+        ]));
+        store.audit_events.push(seed_audit());
+        write_store(&path, &store);
+        let sidecar = crate::memory_entity_relation_store::sidecar_path(&path).expect("sidecar");
+        let before = fs::read(&sidecar).expect("before");
+        let trusted_project = TrustedCanonicalProject {
+            project_root: root.to_string(),
+            project_id: canonical.to_string(),
+        };
+        let error = record_unused_alias(
+            &path,
+            &trusted_project,
+            3,
+            "write-m6p00-foreign-relation-candidate",
+        )
+        .expect_err("explicit foreign project owner on relation_candidate must fail closed");
+        assert!(
+            error.contains("memory_entity_relation_store_nested_project_id_mismatch"),
+            "{error}"
+        );
+        assert!(error.contains(foreign), "{error}");
+        assert_zero_write_counts(&path, &sidecar, &before, 3, 1, 1, 0, 0, 1, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_mixed_legal_nonproject_plus_foreign_project_owner_rejects_zero_write() {
+        let dir = temp_dir("m6p00-mixed-foreign");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m6p00-mixed-foreign";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa32";
+        let foreign = "project:dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+        let mut store = empty_store(Some(canonical));
+        store.revision = 3;
+        store.registry.entities.push(seed_memory_record_entity());
+        store.relations.push(seed_relation(vec![
+            knowledge_doc_source("doc:architecture"),
+            tool_source("tool:codex-cli"),
+            session_source("session:m6p00"),
+            explicit_project_owner_source(foreign, root),
+        ]));
+        store.relation_candidates.push(seed_relation_candidate(vec![
+            knowledge_doc_source("doc:architecture"),
+            tool_source("tool:codex-cli"),
+            session_source("session:m6p00"),
+        ]));
+        store.audit_events.push(seed_audit());
+        write_store(&path, &store);
+        let sidecar = crate::memory_entity_relation_store::sidecar_path(&path).expect("sidecar");
+        let before = fs::read(&sidecar).expect("before");
+        let trusted_project = TrustedCanonicalProject {
+            project_root: root.to_string(),
+            project_id: canonical.to_string(),
+        };
+        let error = record_unused_alias(&path, &trusted_project, 3, "write-m6p00-mixed-foreign")
+            .expect_err("mixed legal sources plus foreign project owner must fail closed");
+        assert!(
+            error.contains("memory_entity_relation_store_nested_project_id_mismatch"),
+            "{error}"
+        );
+        assert!(error.contains(foreign), "{error}");
+        assert_zero_write_counts(&path, &sidecar, &before, 3, 1, 1, 1, 0, 1, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_legal_nonproject_knowledge_doc_tool_session_preserves_source_ids() {
+        let dir = temp_dir("m6p00-legal-nonproject");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m6p00-legal-nonproject";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa33";
+        let path_derived = crate::project_id(root);
+        let doc_id = "doc:architecture";
+        let tool_id = "tool:codex-cli";
+        let session_id = path_derived.as_str();
+        let mut store = empty_store(Some(canonical));
+        store.registry.entities.push(seed_memory_record_entity());
+        store.relations.push(seed_relation(vec![
+            knowledge_doc_source(doc_id),
+            tool_source(tool_id),
+            session_source(session_id),
+        ]));
+        store.relation_candidates.push(seed_relation_candidate(vec![
+            knowledge_doc_source(doc_id),
+            tool_source(tool_id),
+            session_source(session_id),
+        ]));
+        write_store(&path, &store);
+        let trusted_project = TrustedCanonicalProject {
+            project_root: root.to_string(),
+            project_id: canonical.to_string(),
+        };
+        let workflow_candidate_id =
+            first_kind_candidate_id(&path, &trusted_project, MemoryEntityKind::Workflow);
+        record_alias_decision_for_canonical_project(
+            &path,
+            &trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: workflow_candidate_id,
+                decision: MemoryEntityAliasDecisionKind::RejectAlias,
+                actor_id: "user-m6p00".to_string(),
+                actor_role: "user".to_string(),
+                reason: "legal non-project sources must persist verbatim".to_string(),
+                expected_store_revision: Some(0),
+            },
+            "2026-08-18T00:00:02Z",
+            "write-m6p00-legal-nonproject",
+        )
+        .expect("legal-only write");
+        let after = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:03Z")
+            .expect("load");
+        let expected_ids = [doc_id, tool_id, session_id];
+        for source in &after.relations[0].source_refs {
+            assert!(
+                expected_ids.contains(&source.source_id.as_deref().unwrap_or("")),
+                "relation source_id rewritten: {:?}",
+                source.source_id
+            );
+        }
+        for source in &after.relation_candidates[0].source_refs {
+            assert!(
+                expected_ids.contains(&source.source_id.as_deref().unwrap_or("")),
+                "relation_candidate source_id rewritten: {:?}",
+                source.source_id
+            );
+        }
+        let relation_ids: Vec<Option<&str>> = after.relations[0]
+            .source_refs
+            .iter()
+            .map(|source| source.source_id.as_deref())
+            .collect();
+        let candidate_ids: Vec<Option<&str>> = after.relation_candidates[0]
+            .source_refs
+            .iter()
+            .map(|source| source.source_id.as_deref())
+            .collect();
+        assert_eq!(
+            relation_ids,
+            vec![Some(doc_id), Some(tool_id), Some(session_id)]
+        );
+        assert_eq!(
+            candidate_ids,
+            vec![Some(doc_id), Some(tool_id), Some(session_id)]
+        );
+        assert_ne!(session_id, canonical);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m6p00_historical_project_source_legacy_id_migrates_and_preview_resolves_canonical() {
+        let dir = temp_dir("m6p00-historical-legacy");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m6p00-historical-legacy";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa34";
+        let legacy = crate::project_id(root);
+        assert_ne!(canonical, legacy.as_str());
+        let mut store = empty_store(Some(legacy.as_str()));
+        store
+            .relations
+            .push(seed_relation(vec![project_source(&legacy, root)]));
+        store
+            .relation_candidates
+            .push(seed_relation_candidate(vec![project_source(&legacy, root)]));
+        write_store(&path, &store);
+        let trusted_project = TrustedCanonicalProject {
+            project_root: root.to_string(),
+            project_id: canonical.to_string(),
+        };
+        let workflow_candidate_id =
+            first_kind_candidate_id(&path, &trusted_project, MemoryEntityKind::Workflow);
+        record_alias_decision_for_canonical_project(
+            &path,
+            &trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: workflow_candidate_id,
+                decision: MemoryEntityAliasDecisionKind::RejectAlias,
+                actor_id: "user-m6p00".to_string(),
+                actor_role: "user".to_string(),
+                reason: "historical project-source shape must migrate".to_string(),
+                expected_store_revision: Some(0),
+            },
+            "2026-08-18T00:00:02Z",
+            "write-m6p00-historical-legacy",
+        )
+        .expect("legacy historical migrate");
+        let migrated =
+            crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:03Z")
+                .expect("reload");
+        assert_eq!(migrated.project_id.as_deref(), Some(canonical));
+        assert_eq!(
+            migrated.relations[0].source_refs[0].source_id.as_deref(),
+            Some(canonical)
+        );
+        assert_eq!(
+            migrated.relation_candidates[0].source_refs[0]
+                .source_id
+                .as_deref(),
+            Some(canonical)
+        );
+        let preview = preview_candidates_for_canonical_project(
+            &path,
+            &trusted_project,
+            &preview_input(root),
+            "2026-08-18T00:00:04Z",
+        )
+        .expect("second preview");
+        let project = preview
+            .entity_candidates
+            .iter()
+            .find(|candidate| candidate.entity_kind == MemoryEntityKind::Project)
+            .expect("project candidate");
+        assert_eq!(project.source_id.as_deref(), Some(canonical));
+        assert!(project
+            .source_refs
+            .iter()
+            .any(|source| source.source_id.as_deref() == Some(canonical)));
         let _ = fs::remove_dir_all(dir);
     }
 }
