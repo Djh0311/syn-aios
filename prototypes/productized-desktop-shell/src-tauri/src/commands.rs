@@ -6872,24 +6872,69 @@ fn generate_task_package_file(
     request: TaskPackageFileGenerationRequest,
     state: tauri::State<'_, AppState>,
 ) -> Result<TaskPackageFileGenerationResult, String> {
-    let index = read_index(&state)?;
-    generate_task_package_file_for_index_project_at(
+    generate_task_package_file_with_state(&request, &state)
+}
+
+fn generate_task_package_file_with_state(
+    request: &TaskPackageFileGenerationRequest,
+    state: &AppState,
+) -> Result<TaskPackageFileGenerationResult, String> {
+    let canonical_project_id =
+        resolve_m1_canonical_project_id_for_task_package(state, &request.project_root)?;
+    let index = read_index(state)?;
+    generate_task_package_file_for_index_project_with_canonical_project_id(
         &state.workflow_state_path,
         &index,
-        &request,
+        request,
         &default_task_package_output_dir(),
+        &canonical_project_id,
     )
 }
 
+fn resolve_m1_canonical_project_id_for_task_package(
+    state: &AppState,
+    project_root: &str,
+) -> Result<String, String> {
+    let port = state
+        .m1_project_index_read_port()
+        .ok_or_else(|| m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE.to_string())?;
+    port.resolve_exact_alias(project_root)
+        .map(|project_id| project_id.as_str().to_string())
+        .map_err(|error| error.code)
+}
+
+fn generate_task_package_file_for_index_project_with_canonical_project_id(
+    path: &Path,
+    index: &Value,
+    request: &TaskPackageFileGenerationRequest,
+    tasks_dir: &Path,
+    canonical_project_id: &str,
+) -> Result<TaskPackageFileGenerationResult, String> {
+    let project = find_index_project(index, &request.project_root)
+        .ok_or_else(|| "项目不在当前索引内，已拒绝生成真实任务包文件".to_string())?;
+    generate_task_package_file_with_canonical_project_id(
+        path,
+        &project,
+        request,
+        tasks_dir,
+        canonical_project_id,
+    )
+}
+
+#[cfg(test)]
 fn generate_task_package_file_for_index_project_at(
     path: &Path,
     index: &Value,
     request: &TaskPackageFileGenerationRequest,
     tasks_dir: &Path,
 ) -> Result<TaskPackageFileGenerationResult, String> {
-    let project = find_index_project(index, &request.project_root)
-        .ok_or_else(|| "项目不在当前索引内，已拒绝生成真实任务包文件".to_string())?;
-    generate_task_package_file_at(path, &project, request, tasks_dir)
+    generate_task_package_file_for_index_project_with_canonical_project_id(
+        path,
+        index,
+        request,
+        tasks_dir,
+        &legacy_test_task_package_project_id(&request.project_root),
+    )
 }
 
 #[tauri::command]

@@ -993,6 +993,7 @@ fn present_or_placeholder(value: Option<String>) -> String {
 
 fn task_memory_packet_input_from_task_package(
     project_root_value: &str,
+    canonical_project_id: &str,
     workflow_id: &str,
     work_item_id: &str,
     work_item: &Value,
@@ -1020,7 +1021,7 @@ fn task_memory_packet_input_from_task_package(
 
     TaskMemoryPacketBuildInput {
         project_root: project_root_value.to_string(),
-        project_id: Some(project_id(project_root_value)),
+        project_id: Some(canonical_project_id.to_string()),
         workflow_id: Some(workflow_id.to_string()),
         task_id: Some(work_item_id.to_string()),
         role_id,
@@ -3620,6 +3621,167 @@ mod tests {
     include!("lib_observation_candidate_tests.rs");
 
     include!("lib_task_memory_packet_tests.rs");
+
+    fn fixture_task_package_render_fields(project_root: &str) -> RenderTaskPackageFields {
+        RenderTaskPackageFields {
+            task_name: "opaque canonical id".to_string(),
+            assigned_line: "Codex 开发线".to_string(),
+            background: vec!["background".to_string()],
+            goals: vec!["goal".to_string()],
+            allowed_read: vec![],
+            allowed_write: vec![],
+            forbidden_actions: vec![],
+            acceptance_criteria: vec![],
+            required_return: vec![],
+            review_focus: vec![],
+            project_name: "fixture".to_string(),
+            project_root: project_root.to_string(),
+            workflow_id: "workflow:fixture".to_string(),
+            work_item_id: "work-item:fixture".to_string(),
+        }
+    }
+
+    #[test]
+    fn task_memory_packet_input_uses_supplied_canonical_project_id_verbatim() {
+        let project_root = "/tmp/syn-m5r07-d1-not-used-for-id";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+        let input = task_memory_packet_input_from_task_package(
+            project_root,
+            canonical,
+            "workflow:fixture",
+            "work-item:fixture",
+            &json!({}),
+            &json!({}),
+            &fixture_task_package_render_fields(project_root),
+        );
+        assert_eq!(input.project_id.as_deref(), Some(canonical));
+        assert_ne!(input.project_id.as_deref(), Some(project_id(project_root).as_str()));
+    }
+
+    #[test]
+    fn task_memory_packet_generation_command_rejects_unavailable_m1_before_mutation() {
+        let dir = test_temp_dir("task-memory-packet-m1-unavailable");
+        fs::create_dir_all(&dir).expect("create temp dir");
+        let workflow_state_path = dir.join("workflow-state.v0.json");
+        let index_path = dir.join("codex-index.json");
+        let marker = "syn-m5r07-d1-unmutated-workflow";
+        fs::write(&workflow_state_path, marker).expect("write sentinel workflow");
+        fs::write(
+            &index_path,
+            r#"{"projects":[{"project_root":"/tmp/syn-m5r07-d1-missing-alias"}]}"#,
+        )
+        .expect("write index");
+        let before = fs::read(&workflow_state_path).expect("read sentinel");
+        let state = AppState {
+            index_path,
+            tasks_path: dir.join("tasks.md"),
+            workflow_state_path: workflow_state_path.clone(),
+            m3_role_session_read_runtime: Default::default(),
+            m1_project_index: None,
+            m3_project_role_session_authority: None,
+            m5_store_path: None,
+        };
+        let error = generate_task_package_file_with_state(
+            &TaskPackageFileGenerationRequest {
+                project_root: "/tmp/syn-m5r07-d1-missing-alias".to_string(),
+                work_item_id: "work-item:unused".to_string(),
+            },
+            &state,
+        )
+        .expect_err("M1 authority must fail closed");
+        assert_eq!(error, m1_project_index::M1_PROJECT_INDEX_UNAVAILABLE);
+        assert_eq!(
+            fs::read(&workflow_state_path).expect("reread sentinel"),
+            before
+        );
+        assert!(!dir.join("tasks").exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn task_memory_packet_generation_command_rejects_unknown_alias_before_mutation() {
+        let parent = std::env::temp_dir().join(format!(
+            "syn-m5r07-d1-unknown-alias-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        let app_data_root = parent.join(m1_project_index::M1_ORDINARY_APP_DATA_DIR_NAME);
+        fs::create_dir_all(&app_data_root).expect("create ordinary app-data");
+        let app_data_root = fs::canonicalize(&app_data_root).expect("canonicalize ordinary root");
+        let source = serde_json::json!({
+            "schema_version": m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_SCHEMA_VERSION,
+            "source_id": "syn-m5r07-d1-synthetic-source",
+            "source_revision": 1,
+            "projects": [{
+                "entry_id": "syn-m5r07-d1-entry-1",
+                "mode": "migrate_legacy_project",
+                "source_ref": "synthetic://m5r07-d1-unknown-alias",
+                "exact_alias": "syn-m5r07-d1-registered-alias"
+            }]
+        });
+        fs::write(
+            app_data_root.join(m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            format!("{source}\n"),
+        )
+        .expect("write identity source");
+        let seed_dir = parent.join("synthetic-ordinary-product-seeds");
+        fs::create_dir_all(&seed_dir).expect("create seed dir");
+        let index_seed = seed_dir.join("codex-index.json");
+        let tasks_seed = seed_dir.join("README.md");
+        fs::write(&index_seed, r#"{"projects":[]}"#).expect("write seed index");
+        fs::write(&tasks_seed, "# synthetic\n").expect("write seed tasks");
+        let state = AppState::try_new_with_tauri_ordinary_product_seeds(
+            &app_data_root,
+            &index_seed,
+            &tasks_seed,
+        )
+        .expect("ordinary constructor");
+        let workflow_before = fs::read(&state.workflow_state_path).ok();
+        let error = generate_task_package_file_with_state(
+            &TaskPackageFileGenerationRequest {
+                project_root: "syn-m5r07-d1-unknown-alias".to_string(),
+                work_item_id: "work-item:unused".to_string(),
+            },
+            &state,
+        )
+        .expect_err("unknown alias must fail closed");
+        assert_eq!(error, "m1_alias_unknown");
+        assert_eq!(fs::read(&state.workflow_state_path).ok(), workflow_before);
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn task_memory_packet_production_does_not_derive_project_id_from_root() {
+        let lib = include_str!("lib.rs");
+        let start = lib
+            .find("fn task_memory_packet_input_from_task_package(")
+            .expect("task memory packet builder");
+        let end = lib[start..]
+            .find("\nfn string_array_or_placeholder(")
+            .map(|offset| start + offset)
+            .expect("builder bound");
+        let builder = &lib[start..end];
+        assert!(builder.contains("canonical_project_id"));
+        assert!(!builder.contains("project_id(project_root_value)"));
+        assert!(!builder.contains("#[cfg(test)]"));
+
+        let commands = include_str!("commands.rs");
+        let start = commands
+            .find("fn generate_task_package_file(")
+            .expect("production command");
+        let end = commands[start..]
+            .find("\n#[cfg(test)]\nfn generate_task_package_file_for_index_project_at(")
+            .map(|offset| start + offset)
+            .expect("production command bound");
+        let production = &commands[start..end];
+        assert!(production.contains("resolve_m1_canonical_project_id_for_task_package"));
+        assert!(production.contains("m1_project_index_read_port"));
+        assert!(production.contains("resolve_exact_alias"));
+        assert!(production.contains("generate_task_package_file_with_canonical_project_id"));
+        assert!(!production.contains("project_id(&request.project_root)"));
+        assert!(!production.contains("project_id(project_root"));
+        assert!(!production.contains("register_exact_alias"));
+    }
 
     include!("lib_memory_entity_relation_tests.rs");
 

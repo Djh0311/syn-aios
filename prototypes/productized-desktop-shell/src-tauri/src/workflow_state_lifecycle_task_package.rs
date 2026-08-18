@@ -699,11 +699,12 @@ fn update_task_package_fields_at(
     })
 }
 
-fn generate_task_package_file_at(
+fn generate_task_package_file_with_canonical_project_id(
     path: &Path,
     project: &ProjectRecord,
     request: &TaskPackageFileGenerationRequest,
     tasks_dir: &Path,
+    canonical_project_id: &str,
 ) -> Result<TaskPackageFileGenerationResult, String> {
     if !path.exists() {
         return Err("工作流状态文件不存在；无法生成真实任务包文件".to_string());
@@ -755,6 +756,7 @@ fn generate_task_package_file_at(
     let artifact_id = optional_string_from(artifact, "artifact_id");
     let memory_input = task_memory_packet_input_from_task_package(
         &request.project_root,
+        canonical_project_id,
         &workflow_id,
         &request.work_item_id,
         work_item,
@@ -880,6 +882,27 @@ fn generate_task_package_file_at(
         memory_injection_summary,
         snapshot,
     })
+}
+
+#[cfg(test)]
+fn generate_task_package_file_at(
+    path: &Path,
+    project: &ProjectRecord,
+    request: &TaskPackageFileGenerationRequest,
+    tasks_dir: &Path,
+) -> Result<TaskPackageFileGenerationResult, String> {
+    generate_task_package_file_with_canonical_project_id(
+        path,
+        project,
+        request,
+        tasks_dir,
+        &legacy_test_task_package_project_id(&project.project_root),
+    )
+}
+
+#[cfg(test)]
+fn legacy_test_task_package_project_id(project_root: &str) -> String {
+    project_id(project_root)
 }
 
 fn inspect_task_package_dispatch_readiness_at(

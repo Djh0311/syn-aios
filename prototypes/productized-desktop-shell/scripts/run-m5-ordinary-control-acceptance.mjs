@@ -13,6 +13,10 @@ const PHASE_ENV = "SYN_M5R07_ORDINARY_CONTROL_PHASE";
 const NONCE_ENV = "SYN_M5R07_ORDINARY_CONTROL_NONCE";
 const DRIVER_VALUE = "ordinary-disposable-positive-tauri-v1";
 const PURPOSE = "syn-m5r07-ordinary-disposable-positive-tauri-v1";
+const COMPOSITION = "ORDINARY_TAURI_CONSTRUCTOR_SYNTHETIC_ISOLATED_INPUTS";
+const IDENTITY_SOURCE_SCHEMA = "m1.ordinary-project-identity-source.v1";
+const IDENTITY_SOURCE_FILE = "m1-ordinary-project-identity-source-v1.json";
+const APP_DATA_RELATIVE_PATH = "app-data/local.codex.governance.workbench";
 const ROOT_PREFIX = "syn-m5r07-ordinary-";
 const MODE_0700 = 0o700;
 const MODE_0600 = 0o600;
@@ -128,7 +132,7 @@ async function createOrdinaryProfile() {
     capability_sha256: sha256(capability),
     project_relative_path: projectRelativePath,
     paths: {
-      app_data_relative_path: "app-data/local.codex.governance.workbench",
+      app_data_relative_path: APP_DATA_RELATIVE_PATH,
       index_relative_path: "fixture/codex-index.json",
       tasks_relative_path: "fixture/tasks.md",
       logs_relative_path: "logs",
@@ -138,13 +142,33 @@ async function createOrdinaryProfile() {
   await ensurePrivateDirectory(join(root, "fixture"));
   await ensurePrivateDirectory(projectRoot);
   await ensurePrivateDirectory(join(root, "app-data"));
-  await ensurePrivateDirectory(join(root, "app-data/local.codex.governance.workbench"));
+  const appDataRoot = join(root, APP_DATA_RELATIVE_PATH);
+  await ensurePrivateDirectory(appDataRoot);
   await ensurePrivateDirectory(join(root, "logs"));
+  const canonicalProjectRoot = await realpath(projectRoot);
+  const sourceRef = `synthetic://m5r07-ordinary-disposable/${runId}`;
+  const identitySourceRelativePath = `${APP_DATA_RELATIVE_PATH}/${IDENTITY_SOURCE_FILE}`;
+  const identitySourcePath = join(root, identitySourceRelativePath);
+  const identitySource = {
+    schema_version: IDENTITY_SOURCE_SCHEMA,
+    source_id: `syn-m5r07-ordinary-synthetic-source-${runId}`,
+    source_revision: 1,
+    projects: [
+      {
+        entry_id: `syn-m5r07-ordinary-entry-${runId}`,
+        mode: "migrate_legacy_project",
+        source_ref: sourceRef,
+        exact_alias: canonicalProjectRoot,
+      },
+    ],
+  };
+  await writeJson(identitySourcePath, identitySource);
+  const identitySourceSha256 = sha256(await readFile(identitySourcePath));
   await writeJson(join(root, "fixture/codex-index.json"), {
     generated_at: timestamp,
     projects: [
       {
-        project_root: projectRoot,
+        project_root: canonicalProjectRoot,
         active_hint: true,
         thread_count: 0,
         active_thread_count: 0,
@@ -176,6 +200,13 @@ async function createOrdinaryProfile() {
     capability,
     runId,
     profileFingerprint: sha256(await readFile(join(root, "profile.json"))),
+    identitySource: {
+      relative_path: identitySourceRelativePath,
+      sha256: identitySourceSha256,
+      schema_version: IDENTITY_SOURCE_SCHEMA,
+      mode: "migrate_legacy_project",
+      source_ref: sourceRef,
+    },
   };
 }
 
@@ -249,6 +280,55 @@ function processReceipt(child, phase, launchOrdinal) {
   };
 }
 
+async function readM1Registry(profileRoot) {
+  const registryPath = join(profileRoot, APP_DATA_RELATIVE_PATH, "m1/project-index-v1.json");
+  const bytes = await readFile(registryPath);
+  const parsed = JSON.parse(bytes.toString("utf8"));
+  return {
+    path: registryPath,
+    sha256: sha256(bytes),
+    registry_revision: parsed.registry_revision ?? null,
+  };
+}
+
+function sameExactObjectIds(left, right) {
+  if (!left || !right) return false;
+  const keys = [
+    "proposal_id",
+    "authorization_decision_id",
+    "authorization_id",
+    "workflow_run_id",
+    "work_item_id",
+    "attempt_id",
+    "grant_id",
+    "dispatch_id",
+    "runtime_receipt_id",
+    "execution_readback_id",
+    "claim_id",
+    "executed_claim_id",
+    "review_id",
+    "result_decision_id",
+    "fact_id",
+  ];
+  return keys.every((key) => Boolean(left[key]) && left[key] === right[key]);
+}
+
+function sameClosedLoopCounts(left, right) {
+  if (!left || !right) return false;
+  const keys = [
+    "grants",
+    "attempts",
+    "dispatches",
+    "durable_operations",
+    "execution_readbacks",
+    "claims",
+    "reviews",
+    "result_decisions",
+    "project_facts",
+  ];
+  return keys.every((key) => left[key] === right[key]);
+}
+
 async function main() {
   if (process.argv.length !== 2) {
     process.stderr.write("m5r07_ordinary_acceptance_wrapper_rejects_arguments\n");
@@ -275,12 +355,17 @@ async function main() {
   let retried = null;
   let runtime = null;
   let runtimeRepeat = null;
+  let report = null;
+  let review = null;
+  let result = null;
+  let firstRegistry = null;
   let failed = null;
   try {
     rejected = await waitForFile(join(profile.logs, "m5r07-ordinary-backend-rejected.json"), 180_000);
     open = existsSync(join(profile.logs, "m5r07-ordinary-backend-open.json"))
       ? JSON.parse(await readFile(join(profile.logs, "m5r07-ordinary-backend-open.json"), "utf8"))
       : null;
+    firstRegistry = await readM1Registry(profile.root);
     seeded = await waitForFile(join(profile.logs, "m5r07-ordinary-backend-seeded.json"), 60_000);
     retried = await waitForFile(join(profile.logs, "m5r07-ordinary-backend-retried.json"), 60_000);
     runtime = await waitForFile(join(profile.logs, "m5r07-ordinary-backend-runtime.json"), 60_000);
@@ -288,6 +373,9 @@ async function main() {
       join(profile.logs, "m5r07-ordinary-backend-runtime_repeat.json"),
       60_000,
     );
+    report = await waitForFile(join(profile.logs, "m5r07-ordinary-backend-report.json"), 60_000);
+    review = await waitForFile(join(profile.logs, "m5r07-ordinary-backend-review.json"), 60_000);
+    result = await waitForFile(join(profile.logs, "m5r07-ordinary-backend-result.json"), 60_000);
   } catch (error) {
     firstError = String(error);
     try {
@@ -299,6 +387,7 @@ async function main() {
   killTree(first.child.pid);
   let reopen = null;
   let reopenError = null;
+  let secondRegistry = null;
   const second = spawnDetached(binaryPath, [], {
     cwd: desktopRoot,
     env: ordinaryEnv(profile, "reopen"),
@@ -306,8 +395,14 @@ async function main() {
   const secondProcess = processReceipt(second, "reopen", 2);
   try {
     reopen = await waitForFile(join(profile.logs, "m5r07-ordinary-backend-reopen.json"), 180_000);
+    secondRegistry = await readM1Registry(profile.root);
   } catch (error) {
     reopenError = String(error);
+    try {
+      secondRegistry = await readM1Registry(profile.root);
+    } catch {
+      // registry may be absent if the first process never constructed
+    }
   }
   killTree(second.child.pid);
   killTree(vite.child.pid);
@@ -317,7 +412,28 @@ async function main() {
   const sameBinding =
     Boolean(open?.binding_id) && open?.binding_id === reopen?.binding_id;
   const sameProject =
-    Boolean(open?.project_id) && open?.project_id === reopen?.project_id;
+    Boolean(open?.project_id) &&
+    open?.project_id === reopen?.project_id &&
+    Boolean(result?.project_id) &&
+    result?.project_id === reopen?.project_id;
+  const sameSupervisorRoleSession =
+    Boolean(open?.role_session_id) &&
+    open?.role_session_id === reopen?.role_session_id &&
+    Boolean(result?.supervisor_role_session_id) &&
+    result?.supervisor_role_session_id === reopen?.supervisor_role_session_id;
+  const sameWorkerRoleSession =
+    Boolean(result?.worker_role_session_id) &&
+    result?.worker_role_session_id === reopen?.worker_role_session_id;
+  const sameReviewerRoleSession =
+    Boolean(result?.reviewer_role_session_id) &&
+    result?.reviewer_role_session_id === reopen?.reviewer_role_session_id;
+  const sameExactIds = sameExactObjectIds(result, reopen);
+  const sameCounts = sameClosedLoopCounts(result, reopen);
+  const sameM1Revision =
+    firstRegistry?.registry_revision != null &&
+    firstRegistry?.registry_revision === secondRegistry?.registry_revision;
+  const sameM1Bytes =
+    Boolean(firstRegistry?.sha256) && firstRegistry?.sha256 === secondRegistry?.sha256;
   const noSecondEffect =
     runtime &&
     runtimeRepeat &&
@@ -326,11 +442,20 @@ async function main() {
     runtime.durable_operations === runtimeRepeat.durable_operations &&
     runtime.execution_readbacks === runtimeRepeat.execution_readbacks;
   const receipt = {
-    schema: "syn.m5r07.ordinary-control-launcher.v1",
-    composition: "ORDINARY_DISPOSABLE_FIXTURE_ONLY",
+    schema: "syn.m5r07.ordinary-control-launcher.v2",
+    composition: COMPOSITION,
     not_legacy_composition: true,
     not_stage_closeout: true,
     ordinary_disposable_fixture_only: true,
+    real_ordinary_tauri_constructor: true,
+    acceptance_only_m3_terminal_fixture: true,
+    synthetic_inputs: "SYNTHETIC_INPUTS",
+    no_real_user_data: "NO_REAL_USER_DATA",
+    not_deployed: "NOT_DEPLOYED",
+    not_real_user_legacy_project: true,
+    not_daily_run: true,
+    not_release: true,
+    m1_identity_source: profile.identitySource,
     window_capture: "NO_WINDOW_CAPTURE",
     profile_root: profile.root,
     profile_fingerprint: profile.profileFingerprint,
@@ -348,12 +473,24 @@ async function main() {
     retried,
     runtime,
     runtime_repeat: runtimeRepeat,
+    report,
+    review,
+    result,
     reopen,
     failed,
     first_launch_error: firstError,
     reopen_error: reopenError,
+    first_m1_registry: firstRegistry,
+    second_m1_registry: secondRegistry,
     same_binding: sameBinding,
     same_project: sameProject,
+    same_supervisor_role_session: Boolean(sameSupervisorRoleSession),
+    same_worker_role_session: Boolean(sameWorkerRoleSession),
+    same_reviewer_role_session: Boolean(sameReviewerRoleSession),
+    same_exact_object_ids: Boolean(sameExactIds),
+    same_closed_loop_counts: Boolean(sameCounts),
+    same_m1_registry_revision: Boolean(sameM1Revision),
+    same_m1_registry_bytes: Boolean(sameM1Bytes),
     no_second_effect: Boolean(noSecondEffect),
     m1_m3_installed:
       open?.derived_from === "backend_store" &&
@@ -375,10 +512,23 @@ async function main() {
     rejected?.durable_operations === 0 &&
     retried?.grants === (seeded?.grants ?? 0) + 1 &&
     Boolean(runtime) &&
+    Boolean(report) &&
+    Boolean(review) &&
+    result?.exact_chain_complete === true &&
+    result?.independent_reviewer === true &&
+    reopen?.exact_chain_complete === true &&
+    reopen?.independent_reviewer === true &&
     Boolean(noSecondEffect) &&
     Boolean(reopen?.binding_id) &&
     sameBinding &&
     sameProject &&
+    Boolean(sameSupervisorRoleSession) &&
+    Boolean(sameWorkerRoleSession) &&
+    Boolean(sameReviewerRoleSession) &&
+    Boolean(sameExactIds) &&
+    Boolean(sameCounts) &&
+    Boolean(sameM1Revision) &&
+    Boolean(sameM1Bytes) &&
     !failed;
   process.exitCode = passed ? 0 : 1;
 }

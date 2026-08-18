@@ -3046,6 +3046,24 @@ async function installM5R07OrdinaryControlAcceptanceDriver() {
     runtimeButton?.click();
     await m5r07Delay(400);
     await m5r07OrdinaryWrite("runtime_repeat");
+    await m5r07Click('[data-m5-action="report"]');
+    await m5r07WaitFor("report_log", () => {
+      const log = document.querySelector("[data-m5-supervisor-log]");
+      return log?.textContent?.includes("report") ? log : null;
+    });
+    await m5r07OrdinaryWrite("report");
+    await m5r07Click('[data-m5-action="review"]');
+    await m5r07WaitFor("review_log", () => {
+      const log = document.querySelector("[data-m5-supervisor-log]");
+      return log?.textContent?.includes("review") ? log : null;
+    });
+    await m5r07OrdinaryWrite("review");
+    await m5r07Click('[data-m5-action="result"]');
+    await m5r07WaitFor("result_log", () => {
+      const log = document.querySelector("[data-m5-supervisor-log]");
+      return log?.textContent?.includes("result") ? log : null;
+    });
+    await m5r07OrdinaryWrite("result");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     document.documentElement.dataset.m5r07OrdinaryError = message;
