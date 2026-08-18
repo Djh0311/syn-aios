@@ -2012,7 +2012,10 @@ mod tests {
         assert_eq!(after.retry_count, before.retry_count);
         assert_eq!(after.last_receipt_id, before.last_receipt_id);
         assert_eq!(after.updated_at_ms, before.updated_at_ms);
-        assert_eq!(after.last_receipt_id.as_deref(), Some(before_receipt.as_str()));
+        assert_eq!(
+            after.last_receipt_id.as_deref(),
+            Some(before_receipt.as_str())
+        );
         assert_eq!(
             load_operation_by_effect(&store, &first.effect_id)
                 .unwrap()
@@ -2023,27 +2026,51 @@ mod tests {
     }
 
     #[test]
-    fn m5r08_runtime_duplicate_attempt_cannot_persist_second_effect() {
+    fn m5r09_runtime_direct_durable_reentry_rejects_duplicate_effect() {
         let store = M5OrchestrationStore::open_in_memory().unwrap();
         let cell = scoped_cell(&store, "dup");
+        let grant = store
+            .load_grant(&cell.parent_grant_id)
+            .unwrap()
+            .expect("stored grant");
         let mut first_runtime = SynNativeAgentRuntime::new();
-        let first =
-            run_authorized_workcell(&store, &mut first_runtime, &cell, 3000, RuntimeFault::None)
-                .unwrap();
+        let first = persist_and_execute_workcell(
+            &store,
+            &mut first_runtime,
+            &cell,
+            &grant,
+            3000,
+            RuntimeFault::None,
+        )
+        .unwrap();
+        let first_events = first_runtime.events().to_vec();
+        assert!(
+            !first_events.is_empty(),
+            "first durable persist must reach the adapter"
+        );
         let op_id = crate::m5_agent_runtime::attempt_scoped_operation_id(
             &cell.attempt_id,
-            &cell.parent_grant_id,
+            grant.grant_id.as_str(),
         );
         let before = snapshot_op(&store, &op_id);
         let ops_before = durable_op_count(&store);
         assert_eq!(ops_before, 1);
         assert_eq!(before.state, DurableOperationState::Completed);
+        assert_eq!(
+            before.last_receipt_id.as_deref(),
+            Some(first.receipt_id.as_str())
+        );
+        let receipts_before = count_non_null_receipts(&store);
+        assert_eq!(receipts_before, 1);
+        let events_before = persisted_event_count(&store);
+        let readbacks_before = execution_readback_count(&store);
 
         let mut fresh_runtime = SynNativeAgentRuntime::new();
-        let err = run_authorized_workcell(
+        let err = persist_and_execute_workcell(
             &store,
             &mut fresh_runtime,
             &cell,
+            &grant,
             4000,
             RuntimeFault::None,
         )
@@ -2051,16 +2078,23 @@ mod tests {
         assert_eq!(err, "duplicate_effect");
         assert!(
             fresh_runtime.events().is_empty(),
-            "durable duplicate must not reach the adapter: {:?}",
+            "direct durable reentry must return before the adapter executes: {:?}",
             fresh_runtime.events()
         );
-        assert_eq!(durable_op_count(&store), ops_before);
+        assert_eq!(first_runtime.events(), first_events.as_slice());
+        assert_eq!(durable_op_count(&store), 1);
+        assert_eq!(count_non_null_receipts(&store), 1);
+        assert_eq!(persisted_event_count(&store), events_before);
+        assert_eq!(execution_readback_count(&store), readbacks_before);
         let after = snapshot_op(&store, &op_id);
         assert_eq!(after.operation_id, before.operation_id);
         assert_eq!(after.state, before.state);
         assert_eq!(after.last_receipt_id, before.last_receipt_id);
         assert_eq!(after.updated_at_ms, before.updated_at_ms);
         assert_eq!(after.retry_count, before.retry_count);
+        assert_eq!(after.grant_id, before.grant_id);
+        assert_eq!(after.dispatch_id, before.dispatch_id);
+        assert_eq!(after.attempt_id.as_str(), before.attempt_id.as_str());
         assert_eq!(after.effect_id, before.effect_id);
         assert_eq!(
             after.last_receipt_id.as_deref(),
@@ -2075,5 +2109,34 @@ mod tests {
             )
             .unwrap();
         assert_eq!(effects, 1);
+    }
+
+    fn count_non_null_receipts(store: &M5OrchestrationStore) -> i64 {
+        store
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM m5_durable_operations WHERE last_receipt_id IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0)
+    }
+
+    fn persisted_event_count(store: &M5OrchestrationStore) -> i64 {
+        store
+            .connection()
+            .query_row("SELECT COUNT(*) FROM m5_events", [], |row| row.get(0))
+            .unwrap_or(0)
+    }
+
+    fn execution_readback_count(store: &M5OrchestrationStore) -> i64 {
+        store
+            .connection()
+            .query_row(
+                "SELECT COUNT(*) FROM m5_execution_attempt_readbacks",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0)
     }
 }

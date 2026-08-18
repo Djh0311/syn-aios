@@ -3159,10 +3159,10 @@ mod tests {
     }
 
     #[test]
-    fn m5r08_runtime_authorized_runtime_succeeds_once() {
+    fn m5r09_runtime_dispatch_state_gate_is_exact() {
         let root = ordinary_named_root();
         let state = ordinary_app_state(&root);
-        let opened = approve_echo(&state, "syn-m5r08-runtime-once");
+        let opened = approve_echo(&state, "syn-m5r09-dispatch-gate");
         let grant_id = formal_grant_id(&state, &opened.project_id);
         let (_, workcell_id, operation_id, receipt_id, effect_id) =
             scoped_ids_for_grant(&state, &grant_id);
@@ -3208,15 +3208,7 @@ mod tests {
             },
         )
         .expect_err("second authorized runtime");
-        assert!(
-            repeat == "attempt_not_dispatched"
-                || repeat == "dispatch_not_pending_delivery"
-                || repeat == "duplicate_effect"
-                || repeat.contains("not_dispatched")
-                || repeat.contains("already")
-                || repeat.contains("terminal"),
-            "{repeat}"
-        );
+        assert_eq!(repeat, "dispatch_not_pending_delivery");
         assert_eq!(
             count_sql(
                 &state,
@@ -3225,7 +3217,10 @@ mod tests {
             1
         );
         assert_eq!(
-            count_sql(&state, "SELECT COUNT(DISTINCT effect_id) FROM m5_durable_operations"),
+            count_sql(
+                &state,
+                "SELECT COUNT(DISTINCT effect_id) FROM m5_durable_operations"
+            ),
             1
         );
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
