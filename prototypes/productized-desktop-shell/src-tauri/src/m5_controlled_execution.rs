@@ -404,8 +404,20 @@ fn persist_and_execute_workcell(
     fault: RuntimeFault,
 ) -> Result<RuntimeReceipt, String> {
     assert_dispatch_readback_substrate(store, &workcell.dispatch_id, &workcell.attempt_id)?;
+    if workcell.attempt_id.trim().is_empty() || grant.grant_id.as_str().trim().is_empty() {
+        return Err("workcell_identity_missing_attempt_or_grant".to_string());
+    }
+    let operation_id = crate::m5_agent_runtime::attempt_scoped_operation_id(
+        &workcell.attempt_id,
+        grant.grant_id.as_str(),
+    );
+    if let Some(_existing) =
+        existing_operation_for_attempt_effect(store, &operation_id, &workcell.effect_id)?
+    {
+        return Err("duplicate_effect".to_string());
+    }
     let mut op = DurableOperation {
-        operation_id: format!("op-{}", workcell.workcell_id),
+        operation_id,
         attempt_id: AttemptId::new(workcell.attempt_id.clone()),
         project_id: grant.project_id.clone(),
         orchestration_id: grant.orchestration_id.as_str().to_string(),
@@ -440,6 +452,23 @@ fn persist_and_execute_workcell(
     let _ = OrchestrationId::new(op.orchestration_id.clone());
     let _ = WorkflowRunId::new(op.workflow_run_id.clone());
     Ok(receipt)
+}
+
+fn existing_operation_for_attempt_effect(
+    store: &M5OrchestrationStore,
+    operation_id: &str,
+    effect_id: &str,
+) -> Result<Option<DurableOperation>, String> {
+    let by_id = load_operation(store, operation_id)?;
+    let by_effect = load_operation_by_effect(store, effect_id)?;
+    match (by_id, by_effect) {
+        (None, None) => Ok(None),
+        (Some(op), None) | (None, Some(op)) => Ok(Some(op)),
+        (Some(by_id), Some(by_effect)) if by_id.operation_id == by_effect.operation_id => {
+            Ok(Some(by_id))
+        }
+        (Some(_), Some(_)) => Err("duplicate_effect".to_string()),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1705,9 +1734,15 @@ mod tests {
         let receipt =
             run_authorized_workcell(&store, &mut runtime, &cell, 3000, RuntimeFault::None).unwrap();
         assert_eq!(receipt.outcome, "SUCCEEDED");
-        let op = load_operation(&store, &format!("op-{}", cell.workcell_id))
-            .unwrap()
-            .unwrap();
+        let op = load_operation(
+            &store,
+            &crate::m5_agent_runtime::attempt_scoped_operation_id(
+                &cell.attempt_id,
+                &cell.parent_grant_id,
+            ),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(op.state, DurableOperationState::Completed);
         assert_eq!(
             op.last_receipt_id.as_deref(),
@@ -1721,9 +1756,15 @@ mod tests {
         let cell = cell(&store, "to");
         let mut runtime = SynNativeAgentRuntime::new();
         run_authorized_workcell(&store, &mut runtime, &cell, 3000, RuntimeFault::Timeout).unwrap();
-        let op = load_operation(&store, &format!("op-{}", cell.workcell_id))
-            .unwrap()
-            .unwrap();
+        let op = load_operation(
+            &store,
+            &crate::m5_agent_runtime::attempt_scoped_operation_id(
+                &cell.attempt_id,
+                &cell.parent_grant_id,
+            ),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(op.state, DurableOperationState::TimedOut);
         retry_operation(&store, &op.operation_id, 4000).unwrap();
         let retried = load_operation(&store, &op.operation_id).unwrap().unwrap();
@@ -1836,5 +1877,203 @@ mod tests {
         assert!(err.starts_with("unknown_op_state:"), "{err}");
         let by_effect = load_operation_by_effect(&store, &effect_id).unwrap_err();
         assert!(by_effect.starts_with("unknown_op_state:"), "{by_effect}");
+    }
+
+    fn scoped_cell(store: &M5OrchestrationStore, suffix: &str) -> WorkcellRun {
+        let mut cell = cell(store, suffix);
+        cell.workcell_id = crate::m5_agent_runtime::attempt_scoped_workcell_id(
+            &cell.attempt_id,
+            &cell.parent_grant_id,
+        );
+        cell
+    }
+
+    fn snapshot_op(store: &M5OrchestrationStore, operation_id: &str) -> DurableOperation {
+        load_operation(store, operation_id)
+            .unwrap()
+            .expect("operation")
+    }
+
+    #[test]
+    fn m5r08_runtime_two_legal_attempts_have_distinct_identities() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let first = scoped_cell(&store, "att-a");
+        let mut runtime_a = SynNativeAgentRuntime::new();
+        let receipt_a =
+            run_authorized_workcell(&store, &mut runtime_a, &first, 3000, RuntimeFault::None)
+                .unwrap();
+        let op_a_id = crate::m5_agent_runtime::attempt_scoped_operation_id(
+            &first.attempt_id,
+            &first.parent_grant_id,
+        );
+        let op_a = snapshot_op(&store, &op_a_id);
+        let old = (
+            first.workcell_id.clone(),
+            op_a.operation_id.clone(),
+            receipt_a.receipt_id.as_str().to_string(),
+            first.effect_id.clone(),
+            op_a.state.clone(),
+            op_a.last_receipt_id.clone(),
+            op_a.updated_at_ms,
+            op_a.retry_count,
+            op_a.grant_id.clone(),
+            op_a.dispatch_id.clone(),
+            op_a.attempt_id.as_str().to_string(),
+        );
+
+        let second = scoped_cell(&store, "att-b");
+        let mut runtime_b = SynNativeAgentRuntime::new();
+        let receipt_b =
+            run_authorized_workcell(&store, &mut runtime_b, &second, 4000, RuntimeFault::None)
+                .unwrap();
+        let op_b_id = crate::m5_agent_runtime::attempt_scoped_operation_id(
+            &second.attempt_id,
+            &second.parent_grant_id,
+        );
+        let op_b = snapshot_op(&store, &op_b_id);
+
+        assert_ne!(first.attempt_id, second.attempt_id);
+        assert_ne!(first.parent_grant_id, second.parent_grant_id);
+        assert_ne!(first.workcell_id, second.workcell_id);
+        assert_ne!(op_a.operation_id, op_b.operation_id);
+        assert_ne!(receipt_a.receipt_id.as_str(), receipt_b.receipt_id.as_str());
+        assert_ne!(first.effect_id, second.effect_id);
+        assert_eq!(
+            first.workcell_id,
+            crate::m5_agent_runtime::attempt_scoped_workcell_id(
+                &first.attempt_id,
+                &first.parent_grant_id
+            )
+        );
+        assert_eq!(
+            second.workcell_id,
+            crate::m5_agent_runtime::attempt_scoped_workcell_id(
+                &second.attempt_id,
+                &second.parent_grant_id
+            )
+        );
+        assert_eq!(
+            receipt_a.receipt_id.as_str(),
+            crate::m5_agent_runtime::attempt_scoped_receipt_id(
+                &first.attempt_id,
+                &first.parent_grant_id
+            )
+        );
+        assert_eq!(
+            receipt_b.receipt_id.as_str(),
+            crate::m5_agent_runtime::attempt_scoped_receipt_id(
+                &second.attempt_id,
+                &second.parent_grant_id
+            )
+        );
+        assert_eq!(op_a.project_id, op_b.project_id);
+        assert_eq!(op_a.state, DurableOperationState::Completed);
+        assert_eq!(op_b.state, DurableOperationState::Completed);
+
+        let reloaded = snapshot_op(&store, &old.1);
+        assert_eq!(reloaded.operation_id, old.1);
+        assert_eq!(reloaded.state, old.4);
+        assert_eq!(reloaded.last_receipt_id, old.5);
+        assert_eq!(reloaded.updated_at_ms, old.6);
+        assert_eq!(reloaded.retry_count, old.7);
+        assert_eq!(reloaded.grant_id, old.8);
+        assert_eq!(reloaded.dispatch_id, old.9);
+        assert_eq!(reloaded.attempt_id.as_str(), old.10);
+        assert_eq!(reloaded.effect_id, old.3);
+        assert_eq!(durable_op_count(&store), 2);
+    }
+
+    #[test]
+    fn m5r08_runtime_old_lineage_unchanged_after_later_attempt() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let first = scoped_cell(&store, "keep-old");
+        let mut runtime_a = SynNativeAgentRuntime::new();
+        let receipt_a =
+            run_authorized_workcell(&store, &mut runtime_a, &first, 3000, RuntimeFault::None)
+                .unwrap();
+        let op_a_id = crate::m5_agent_runtime::attempt_scoped_operation_id(
+            &first.attempt_id,
+            &first.parent_grant_id,
+        );
+        let before = snapshot_op(&store, &op_a_id);
+        let before_receipt = receipt_a.receipt_id.as_str().to_string();
+
+        let second = scoped_cell(&store, "later");
+        let mut runtime_b = SynNativeAgentRuntime::new();
+        run_authorized_workcell(&store, &mut runtime_b, &second, 4000, RuntimeFault::None).unwrap();
+
+        let after = snapshot_op(&store, &op_a_id);
+        assert_eq!(after.operation_id, before.operation_id);
+        assert_eq!(after.attempt_id.as_str(), before.attempt_id.as_str());
+        assert_eq!(after.grant_id, before.grant_id);
+        assert_eq!(after.dispatch_id, before.dispatch_id);
+        assert_eq!(after.effect_id, before.effect_id);
+        assert_eq!(after.state, before.state);
+        assert_eq!(after.retry_count, before.retry_count);
+        assert_eq!(after.last_receipt_id, before.last_receipt_id);
+        assert_eq!(after.updated_at_ms, before.updated_at_ms);
+        assert_eq!(after.last_receipt_id.as_deref(), Some(before_receipt.as_str()));
+        assert_eq!(
+            load_operation_by_effect(&store, &first.effect_id)
+                .unwrap()
+                .unwrap()
+                .operation_id,
+            before.operation_id
+        );
+    }
+
+    #[test]
+    fn m5r08_runtime_duplicate_attempt_cannot_persist_second_effect() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let cell = scoped_cell(&store, "dup");
+        let mut first_runtime = SynNativeAgentRuntime::new();
+        let first =
+            run_authorized_workcell(&store, &mut first_runtime, &cell, 3000, RuntimeFault::None)
+                .unwrap();
+        let op_id = crate::m5_agent_runtime::attempt_scoped_operation_id(
+            &cell.attempt_id,
+            &cell.parent_grant_id,
+        );
+        let before = snapshot_op(&store, &op_id);
+        let ops_before = durable_op_count(&store);
+        assert_eq!(ops_before, 1);
+        assert_eq!(before.state, DurableOperationState::Completed);
+
+        let mut fresh_runtime = SynNativeAgentRuntime::new();
+        let err = run_authorized_workcell(
+            &store,
+            &mut fresh_runtime,
+            &cell,
+            4000,
+            RuntimeFault::None,
+        )
+        .unwrap_err();
+        assert_eq!(err, "duplicate_effect");
+        assert!(
+            fresh_runtime.events().is_empty(),
+            "durable duplicate must not reach the adapter: {:?}",
+            fresh_runtime.events()
+        );
+        assert_eq!(durable_op_count(&store), ops_before);
+        let after = snapshot_op(&store, &op_id);
+        assert_eq!(after.operation_id, before.operation_id);
+        assert_eq!(after.state, before.state);
+        assert_eq!(after.last_receipt_id, before.last_receipt_id);
+        assert_eq!(after.updated_at_ms, before.updated_at_ms);
+        assert_eq!(after.retry_count, before.retry_count);
+        assert_eq!(after.effect_id, before.effect_id);
+        assert_eq!(
+            after.last_receipt_id.as_deref(),
+            Some(first.receipt_id.as_str())
+        );
+        let effects: i64 = store
+            .connection()
+            .query_row(
+                "SELECT COUNT(DISTINCT effect_id) FROM m5_durable_operations",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(effects, 1);
     }
 }

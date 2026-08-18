@@ -504,4 +504,89 @@ mod tests {
             Some("run_m5_authorized_runtime_with_state")
         );
     }
+
+    #[test]
+    fn m5r08_runtime_static_guard_rejects_project_scoped_workcell() {
+        let product = include_str!("m5_product_commands.rs");
+        let formal_start = product
+            .find("pub(crate) fn run_m5_authorized_runtime_with_state(")
+            .expect("formal runtime");
+        let formal_end = product[formal_start + 1..]
+            .find("\npub(crate) fn ")
+            .map(|idx| formal_start + 1 + idx)
+            .expect("next product fn");
+        let formal = &product[formal_start..formal_end];
+        assert!(
+            !formal.contains("format!(\"wc-{}\", binding.project_id)"),
+            "ordinary runtime must not build workcell_id from only project_id"
+        );
+        assert!(!formal.contains("wc-{}\", binding.project_id"));
+        assert!(
+            !formal.contains("format!(\"rt-{}\", binding.project_id)"),
+            "ordinary runtime session_ref must not collapse to project scope"
+        );
+        assert!(
+            formal.contains("attempt_scoped_workcell_id"),
+            "ordinary runtime must use attempt/grant-scoped workcell identity"
+        );
+        assert!(
+            formal.contains("admitted.attempt_id()"),
+            "workcell identity must consume the admitted attempt"
+        );
+        assert!(
+            formal.contains("admitted_grant_id") || formal.contains("admitted.grant_id()"),
+            "workcell identity must consume the admitted grant"
+        );
+
+        let product_prod = production_prefix(product);
+        assert!(!product_prod.contains("format!(\"wc-{}\", binding.project_id)"));
+        assert!(product_prod.contains("attempt_scoped_workcell_id"));
+
+        let controlled = include_str!("m5_controlled_execution.rs");
+        let persist_start = controlled
+            .find("fn persist_and_execute_workcell(")
+            .expect("persist_and_execute_workcell");
+        let persist_end = controlled[persist_start + 1..]
+            .find("\nfn ")
+            .map(|idx| persist_start + 1 + idx)
+            .expect("next after persist");
+        let persist = &controlled[persist_start..persist_end];
+        assert!(
+            persist.contains("attempt_scoped_operation_id"),
+            "durable operation_id must inherit attempt/grant scope"
+        );
+        assert!(
+            !persist.contains("format!(\"op-{}\", workcell.workcell_id)"),
+            "operation_id must not inherit a caller workcell_id that can collapse to project scope"
+        );
+        assert!(
+            persist.contains("existing_operation_for_attempt_effect")
+                || persist.contains("duplicate_effect"),
+            "duplicate effect safety must be durable, not adapter-only"
+        );
+
+        let runtime = include_str!("m5_agent_runtime.rs");
+        let receipt_start = runtime.find("fn build_receipt(").expect("build_receipt");
+        let receipt_end = runtime[receipt_start + 1..]
+            .find("\nfn ")
+            .map(|idx| receipt_start + 1 + idx)
+            .expect("next after receipt");
+        let receipt = &runtime[receipt_start..receipt_end];
+        assert!(
+            receipt.contains("attempt_scoped_receipt_id"),
+            "runtime receipt_id must inherit attempt/grant scope"
+        );
+        assert!(
+            !receipt.contains("format!(\"rr-{}\", workcell.workcell_id)"),
+            "receipt_id must not inherit a caller workcell_id that can collapse to project scope"
+        );
+        let helpers = production_prefix(runtime);
+        assert!(helpers.contains("fn attempt_scoped_workcell_id("));
+        assert!(helpers.contains("fn attempt_scoped_operation_id("));
+        assert!(helpers.contains("fn attempt_scoped_receipt_id("));
+        assert!(
+            !helpers.contains("format!(\"wc-{}\", binding.project_id)")
+                && !helpers.contains("format!(\"wc-{project_id}\")")
+        );
+    }
 }

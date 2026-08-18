@@ -637,9 +637,12 @@ pub(crate) fn run_m5_authorized_runtime_with_state(
     let expected_attempt_revision = post_dispatch_attempt.revision;
     let admitted_grant_id = admitted.grant_id().to_string();
     let workcell = crate::m5_agent_runtime::WorkcellRun {
-        workcell_id: format!("wc-{}", binding.project_id),
+        workcell_id: crate::m5_agent_runtime::attempt_scoped_workcell_id(
+            admitted.attempt_id(),
+            &admitted_grant_id,
+        ),
         profile_digest: "profile:syn-native:v1".into(),
-        session_ref: format!("rt-{}", binding.project_id),
+        session_ref: format!("rt-{}:{}", admitted.attempt_id(), admitted_grant_id),
         parent_grant_id: admitted_grant_id.clone(),
         attempt_id: admitted.attempt_id().into(),
         dispatch_id: dispatch.dispatch_id.clone(),
@@ -3123,6 +3126,247 @@ mod tests {
         assert_eq!(
             snapshot_lineage(&resumed, &old_grant, &old_dispatch),
             before_lineage
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    fn scoped_ids_for_grant(
+        state: &crate::AppState,
+        grant_id: &str,
+    ) -> (String, String, String, String, String) {
+        let store = store_from_state(state).expect("m5 store");
+        let grant = store.load_grant(grant_id).expect("load").expect("grant");
+        let attempt_id = grant.attempt_id.as_str().to_string();
+        let workcell_id = crate::m5_agent_runtime::attempt_scoped_workcell_id(
+            &attempt_id,
+            grant.grant_id.as_str(),
+        );
+        let operation_id = crate::m5_agent_runtime::attempt_scoped_operation_id(
+            &attempt_id,
+            grant.grant_id.as_str(),
+        );
+        let receipt_id = crate::m5_agent_runtime::attempt_scoped_receipt_id(
+            &attempt_id,
+            grant.grant_id.as_str(),
+        );
+        (
+            attempt_id,
+            workcell_id,
+            operation_id,
+            receipt_id,
+            grant.effect_key,
+        )
+    }
+
+    #[test]
+    fn m5r08_runtime_authorized_runtime_succeeds_once() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r08-runtime-once");
+        let grant_id = formal_grant_id(&state, &opened.project_id);
+        let (_, workcell_id, operation_id, receipt_id, effect_id) =
+            scoped_ids_for_grant(&state, &grant_id);
+        assert_ne!(workcell_id, format!("wc-{}", opened.project_id));
+        assert_ne!(operation_id, format!("op-wc-{}", opened.project_id));
+        assert_ne!(receipt_id, format!("rr-wc-{}", opened.project_id));
+        assert!(workcell_id.contains(':'));
+        assert!(workcell_id.contains(&grant_id));
+
+        let runtime = run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("runtime");
+        assert_eq!(runtime.receipt_id.as_deref(), Some(receipt_id.as_str()));
+        let store = store_from_state(&state).expect("m5 store");
+        let op = crate::m5_controlled_execution::load_operation(&store, &operation_id)
+            .expect("load")
+            .expect("op");
+        assert_eq!(op.effect_id, effect_id);
+        assert_eq!(op.grant_id, grant_id);
+        assert_eq!(
+            op.state,
+            crate::m5_controlled_execution::DurableOperationState::Completed
+        );
+        assert_eq!(op.last_receipt_id.as_deref(), Some(receipt_id.as_str()));
+        assert_eq!(
+            crate::m5_controlled_execution::load_operation_by_effect(&store, &effect_id)
+                .expect("by effect")
+                .expect("op")
+                .operation_id,
+            operation_id
+        );
+
+        let repeat = run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect_err("second authorized runtime");
+        assert!(
+            repeat == "attempt_not_dispatched"
+                || repeat == "dispatch_not_pending_delivery"
+                || repeat == "duplicate_effect"
+                || repeat.contains("not_dispatched")
+                || repeat.contains("already")
+                || repeat.contains("terminal"),
+            "{repeat}"
+        );
+        assert_eq!(
+            count_sql(
+                &state,
+                "SELECT COUNT(*) FROM m5_durable_operations WHERE state='COMPLETED'"
+            ),
+            1
+        );
+        assert_eq!(
+            count_sql(&state, "SELECT COUNT(DISTINCT effect_id) FROM m5_durable_operations"),
+            1
+        );
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn m5r08_runtime_two_legal_attempts_keep_old_lineage() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r08-runtime-retry");
+        seed_known_no_effect_terminal(&state, &opened, "FAILED", "op-m5r08-old");
+        let old_grant = formal_grant_id(&state, &opened.project_id);
+        let old_dispatch = formal_dispatch_id(&state, &opened.project_id);
+        let before_lineage = snapshot_lineage(&state, &old_grant, &old_dispatch);
+        let before_counts = lineage_counts(&state);
+        assert_eq!(before_lineage.operation_id.as_deref(), Some("op-m5r08-old"));
+        apply_control(&state, &opened, "RETRY", 0).expect("retry");
+        let new_grant = formal_grant_id(&state, &opened.project_id);
+        assert_ne!(new_grant, old_grant);
+        let runtime = run_m5_authorized_runtime_with_state(
+            &state,
+            M5FormalStepRequest {
+                binding_id: opened.binding_id.clone(),
+                project_id: opened.project_id.clone(),
+            },
+        )
+        .expect("new lineage runtime");
+        let (new_attempt, new_workcell, new_operation, new_receipt, new_effect) =
+            scoped_ids_for_grant(&state, &new_grant);
+        assert_eq!(runtime.receipt_id.as_deref(), Some(new_receipt.as_str()));
+        assert_ne!(new_workcell, format!("wc-{}", opened.project_id));
+        assert_ne!(new_operation, before_lineage.operation_id.clone().unwrap());
+        assert_ne!(
+            new_receipt,
+            before_lineage.readback_id.clone().unwrap_or_default()
+        );
+        assert_ne!(new_effect, before_lineage.dispatch_effect);
+        assert_ne!(new_attempt, before_lineage.attempt_id);
+        assert!(new_workcell.contains(&new_attempt));
+        assert!(new_workcell.contains(&new_grant));
+        assert_eq!(
+            snapshot_lineage(&state, &old_grant, &old_dispatch),
+            before_lineage
+        );
+        let after_counts = lineage_counts(&state);
+        assert_eq!(after_counts.0, before_counts.0 + 1);
+        assert_eq!(after_counts.1, before_counts.1 + 1);
+        assert_eq!(after_counts.2, before_counts.2 + 1);
+        assert_eq!(after_counts.3, before_counts.3 + 1);
+        assert_eq!(control_operation_state(&state, "op-m5r08-old"), "FAILED");
+        assert_eq!(control_operation_state(&state, &new_operation), "COMPLETED");
+        let store = store_from_state(&state).expect("m5 store");
+        let old_op = crate::m5_controlled_execution::load_operation(&store, "op-m5r08-old")
+            .expect("load old")
+            .expect("old op");
+        assert_eq!(old_op.grant_id, old_grant);
+        assert_eq!(old_op.dispatch_id, old_dispatch);
+        assert_eq!(old_op.effect_id, before_lineage.dispatch_effect);
+        let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
+    }
+
+    #[test]
+    fn m5r08_runtime_duplicate_admitted_effect_fails_closed() {
+        let root = ordinary_named_root();
+        let state = ordinary_app_state(&root);
+        let opened = approve_echo(&state, "syn-m5r08-runtime-dup");
+        let admitted = admit_after_approve(&state, &opened);
+        let store = store_from_state(&state).expect("m5 store");
+        let now = m5_now_ms();
+        crate::m5_orchestration_service::complete_dispatch_readback(
+            &store,
+            crate::m5_orchestration_service::DispatchReadbackSource::Admitted(&admitted),
+            now,
+        )
+        .expect("readback");
+        let dispatch = store
+            .load_dispatch(admitted.dispatch_id())
+            .expect("load")
+            .expect("dispatch");
+        let workcell = crate::m5_agent_runtime::WorkcellRun {
+            workcell_id: crate::m5_agent_runtime::attempt_scoped_workcell_id(
+                admitted.attempt_id(),
+                admitted.grant_id(),
+            ),
+            profile_digest: "profile:syn-native:v1".into(),
+            session_ref: format!("rt-{}:{}", admitted.attempt_id(), admitted.grant_id()),
+            parent_grant_id: admitted.grant_id().into(),
+            attempt_id: admitted.attempt_id().into(),
+            dispatch_id: dispatch.dispatch_id,
+            effect_id: dispatch.effect_id,
+            actor_binding: admitted.worker_role_session_id().into(),
+            command: WHITELISTED_COMMAND.into(),
+            child_depth: 0,
+            budget_tokens: 8,
+            stop_conditions: vec!["max_tokens".into()],
+            dynamic_package_enabled: false,
+        };
+        let mut first_runtime = crate::m5_agent_runtime::SynNativeAgentRuntime::new();
+        let first = crate::m5_controlled_execution::run_admitted_workcell(
+            &store,
+            admitted,
+            &mut first_runtime,
+            &workcell,
+            now + 500,
+            crate::m5_agent_runtime::RuntimeFault::None,
+        )
+        .expect("first effect");
+        let op_id = crate::m5_agent_runtime::attempt_scoped_operation_id(
+            &workcell.attempt_id,
+            &workcell.parent_grant_id,
+        );
+        let before = crate::m5_controlled_execution::load_operation(&store, &op_id)
+            .expect("load")
+            .expect("op");
+        let ops_before = count_sql(&state, "SELECT COUNT(*) FROM m5_durable_operations");
+
+        let mut fresh_runtime = crate::m5_agent_runtime::SynNativeAgentRuntime::new();
+        let err = crate::m5_controlled_execution::run_authorized_workcell(
+            &store,
+            &mut fresh_runtime,
+            &workcell,
+            now + 800,
+            crate::m5_agent_runtime::RuntimeFault::None,
+        )
+        .expect_err("duplicate must fail closed");
+        assert_eq!(err, "duplicate_effect");
+        assert!(fresh_runtime.events().is_empty());
+        assert_eq!(
+            count_sql(&state, "SELECT COUNT(*) FROM m5_durable_operations"),
+            ops_before
+        );
+        let after = crate::m5_controlled_execution::load_operation(&store, &op_id)
+            .expect("load")
+            .expect("op");
+        assert_eq!(after.operation_id, before.operation_id);
+        assert_eq!(after.state, before.state);
+        assert_eq!(after.last_receipt_id, before.last_receipt_id);
+        assert_eq!(after.updated_at_ms, before.updated_at_ms);
+        assert_eq!(
+            after.last_receipt_id.as_deref(),
+            Some(first.receipt_id.as_str())
         );
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }

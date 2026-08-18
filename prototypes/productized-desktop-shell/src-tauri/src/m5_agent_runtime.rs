@@ -25,6 +25,20 @@ pub(crate) struct WorkcellRun {
     pub dynamic_package_enabled: bool,
 }
 
+/// Stable workcell carrier for one admitted attempt/grant pair.
+/// Distinct across legal attempts of the same project; replay-stable.
+pub(crate) fn attempt_scoped_workcell_id(attempt_id: &str, grant_id: &str) -> String {
+    format!("wc-{attempt_id}:{grant_id}")
+}
+
+pub(crate) fn attempt_scoped_operation_id(attempt_id: &str, grant_id: &str) -> String {
+    format!("op-{}", attempt_scoped_workcell_id(attempt_id, grant_id))
+}
+
+pub(crate) fn attempt_scoped_receipt_id(attempt_id: &str, grant_id: &str) -> String {
+    format!("rr-{}", attempt_scoped_workcell_id(attempt_id, grant_id))
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum RuntimeFault {
     None,
@@ -223,7 +237,10 @@ fn build_receipt(
         workcell.workcell_id, workcell.effect_id, workcell.command, outcome
     ));
     RuntimeReceipt {
-        receipt_id: RuntimeReceiptId::new(format!("rr-{}", workcell.workcell_id)),
+        receipt_id: RuntimeReceiptId::new(attempt_scoped_receipt_id(
+            &workcell.attempt_id,
+            grant.grant_id.as_str(),
+        )),
         grant_id: GrantId::new(grant.grant_id.as_str().to_string()),
         attempt_id: AttemptId::new(workcell.attempt_id.clone()),
         dispatch_id: workcell.dispatch_id.clone(),
@@ -399,5 +416,31 @@ mod tests {
         assert_eq!(f.outcome, "UNKNOWN");
         assert!(!native.events().is_empty());
         assert!(!fake.journal().is_empty());
+    }
+
+    #[test]
+    fn m5r08_runtime_receipt_inherits_attempt_grant_scope() {
+        let store = M5OrchestrationStore::open_in_memory().unwrap();
+        let (grant, mut cell) = workcell(&store);
+        cell.workcell_id = format!("wc-{}", grant.project_id);
+        let mut runtime = SynNativeAgentRuntime::new();
+        let receipt = runtime
+            .execute(&cell, &grant, RuntimeFault::None)
+            .unwrap();
+        let expected = attempt_scoped_receipt_id(cell.attempt_id.as_str(), grant.grant_id.as_str());
+        assert_eq!(receipt.receipt_id.as_str(), expected);
+        assert_ne!(
+            receipt.receipt_id.as_str(),
+            format!("rr-wc-{}", grant.project_id)
+        );
+        assert!(receipt.receipt_id.as_str().contains(cell.attempt_id.as_str()));
+        assert!(receipt
+            .receipt_id
+            .as_str()
+            .contains(grant.grant_id.as_str()));
+        assert_eq!(
+            attempt_scoped_workcell_id(cell.attempt_id.as_str(), grant.grant_id.as_str()),
+            format!("wc-{}:{}", cell.attempt_id, grant.grant_id.as_str())
+        );
     }
 }
