@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`CURRENT` / `NOT_STARTED`。stage-15 检查点 CP1 的第二叶。前置 M6D01 内容 `80ddebdf17889035bc7acde423e32ad6de6f17bb` 已获主管自复核 PASS；本叶做完即到 CP1，必须收口交包并由同一 Codex 前台阻塞独立验收。
+状态：`SUPERVISOR_SELF_REVIEW_PASS` / `ARCHIVED` / `CP1_PENDING`。stage-15 检查点 CP1 的第二叶。内容候选 `651a8fb9329d2ff07b4befe14fb37a1811942766` / tree `8be2ac175f0aeb4027441f53883d9e7f9d5f67aa` 已按七项判据放行；M6D01+M6D02 的 CP1 独立验收尚未进行，PASS 前不进入 M6D03。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-003、第 3 节 `GlobalSupervisorSession` 不变量（global scope、只读默认、provider handle 非授权）；M6D01 冻结的合同为唯一判据；用户 2026-08-18 22:41 的排叶与检查点要求。
 

@@ -13,7 +13,7 @@
 - 以 5600X WSL `/home/synadmin/workspace/syn` 为权威仓库；不 reset、stash、clean、覆盖或丢弃既有未归属 WIP；
 - 不接真实个人资料、真实用户项目写入、真实模型/provider、真实消息、账号、凭据、connector 或外部网络业务动作；产品层证据只用隔离 app-data、scratch projects、fake roles/provider/runtime 与白名单合成动作；
 - 不 push、merge、rebase、部署、发布。公开 push 只由用户本人明确要求时由总指导执行；
-- syn 仓库源码写面同一时间只允许一个施工者。B 线 F2 实施与本阶段的源码写面互斥，不得并行；本阶段不进入 `syn-shell` 仓库；
+- syn 仓库源码写面同一时间只允许一个施工者。Grok 是优先产品执行者但不是唯一写者；Grok 不可用、卡住或不收敛时，同一长驻 Codex 可在 current leaf 精确写域内接管，以无人值守完成计划为主。B 线 F2 实施与本阶段的源码写面互斥，不得并行；本阶段不进入 `syn-shell` 仓库；
 - 6 个未跟踪 `m6_*.rs`（含 `m6_member_directory.rs.bak`）与 `gen/schemas/linux-schema.json` 只读保全，不得暂存、清理、恢复，也不得升格为 M6 基线或实现输入。
 
 干完的标准：
@@ -73,7 +73,7 @@
 
 - [x] M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置（内容 `4147454`、记账 `cf1cb25`；独立检查点 `stage-15-m6p00-20260819-0342` PASS）
 - [x] M6D01 跨项目与成员合同冻结（ORG-001，只写合同；内容 `80ddebd`，主管自复核 PASS）→ CP1
-- [ ] M6D02 顶层 Global Supervisor 持久 RoleSession（ORG-003；current）→ **CP1 停点**
+- [x] M6D02 顶层 Global Supervisor 持久 RoleSession（ORG-003；内容 `651a8fb`，主管自复核 PASS）→ **CP1 已收口，独立验收待执行**
 - [ ] M6D03 只读跨项目 query 与 advisory（ORG-002）→ CP2
 - [ ] M6D04 Secretary consult Handoff（ORG-004）→ **CP2 停点**
 - [ ] M6D05 稳定成员目录（ORG-005）→ CP3
