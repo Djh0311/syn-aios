@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`CURRENT` / `NOT_STARTED`。stage-15 检查点 CP2 的第二叶；M6D03 已由主管自复核放行并归档。本叶做完即到 CP2，必须收口交包并由同一长驻 Codex 前台阻塞启动独立验收官。
+状态：`SUPERVISOR_SELF_REVIEW_PASS` / `ARCHIVED` / `CP2_PENDING`。stage-15 检查点 CP2 的第二叶；内容候选 `ec1ba997af6c8b2418c5f1b7051f1015a5307996` / tree `685e458b3670fbc99dd57aa7f55c624d1307f271` 已按七项判据放行。本叶归档后关闭 authorization、留空 current leaves，并提交覆盖 M6D03+M6D04 的 CP2 独立验收；PASS 前不进入 M6D05。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-004、第 3 节 `ConsultHandoff` 不变量（from/to、scope、refs、question、receipt；无项目写权限）；M3 Handoff 为唯一 owner；判据以 M6D01 冻结合同为准。
 
