@@ -18,9 +18,9 @@
 - [ ] 阶段12 Syn 5600X/WSL C2 长期 SSH 开发通道与 D 源码迁移
 - [x] 阶段13 DeepSeek Harness 方法吸收、Syn 原生核心与自升级计划校准
 - [x] 阶段14 M5 项目主管与执行闭环（M5 scoped product-chain PASS / stage-14 closed / not released）
-- [ ] 阶段15 M6 全局主管与内部组织（active；M6P00 已独立 PASS；M6D01 `80ddebd`、M6D02 `651a8fb` 已主管自复核 PASS；CP1 待独立验收，UI 验收载体为新壳）
+- [ ] 阶段15 M6 全局主管与内部组织（active；M6P00、CP1 已独立 PASS；当前 M6D03 只读跨项目 query/advisory，UI 验收载体为新壳）
 
-当前优先级（2026-08-19 05:16 更新）：`stage-15` active。M6P00 内容 `4147454bc046d5a5d3047799725d9e77ed086179` / 记账 `cf1cb254228f71e4539a435f54041cd8e67e7955` 已获独立 verdict `stage-15-m6p00-20260819-0342` PASS；M6D01 静态合同与 fixtures 内容 `80ddebdf17889035bc7acde423e32ad6de6f17bb`、M6D02 持久 Global Supervisor RoleSession 内容 `651a8fb9329d2ff07b4befe14fb37a1811942766` 均已由主管按七项判据放行并归档。当前停在 CP1，authorization closed、`leaves/` 为空；同一长驻 Codex 将前台阻塞 Cursor Opus 验收，PASS 前不拉入 M6D03。后续仍按 CP2=D03+D04、CP3=D05+D06、阶段交包=D07+D08；检查点每两分钟心跳，`checkpoint-loop.sh` 已退役。ORG-007 与新壳 UI 不在 stage-15，F2/F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活。
+当前优先级（2026-08-19 05:38 更新）：`stage-15` active。M6P00 独立 verdict `stage-15-m6p00-20260819-0342` PASS；M6D01 `80ddebdf17889035bc7acde423e32ad6de6f17bb` 与 M6D02 `651a8fb9329d2ff07b4befe14fb37a1811942766` 已获独立 CP1 verdict `stage-15-cp1-20260819-0521` PASS。CP1 交包已移入 `handled/`，verdict 欠账分别写入 M6D03、M6D08、M6S01 与 ENG-01；用户本轮原始指令已直接确认 Grok 优先、Codex 保底。当前唯一 leaf 为 CP2 第一叶 M6D03，完成后连续进入 M6D04，到 CP2 再停；后续仍按 CP3=D05+D06、阶段交包=D07+D08。检查点每两分钟心跳，`checkpoint-loop.sh` 已退役。ORG-007 与新壳 UI 不在 stage-15，F2/F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活。
 
 上一阶段结论（2026-08-18 closeout）：M5 内容锚 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d` 与 M5R09 记账 `8e6f59f48d2d90891d3c02396378921e4a2f5d6e` / tree `2043660c9547c6c102ae24414674918ca8215eb0` 已获独立 PASS；M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 完成 lifecycle、权威状态、载体/WIP 分层与 M6 输入交接。REC-00、M5R00、M5R01–M5R09 与 M5C01 已按各自惯例归档，stage-14 已关闭，当前没有 M5 leaf。结论只到 `M5 SCOPED PRODUCT-CHAIN PASS / NOT_RELEASED`；用户 OSS 门面 `c1025ba` 独立于 M5 候选，OSS-01 保持 unfinished。当时 `stage-15` 尚未建立；其后已由用户明确激活，见上方当前优先级。stage-12 仍开着，D0C04 / D0C05 保持 unfinished；F2/F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活。
 

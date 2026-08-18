@@ -4,7 +4,7 @@
 
 状态：`UNFINISHED` / `NOT_CURRENT` / `NON_BLOCKING_FOR_M5_CLOSEOUT`。
 
-来源：`M5R09-20260818-1836.verdict.md` 欠账 5–8、用户 2026-08-18 18:40 closeout 纪律，以及 M6P00 PASS verdict `stage-15-m6p00-20260819-0342.verdict.md` 欠账 1、2、6、7、9。以下均属断言收紧、死代码、warning 分类、legacy command cutover 或载体卫生，不满足“现在不修则普通产品对真实用户不可用”门；只记录，不进入 M6D01 合同叶施工。
+来源：`M5R09-20260818-1836.verdict.md` 欠账 5–8、用户 2026-08-18 18:40 closeout 纪律、M6P00 PASS verdict `stage-15-m6p00-20260819-0342.verdict.md` 欠账 1、2、6、7、9，以及 CP1 PASS verdict `stage-15-cp1-20260819-0521.verdict.md` 欠账 7–9。以下均属断言收紧、死代码、warning 分类、legacy command cutover、合同索引或载体卫生，不满足“现在不修则普通产品对真实用户不可用”门；只记录，不进入当前 M6 产品叶施工。
 
 未来做完的标准：
 
@@ -18,3 +18,6 @@
 8. 将受保护 WIP 保全改成可机检三条件：不在 index、不在任何产品分支、内容 hash 不变；识别 `refs/poracode/checkpoints/**` 会快照整棵工作树并可能在还原时覆盖未跟踪 WIP，补 manifest/预检模板但不擅自删 IDE refs。
 9. 请总指导确认 `c60caa9` 在 stage-15 建立前吸收 21 个 tracked Rust WIP 是有意的 rustfmt 基线；确认后更新 M5R08 的 30 项静态 WIP manifest，未确认前不得把旧表继续当全部当前 status 事实。
 10. 随后续 command cutover 迁移 C4 旧 preview/prepare 的 production path-derived `project_id` 比较；这不是 M6D01 合同叶，也不得借 ENG-01 放宽 M5 项目主管语义。
+11. 为 M2–M6 增补合同设计独立机器索引/校验器，或明确扩展现有机制但不得改写 M1 冻结十合同 `manifest.v1.json` 的旧 hash/语义；能发现增补合同间字段、export 与依赖矛盾，不把“未登记”继续当作已自动校验。
+12. 最终裁定 6 个未跟踪旧 `m6_*.rs` 原型的 owner/保留/归档/删除去处；在归属明确前继续满足“不在 index、不在产品分支、内容 hash 不变”，不得把它们升格为 M6 基线或作为 `m6_org_*` 实现输入。
+13. 统一 warning 计数口径：CP1 独立重跑的 rustc 汇总为 897 warnings，而 `rg '^warning:'` 连同汇总行计 898；M6D02 新文件贡献 0。后续基线报告必须同时写工具汇总与文本计数，不能继续无条件沿用 883 或把相同基线冒充新回归。

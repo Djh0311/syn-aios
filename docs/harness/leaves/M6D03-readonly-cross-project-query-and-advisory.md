@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`PLANNED` / `NOT_STARTED`。stage-15 检查点 CP2 的第一叶。前置：CP1 获总指导 PASS。
+状态：`CURRENT` / `NOT_STARTED`。stage-15 检查点 CP2 的第一叶。CP1 已由独立 verdict `stage-15-cp1-20260819-0521.verdict.md` PASS 放行；本叶完成后直接进入 M6D04，不提前越过 CP2。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-002、第 3 节 `ProjectSummary` 与 `CrossProjectAdvisory` / `AdvisoryApplicationProjection` 不变量、第 7 节关键验收（write-spy / hash baseline）；ProjectSummary 输入固定依 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节与 `docs/contracts/m5-project-summary-projection-v1.md`；判据以 M6D01 冻结合同为准。
 
@@ -17,8 +17,10 @@ M6P00 PASS verdict 硬前置（`stage-15-m6p00-20260819-0342.verdict.md` 欠账 
 
 1. 新增 `m6_org_cross_project_advisory.rs`，跨项目读取**只**经 M5 `ProjectSummaryQueryPort`，一次消费 ≥2 个版本化 summary；不得直读项目 store / projection / project root，不得复制项目原始事实；须有测试证明不存在绕过路径；
 2. 实现 freshness / missing / denied / degraded 四态，保留 M5 侧的 stale 与 foreign 拒绝；consumer RoleSession / scope / expiry / policy gate 全程携带并校验，缺 watermark 或缺 owner 的 summary 一律拒（反例测试）；
+   - CP1 PASS 欠账 3：普通产品 query/advisory 成功路径必须从已授权、已裁剪的 ProjectSummary metadata 形成非空的最小 `summary_refs` / `source_refs`，接入 M6D02 Global RoleSession context 容器；不得把 raw summary、项目原文、transcript、provider response 或 tool output 填入会话；
 3. 冲突规则确定性：同输入同输出；每条结论可回源到具体 summary 的 id + version + watermark，source links 齐全；
 4. Advisory 与用户采纳本身零项目 mutation：采纳只生成 `DecisionRequest`，不写任何项目、不创建 workflow、不批准 grant、不执行 action；
+   - CP1 PASS 欠账 1：把 M6D02 的 `authorize_attempted_project_write` 接到 M6D03 ordinary application service 的真实项目 mutation 拒绝边界，而不只用于 status DTO 字段计算；从真实 Tauri command/application 调用链发起直接项目 mutation 尝试时，必须在任何 project store/event/audit/outbox/sidecar/file 写入前返回稳定拒绝，并由零写反例证明。不得因此新增可成功的项目写命令；
 5. `AdvisoryApplicationProjection` 只引用各项目 owner 的 authoritative command / receipt，投影 `applied / failed / rolled-back / unknown`，不拥有执行结果、不改 advisory lifecycle；partial apply 与回滚按 M6D01 合同；
 6. summary version / watermark 变化把相关 advisory 标 stale，不静默重算覆盖历史；
 7. 模型侧只增强解释，不得绕过 source / ACL；本叶只用 fake provider / runtime，不接真实模型；

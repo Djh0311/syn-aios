@@ -15,6 +15,7 @@
 3. legacy 兼容与回滚有测试：旧 single-project global review 与 Agent Center 显示仍可用；目录可导出 / 重建；回滚路径不恢复跨项目 raw read；
 4. `cargo check --lib --offline` 与 M6 全量定向测试在 disposable checkout 上通过，记录真实 passed / failed 与退出码，证据绑定候选 SHA；与各叶自报数字不一致时以本轮重跑为准并指出差异；
    - 按 M6P00 PASS verdict 欠账 5，把 `m1_project_index_restart_restores_same_project_id` 及适用的 `m1_` restart/replay filter 纳入本轮回归，证明 canonical alias 在重启后仍解析为同一 ProjectId；不得只引用 M6P00 或历史 M1 数字。
+   - 按 CP1 PASS 欠账 2，明确裁定 ordinary `AppState` 遇到 Global Supervisor RoleSession ambiguous/quarantined/corrupt/install failure 时，是有意让整个普通产品启动 fail-closed，还是降级成显式 `Unavailable` slot；两种口径只能选一套并与合同/产品可用性一致，必须覆盖真实 ordinary startup 调用链、稳定错误和无 legacy/default fallback 的集成反例，不得维持未决行为。
 5. **如实划界**：报告与 `docs/current-state.md` 明写 stage-15 只到 M6 域层；ORG-007 双项目隔离 App 验收、顶层入口 UI、真实窗口像素证据均欠在新壳（F2/F3/F5），M6 未完成、未发布。不得用域层证据声称跨项目能力已在产品上可用；
 6. 把 ORG-007 与 UI 侧欠账写成 `docs/harness/unfinished/` 文件（若 M6S01 已存在则据实更新），并把 advisory / member / source-ref 事件合同交 M7 的输入写成 `handoffs/` 交接文档——只写交接，不激活 M7；
 7. 逐条列出本阶段所有欠账与它们的去处；
