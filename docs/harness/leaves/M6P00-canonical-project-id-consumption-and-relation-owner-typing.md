@@ -4,6 +4,8 @@
 
 状态：`CURRENT` / `NOT_ACCEPTED` / `NOT_CLOSEOUT`。stage-15 于 2026-08-18 建立并 active；authorization closed；M6 域层各叶、F2/F3/F5 与壳采纳均未激活。
 
+分工口径（2026-08-18 22:30 用户改定后由总指导校订）：本叶的实施与逐叶验收由开发主管承包，见 `handoffs/2026-08-18-syn-supervisor-handoff-stage-15-full-stage-ownership-v1.md`。总指导只排叶、裁决硬停点、在阶段做完后独立验收，不逐叶把关。下面第 8 条按此口径改写，旧的"举手等总指导逐叶验收"口径作废。
+
 来源收据：`M5R09-20260818-1836.verdict.md` 欠账 2、4 与 2026-08-18 18:40 用户 closeout 纪律把本项定为 M6 前置（当时判为“不修也不至于对真实用户不可用”，因此没进 M5 返修）；用户 2026-08-18 21:49 明确“接下来就是 M6”，并批准总指导的排法：M6 域层施工前先做本前置。交接输入见 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节。
 
 目标：让 canonical `ProjectId` 成为项目身份在正式读写入口上的唯一命名空间，并让 memory relation 的 source owner 校验建立在可判别类型上，而不是字符串巧合。本叶只补前置，不做 M6 域层实现，不改 M5 已接受的执行合同语义。
@@ -24,7 +26,8 @@
 5. 不改 M1–M5 冻结合同正文与旧 hash；解释或扩展语义只能新建增补合同；
 6. `cargo check --lib --offline` 与本叶相关定向测试在 disposable checkout 上通过，证据绑定候选 SHA；
 7. 独立内容提交，写域精确，`git diff --check` 通过；
-8. 到此停下写节点请求文件，等独立验收，不自行进入 M6 域层第一叶。
+8. 主管自己起独立复核并按七项判据放行（写域、冻结物、WIP 保全、独立 worktree 重跑、实质、不越级、欠账），不放行就自己开返修；放行后自己收口：归档本叶到 `docs/harness/done/2026-08/`、据实标记 `stage-15.md` 与 `plan.md`、写审计行与叶报告、authorization 打回精确 closed 两字段；
+9. 收口后在 `/home/synadmin/workspace/.syn-gates/open/` 写交包文件（命名 `stage-15-<YYYYMMDD-HHMM>.md`），说明"M6P00 已完成，等总指导排 M6 域层首叶"，含候选与记账 SHA/tree、自查七项的原始证据与欠账，然后停下。不自建 M6 域层叶子，不关闭 stage-15，不宣布 M6 完成，不进入 F2/F3/F5 或壳采纳。
 
 证据：只在 disposable checkout 上产出定向证据，绑定候选 SHA。本叶不做 GUI、不做窗口截图、不做 computer use、不接真实 provider 或账号。
 
@@ -42,7 +45,7 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 canonical 解析接线与必要 `AppState` 接线）
 - workflow / 编排入口文件中经本叶报告点名的具体文件（`workflow_execution_entrypoints.rs`、`workflow_run_dispatch_entrypoints.rs`、`workflow_read_model_entrypoints.rs`、`project_workflow_automation.rs`、`m5_orchestration_store.rs`、`m5_orchestration_schema.rs`），**仅** canonical ProjectId 的解析与校验接线；不改执行合同语义、不改 Grant/receipt/audit/quarantine 边界
 - `tasks/2026-08-18-*`、`tasks/2026-08-19-*`
-- `docs/harness/stages/stage-15.md`、`docs/harness/leaves/`、`docs/harness/unfinished/`、`docs/harness/audit/2026-08.jsonl`、`docs/harness/reports/M6P00-*`、`docs/harness/plan.md`、`docs/current-state.md`
+- `docs/harness/stages/stage-15.md`、`docs/harness/leaves/`、`docs/harness/unfinished/`、`docs/harness/done/2026-08/`（仅本叶收口归档）、`docs/harness/authorization.json`、`docs/harness/audit/2026-08.jsonl`、`docs/harness/reports/M6P00-*`、`docs/harness/plan.md`、`docs/current-state.md`
 
 不许动：
 
