@@ -14,7 +14,7 @@
 2. 会话默认只读：会话本身不携带任何项目写能力，provider handle 不构成授权；任何试图用 global 会话直接写项目的路径必须编译期或运行期 fail-closed；
 3. 会话上下文只含最小 summaries 与 refs 的容器边界，不含原始项目文件、transcript、secret、未裁剪 memory；
 4. 与 Project Supervisor / Secretary 会话严格分离：scope 判别基于可判别类型或显式字段，不靠名称巧合；项目主管会话不能被当作 global 会话使用（反例测试）；
-5. **真实生产消费者**：至少一个真实 Tauri command 在 `commands.rs` 注册、在 `lib.rs` 接入 `AppState`，普通启动路径可达。不得只存在于 `#[cfg(test)]`、env 门控或 fixture；报告须指出从普通 entrypoint 到本叶实现的完整调用链；
+5. **真实生产消费者**：至少一个真实 Tauri command 在 `commands.rs` 定义、在 `command_registry.rs` 的 `tauri::generate_handler!` 清单注册（该文件由 `lib.rs` `include!` 到 crate root），并在 `lib.rs` 接入 `AppState`，普通启动路径可达。不得只存在于 `#[cfg(test)]`、env 门控或 fixture；报告须指出从普通 entrypoint 到本叶实现的完整调用链；
 6. 重启后同一会话解析为同一身份（不靠路径派生、不靠自动重建）；来源缺失或损坏时 fail-closed，无静默 fallback、默认值兜底或自动导入；
 7. 定向测试覆盖：持久化往返、重启同一身份、scope 隔离反例、只读默认、损坏/缺失 fail-closed；
 8. `cargo check --lib --offline` 与本叶定向测试在 disposable checkout 上通过，记录真实 passed / failed 与退出码，证据绑定候选 SHA；
@@ -29,6 +29,7 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/m6_org_schema.rs`、`m6_org_store.rs`、`m6_org_dto.rs`（新建，M6 域层自有持久化与 DTO）
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 `mod` 声明、`AppState` 接线与 command 注册）
 - `prototypes/productized-desktop-shell/src-tauri/src/commands.rs`（仅本叶 command 接线）
+- `prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs`（施工前调用图核实出的必要相邻路径：仅把本叶新增 command 加入现有 `tauri::generate_handler!` 清单；不改其他注册项或模块挂载）
 - `m3_role_session.rs`、`m3_role_session_repository.rs`、`m3_role_session_schema.rs`：**仅**可见性调整（如 `pub(crate)`）与新增 trait 实现，不改既有语义、不改既有字段含义；每一处此类改动须在本叶报告里逐条列出并说明为何不可避免
 - `docs/contracts/`（仅新增增补合同）
 - `tasks/2026-08-*`、`tasks/2026-08-19-*`
