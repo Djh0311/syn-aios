@@ -289,7 +289,7 @@ impl AppState {
         if acceptance_runtime_profile::active_paths()?.is_some() {
             return Err("m4_secretary_ordinary_constructor_rejects_acceptance_profile".to_string());
         }
-        m1_project_index::M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source(
+        m1_project_index::M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source_if_present(
             app_data_root,
         )
         .map_err(|error| error.code)?;

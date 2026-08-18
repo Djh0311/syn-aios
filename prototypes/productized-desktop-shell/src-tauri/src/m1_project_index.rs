@@ -2368,20 +2368,27 @@ mod tests {
     }
 
     #[test]
-    fn m1_ordinary_identity_source_missing_and_corrupt_fail_closed_without_registry_write() {
+    fn m5r09_m1_enrollment_backend_unenrolled_constructs_and_corrupt_fail_closed_without_registry_write()
+    {
         let root = ordinary_named_root();
         fs::write(
             root.join("codex-index.json"),
             r#"{"projects":[{"project_root":"/legacy/never-imported"}]}"#,
         )
         .expect("write unused legacy index");
-        assert_eq!(
-            ordinary_tauri_constructor_error(&root),
-            M1_ORDINARY_IDENTITY_SOURCE_MISSING
+        let state = app_state_after_ordinary_tauri_constructor(&root);
+        let authority = state
+            .m1_project_index_authority()
+            .expect("unenrolled authority");
+        assert_unavailable(authority.resolve_exact_alias("never-registered"));
+        assert_unavailable(
+            authority.resolve_canonical_project_id("project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
         );
+        assert!(!root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME).exists());
         assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
         assert!(!root.join("m1").exists());
         assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
+        drop(state);
 
         fs::write(
             root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),

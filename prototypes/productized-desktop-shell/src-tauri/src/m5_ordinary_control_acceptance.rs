@@ -2017,24 +2017,39 @@ mod tests {
     }
 
     #[test]
-    fn constructor_rejects_missing_identity_source() {
+    fn m5r09_m1_enrollment_backend_constructor_allows_missing_identity_source() {
         let root = ordinary_named_root();
         let (index_seed, tasks_seed) = write_synthetic_ordinary_product_seeds(&root);
-        let error = match crate::AppState::try_new_with_tauri_ordinary_product_seeds(
+        let state = crate::AppState::try_new_with_tauri_ordinary_product_seeds(
             &root,
             &index_seed,
             &tasks_seed,
-        ) {
-            Ok(_) => panic!("missing source must fail closed"),
-            Err(error) => error,
-        };
+        )
+        .expect("unenrolled ordinary AppState must construct");
+        let authority = state
+            .m1_project_index_authority()
+            .expect("unenrolled authority");
         assert_eq!(
-            error,
-            crate::m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_MISSING
+            authority
+                .resolve_exact_alias("never-registered")
+                .unwrap_err()
+                .code,
+            M1_PROJECT_INDEX_UNAVAILABLE
         );
+        assert_eq!(
+            authority
+                .resolve_canonical_project_id("project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+                .unwrap_err()
+                .code,
+            M1_PROJECT_INDEX_UNAVAILABLE
+        );
+        assert!(!root
+            .join(crate::m1_project_index::M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME)
+            .exists());
         assert!(!root
             .join(crate::m1_project_index::M1_ORDINARY_REGISTRY_RELATIVE_PATH)
             .exists());
+        assert!(!root.join(".m1-project-index.established").exists());
         let _ = std::fs::remove_dir_all(root.parent().expect("parent"));
     }
 }
