@@ -18,9 +18,11 @@
 - [ ] 阶段12 Syn 5600X/WSL C2 长期 SSH 开发通道与 D 源码迁移
 - [x] 阶段13 DeepSeek Harness 方法吸收、Syn 原生核心与自升级计划校准
 - [x] 阶段14 M5 项目主管与执行闭环（M5 scoped product-chain PASS / stage-14 closed / not released）
-- [ ] 阶段15 M6 全局主管与内部组织（候选原型 WIP / NOT_ACCEPTED / NOT_MAINLINE，M5 验收前不激活）
+- [ ] 阶段15 M6 全局主管与内部组织（2026-08-18 建立并 active；域层先行，UI 验收载体为新壳；当前唯一 current leaf 为 M6P00 前置）
 
-当前优先级（2026-08-18 closeout）：M5 内容锚 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d` 与 M5R09 记账 `8e6f59f48d2d90891d3c02396378921e4a2f5d6e` / tree `2043660c9547c6c102ae24414674918ca8215eb0` 已获独立 PASS；M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 完成 lifecycle、权威状态、载体/WIP 分层与 M6 输入交接。REC-00、M5R00、M5R01–M5R09 与 M5C01 已按各自惯例归档，stage-14 已关闭，当前没有 M5 leaf。结论只到 `M5 SCOPED PRODUCT-CHAIN PASS / NOT_RELEASED`；用户 OSS 门面 `c1025ba` 独立于 M5 候选，OSS-01 保持 unfinished。`stage-15`（M6）未建立、未激活。stage-12 仍开着，D0C04 / D0C05 保持 unfinished；F2/F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活，后续仍须用户以自然语言明确开始。
+当前优先级（2026-08-18 21:50 更新）：用户明确“接下来就是 M6”，`stage-15` 已建立为 active，唯一 current leaf 是 `M6P00 canonical ProjectId 消费扩面与 relation owner 类型化前置`（从 `unfinished/` 拉回 `leaves/`）。M6 域层各叶在 M6P00 通过独立验收后才排。B 线新壳 F0/F1 已在姊妹仓库 `/home/synadmin/workspace/syn-shell` 独立 PASS 并 closeout，其成果已推到用户自有 fork `github.com/Djh0311/syn-shell` 的 `syn` 分支（`45dd5c1c`），fork 的 `master` 保持纯跟踪上游；F2 起的实施与本阶段争用 syn 源码写面，须排序不得并行。stage-12 仍开着，D0C04 / D0C05 保持 unfinished；F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活。
+
+上一阶段结论（2026-08-18 closeout）：M5 内容锚 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d` 与 M5R09 记账 `8e6f59f48d2d90891d3c02396378921e4a2f5d6e` / tree `2043660c9547c6c102ae24414674918ca8215eb0` 已获独立 PASS；M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 完成 lifecycle、权威状态、载体/WIP 分层与 M6 输入交接。REC-00、M5R00、M5R01–M5R09 与 M5C01 已按各自惯例归档，stage-14 已关闭，当前没有 M5 leaf。结论只到 `M5 SCOPED PRODUCT-CHAIN PASS / NOT_RELEASED`；用户 OSS 门面 `c1025ba` 独立于 M5 候选，OSS-01 保持 unfinished。`stage-15`（M6）未建立、未激活。stage-12 仍开着，D0C04 / D0C05 保持 unfinished；F2/F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活，后续仍须用户以自然语言明确开始。
 
 ## M5 + M6 当前状态（2026-08-16 修正，非完成声明）
 
