@@ -30,6 +30,8 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/m6_org_cross_project_advisory.rs`、`m6_org_global_role_session.rs`、`m6_org_schema.rs`、`m6_org_store.rs`、`m6_org_dto.rs`（仅本叶所需接线）
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 `mod` 声明、`AppState` 接线与 command 注册）
 - `prototypes/productized-desktop-shell/src-tauri/src/commands.rs`（仅本叶 command 接线）
+- `prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs`（施工前调用图核实出的必要相邻路径：仅把本叶 Secretary consult start、Global Supervisor accept/reject、Secretary receipt/read 三条 command 加入既有 `generate_handler!`；不改其他注册项、command gate 或能力）
+- `prototypes/productized-desktop-shell/src-tauri/src/secretary_agent.rs`（施工前调用图核实出的既有普通 M4 Secretary 入口载体：仅把本叶 consult start/read 通过 `M4SecretaryApplicationService` 与既有 `M4SecretaryHandoffPort` 接到 M6/M3 adapter；不改 Home、conversation、coordination、personal-object、model 或 provider 语义）
 - `m3_handoff.rs`、`m4_secretary_service.rs`、`m4_secretary_domain.rs`：**仅**可见性调整、新增 trait 实现与本叶咨询入口接线，不改 M3 Handoff 语义、不改 M4 已接受的秘书语义；每处改动在报告里逐条说明
 - `docs/contracts/`（仅新增增补合同）
 - `tasks/2026-08-*`、`tasks/2026-08-19-*`
