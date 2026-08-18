@@ -19,6 +19,18 @@ pub(crate) struct TrustedCanonicalProject {
     pub project_id: String,
 }
 
+#[cfg(test)]
+pub(crate) const M5R09_TRUSTED_CANONICAL_PROJECT_ID: &str =
+    "project:canonical:m5r09-trusted-fixture";
+
+#[cfg(test)]
+pub(crate) fn trusted_canonical_fixture(project_root: &str) -> TrustedCanonicalProject {
+    TrustedCanonicalProject {
+        project_root: project_root.to_string(),
+        project_id: M5R09_TRUSTED_CANONICAL_PROJECT_ID.to_string(),
+    }
+}
+
 pub(crate) fn preview_candidates_for_canonical_project(
     workflow_state_path: &Path,
     trusted: &TrustedCanonicalProject,
@@ -37,6 +49,7 @@ pub(crate) fn preview_candidates_for_canonical_project(
         trusted,
         "memory_entity_relation_store_project_id_mismatch",
     )?;
+    validate_nested_owner_identities(&store, trusted)?;
     let derived = derive_candidates(
         workflow_state_path,
         &input,
@@ -60,12 +73,12 @@ pub(crate) fn preview_candidates(
     input: &PreviewMemoryEntityRelationCandidatesInput,
     timestamp: &str,
 ) -> Result<MemoryEntityRelationPreviewOutput, String> {
-    validate_preview_input(input)?;
-    let trusted = TrustedCanonicalProject {
-        project_root: input.project_root.clone(),
-        project_id: crate::project_id(&input.project_root),
-    };
-    preview_candidates_for_canonical_project(workflow_state_path, &trusted, input, timestamp)
+    preview_candidates_for_canonical_project(
+        workflow_state_path,
+        &trusted_canonical_fixture(&input.project_root),
+        input,
+        timestamp,
+    )
 }
 
 pub(crate) fn record_alias_decision_for_canonical_project(
@@ -94,6 +107,7 @@ pub(crate) fn record_alias_decision_for_canonical_project(
                 trusted,
                 "memory_entity_relation_store_project_id_mismatch",
             )?;
+            converge_nested_owner_identities(store, trusted)?;
             validate_expected_revision(input.expected_store_revision, store)?;
             let derived = derive_candidates(
                 workflow_state_path,
@@ -161,13 +175,9 @@ pub(crate) fn record_alias_decision(
     timestamp: &str,
     write_id: &str,
 ) -> Result<RecordMemoryEntityAliasDecisionOutput, String> {
-    let trusted = TrustedCanonicalProject {
-        project_root: input.project_root.clone(),
-        project_id: crate::project_id(&input.project_root),
-    };
     record_alias_decision_for_canonical_project(
         workflow_state_path,
-        &trusted,
+        &trusted_canonical_fixture(&input.project_root),
         input,
         timestamp,
         write_id,
@@ -200,6 +210,7 @@ pub(crate) fn record_merge_decision_for_canonical_project(
                 trusted,
                 "memory_entity_relation_store_project_id_mismatch",
             )?;
+            converge_nested_owner_identities(store, trusted)?;
             validate_expected_revision(input.expected_store_revision, store)?;
             let derived = derive_candidates(
                 workflow_state_path,
@@ -308,13 +319,9 @@ pub(crate) fn record_merge_decision(
     timestamp: &str,
     write_id: &str,
 ) -> Result<RecordMemoryEntityMergeDecisionOutput, String> {
-    let trusted = TrustedCanonicalProject {
-        project_root: input.project_root.clone(),
-        project_id: crate::project_id(&input.project_root),
-    };
     record_merge_decision_for_canonical_project(
         workflow_state_path,
-        &trusted,
+        &trusted_canonical_fixture(&input.project_root),
         input,
         timestamp,
         write_id,
@@ -347,6 +354,7 @@ pub(crate) fn record_relation_decision_for_canonical_project(
                 trusted,
                 "memory_entity_relation_store_project_id_mismatch",
             )?;
+            converge_nested_owner_identities(store, trusted)?;
             validate_expected_revision(input.expected_store_revision, store)?;
             let derived = derive_candidates(
                 workflow_state_path,
@@ -440,13 +448,9 @@ pub(crate) fn record_relation_decision(
     timestamp: &str,
     write_id: &str,
 ) -> Result<RecordMemoryRelationCandidateDecisionOutput, String> {
-    let trusted = TrustedCanonicalProject {
-        project_root: input.project_root.clone(),
-        project_id: crate::project_id(&input.project_root),
-    };
     record_relation_decision_for_canonical_project(
         workflow_state_path,
-        &trusted,
+        &trusted_canonical_fixture(&input.project_root),
         input,
         timestamp,
         write_id,
@@ -995,6 +999,7 @@ fn validate_actor_can_decide(actor_role: &str) -> Result<(), String> {
     Err(format!("当前角色不能记录实体 / 关系治理决定：{actor_role}"))
 }
 
+#[allow(dead_code)]
 fn validate_preview_input(
     input: &PreviewMemoryEntityRelationCandidatesInput,
 ) -> Result<(), String> {
@@ -1211,6 +1216,208 @@ fn preview_allows_store_project_id(
             trusted.project_id
         )),
     }
+}
+
+const NESTED_OWNER_MISMATCH: &str = "memory_entity_relation_store_nested_project_id_mismatch";
+
+fn legacy_owner_project_id(trusted: &TrustedCanonicalProject) -> String {
+    crate::project_id(&trusted.project_root)
+}
+
+fn allow_owner_project_id(
+    value: &str,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    if value == trusted.project_id || value == legacy_owner_project_id(trusted) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{mismatch_code}: expected {}, actual {value}",
+            trusted.project_id
+        ))
+    }
+}
+
+fn allow_optional_owner_project_id(
+    value: Option<&str>,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    match value {
+        None => Ok(()),
+        Some(value) => allow_owner_project_id(value, trusted, mismatch_code),
+    }
+}
+
+fn rewrite_optional_owner_project_id(
+    value: &mut Option<String>,
+    trusted: &TrustedCanonicalProject,
+) {
+    if value.as_deref() == Some(legacy_owner_project_id(trusted).as_str()) {
+        *value = Some(trusted.project_id.clone());
+    }
+}
+
+fn project_owner_canonical_key(owner_project_id: &str) -> String {
+    canonical_key_for(
+        MemoryEntityKind::Project,
+        owner_project_id,
+        owner_project_id,
+    )
+}
+
+fn project_owner_entity_id(owner_project_id: &str) -> String {
+    entity_id_for(
+        MemoryEntityKind::Project,
+        &project_owner_canonical_key(owner_project_id),
+    )
+}
+
+fn validate_nested_owner_identities(
+    store: &MemoryEntityRelationStoreV1,
+    trusted: &TrustedCanonicalProject,
+) -> Result<(), String> {
+    for candidate in &store.entity_candidates {
+        if candidate.entity_kind != MemoryEntityKind::Project {
+            continue;
+        }
+        allow_optional_owner_project_id(candidate.source_id.as_deref(), trusted, NESTED_OWNER_MISMATCH)?;
+        for source in &candidate.source_refs {
+            allow_optional_owner_project_id(source.source_id.as_deref(), trusted, NESTED_OWNER_MISMATCH)?;
+        }
+    }
+    for entity in &store.registry.entities {
+        if entity.entity_kind != MemoryEntityKind::Project {
+            continue;
+        }
+        for source in &entity.source_refs {
+            allow_optional_owner_project_id(source.source_id.as_deref(), trusted, NESTED_OWNER_MISMATCH)?;
+        }
+        for alias in &entity.aliases {
+            allow_optional_owner_project_id(alias.source_id.as_deref(), trusted, NESTED_OWNER_MISMATCH)?;
+        }
+    }
+    for relation in &store.relations {
+        for source in &relation.source_refs {
+            validate_optional_proven_owner_project_source_id(
+                source.source_id.as_deref(),
+                trusted,
+                NESTED_OWNER_MISMATCH,
+            )?;
+        }
+    }
+    for candidate in &store.relation_candidates {
+        for source in &candidate.source_refs {
+            validate_optional_proven_owner_project_source_id(
+                source.source_id.as_deref(),
+                trusted,
+                NESTED_OWNER_MISMATCH,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_optional_proven_owner_project_source_id(
+    value: Option<&str>,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    match value {
+        Some(value)
+            if value == trusted.project_id || value == legacy_owner_project_id(trusted) =>
+        {
+            allow_owner_project_id(value, trusted, mismatch_code)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn rewrite_nested_owner_identities(
+    store: &mut MemoryEntityRelationStoreV1,
+    trusted: &TrustedCanonicalProject,
+) {
+    let legacy = legacy_owner_project_id(trusted);
+    let legacy_key = project_owner_canonical_key(&legacy);
+    let legacy_entity_id = project_owner_entity_id(&legacy);
+    let canonical_key = project_owner_canonical_key(&trusted.project_id);
+    let canonical_entity_id = project_owner_entity_id(&trusted.project_id);
+    for candidate in &mut store.entity_candidates {
+        if candidate.entity_kind != MemoryEntityKind::Project {
+            continue;
+        }
+        rewrite_optional_owner_project_id(&mut candidate.source_id, trusted);
+        for source in &mut candidate.source_refs {
+            rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+        }
+        if candidate.normalized_key == legacy_key {
+            candidate.normalized_key = canonical_key.clone();
+        }
+    }
+    for entity in &mut store.registry.entities {
+        if entity.entity_kind != MemoryEntityKind::Project {
+            continue;
+        }
+        for source in &mut entity.source_refs {
+            rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+        }
+        for alias in &mut entity.aliases {
+            rewrite_optional_owner_project_id(&mut alias.source_id, trusted);
+        }
+        if entity.canonical_key == legacy_key {
+            entity.canonical_key = canonical_key.clone();
+        }
+        if entity.entity_id == legacy_entity_id {
+            entity.entity_id = canonical_entity_id.clone();
+        }
+    }
+    for relation in &mut store.relations {
+        for source in &mut relation.source_refs {
+            rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+        }
+    }
+    for candidate in &mut store.relation_candidates {
+        for source in &mut candidate.source_refs {
+            rewrite_optional_owner_project_id(&mut source.source_id, trusted);
+        }
+    }
+    remap_project_entity_id_refs(store, &legacy_entity_id, &canonical_entity_id);
+}
+
+fn remap_project_entity_id_refs(
+    store: &mut MemoryEntityRelationStoreV1,
+    from_entity_id: &str,
+    to_entity_id: &str,
+) {
+    if from_entity_id == to_entity_id {
+        return;
+    }
+    for relation in &mut store.relations {
+        if relation.subject_entity_id == from_entity_id {
+            relation.subject_entity_id = to_entity_id.to_string();
+        }
+        if relation.object_entity_id == from_entity_id {
+            relation.object_entity_id = to_entity_id.to_string();
+        }
+    }
+    for candidate in &mut store.relation_candidates {
+        if candidate.subject_entity_id == from_entity_id {
+            candidate.subject_entity_id = to_entity_id.to_string();
+        }
+        if candidate.object_entity_id == from_entity_id {
+            candidate.object_entity_id = to_entity_id.to_string();
+        }
+    }
+}
+
+fn converge_nested_owner_identities(
+    store: &mut MemoryEntityRelationStoreV1,
+    trusted: &TrustedCanonicalProject,
+) -> Result<(), String> {
+    validate_nested_owner_identities(store, trusted)?;
+    rewrite_nested_owner_identities(store, trusted);
+    Ok(())
 }
 
 fn entity_kind_from_memory_source(source: &crate::MemorySourceRef) -> Option<MemoryEntityKind> {
@@ -1740,5 +1947,524 @@ mod m5r08_m1_tests {
         )));
         assert!(production.contains("let project_id = trusted_project_id.to_string();"));
         assert!(production.contains("existing == crate::project_id(&trusted.project_root)"));
+    }
+}
+
+#[cfg(test)]
+mod m5r09_tests {
+    use super::*;
+    use crate::{
+        MemoryEntity, MemoryEntityAlias, MemoryEntityAliasDecisionKind, MemoryEntityCandidate,
+        MemoryEntityKind, MemoryEntityMergeDecisionKind, MemoryEntityRelationStoreV1,
+        MemoryRelation, MemoryRelationCandidate, MemoryRelationCandidateDecisionKind,
+        MemoryRelationKind, MemoryRelationSource, MemoryRelationSourceKind, MemoryRelationStatus,
+        PreviewMemoryEntityRelationCandidatesInput, RecordMemoryEntityAliasDecisionInput,
+        RecordMemoryEntityMergeDecisionInput, RecordMemoryRelationCandidateDecisionInput,
+    };
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "syn-m5r09-entity-{}-{}-{}",
+            prefix,
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&dir).expect("temp");
+        dir
+    }
+
+    fn workflow_path(dir: &Path) -> PathBuf {
+        let path = dir.join("workflow-state.v0.json");
+        fs::write(&path, "{}").expect("workflow");
+        path
+    }
+
+    fn write_store(path: &Path, store: &MemoryEntityRelationStoreV1) {
+        let sidecar = crate::memory_entity_relation_store::sidecar_path(path).expect("sidecar");
+        fs::write(&sidecar, serde_json::to_string(store).expect("json")).expect("write");
+    }
+
+    fn empty_store(project_id: Option<&str>) -> MemoryEntityRelationStoreV1 {
+        MemoryEntityRelationStoreV1 {
+            store_version: "memory_entity_relations.v1".to_string(),
+            project_id: project_id.map(|value| value.to_string()),
+            workflow_id: None,
+            revision: 0,
+            registry: crate::MemoryEntityRegistry {
+                entities: vec![],
+                updated_at: "2026-08-18T00:00:00Z".to_string(),
+                warnings: vec!["memory_entity_registry_minimal".to_string()],
+            },
+            entity_candidates: vec![],
+            merge_candidates: vec![],
+            relation_candidates: vec![],
+            relations: vec![],
+            audit_events: vec![],
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        }
+    }
+
+    fn preview_input(root: &str) -> PreviewMemoryEntityRelationCandidatesInput {
+        PreviewMemoryEntityRelationCandidatesInput {
+            project_root: root.to_string(),
+            project_id: None,
+            workflow_id: None,
+        }
+    }
+
+    fn project_source(source_id: &str, root: &str) -> MemoryRelationSource {
+        MemoryRelationSource {
+            source_kind: MemoryRelationSourceKind::Manual,
+            source_id: Some(source_id.to_string()),
+            source_path: Some(root.to_string()),
+            source_title: Some(root.to_string()),
+            authority_level: "manual".to_string(),
+            sensitive_level: "project".to_string(),
+        }
+    }
+
+    fn nested_legacy_store(root: &str, legacy: &str) -> MemoryEntityRelationStoreV1 {
+        let legacy_key = project_owner_canonical_key(legacy);
+        let legacy_entity_id = project_owner_entity_id(legacy);
+        let mut store = empty_store(Some(legacy));
+        store.registry.entities.push(MemoryEntity {
+            entity_id: legacy_entity_id.clone(),
+            entity_kind: MemoryEntityKind::Project,
+            canonical_key: legacy_key.clone(),
+            display_name: root.to_string(),
+            aliases: vec![MemoryEntityAlias {
+                alias_id: "entity-alias:v1:m5r09-legacy".to_string(),
+                alias: root.to_string(),
+                source_kind: MemoryRelationSourceKind::Manual,
+                source_id: Some(legacy.to_string()),
+                created_at: "2026-08-18T00:00:00Z".to_string(),
+            }],
+            source_refs: vec![project_source(legacy, root)],
+            status: "registered".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        });
+        store.entity_candidates.push(MemoryEntityCandidate {
+            candidate_id: "entity-candidate:v1:m5r09-legacy-project".to_string(),
+            entity_kind: MemoryEntityKind::Project,
+            display_name: root.to_string(),
+            normalized_key: legacy_key,
+            source_kind: MemoryRelationSourceKind::Manual,
+            source_id: Some(legacy.to_string()),
+            source_path: Some(root.to_string()),
+            source_title: Some(root.to_string()),
+            source_refs: vec![project_source(legacy, root)],
+            confidence_kind: "project_root_explicit".to_string(),
+            status: MemoryRelationStatus::Confirmed,
+            reason: "historical nested project candidate".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        });
+        store.relations.push(MemoryRelation {
+            relation_id: "relation:v1:m5r09-legacy".to_string(),
+            relation_kind: MemoryRelationKind::Entity,
+            subject_entity_id: legacy_entity_id.clone(),
+            object_entity_id: "entity:v1:memory_record:other".to_string(),
+            subject_label: root.to_string(),
+            object_label: "other".to_string(),
+            predicate: "entity_reference".to_string(),
+            source_kind: MemoryRelationSourceKind::Manual,
+            source_refs: vec![project_source(legacy, root)],
+            status: MemoryRelationStatus::Confirmed,
+            confirmed_by: "user".to_string(),
+            confirmation_role: "user".to_string(),
+            confirmation_reason: "historical".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        });
+        store.relation_candidates.push(MemoryRelationCandidate {
+            candidate_id: "relation-candidate:v1:m5r09-legacy".to_string(),
+            relation_kind: MemoryRelationKind::Entity,
+            subject_entity_id: legacy_entity_id,
+            object_entity_id: "entity:v1:memory_record:other".to_string(),
+            subject_label: root.to_string(),
+            object_label: "other".to_string(),
+            predicate: "entity_reference".to_string(),
+            source_kind: MemoryRelationSourceKind::Manual,
+            source_refs: vec![project_source(legacy, root)],
+            confidence_kind: "deterministic_source_ref".to_string(),
+            status: MemoryRelationStatus::Candidate,
+            requires_user_confirmation: false,
+            reason: "historical nested relation".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        });
+        store
+    }
+
+    fn assert_no_legacy_owner(store: &MemoryEntityRelationStoreV1, legacy: &str, canonical: &str) {
+        let canonical_key = project_owner_canonical_key(canonical);
+        let canonical_entity_id = project_owner_entity_id(canonical);
+        let leftover = serde_json::to_string(store).expect("json");
+        assert!(
+            !leftover.contains(&format!("\"{legacy}\"")),
+            "legacy owner {legacy} must not remain in persisted store: {leftover}"
+        );
+        for candidate in &store.entity_candidates {
+            if candidate.entity_kind != MemoryEntityKind::Project {
+                continue;
+            }
+            assert_eq!(candidate.source_id.as_deref(), Some(canonical));
+            assert_eq!(candidate.normalized_key, canonical_key);
+            assert!(candidate
+                .source_refs
+                .iter()
+                .all(|source| source.source_id.as_deref() == Some(canonical)));
+        }
+        for entity in &store.registry.entities {
+            if entity.entity_kind != MemoryEntityKind::Project {
+                continue;
+            }
+            assert_eq!(entity.entity_id, canonical_entity_id);
+            assert_eq!(entity.canonical_key, canonical_key);
+            assert!(entity
+                .source_refs
+                .iter()
+                .all(|source| source.source_id.as_deref() == Some(canonical)));
+            assert!(entity
+                .aliases
+                .iter()
+                .all(|alias| alias.source_id.as_deref() == Some(canonical)));
+        }
+        assert!(store
+            .relations
+            .iter()
+            .all(|relation| relation.subject_entity_id == canonical_entity_id
+                || relation.subject_entity_id == "entity:v1:memory_record:other"));
+        assert!(store
+            .relation_candidates
+            .iter()
+            .all(|candidate| candidate.subject_entity_id == canonical_entity_id
+                || candidate.subject_entity_id == "entity:v1:memory_record:other"));
+    }
+
+    fn first_kind_candidate_id(
+        path: &Path,
+        trusted_project: &TrustedCanonicalProject,
+        kind: MemoryEntityKind,
+    ) -> String {
+        let preview = preview_candidates_for_canonical_project(
+            path,
+            trusted_project,
+            &preview_input(&trusted_project.project_root),
+            "2026-08-18T00:00:01Z",
+        )
+        .expect("preview");
+        preview
+            .entity_candidates
+            .iter()
+            .find(|candidate| candidate.entity_kind == kind)
+            .expect("candidate")
+            .candidate_id
+            .clone()
+    }
+
+    #[test]
+    fn m5r09_entity_relation_legacy_nested_store_converges_and_stays_resolvable() {
+        let dir = temp_dir("legacy-nested");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r09-entity-legacy-nested";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa21";
+        let legacy = crate::project_id(root);
+        assert_ne!(canonical, legacy);
+        write_store(&path, &nested_legacy_store(root, &legacy));
+        let trusted_project = TrustedCanonicalProject {
+            project_root: root.to_string(),
+            project_id: canonical.to_string(),
+        };
+        let workflow_candidate_id =
+            first_kind_candidate_id(&path, &trusted_project, MemoryEntityKind::Workflow);
+        record_alias_decision_for_canonical_project(
+            &path,
+            &trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: workflow_candidate_id,
+                decision: MemoryEntityAliasDecisionKind::RejectAlias,
+                actor_id: "user-m5r09".to_string(),
+                actor_role: "user".to_string(),
+                reason: "migrate nested legacy owner identity".to_string(),
+                expected_store_revision: Some(0),
+            },
+            "2026-08-18T00:00:02Z",
+            "write-m5r09-entity-legacy-nested",
+        )
+        .expect("legacy nested migrate");
+        let store = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:03Z")
+            .expect("load");
+        assert_eq!(store.project_id.as_deref(), Some(canonical));
+        assert_no_legacy_owner(&store, &legacy, canonical);
+        let project_candidate_id =
+            first_kind_candidate_id(&path, &trusted_project, MemoryEntityKind::Project);
+        let second = record_alias_decision_for_canonical_project(
+            &path,
+            &trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: project_candidate_id,
+                decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                actor_id: "user-m5r09".to_string(),
+                actor_role: "user".to_string(),
+                reason: "same project remains resolvable after nested rewrite".to_string(),
+                expected_store_revision: Some(1),
+            },
+            "2026-08-18T00:00:04Z",
+            "write-m5r09-entity-legacy-followup",
+        )
+        .expect("follow-up decision still resolves");
+        assert_eq!(
+            second.entity.expect("entity").source_refs[0]
+                .source_id
+                .as_deref(),
+            Some(canonical)
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r09_entity_relation_mixed_foreign_nested_owner_rejects_zero_write() {
+        let dir = temp_dir("mixed-foreign");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r09-entity-mixed-foreign";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa22";
+        let foreign = "project:ffffffff-ffff-4fff-8fff-ffffffffffff";
+        let mut store = empty_store(Some(canonical));
+        store.registry.entities.push(MemoryEntity {
+            entity_id: "entity:v1:project:foreign-nested".to_string(),
+            entity_kind: MemoryEntityKind::Project,
+            canonical_key: "project:foreign".to_string(),
+            display_name: root.to_string(),
+            aliases: vec![MemoryEntityAlias {
+                alias_id: "entity-alias:v1:m5r09-foreign".to_string(),
+                alias: root.to_string(),
+                source_kind: MemoryRelationSourceKind::Manual,
+                source_id: Some(foreign.to_string()),
+                created_at: "2026-08-18T00:00:00Z".to_string(),
+            }],
+            source_refs: vec![project_source(foreign, root)],
+            status: "registered".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        });
+        store.revision = 3;
+        store.audit_events.push(audit_event(
+            "historical",
+            "user-m5r09",
+            "user",
+            "memory_entity",
+            "entity:v1:project:foreign-nested",
+            None,
+            MemoryRelationStatus::Confirmed,
+            "seed",
+            "2026-08-18T00:00:00Z",
+            vec![],
+        ));
+        write_store(&path, &store);
+        let sidecar = crate::memory_entity_relation_store::sidecar_path(&path).expect("sidecar");
+        let before = fs::read(&sidecar).expect("before");
+        let trusted_project = TrustedCanonicalProject {
+            project_root: root.to_string(),
+            project_id: canonical.to_string(),
+        };
+        let error = record_alias_decision_for_canonical_project(
+            &path,
+            &trusted_project,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: "entity-candidate:v1:unused".to_string(),
+                decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                actor_id: "user-m5r09".to_string(),
+                actor_role: "user".to_string(),
+                reason: "nested foreign must not write".to_string(),
+                expected_store_revision: Some(3),
+            },
+            "2026-08-18T00:00:02Z",
+            "write-m5r09-entity-mixed-foreign",
+        )
+        .expect_err("nested foreign must fail closed");
+        assert!(
+            error.contains("memory_entity_relation_store_nested_project_id_mismatch"),
+            "{error}"
+        );
+        assert!(error.contains(foreign), "{error}");
+        assert_eq!(fs::read(&sidecar).expect("after"), before);
+        let after = crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:03Z")
+            .expect("load");
+        assert_eq!(after.revision, 3);
+        assert_eq!(after.audit_events.len(), 1);
+        assert_eq!(after.registry.entities.len(), 1);
+        assert_eq!(after.relations.len(), 0);
+        assert_eq!(after.entity_candidates.len(), 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r09_entity_relation_canonical_fixture_paths_use_fixture_id() {
+        let dir = temp_dir("fixture-paths");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r09-entity-fixture-paths";
+        let fixture = M5R09_TRUSTED_CANONICAL_PROJECT_ID;
+        let path_derived = crate::project_id(root);
+        assert_ne!(fixture, path_derived.as_str());
+        crate::formal_memory_store::create_record(
+            &path,
+            &crate::CreateFormalMemoryRecordInput {
+                project_root: root.to_string(),
+                project_id: Some(fixture.to_string()),
+                workflow_id: None,
+                scope: crate::MemoryScope {
+                    scope_id: "scope:m5r09".to_string(),
+                    scope_type: "global".to_string(),
+                    user_id: None,
+                    project_id: Some(fixture.to_string()),
+                    workflow_id: None,
+                    session_id: None,
+                    role_ids: vec![],
+                    document_refs: vec![],
+                    permission_policy_ref: None,
+                    model_export_policy: "allowed_with_redaction".to_string(),
+                    valid_from: "2026-08-18T00:00:00Z".to_string(),
+                    valid_until: None,
+                },
+                memory_type: "project_memory".to_string(),
+                claim: "Codex CLI alias fixture".to_string(),
+                body: "Codex tool alias fixture body".to_string(),
+                source_refs: vec![
+                    crate::MemorySourceRef {
+                        source_ref_id: "src:m5r09:codex-cli".to_string(),
+                        source_type: "tool".to_string(),
+                        source_id: Some("tool:codex-cli".to_string()),
+                        source_path: None,
+                        source_title: Some("Codex CLI".to_string()),
+                        anchor: None,
+                        source_created_at: None,
+                        captured_at: "2026-08-18T00:00:00Z".to_string(),
+                        authority_level: "manual".to_string(),
+                        sensitive_level: "project".to_string(),
+                        content_hash: None,
+                    },
+                    crate::MemorySourceRef {
+                        source_ref_id: "src:m5r09:codex-tool".to_string(),
+                        source_type: "tool".to_string(),
+                        source_id: Some("tool:codex-tool".to_string()),
+                        source_path: None,
+                        source_title: Some("codex tool".to_string()),
+                        anchor: None,
+                        source_created_at: None,
+                        captured_at: "2026-08-18T00:00:00Z".to_string(),
+                        authority_level: "manual".to_string(),
+                        sensitive_level: "project".to_string(),
+                        content_hash: None,
+                    },
+                ],
+                actor_id: "user-m5r09".to_string(),
+                actor_role: "user".to_string(),
+                reason: "seed merge and relation candidates for fixture path".to_string(),
+                audit_event_type: None,
+                expected_store_revision: None,
+            },
+            "2026-08-18T00:00:01Z",
+            "write-m5r09-entity-fixture-formal",
+        )
+        .expect("formal seed");
+        let preview = preview_candidates(&path, &preview_input(root), "2026-08-18T00:00:02Z")
+            .expect("preview wrapper");
+        let project = preview
+            .entity_candidates
+            .iter()
+            .find(|candidate| candidate.entity_kind == MemoryEntityKind::Project)
+            .expect("project candidate");
+        assert_eq!(project.source_id.as_deref(), Some(fixture));
+        assert_ne!(project.source_id.as_deref(), Some(path_derived.as_str()));
+        let alias = record_alias_decision(
+            &path,
+            &RecordMemoryEntityAliasDecisionInput {
+                project_root: root.to_string(),
+                entity_candidate_id: project.candidate_id.clone(),
+                decision: MemoryEntityAliasDecisionKind::ConfirmAlias,
+                actor_id: "user-m5r09".to_string(),
+                actor_role: "user".to_string(),
+                reason: "fixture alias path must persist fixture owner".to_string(),
+                expected_store_revision: Some(0),
+            },
+            "2026-08-18T00:00:03Z",
+            "write-m5r09-entity-fixture-alias",
+        )
+        .expect("alias wrapper");
+        assert_eq!(
+            alias.entity.expect("entity").source_refs[0]
+                .source_id
+                .as_deref(),
+            Some(fixture)
+        );
+        let after_alias =
+            crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:04Z")
+                .expect("load");
+        assert_eq!(after_alias.project_id.as_deref(), Some(fixture));
+        assert_ne!(after_alias.project_id.as_deref(), Some(path_derived.as_str()));
+        let merge = preview
+            .merge_candidates
+            .first()
+            .expect("merge candidate");
+        let merge_output = record_merge_decision(
+            &path,
+            &RecordMemoryEntityMergeDecisionInput {
+                project_root: root.to_string(),
+                merge_candidate_id: merge.merge_candidate_id.clone(),
+                decision: MemoryEntityMergeDecisionKind::RejectMerge,
+                actor_id: "user-m5r09".to_string(),
+                actor_role: "user".to_string(),
+                confirmed_by: None,
+                reason: "fixture merge path must persist fixture owner".to_string(),
+                expected_store_revision: Some(1),
+            },
+            "2026-08-18T00:00:05Z",
+            "write-m5r09-entity-fixture-merge",
+        )
+        .expect("merge wrapper");
+        assert_eq!(
+            crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:06Z")
+                .expect("load")
+                .project_id
+                .as_deref(),
+            Some(fixture)
+        );
+        let relation = preview
+            .relation_candidates
+            .first()
+            .expect("relation candidate");
+        record_relation_decision(
+            &path,
+            &RecordMemoryRelationCandidateDecisionInput {
+                project_root: root.to_string(),
+                relation_candidate_id: relation.candidate_id.clone(),
+                decision: MemoryRelationCandidateDecisionKind::RejectRelation,
+                actor_id: "user-m5r09".to_string(),
+                actor_role: "user".to_string(),
+                confirmed_by: None,
+                reason: "fixture relation path must persist fixture owner".to_string(),
+                expected_store_revision: Some(merge_output.store_revision),
+            },
+            "2026-08-18T00:00:07Z",
+            "write-m5r09-entity-fixture-relation",
+        )
+        .expect("relation wrapper");
+        let after =
+            crate::memory_entity_relation_store::load_store(&path, "2026-08-18T00:00:08Z")
+                .expect("load");
+        assert_eq!(after.project_id.as_deref(), Some(fixture));
+        assert_ne!(after.project_id.as_deref(), Some(path_derived.as_str()));
+        let _ = fs::remove_dir_all(dir);
     }
 }

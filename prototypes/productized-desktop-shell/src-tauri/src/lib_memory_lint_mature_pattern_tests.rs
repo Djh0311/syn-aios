@@ -739,9 +739,11 @@
         bootstrap_project_workflow_at(&path, &fixture_project(project_root))
             .expect("workflow state should include project");
         prepare_m12_repeated_candidate_fixture(&path, project_root);
+        let trusted = mature_pattern_governance::trusted_canonical_fixture(project_root);
 
-        let preview = mature_pattern_governance::preview_mature_patterns(
+        let preview = mature_pattern_governance::preview_mature_patterns_for_canonical_project(
             &path,
+            &trusted,
             &fixture_m12_preview_input(project_root),
             "2026-06-05T12:00:01Z",
         )
@@ -787,8 +789,10 @@
         bootstrap_project_workflow_at(&path, &fixture_project(project_root))
             .expect("workflow state should include project");
         prepare_m12_repeated_candidate_fixture(&path, project_root);
-        let preview = mature_pattern_governance::preview_mature_patterns(
+        let trusted = mature_pattern_governance::trusted_canonical_fixture(project_root);
+        let preview = mature_pattern_governance::preview_mature_patterns_for_canonical_project(
             &path,
+            &trusted,
             &fixture_m12_preview_input(project_root),
             "2026-06-05T12:10:00Z",
         )
@@ -821,8 +825,10 @@
         bootstrap_project_workflow_at(&path, &fixture_project(project_root))
             .expect("workflow state should include project");
         prepare_m12_repeated_candidate_fixture(&path, project_root);
-        let preview = mature_pattern_governance::preview_mature_patterns(
+        let trusted = mature_pattern_governance::trusted_canonical_fixture(project_root);
+        let preview = mature_pattern_governance::preview_mature_patterns_for_canonical_project(
             &path,
+            &trusted,
             &fixture_m12_preview_input(project_root),
             "2026-06-05T12:20:00Z",
         )
@@ -834,8 +840,9 @@
             .expect("repeated candidate should exist")
             .clone();
 
-        let blocked = mature_pattern_governance::record_mature_pattern_decision(
+        let blocked = mature_pattern_governance::record_mature_pattern_decision_for_canonical_project(
             &path,
+            &trusted,
             &RecordMaturePatternDecisionInput {
                 project_root: project_root.to_string(),
                 candidate_id: candidate.candidate_id.clone(),
@@ -854,8 +861,9 @@
         .unwrap_err();
         assert!(blocked.contains("必须由用户确认"));
 
-        let output = mature_pattern_governance::record_mature_pattern_decision(
+        let output = mature_pattern_governance::record_mature_pattern_decision_for_canonical_project(
             &path,
+            &trusted,
             &RecordMaturePatternDecisionInput {
                 project_root: project_root.to_string(),
                 candidate_id: candidate.candidate_id.clone(),
@@ -937,16 +945,19 @@
         bootstrap_project_workflow_at(&path, &fixture_project(project_root))
             .expect("workflow state should include project");
         prepare_m12_repeated_candidate_fixture(&path, project_root);
-        let preview = mature_pattern_governance::preview_mature_patterns(
+        let trusted = mature_pattern_governance::trusted_canonical_fixture(project_root);
+        let preview = mature_pattern_governance::preview_mature_patterns_for_canonical_project(
             &path,
+            &trusted,
             &fixture_m12_preview_input(project_root),
             "2026-06-05T12:30:00Z",
         )
         .expect("mature pattern preview should build");
         let candidate_id = preview.mature_pattern_candidates[0].candidate_id.clone();
 
-        let conflict = mature_pattern_governance::record_mature_pattern_decision(
+        let conflict = mature_pattern_governance::record_mature_pattern_decision_for_canonical_project(
             &path,
+            &trusted,
             &RecordMaturePatternDecisionInput {
                 project_root: project_root.to_string(),
                 candidate_id: candidate_id.clone(),
@@ -965,8 +976,9 @@
         .unwrap_err();
         assert!(conflict.contains("memory_pattern_store_conflict"));
 
-        let reject_output = mature_pattern_governance::record_mature_pattern_decision(
+        let reject_output = mature_pattern_governance::record_mature_pattern_decision_for_canonical_project(
             &path,
+            &trusted,
             &RecordMaturePatternDecisionInput {
                 project_root: project_root.to_string(),
                 candidate_id,
@@ -1008,8 +1020,9 @@
             MaturePatternCandidateStatus::Rejected
         );
         let quarantine_candidate_id = preview.mature_pattern_candidates[1].candidate_id.clone();
-        let quarantine_output = mature_pattern_governance::record_mature_pattern_decision(
+        let quarantine_output = mature_pattern_governance::record_mature_pattern_decision_for_canonical_project(
             &path,
+            &trusted,
             &RecordMaturePatternDecisionInput {
                 project_root: project_root.to_string(),
                 candidate_id: quarantine_candidate_id,
@@ -1038,16 +1051,20 @@
         bootstrap_project_workflow_at(&damaged_path, &fixture_project(damaged_project_root))
             .expect("workflow state should include project");
         prepare_m12_repeated_candidate_fixture(&damaged_path, damaged_project_root);
-        let damaged_preview = mature_pattern_governance::preview_mature_patterns(
+        let damaged_trusted =
+            mature_pattern_governance::trusted_canonical_fixture(damaged_project_root);
+        let damaged_preview = mature_pattern_governance::preview_mature_patterns_for_canonical_project(
             &damaged_path,
+            &damaged_trusted,
             &fixture_m12_preview_input(damaged_project_root),
             "2026-06-05T12:31:00Z",
         )
         .expect("mature pattern preview should build");
         let sidecar = mature_pattern_store::sidecar_path(&damaged_path).expect("sidecar path");
         fs::write(&sidecar, "{ damaged json").expect("test should write damaged pattern store");
-        let damaged = mature_pattern_governance::record_mature_pattern_decision(
+        let damaged = mature_pattern_governance::record_mature_pattern_decision_for_canonical_project(
             &damaged_path,
+            &damaged_trusted,
             &RecordMaturePatternDecisionInput {
                 project_root: damaged_project_root.to_string(),
                 candidate_id: damaged_preview.mature_pattern_candidates[0]

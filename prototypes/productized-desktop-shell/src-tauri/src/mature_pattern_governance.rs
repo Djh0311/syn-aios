@@ -17,6 +17,18 @@ pub(crate) struct TrustedCanonicalProject {
     pub project_id: String,
 }
 
+#[cfg(test)]
+pub(crate) const M5R09_TRUSTED_CANONICAL_PROJECT_ID: &str =
+    "project:canonical:m5r09-trusted-fixture";
+
+#[cfg(test)]
+pub(crate) fn trusted_canonical_fixture(project_root: &str) -> TrustedCanonicalProject {
+    TrustedCanonicalProject {
+        project_root: project_root.to_string(),
+        project_id: M5R09_TRUSTED_CANONICAL_PROJECT_ID.to_string(),
+    }
+}
+
 pub(crate) fn preview_mature_patterns_for_canonical_project(
     workflow_state_path: &Path,
     trusted: &TrustedCanonicalProject,
@@ -35,6 +47,7 @@ pub(crate) fn preview_mature_patterns_for_canonical_project(
         trusted,
         "memory_pattern_store_project_id_mismatch",
     )?;
+    validate_pattern_nested_owner_identities(&store, trusted)?;
     let formal_store = crate::formal_memory_store::load_store(workflow_state_path, timestamp)?;
     let candidate_store =
         crate::memory_candidate_store::load_store(workflow_state_path, timestamp)?;
@@ -79,12 +92,12 @@ pub(crate) fn preview_mature_patterns(
     input: &PreviewMaturePatternsInput,
     timestamp: &str,
 ) -> Result<MaturePatternPreviewOutput, String> {
-    validate_preview_input(input)?;
-    let trusted = TrustedCanonicalProject {
-        project_root: input.project_root.clone(),
-        project_id: crate::project_id(&input.project_root),
-    };
-    preview_mature_patterns_for_canonical_project(workflow_state_path, &trusted, input, timestamp)
+    preview_mature_patterns_for_canonical_project(
+        workflow_state_path,
+        &trusted_canonical_fixture(&input.project_root),
+        input,
+        timestamp,
+    )
 }
 
 pub(crate) fn record_mature_pattern_decision_for_canonical_project(
@@ -112,6 +125,7 @@ pub(crate) fn record_mature_pattern_decision_for_canonical_project(
                 trusted,
                 "memory_pattern_store_project_id_mismatch",
             )?;
+            converge_pattern_nested_owner_identities(store, trusted)?;
             validate_expected_revision(input.expected_pattern_store_revision, store)?;
             let formal_store =
                 crate::formal_memory_store::load_store(workflow_state_path, timestamp)?;
@@ -122,7 +136,7 @@ pub(crate) fn record_mature_pattern_decision_for_canonical_project(
             let lint_store = crate::memory_lint_store::load_store(workflow_state_path, timestamp)?;
             let entity_relation_store =
                 crate::memory_entity_relation_store::load_store(workflow_state_path, timestamp)?;
-            let derived = derive_mature_pattern_materials(
+            let mut derived = derive_mature_pattern_materials(
                 &preview_input,
                 timestamp,
                 store,
@@ -132,6 +146,7 @@ pub(crate) fn record_mature_pattern_decision_for_canonical_project(
                 &lint_store,
                 &entity_relation_store,
             );
+            validate_and_rewrite_derived_pattern_materials(&mut derived, trusted)?;
             let candidate = derived
                 .candidates
                 .into_iter()
@@ -242,13 +257,9 @@ pub(crate) fn record_mature_pattern_decision(
     pattern_write_id: &str,
     formal_write_id: &str,
 ) -> Result<RecordMaturePatternDecisionOutput, String> {
-    let trusted = TrustedCanonicalProject {
-        project_root: input.project_root.clone(),
-        project_id: crate::project_id(&input.project_root),
-    };
     record_mature_pattern_decision_for_canonical_project(
         workflow_state_path,
-        &trusted,
+        &trusted_canonical_fixture(&input.project_root),
         input,
         timestamp,
         pattern_write_id,
@@ -779,6 +790,7 @@ fn gate(
     }
 }
 
+#[allow(dead_code)]
 fn validate_preview_input(input: &PreviewMaturePatternsInput) -> Result<(), String> {
     if input.project_root.trim().is_empty() {
         return Err("成熟模式 preview 缺少 project_root".to_string());
@@ -934,6 +946,150 @@ fn preview_allows_store_project_id(
             trusted.project_id
         )),
     }
+}
+
+const NESTED_OWNER_MISMATCH: &str = "memory_pattern_store_nested_project_id_mismatch";
+
+fn legacy_owner_project_id(trusted: &TrustedCanonicalProject) -> String {
+    crate::project_id(&trusted.project_root)
+}
+
+fn allow_owner_project_id(
+    value: &str,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    if value == trusted.project_id || value == legacy_owner_project_id(trusted) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{mismatch_code}: expected {}, actual {value}",
+            trusted.project_id
+        ))
+    }
+}
+
+fn allow_optional_owner_project_id(
+    value: Option<&str>,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    match value {
+        None => Ok(()),
+        Some(value) => allow_owner_project_id(value, trusted, mismatch_code),
+    }
+}
+
+fn rewrite_optional_owner_project_id(
+    value: &mut Option<String>,
+    trusted: &TrustedCanonicalProject,
+) {
+    if value.as_deref() == Some(legacy_owner_project_id(trusted).as_str()) {
+        *value = Some(trusted.project_id.clone());
+    }
+}
+
+fn validate_pattern_candidate_owners(
+    candidate: &MaturePatternCandidate,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    allow_optional_owner_project_id(candidate.scope.project_id.as_deref(), trusted, mismatch_code)?;
+    for member in &candidate.member_refs {
+        allow_optional_owner_project_id(member.project_id.as_deref(), trusted, mismatch_code)?;
+    }
+    Ok(())
+}
+
+fn validate_pattern_report_owners(
+    report: &MemoryClusterReport,
+    trusted: &TrustedCanonicalProject,
+    mismatch_code: &str,
+) -> Result<(), String> {
+    for project_id in &report.project_ids {
+        allow_owner_project_id(project_id, trusted, mismatch_code)?;
+    }
+    for member in &report.member_refs {
+        allow_optional_owner_project_id(member.project_id.as_deref(), trusted, mismatch_code)?;
+    }
+    Ok(())
+}
+
+fn rewrite_pattern_candidate_owners(
+    candidate: &mut MaturePatternCandidate,
+    trusted: &TrustedCanonicalProject,
+) {
+    rewrite_optional_owner_project_id(&mut candidate.scope.project_id, trusted);
+    for member in &mut candidate.member_refs {
+        rewrite_optional_owner_project_id(&mut member.project_id, trusted);
+    }
+}
+
+fn rewrite_pattern_report_owners(report: &mut MemoryClusterReport, trusted: &TrustedCanonicalProject) {
+    let legacy = legacy_owner_project_id(trusted);
+    for project_id in &mut report.project_ids {
+        if project_id == &legacy {
+            *project_id = trusted.project_id.clone();
+        }
+    }
+    let mut seen = BTreeSet::new();
+    report.project_ids.retain(|project_id| seen.insert(project_id.clone()));
+    for member in &mut report.member_refs {
+        rewrite_optional_owner_project_id(&mut member.project_id, trusted);
+    }
+}
+
+fn validate_pattern_nested_owner_identities(
+    store: &MemoryPatternStoreV1,
+    trusted: &TrustedCanonicalProject,
+) -> Result<(), String> {
+    for candidate in &store.mature_pattern_candidates {
+        validate_pattern_candidate_owners(candidate, trusted, NESTED_OWNER_MISMATCH)?;
+    }
+    for report in &store.cluster_reports {
+        validate_pattern_report_owners(report, trusted, NESTED_OWNER_MISMATCH)?;
+    }
+    Ok(())
+}
+
+fn rewrite_pattern_nested_owner_identities(
+    store: &mut MemoryPatternStoreV1,
+    trusted: &TrustedCanonicalProject,
+) {
+    for candidate in &mut store.mature_pattern_candidates {
+        rewrite_pattern_candidate_owners(candidate, trusted);
+    }
+    for report in &mut store.cluster_reports {
+        rewrite_pattern_report_owners(report, trusted);
+    }
+}
+
+fn converge_pattern_nested_owner_identities(
+    store: &mut MemoryPatternStoreV1,
+    trusted: &TrustedCanonicalProject,
+) -> Result<(), String> {
+    validate_pattern_nested_owner_identities(store, trusted)?;
+    rewrite_pattern_nested_owner_identities(store, trusted);
+    Ok(())
+}
+
+fn validate_and_rewrite_derived_pattern_materials(
+    derived: &mut DerivedMaturePatternMaterials,
+    trusted: &TrustedCanonicalProject,
+) -> Result<(), String> {
+    for candidate in &derived.candidates {
+        validate_pattern_candidate_owners(candidate, trusted, NESTED_OWNER_MISMATCH)?;
+    }
+    for report in &derived.cluster_reports {
+        validate_pattern_report_owners(report, trusted, NESTED_OWNER_MISMATCH)?;
+    }
+    for candidate in &mut derived.candidates {
+        rewrite_pattern_candidate_owners(candidate, trusted);
+    }
+    for report in &mut derived.cluster_reports {
+        rewrite_pattern_report_owners(report, trusted);
+    }
+    Ok(())
 }
 
 fn global_scope(input: &PreviewMaturePatternsInput, timestamp: &str) -> MemoryScope {
@@ -1314,7 +1470,8 @@ mod m5r08_m1_tests {
             .iter()
             .find(|candidate| candidate.candidate_id == historical.candidate_id)
             .expect("historical candidate remains");
-        assert_eq!(kept.scope.project_id.as_deref(), Some(legacy.as_str()));
+        assert_eq!(kept.scope.project_id.as_deref(), Some(canonical));
+        assert_ne!(kept.scope.project_id.as_deref(), Some(legacy.as_str()));
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1458,5 +1615,352 @@ mod m5r08_m1_tests {
         assert!(production.contains("store.project_id = Some(trusted.project_id.clone())"));
         assert!(production.contains("project_id: Some(trusted.project_id.clone())"));
         assert!(production.contains("existing == crate::project_id(&trusted.project_root)"));
+    }
+}
+
+#[cfg(test)]
+mod m5r09_tests {
+    use super::*;
+    use crate::{
+        MaturePatternCandidate, MaturePatternCandidateStatus, MaturePatternDecisionKind,
+        MemoryClusterMemberRef, MemoryClusterReport, MemoryPatternStoreV1, MemoryScope,
+        MemorySourceRef, PreviewMaturePatternsInput, RecordMaturePatternDecisionInput,
+    };
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "syn-m5r09-mature-{}-{}-{}",
+            prefix,
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&dir).expect("temp");
+        dir
+    }
+
+    fn workflow_path(dir: &Path) -> PathBuf {
+        let path = dir.join("workflow-state.v0.json");
+        fs::write(&path, "{}").expect("workflow");
+        path
+    }
+
+    fn write_store(path: &Path, store: &MemoryPatternStoreV1) {
+        let sidecar = crate::mature_pattern_store::sidecar_path(path).expect("sidecar");
+        fs::write(&sidecar, serde_json::to_string(store).expect("json")).expect("write");
+    }
+
+    fn sample_scope(project_id: Option<&str>) -> MemoryScope {
+        MemoryScope {
+            scope_id: "scope:global:m5r09".to_string(),
+            scope_type: "global".to_string(),
+            user_id: None,
+            project_id: project_id.map(|value| value.to_string()),
+            workflow_id: None,
+            session_id: None,
+            role_ids: vec![],
+            document_refs: vec![],
+            permission_policy_ref: Some("user_confirmed_mature_pattern".to_string()),
+            model_export_policy: "allowed_with_redaction".to_string(),
+            valid_from: "2026-08-18T00:00:00Z".to_string(),
+            valid_until: None,
+        }
+    }
+
+    fn sample_source() -> MemorySourceRef {
+        MemorySourceRef {
+            source_ref_id: "src:m5r09".to_string(),
+            source_type: "manual_note".to_string(),
+            source_id: Some("manual:m5r09".to_string()),
+            source_path: None,
+            source_title: Some("m5r09".to_string()),
+            anchor: None,
+            source_created_at: None,
+            captured_at: "2026-08-18T00:00:00Z".to_string(),
+            authority_level: "manual".to_string(),
+            sensitive_level: "internal".to_string(),
+            content_hash: None,
+        }
+    }
+
+    fn sample_member(project_id: Option<&str>) -> MemoryClusterMemberRef {
+        MemoryClusterMemberRef {
+            member_ref_id: "cluster-member:v1:m5r09".to_string(),
+            member_kind: "memory_candidate".to_string(),
+            member_id: "candidate:m5r09".to_string(),
+            project_id: project_id.map(|value| value.to_string()),
+            title: "m5r09 member".to_string(),
+            source_refs: vec![sample_source()],
+        }
+    }
+
+    fn sample_candidate(id: &str, project_id: Option<&str>) -> MaturePatternCandidate {
+        MaturePatternCandidate {
+            candidate_id: id.to_string(),
+            pattern_kind: "maintenance_signal".to_string(),
+            scope: sample_scope(project_id),
+            title: "m5r09".to_string(),
+            claim: "m5r09 claim".to_string(),
+            body: "m5r09 body".to_string(),
+            source_refs: vec![sample_source()],
+            member_refs: vec![sample_member(project_id)],
+            signal_refs: vec![],
+            status: MaturePatternCandidateStatus::Candidate,
+            requires_user_confirmation: true,
+            review_summary: "review".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        }
+    }
+
+    fn sample_report(project_id: &str) -> MemoryClusterReport {
+        MemoryClusterReport {
+            report_id: "memory-cluster-report:v1:m5r09".to_string(),
+            report_kind: "maintenance_signal".to_string(),
+            scope_type: "global".to_string(),
+            title: "m5r09 report".to_string(),
+            project_ids: vec![project_id.to_string()],
+            member_refs: vec![sample_member(Some(project_id))],
+            source_refs: vec![sample_source()],
+            status: "derived_report".to_string(),
+            staleness: "historical".to_string(),
+            display_text: "m5r09 report".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        }
+    }
+
+    fn store_with(
+        project_id: Option<&str>,
+        candidates: Vec<MaturePatternCandidate>,
+        reports: Vec<MemoryClusterReport>,
+    ) -> MemoryPatternStoreV1 {
+        MemoryPatternStoreV1 {
+            store_version: "memory_patterns.v1".to_string(),
+            project_id: project_id.map(|value| value.to_string()),
+            workflow_id: None,
+            revision: 0,
+            mature_pattern_candidates: candidates,
+            cluster_reports: reports,
+            audit_events: vec![],
+            updated_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        }
+    }
+
+    fn reject_input(root: &str, candidate_id: &str) -> RecordMaturePatternDecisionInput {
+        RecordMaturePatternDecisionInput {
+            project_root: root.to_string(),
+            candidate_id: candidate_id.to_string(),
+            decision: MaturePatternDecisionKind::Reject,
+            actor_id: "user-m5r09".to_string(),
+            actor_role: "user".to_string(),
+            confirmed_by: None,
+            reason: "m5r09 nested identity decision".to_string(),
+            expected_pattern_store_revision: Some(0),
+            expected_formal_store_revision: None,
+        }
+    }
+
+    fn assert_no_legacy_owner(store: &MemoryPatternStoreV1, legacy: &str, canonical: &str) {
+        let leftover = serde_json::to_string(store).expect("json");
+        assert!(
+            !leftover.contains(&format!("\"{legacy}\"")),
+            "legacy owner {legacy} must not remain: {leftover}"
+        );
+        for candidate in &store.mature_pattern_candidates {
+            assert_eq!(candidate.scope.project_id.as_deref(), Some(canonical));
+            assert!(candidate
+                .member_refs
+                .iter()
+                .all(|member| member.project_id.as_deref() == Some(canonical)));
+        }
+        for report in &store.cluster_reports {
+            assert_eq!(report.project_ids, vec![canonical.to_string()]);
+            assert!(report
+                .member_refs
+                .iter()
+                .all(|member| member.project_id.as_deref() == Some(canonical)));
+        }
+    }
+
+    #[test]
+    fn m5r09_mature_pattern_legacy_nested_store_converges() {
+        let dir = temp_dir("legacy-nested");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r09-mature-legacy-nested";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa31";
+        let legacy = crate::project_id(root);
+        assert_ne!(canonical, legacy);
+        write_store(
+            &path,
+            &store_with(
+                Some(legacy.as_str()),
+                vec![sample_candidate(
+                    "mature-pattern-candidate:v1:m5r09",
+                    Some(legacy.as_str()),
+                )],
+                vec![sample_report(&legacy)],
+            ),
+        );
+        record_mature_pattern_decision_for_canonical_project(
+            &path,
+            &TrustedCanonicalProject {
+                project_root: root.to_string(),
+                project_id: canonical.to_string(),
+            },
+            &reject_input(root, "mature-pattern-candidate:v1:m5r09"),
+            "2026-08-18T00:00:01Z",
+            "write-m5r09-mature-legacy-nested",
+            "write-m5r09-mature-formal-unused",
+        )
+        .expect("legacy nested migrate");
+        let store = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z")
+            .expect("load");
+        assert_eq!(store.project_id.as_deref(), Some(canonical));
+        assert_no_legacy_owner(&store, &legacy, canonical);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r09_mature_pattern_mixed_foreign_nested_owner_rejects_zero_write() {
+        let dir = temp_dir("mixed-foreign");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r09-mature-mixed-foreign";
+        let canonical = "project:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa32";
+        let foreign = "project:ffffffff-ffff-4fff-8fff-ffffffffffff";
+        let mut candidate = sample_candidate(
+            "mature-pattern-candidate:v1:m5r09",
+            Some(canonical),
+        );
+        candidate.member_refs = vec![sample_member(Some(foreign))];
+        let mut store = store_with(
+            Some(canonical),
+            vec![candidate],
+            vec![sample_report(canonical)],
+        );
+        store.revision = 4;
+        store.audit_events.push(MaturePatternAuditEvent {
+            audit_event_id: "mature-pattern-audit:v1:seed".to_string(),
+            event_type: "seed".to_string(),
+            actor_id: "user-m5r09".to_string(),
+            actor_role: "user".to_string(),
+            target_kind: "mature_pattern_candidate".to_string(),
+            target_id: "mature-pattern-candidate:v1:m5r09".to_string(),
+            before_status: None,
+            after_status: Some(MaturePatternCandidateStatus::Candidate),
+            formal_memory_id: None,
+            reason: "seed".to_string(),
+            created_at: "2026-08-18T00:00:00Z".to_string(),
+            warnings: vec![],
+        });
+        write_store(&path, &store);
+        let sidecar = crate::mature_pattern_store::sidecar_path(&path).expect("sidecar");
+        let before = fs::read(&sidecar).expect("before");
+        let formal_sidecar = crate::formal_memory_store::sidecar_path(&path).expect("formal");
+        let formal_existed = formal_sidecar.exists();
+        let error = record_mature_pattern_decision_for_canonical_project(
+            &path,
+            &TrustedCanonicalProject {
+                project_root: root.to_string(),
+                project_id: canonical.to_string(),
+            },
+            &reject_input(root, "mature-pattern-candidate:v1:m5r09"),
+            "2026-08-18T00:00:01Z",
+            "write-m5r09-mature-mixed-foreign",
+            "write-m5r09-mature-formal-unused",
+        )
+        .expect_err("nested foreign must fail closed");
+        assert!(
+            error.contains("memory_pattern_store_nested_project_id_mismatch"),
+            "{error}"
+        );
+        assert!(error.contains(foreign), "{error}");
+        assert_eq!(fs::read(&sidecar).expect("after"), before);
+        assert_eq!(formal_sidecar.exists(), formal_existed);
+        let after = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:02Z")
+            .expect("load");
+        assert_eq!(after.revision, 4);
+        assert_eq!(after.audit_events.len(), 1);
+        assert_eq!(after.mature_pattern_candidates.len(), 1);
+        assert_eq!(after.cluster_reports.len(), 1);
+        let formal = crate::formal_memory_store::load_store(&path, "2026-08-18T00:00:03Z")
+            .expect("formal");
+        assert!(formal.records.is_empty());
+        assert_eq!(formal.revision, 0);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn m5r09_mature_pattern_canonical_fixture_paths_use_fixture_id() {
+        let dir = temp_dir("fixture-paths");
+        let path = workflow_path(&dir);
+        let root = "/tmp/m5r09-mature-fixture-paths";
+        let fixture = M5R09_TRUSTED_CANONICAL_PROJECT_ID;
+        let path_derived = crate::project_id(root);
+        assert_ne!(fixture, path_derived.as_str());
+        write_store(
+            &path,
+            &store_with(
+                None,
+                vec![sample_candidate(
+                    "mature-pattern-candidate:v1:m5r09",
+                    None,
+                )],
+                vec![],
+            ),
+        );
+        let preview = preview_mature_patterns(
+            &path,
+            &PreviewMaturePatternsInput {
+                project_root: root.to_string(),
+                project_id: Some(path_derived.clone()),
+                workflow_id: None,
+            },
+            "2026-08-18T00:00:01Z",
+        )
+        .expect("preview wrapper");
+        let previewed = preview
+            .mature_pattern_candidates
+            .iter()
+            .find(|candidate| candidate.candidate_id == "mature-pattern-candidate:v1:m5r09")
+            .expect("persisted candidate remains visible");
+        assert_eq!(previewed.scope.project_id.as_deref(), None);
+        let derived_with_scope = preview
+            .mature_pattern_candidates
+            .iter()
+            .find(|candidate| candidate.scope.project_id.is_some());
+        if let Some(candidate) = derived_with_scope {
+            assert_eq!(candidate.scope.project_id.as_deref(), Some(fixture));
+            assert_ne!(
+                candidate.scope.project_id.as_deref(),
+                Some(path_derived.as_str())
+            );
+        }
+        record_mature_pattern_decision(
+            &path,
+            &reject_input(root, "mature-pattern-candidate:v1:m5r09"),
+            "2026-08-18T00:00:02Z",
+            "write-m5r09-mature-fixture",
+            "write-m5r09-mature-formal-unused",
+        )
+        .expect("record wrapper");
+        let store = crate::mature_pattern_store::load_store(&path, "2026-08-18T00:00:03Z")
+            .expect("load");
+        assert_eq!(store.project_id.as_deref(), Some(fixture));
+        assert_ne!(store.project_id.as_deref(), Some(path_derived.as_str()));
+        let decided = store
+            .mature_pattern_candidates
+            .iter()
+            .find(|candidate| candidate.candidate_id == "mature-pattern-candidate:v1:m5r09")
+            .expect("decided candidate");
+        assert_eq!(decided.scope.project_id.as_deref(), None);
+        assert!(store
+            .mature_pattern_candidates
+            .iter()
+            .all(|candidate| candidate.scope.project_id.as_deref() != Some(path_derived.as_str())));
+        let _ = fs::remove_dir_all(dir);
     }
 }
