@@ -4,7 +4,7 @@
 
 use rusqlite::Connection;
 
-pub(crate) const M6_ORG_SCHEMA_VERSION: i64 = 1;
+pub(crate) const M6_ORG_SCHEMA_VERSION: i64 = 2;
 
 pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String> {
     connection
@@ -62,6 +62,19 @@ pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String
                 payload_json TEXT NOT NULL,
                 created_at_ms INTEGER NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS m6_consult_handoff_bindings (
+                handoff_id TEXT PRIMARY KEY,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                request_hash TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            );
+
+            UPDATE m6_org_schema_meta
+            SET schema_version = 2
+            WHERE singleton = 1 AND schema_version = 1;
             "#,
         )
         .map_err(|error| format!("m6_org_schema:{error}"))?;

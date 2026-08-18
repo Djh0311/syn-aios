@@ -147,6 +147,13 @@ struct M6OrgGlobalRoleSessionRuntime {
     role_session_id: RoleSessionId,
 }
 
+#[derive(Clone)]
+pub(crate) struct M6OrgGlobalRoleSessionAuthoritySeed {
+    pub(crate) repository: M3RoleSessionSqliteRepository,
+    pub(crate) binding: ServerResolvedBinding,
+    pub(crate) role_session: RoleSession,
+}
+
 #[derive(Clone, Default)]
 pub(crate) struct M6OrgGlobalRoleSessionSlot {
     runtime: Option<M6OrgGlobalRoleSessionRuntime>,
@@ -204,6 +211,19 @@ impl M6OrgGlobalRoleSessionSlot {
         Ok(M6OrgGlobalRoleSessionStatusDto::ready(
             &session, self, context,
         ))
+    }
+
+    pub(crate) fn authority_seed(&self) -> Result<M6OrgGlobalRoleSessionAuthoritySeed, String> {
+        let role_session = self.load_established_session()?;
+        let runtime = self
+            .runtime
+            .as_ref()
+            .ok_or_else(|| M6_ORG_GLOBAL_ROLE_SESSION_UNAVAILABLE.to_string())?;
+        Ok(M6OrgGlobalRoleSessionAuthoritySeed {
+            repository: runtime.repository.clone(),
+            binding: runtime.binding.clone(),
+            role_session,
+        })
     }
 
     fn load_established_session(&self) -> Result<RoleSession, String> {

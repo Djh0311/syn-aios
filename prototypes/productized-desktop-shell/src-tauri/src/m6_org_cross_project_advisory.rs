@@ -433,6 +433,26 @@ fn validate_request_shape(
     Ok(validated)
 }
 
+pub(crate) fn validate_project_queries_for_consult(
+    project_queries: &[M6OrgProjectSummaryQueryInput],
+) -> Result<(), String> {
+    let handoff_id = "consult-validation";
+    let receipt_ref = "consult-validation-receipt";
+    let status_ref = "ACCEPTED";
+    validate_request_shape(&M6OrgCrossProjectAdvisoryRequest {
+        project_queries: project_queries.to_vec(),
+        consult_handoff: M6OrgConsultHandoffRefInput {
+            consult_handoff_ref: consult_handoff_ref_for(handoff_id, 1, status_ref, receipt_ref),
+            handoff_id: handoff_id.to_string(),
+            handoff_revision: 1,
+            status_ref: status_ref.to_string(),
+            receipt_ref: receipt_ref.to_string(),
+        },
+        idempotency_key: "consult-validation".to_string(),
+    })
+    .map(|_| ())
+}
+
 fn validate_consult_handoff(handoff: &M6OrgConsultHandoffRefInput) -> Result<(), String> {
     require_nonempty("handoff_id", &handoff.handoff_id)?;
     require_nonempty("status_ref", &handoff.status_ref)?;

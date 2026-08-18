@@ -1,8 +1,8 @@
 //! M6-owned advisory, decision-request, and application-projection store.
 
 use crate::m6_org_dto::{
-    M6OrgAdvisoryApplicationProjection, M6OrgApplicationOutcome, M6OrgCrossProjectAdvisory,
-    M6OrgDecisionRequest, M6OrgPerProjectApplicationObservation,
+    M6OrgAdvisoryApplicationProjection, M6OrgApplicationOutcome, M6OrgConsultHandoffProjection,
+    M6OrgCrossProjectAdvisory, M6OrgDecisionRequest, M6OrgPerProjectApplicationObservation,
 };
 use crate::m6_org_schema::ensure_m6_org_schema;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -129,6 +129,127 @@ impl M6OrgStore {
             .commit()
             .map_err(|error| format!("m6_org_advisory_commit:{error}"))?;
         Ok(advisory.clone())
+    }
+
+    pub(crate) fn load_consult_handoff(
+        &self,
+        handoff_id: &str,
+    ) -> Result<Option<M6OrgConsultHandoffProjection>, String> {
+        self.load_payload(
+            "SELECT payload_json FROM m6_consult_handoff_bindings WHERE handoff_id=?1",
+            handoff_id,
+            "m6_org_consult_handoff_load",
+        )
+    }
+
+    pub(crate) fn load_consult_handoff_by_idempotency(
+        &self,
+        idempotency_key: &str,
+    ) -> Result<Option<M6OrgConsultHandoffProjection>, String> {
+        self.load_payload(
+            "SELECT payload_json FROM m6_consult_handoff_bindings WHERE idempotency_key=?1",
+            idempotency_key,
+            "m6_org_consult_handoff_idempotency_load",
+        )
+    }
+
+    pub(crate) fn record_consult_handoff(
+        &mut self,
+        projection: &M6OrgConsultHandoffProjection,
+    ) -> Result<M6OrgConsultHandoffProjection, String> {
+        if let Some(existing) =
+            self.load_consult_handoff_by_idempotency(&projection.idempotency_key)?
+        {
+            if existing.request_hash != projection.request_hash
+                || existing.handoff_id != projection.handoff_id
+            {
+                return Err("m6_org_consult_handoff_idempotency_collision".to_string());
+            }
+            return Ok(existing);
+        }
+        let payload = serde_json::to_string(projection)
+            .map_err(|error| format!("m6_org_consult_handoff_serialize:{error}"))?;
+        let audit_payload = serde_json::to_string(&json!({
+            "handoff_id": projection.handoff_id,
+            "question_ref": projection.request.question_ref,
+            "project_count": projection.request.project_queries.len(),
+            "project_write_capability": false,
+            "owns_handoff_lifecycle": false
+        }))
+        .map_err(|error| format!("m6_org_consult_handoff_audit_serialize:{error}"))?;
+        let transaction = self
+            .connection
+            .transaction()
+            .map_err(|error| format!("m6_org_consult_handoff_tx:{error}"))?;
+        transaction
+            .execute(
+                "INSERT INTO m6_consult_handoff_bindings (
+                    handoff_id,idempotency_key,request_hash,payload_json,
+                    created_at_ms,updated_at_ms
+                 ) VALUES (?1,?2,?3,?4,?5,?6)",
+                params![
+                    projection.handoff_id,
+                    projection.idempotency_key,
+                    projection.request_hash,
+                    payload,
+                    projection.created_at_ms,
+                    projection.updated_at_ms
+                ],
+            )
+            .map_err(|error| format!("m6_org_consult_handoff_insert:{error}"))?;
+        transaction
+            .execute(
+                "INSERT INTO m6_org_audit_events (
+                    event_id,event_type,target_ref,payload_json,created_at_ms
+                 ) VALUES (?1,'ConsultHandoffReferenced',?2,?3,?4)",
+                params![
+                    format!("m6-audit:consult:{}", projection.handoff_id),
+                    projection.handoff_id,
+                    audit_payload,
+                    projection.created_at_ms
+                ],
+            )
+            .map_err(|error| format!("m6_org_consult_handoff_audit_insert:{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("m6_org_consult_handoff_commit:{error}"))?;
+        Ok(projection.clone())
+    }
+
+    pub(crate) fn update_consult_handoff_projection(
+        &mut self,
+        projection: &M6OrgConsultHandoffProjection,
+    ) -> Result<M6OrgConsultHandoffProjection, String> {
+        let existing = self
+            .load_consult_handoff(&projection.handoff_id)?
+            .ok_or_else(|| "m6_org_consult_handoff_not_found".to_string())?;
+        if existing.idempotency_key != projection.idempotency_key
+            || existing.request_hash != projection.request_hash
+            || existing.request != projection.request
+        {
+            return Err("m6_org_consult_handoff_projection_collision".to_string());
+        }
+        let payload = serde_json::to_string(projection)
+            .map_err(|error| format!("m6_org_consult_handoff_update_serialize:{error}"))?;
+        let changed = self
+            .connection
+            .execute(
+                "UPDATE m6_consult_handoff_bindings
+                 SET payload_json=?2,updated_at_ms=?3
+                 WHERE handoff_id=?1 AND idempotency_key=?4 AND request_hash=?5",
+                params![
+                    projection.handoff_id,
+                    payload,
+                    projection.updated_at_ms,
+                    projection.idempotency_key,
+                    projection.request_hash
+                ],
+            )
+            .map_err(|error| format!("m6_org_consult_handoff_update:{error}"))?;
+        if changed != 1 {
+            return Err("m6_org_consult_handoff_update_lost".to_string());
+        }
+        Ok(projection.clone())
     }
 
     pub(crate) fn mark_issued_advisories_stale_for_source_changes(
@@ -481,6 +602,7 @@ impl M6OrgStore {
             "m6_decision_requests",
             "m6_advisory_application_observations",
             "m6_org_audit_events",
+            "m6_consult_handoff_bindings",
         ];
         if !allowed.contains(&table) {
             return Err("m6_org_test_table_not_allowed".to_string());

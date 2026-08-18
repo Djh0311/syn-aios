@@ -332,7 +332,7 @@ fn create_secretary_role_session(
     })
 }
 
-fn permission_descriptor(
+pub(crate) fn permission_descriptor(
     identity: &M4PrimarySecretaryIdentity,
     binding: &ServerResolvedBinding,
 ) -> Result<PermissionSnapshotDescriptor, String> {

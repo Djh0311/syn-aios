@@ -81,6 +81,7 @@ mod m5_runner_entry_registry;
 mod m5_runtime_admission;
 mod m5_runtime_receipt;
 mod m5_side_effect_entry;
+mod m6_org_consult_handoff;
 mod m6_org_cross_project_advisory;
 mod m6_org_dto;
 mod m6_org_global_role_session;

@@ -4865,6 +4865,44 @@ fn attempt_global_supervisor_project_write(
     )
 }
 
+/// Ordinary Secretary entry: M4 validates the fixed PersonalScope
+/// RoleSession before the adapter asks M3 to create the authoritative Handoff.
+#[tauri::command]
+fn start_secretary_global_supervisor_consult(
+    request: crate::m6_org_dto::M6OrgSecretaryConsultStartRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_consult_handoff::M6OrgSecretaryConsultCommandResponse, String> {
+    crate::secretary_agent::start_global_supervisor_consult_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
+/// Global Supervisor decision entry.  Accept/reject is an exact M3 Handoff
+/// transition; only an accepted receipt can authorize M6D03 advice generation.
+#[tauri::command]
+fn decide_global_supervisor_consult_handoff(
+    request: crate::m6_org_dto::M6OrgGlobalSupervisorConsultDecisionRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_consult_handoff::M6OrgSecretaryConsultOutcome, String> {
+    crate::m6_org_consult_handoff::decide_for_state(&state, &request, unix_timestamp_ms())
+}
+
+/// Ordinary Secretary read entry: M4 validates the same fixed personal
+/// session and maps the current M3 receipt into its accepted Handoff outcome.
+#[tauri::command]
+fn read_secretary_global_supervisor_consult_receipt(
+    request: crate::m6_org_dto::M6OrgSecretaryConsultReadRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_consult_handoff::M6OrgSecretaryConsultCommandResponse, String> {
+    crate::secretary_agent::read_global_supervisor_consult_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
 fn load_secretary_role_session_status_for_state(
     state: &AppState,
 ) -> Result<crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto, String> {

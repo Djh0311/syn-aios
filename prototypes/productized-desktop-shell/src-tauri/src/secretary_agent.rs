@@ -15,12 +15,13 @@ use crate::m4_secretary_repository::M4SecretarySqliteRepository;
 use crate::m4_secretary_service::{
     M4SecretaryApplicationOutcome, M4SecretaryApplicationService,
     M4SecretaryControlledModelEnhancementPort, M4SecretaryCoordinationSnapshotReadPort,
-    M4SecretaryHandoffPort, M4SecretaryHandoffPortRecord, M4SecretaryHandoffRequest,
-    M4SecretaryHash, M4SecretaryInvocationClaimOutcome, M4SecretaryInvocationReceipt,
-    M4SecretaryInvocationTerminal, M4SecretaryModelEnhancementRequest,
-    M4SecretaryModelInvocationClaim, M4SecretaryModelInvocationLedgerPort,
-    M4SecretaryModelPortOutcome, M4SecretaryOpaqueRef, M4SecretaryRoleSessionReadPort,
-    M4SecretaryRoleSessionState, M4SecretaryServiceError, M4SecretaryTypedRef,
+    M4SecretaryHandoffOutcome, M4SecretaryHandoffPort, M4SecretaryHandoffPortRecord,
+    M4SecretaryHandoffRequest, M4SecretaryHash, M4SecretaryInvocationClaimOutcome,
+    M4SecretaryInvocationReceipt, M4SecretaryInvocationTerminal,
+    M4SecretaryModelEnhancementRequest, M4SecretaryModelInvocationClaim,
+    M4SecretaryModelInvocationLedgerPort, M4SecretaryModelPortOutcome, M4SecretaryOpaqueRef,
+    M4SecretaryRoleSessionReadPort, M4SecretaryRoleSessionState, M4SecretaryServiceError,
+    M4SecretaryTypedRef,
 };
 use serde::{Deserialize, Serialize};
 
@@ -234,6 +235,95 @@ impl M4SecretaryHandoffPort for OrdinaryProductUnavailableHandoffPort {
             error_code: M4C05_HANDOFF_UNAVAILABLE.to_string(),
         })
     }
+}
+
+/// The consult entry only invokes M4's RoleSession and Handoff paths.  This
+/// explicit unused port proves it cannot accidentally read or mutate the M4
+/// coordination projection while still traversing the accepted application
+/// service boundary.
+#[derive(Clone, Copy, Default)]
+struct M6ConsultUnusedCoordinationPort;
+
+impl M4SecretaryCoordinationSnapshotReadPort for M6ConsultUnusedCoordinationPort {
+    fn read_coordination_snapshot(
+        &self,
+        _scope_ref: &M4SecretaryTypedRef,
+    ) -> Result<M4CoordinationSnapshot, M4SecretaryServiceError> {
+        Err(M4SecretaryServiceError::new(
+            "M6_CONSULT_COORDINATION_PORT_MUST_NOT_BE_CALLED",
+        ))
+    }
+}
+
+pub(crate) fn start_global_supervisor_consult_for_state(
+    state: &crate::AppState,
+    request: &crate::m6_org_dto::M6OrgSecretaryConsultStartRequest,
+    now_ms: i64,
+) -> Result<crate::m6_org_consult_handoff::M6OrgSecretaryConsultCommandResponse, String> {
+    let role_session_port = OrdinaryProductRoleSessionReadPort {
+        runtime: &state.m3_role_session_read_runtime,
+    };
+    let coordination_port = M6ConsultUnusedCoordinationPort;
+    let handoff_port = crate::m6_org_consult_handoff::M6OrgConsultHandoffAdapter::for_start(
+        state,
+        request.clone(),
+        now_ms,
+    );
+    let invocation_ledger_port = OrdinaryProductUnavailableInvocationLedgerPort;
+    let model_port = OrdinaryProductUnavailableModelPort;
+    let m4_request = crate::m6_org_consult_handoff::m4_request_for_start(state, request, now_ms)?;
+    let secretary_handoff = M4SecretaryApplicationService::new(
+        &role_session_port,
+        &coordination_port,
+        &handoff_port,
+        &invocation_ledger_port,
+        &model_port,
+    )
+    .request_handoff(&m4_request)
+    .map_err(|error| error.code)?;
+    let consult = handoff_port.take_outcome()?;
+    Ok(
+        crate::m6_org_consult_handoff::M6OrgSecretaryConsultCommandResponse {
+            consult,
+            secretary_handoff,
+        },
+    )
+}
+
+pub(crate) fn read_global_supervisor_consult_for_state(
+    state: &crate::AppState,
+    request: &crate::m6_org_dto::M6OrgSecretaryConsultReadRequest,
+    now_ms: i64,
+) -> Result<crate::m6_org_consult_handoff::M6OrgSecretaryConsultCommandResponse, String> {
+    let role_session_port = OrdinaryProductRoleSessionReadPort {
+        runtime: &state.m3_role_session_read_runtime,
+    };
+    let coordination_port = M6ConsultUnusedCoordinationPort;
+    let handoff_port = crate::m6_org_consult_handoff::M6OrgConsultHandoffAdapter::for_read(
+        state,
+        request.handoff_id.clone(),
+        now_ms,
+    );
+    let invocation_ledger_port = OrdinaryProductUnavailableInvocationLedgerPort;
+    let model_port = OrdinaryProductUnavailableModelPort;
+    let handoff_ref =
+        M4SecretaryOpaqueRef::new(request.handoff_id.clone()).map_err(|error| error.code)?;
+    let secretary_handoff: M4SecretaryHandoffOutcome = M4SecretaryApplicationService::new(
+        &role_session_port,
+        &coordination_port,
+        &handoff_port,
+        &invocation_ledger_port,
+        &model_port,
+    )
+    .read_handoff_receipt(&handoff_ref)
+    .map_err(|error| error.code)?;
+    let consult = handoff_port.take_outcome()?;
+    Ok(
+        crate::m6_org_consult_handoff::M6OrgSecretaryConsultCommandResponse {
+            consult,
+            secretary_handoff,
+        },
+    )
 }
 
 /// No ordinary-product durable model ledger has been composed yet. A rejected

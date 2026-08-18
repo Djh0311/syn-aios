@@ -213,3 +213,96 @@ pub(crate) struct M6OrgProjectWriteAttemptRequest {
     pub(crate) project_id: String,
     pub(crate) mutation_kind: String,
 }
+
+/// Renderer-safe Secretary input.  The question and sources are references;
+/// raw question text and source bodies are deliberately not representable.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct M6OrgSecretaryConsultStartRequest {
+    pub(crate) question_ref: String,
+    pub(crate) source_refs: Vec<String>,
+    pub(crate) project_queries: Vec<M6OrgProjectSummaryQueryInput>,
+    pub(crate) accept_by_utc: String,
+    pub(crate) return_by_utc: String,
+    pub(crate) idempotency_key: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum M6OrgConsultDecision {
+    Accept,
+    Reject,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum M6OrgConsultRejectionReason {
+    OutOfScope,
+    InsufficientEvidence,
+    PolicyDenied,
+    RecipientUnavailable,
+}
+
+impl M6OrgConsultRejectionReason {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::OutOfScope => "OUT_OF_SCOPE",
+            Self::InsufficientEvidence => "INSUFFICIENT_EVIDENCE",
+            Self::PolicyDenied => "POLICY_DENIED",
+            Self::RecipientUnavailable => "RECIPIENT_UNAVAILABLE",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct M6OrgGlobalSupervisorConsultDecisionRequest {
+    pub(crate) handoff_id: String,
+    pub(crate) decision: M6OrgConsultDecision,
+    pub(crate) rejection_reason: Option<M6OrgConsultRejectionReason>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct M6OrgSecretaryConsultReadRequest {
+    pub(crate) handoff_id: String,
+}
+
+/// Typed projection of the exact M3 Handoff plus its current M3 receipt.  It
+/// is rebuilt from M3 on every response and is never an authority source.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct M6OrgConsultHandoffBinding {
+    pub(crate) consult_handoff_ref: String,
+    pub(crate) handoff_id: String,
+    pub(crate) handoff_revision: u64,
+    pub(crate) status_ref: String,
+    pub(crate) consult_kind: String,
+    pub(crate) from_role_session_id: String,
+    pub(crate) to_role_ref: String,
+    pub(crate) to_recipient_ref: String,
+    pub(crate) scope_ref: String,
+    pub(crate) question_ref: String,
+    pub(crate) object_refs: Vec<String>,
+    pub(crate) receipt_ref: String,
+    pub(crate) project_write_capability: bool,
+}
+
+/// M6 remembers only request material and result references needed to replay
+/// M3 commands.  Lifecycle state and current receipt remain M3-owned.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct M6OrgConsultHandoffProjection {
+    pub(crate) handoff_id: String,
+    pub(crate) idempotency_key: String,
+    pub(crate) request_hash: String,
+    pub(crate) request: M6OrgSecretaryConsultStartRequest,
+    pub(crate) source_session_revision: u64,
+    pub(crate) source_validation_receipt_ref: String,
+    pub(crate) advisory: Option<M6OrgCrossProjectAdvisory>,
+    pub(crate) advisory_blocked_reasons: Vec<String>,
+    pub(crate) accepted_receipt_ref: Option<String>,
+    pub(crate) accepted_revision: Option<u64>,
+    pub(crate) returned_receipt_ref: Option<String>,
+    pub(crate) rejection_reason: Option<M6OrgConsultRejectionReason>,
+    pub(crate) created_at_ms: i64,
+    pub(crate) updated_at_ms: i64,
+}
