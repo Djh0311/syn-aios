@@ -63,7 +63,9 @@
 
 到检查点的硬动作，缺一不可：把 `authorization.json` 打回精确 closed 两字段；在 `/home/synadmin/workspace/.syn-gates/open/` 写该检查点的交包文件（含所覆盖各叶的候选与记账 SHA/tree、每叶做了什么、主管自复核七项的原始证据与退出码、仍未完成事项与欠账、请求验收的确切范围、实际写域清单）；原始日志留在 `.syn-gates/evidence/`；然后结束进程。`open/` 里同时只应存在一个交包文件；写之前确认没有未处理的旧文件，有就停下并在日志里说明。
 
-不得跳过检查点、不得把两个检查点合并交包、不得在未获总指导 PASS 时进入下一检查点的第一叶。总指导给出 PASS 后由总指导重新拉起主管会话；FAIL 则按返修意见在当前范围内返修，重跑直接受影响的验证与必要回归。
+不得跳过检查点、不得把两个检查点合并交包、不得在未获 PASS 时进入下一检查点的第一叶。收口后 `docs/harness/leaves/` 应为空，下一段第一叶等 PASS 后才拉入。
+
+检查点验收的执行载体（2026-08-18 23:20 用户选定）：仓外驱动 `/home/synadmin/workspace/.syn-gates/checkpoint-loop.sh` 起主管跑一段，主管交包退出后由该驱动起**零上下文独立验收官**（提示词 `verifier-prompt-checkpoint.md`，判据即本文件与各叶自己写下的标准），结论写 `verdicts/<交包名>.verdict.md`，首行顶格 `VERDICT: PASS` 或 `VERDICT: FAIL`。PASS 驱动自动起下一段；FAIL 主管按返修意见在当前段范围内返修后重新交包；连续 3 次 FAIL 按不收敛停下等人裁。驱动每轮另外守两条边界：只读保全的 6 个 `m6_*.rs` 与 `linux-schema.json` 的在场与未跟踪状态、验收官不得修改仓库，任一被破就停。总指导在用户回来后复核每一份 verdict，并保留阶段验收权。
 
 ## 叶子
 
