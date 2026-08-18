@@ -45,6 +45,10 @@ pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_MALFORMED: &str =
     "m1_ordinary_project_identity_source_malformed";
 pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_UNSUPPORTED: &str =
     "m1_ordinary_project_identity_source_unsupported";
+pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_ALIAS_CONFLICT: &str =
+    "m1_ordinary_identity_source_alias_conflict";
+pub(crate) const M1_ORDINARY_IDENTITY_SOURCE_REF_CONFLICT: &str =
+    "m1_ordinary_identity_source_ref_conflict";
 const M1_LOCK_RELATIVE_PATH: &str = ".m1-project-index-v1.lock";
 const M1_ESTABLISHED_MARKER_RELATIVE_PATH: &str = ".m1-project-index.established";
 const M1_ESTABLISHED_MARKER_VALUE: &[u8] = b"m1.project-index.established.v1\n";
@@ -95,6 +99,34 @@ pub(crate) struct M1RegisterIsolatedProjectRequest {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct M1RegisterExactAliasRequest {
     pub(crate) exact_alias: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M1EnrollOrdinaryProjectRequest {
+    pub(crate) exact_alias: String,
+    pub(crate) source_ref: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M1OrdinaryEnrollmentStatus {
+    Created,
+    AlreadyEnrolled,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M1EnrolledOrdinaryProject {
+    pub(crate) project_id: M1ProjectId,
+    pub(crate) exact_alias: String,
+    pub(crate) source_ref: String,
+    pub(crate) source_revision: u64,
+    pub(crate) registry_revision: u64,
+    pub(crate) status: M1OrdinaryEnrollmentStatus,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum M1OrdinaryIdentityReplayPresence {
+    Unenrolled,
+    Replayed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -152,7 +184,7 @@ struct M1StoredProject {
     resolver_revision: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct M1OrdinaryIdentitySourceDocument {
     schema_version: String,
@@ -161,7 +193,7 @@ struct M1OrdinaryIdentitySourceDocument {
     projects: Vec<M1OrdinaryIdentitySourceEntry>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct M1OrdinaryIdentitySourceEntry {
     entry_id: String,
@@ -170,7 +202,7 @@ struct M1OrdinaryIdentitySourceEntry {
     exact_alias: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 enum M1OrdinaryIdentitySourceMode {
     #[serde(rename = "create")]
     Create,
@@ -267,6 +299,10 @@ pub(crate) trait M1ProjectIndexAuthorityPort {
         &self,
         request: &M1RegisterExactAliasRequest,
     ) -> Result<M1RegisteredProject, M1ProjectIndexError>;
+    fn enroll_ordinary_project(
+        &self,
+        request: &M1EnrollOrdinaryProjectRequest,
+    ) -> Result<M1EnrolledOrdinaryProject, M1ProjectIndexError>;
     fn resolve_canonical_project_id(&self, claim: &str)
         -> Result<M1ProjectId, M1ProjectIndexError>;
     fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError>;
@@ -307,6 +343,34 @@ impl M1ProjectIndexAuthorityHandle {
         store.replay_ordinary_identity_source(&source)
     }
 
+    pub(crate) fn replay_ordinary_identity_source_if_present(
+        app_data_root: &Path,
+    ) -> Result<M1OrdinaryIdentityReplayPresence, M1ProjectIndexError> {
+        let root = match admit_ordinary_root_for_identity_source(app_data_root) {
+            Ok(root) => root,
+            Err(error) if error.code == M1_ORDINARY_IDENTITY_SOURCE_MISSING => {
+                return Ok(M1OrdinaryIdentityReplayPresence::Unenrolled);
+            }
+            Err(error) => return Err(error),
+        };
+        let store = M1ProjectIndexStore::from_root(root);
+        match load_ordinary_identity_source_if_present(&store.canonical_app_data_root)? {
+            None => match store.classify_registry_presence()? {
+                RegistryPresence::Absent => Ok(M1OrdinaryIdentityReplayPresence::Unenrolled),
+                RegistryPresence::EstablishedMissing => Err(M1ProjectIndexError::new(
+                    "m1_project_index_registry_missing",
+                )),
+                RegistryPresence::Present => Err(M1ProjectIndexError::new(
+                    M1_ORDINARY_IDENTITY_SOURCE_MISSING,
+                )),
+            },
+            Some(source) => {
+                store.replay_ordinary_identity_source(&source)?;
+                Ok(M1OrdinaryIdentityReplayPresence::Replayed)
+            }
+        }
+    }
+
     fn require_readable_registry(&self) -> Result<(), M1ProjectIndexError> {
         match self.store.classify_registry_presence()? {
             RegistryPresence::Absent => Err(M1ProjectIndexError::unavailable()),
@@ -343,6 +407,26 @@ impl M1ProjectIndexAuthorityHandle {
             })
     }
 
+    pub(crate) fn enroll_ordinary_project(
+        &self,
+        request: &M1EnrollOrdinaryProjectRequest,
+    ) -> Result<M1EnrolledOrdinaryProject, M1ProjectIndexError> {
+        if is_scratch_claim(&request.exact_alias) {
+            return Err(M1ProjectIndexError::new(
+                "m1_project_id_scratch_claim_rejected",
+            ));
+        }
+        if is_m5_helper_claim(&request.exact_alias) {
+            return Err(M1ProjectIndexError::new(
+                "m1_project_id_m5_helper_claim_rejected",
+            ));
+        }
+        let exact_alias = validate_alias_shape(&request.exact_alias)?;
+        validate_source_token(&request.source_ref)?;
+        self.store
+            .enroll_ordinary_project(&exact_alias, &request.source_ref)
+    }
+
     pub(crate) fn resolve_canonical_project_id(
         &self,
         claim: &str,
@@ -374,6 +458,13 @@ impl M1ProjectIndexAuthorityPort for M1ProjectIndexAuthorityHandle {
         request: &M1RegisterExactAliasRequest,
     ) -> Result<M1RegisteredProject, M1ProjectIndexError> {
         M1ProjectIndexAuthorityHandle::register_exact_alias(self, request)
+    }
+
+    fn enroll_ordinary_project(
+        &self,
+        request: &M1EnrollOrdinaryProjectRequest,
+    ) -> Result<M1EnrolledOrdinaryProject, M1ProjectIndexError> {
+        M1ProjectIndexAuthorityHandle::enroll_ordinary_project(self, request)
     }
 
     fn resolve_canonical_project_id(
@@ -623,11 +714,94 @@ impl M1ProjectIndexStore {
         })
     }
 
+    fn enroll_ordinary_project(
+        &self,
+        exact_alias: &str,
+        source_ref: &str,
+    ) -> Result<M1EnrolledOrdinaryProject, M1ProjectIndexError> {
+        let _lock = ExclusiveRegistryLock::acquire(&self.lock_path)?;
+        match self.classify_registry_presence()? {
+            RegistryPresence::EstablishedMissing => {
+                return Err(M1ProjectIndexError::new(
+                    "m1_project_index_registry_missing",
+                ));
+            }
+            RegistryPresence::Absent | RegistryPresence::Present => {}
+        }
+        let mut document =
+            match load_ordinary_identity_source_if_present(&self.canonical_app_data_root)? {
+                Some(document) => document,
+                None => M1OrdinaryIdentitySourceDocument {
+                    schema_version: M1_ORDINARY_IDENTITY_SOURCE_SCHEMA_VERSION.to_string(),
+                    source_id: format!("source:{}", Uuid::new_v4()),
+                    source_revision: 0,
+                    projects: Vec::new(),
+                },
+            };
+        let status = if let Some(existing) = document
+            .projects
+            .iter()
+            .find(|entry| entry.exact_alias == exact_alias)
+        {
+            if existing.source_ref != source_ref {
+                return Err(M1ProjectIndexError::new(
+                    M1_ORDINARY_IDENTITY_SOURCE_ALIAS_CONFLICT,
+                ));
+            }
+            M1OrdinaryEnrollmentStatus::AlreadyEnrolled
+        } else if document
+            .projects
+            .iter()
+            .any(|entry| entry.source_ref == source_ref)
+        {
+            return Err(M1ProjectIndexError::new(
+                M1_ORDINARY_IDENTITY_SOURCE_REF_CONFLICT,
+            ));
+        } else {
+            let next_revision = document.source_revision.checked_add(1).ok_or_else(|| {
+                M1ProjectIndexError::new("m1_ordinary_identity_source_revision_overflow")
+            })?;
+            document.source_revision = next_revision;
+            document.projects.push(M1OrdinaryIdentitySourceEntry {
+                entry_id: format!("entry:{}", Uuid::new_v4()),
+                mode: M1OrdinaryIdentitySourceMode::Create,
+                source_ref: source_ref.to_string(),
+                exact_alias: exact_alias.to_string(),
+            });
+            M1OrdinaryEnrollmentStatus::Created
+        };
+        if status == M1OrdinaryEnrollmentStatus::Created {
+            self.persist_ordinary_identity_source(&document)?;
+        }
+        self.replay_ordinary_identity_source_locked(&document)?;
+        let registry = self.load_registry(LoadMode::Required)?;
+        let stored = registry
+            .projects
+            .iter()
+            .find(|project| project.exact_alias.as_deref() == Some(exact_alias))
+            .ok_or_else(|| M1ProjectIndexError::new("m1_alias_unknown"))?;
+        Ok(M1EnrolledOrdinaryProject {
+            project_id: self.issued_project_id(stored.project_id.clone()),
+            exact_alias: exact_alias.to_string(),
+            source_ref: source_ref.to_string(),
+            source_revision: document.source_revision,
+            registry_revision: registry.registry_revision,
+            status,
+        })
+    }
+
     fn replay_ordinary_identity_source(
         &self,
         source: &M1OrdinaryIdentitySourceDocument,
     ) -> Result<(), M1ProjectIndexError> {
         let _lock = ExclusiveRegistryLock::acquire(&self.lock_path)?;
+        self.replay_ordinary_identity_source_locked(source)
+    }
+
+    fn replay_ordinary_identity_source_locked(
+        &self,
+        source: &M1OrdinaryIdentitySourceDocument,
+    ) -> Result<(), M1ProjectIndexError> {
         let mut registry = match self.classify_registry_presence()? {
             RegistryPresence::Absent => empty_registry(),
             RegistryPresence::EstablishedMissing => {
@@ -642,16 +816,19 @@ impl M1ProjectIndexStore {
             let matches = registry
                 .projects
                 .iter()
-                .filter(|project| project.exact_alias.as_deref() == Some(entry.exact_alias.as_str()))
+                .filter(|project| {
+                    project.exact_alias.as_deref() == Some(entry.exact_alias.as_str())
+                })
                 .count();
             match matches {
                 1 => {}
                 0 => {
                     let project_id = format!("project:{}", Uuid::new_v4());
                     validate_canonical_project_id(&project_id)?;
-                    let next_revision = registry.registry_revision.checked_add(1).ok_or_else(
-                        || M1ProjectIndexError::new("m1_project_index_revision_overflow"),
-                    )?;
+                    let next_revision =
+                        registry.registry_revision.checked_add(1).ok_or_else(|| {
+                            M1ProjectIndexError::new("m1_project_index_revision_overflow")
+                        })?;
                     registry.registry_revision = next_revision;
                     registry.projects.push(M1StoredProject {
                         project_id,
@@ -757,6 +934,52 @@ impl M1ProjectIndexStore {
         fs::rename(&temp_path, &self.established_marker_path)
             .map_err(|_| M1ProjectIndexError::new("m1_project_index_registry_replace_failed"))?;
         let dir = File::open(parent)
+            .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_open_failed"))?;
+        dir.sync_all()
+            .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_sync_failed"))?;
+        Ok(())
+    }
+
+    fn persist_ordinary_identity_source(
+        &self,
+        document: &M1OrdinaryIdentitySourceDocument,
+    ) -> Result<(), M1ProjectIndexError> {
+        validate_ordinary_identity_source(document)?;
+        let path = self
+            .canonical_app_data_root
+            .join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
+        match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.file_type().is_file() => {}
+            Ok(_) => {
+                return Err(M1ProjectIndexError::new(
+                    M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
+                ));
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(_) => {
+                return Err(M1ProjectIndexError::new(
+                    M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE,
+                ));
+            }
+        }
+        let text = serde_json::to_string_pretty(document).map_err(|_| {
+            M1ProjectIndexError::new("m1_ordinary_identity_source_serialize_failed")
+        })?;
+        let temp_path = self.canonical_app_data_root.join(format!(
+            ".m1-ordinary-project-identity-source-v1.{}.tmp",
+            Uuid::new_v4().simple()
+        ));
+        {
+            let mut file = File::create(&temp_path)
+                .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_create_failed"))?;
+            file.write_all(text.as_bytes())
+                .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_write_failed"))?;
+            file.sync_all()
+                .map_err(|_| M1ProjectIndexError::new("m1_project_index_tmp_sync_failed"))?;
+        }
+        fs::rename(&temp_path, &path)
+            .map_err(|_| M1ProjectIndexError::new("m1_ordinary_identity_source_replace_failed"))?;
+        let dir = File::open(&self.canonical_app_data_root)
             .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_open_failed"))?;
         dir.sync_all()
             .map_err(|_| M1ProjectIndexError::new("m1_project_index_dir_sync_failed"))?;
@@ -947,9 +1170,8 @@ fn admit_ordinary_root_for_identity_source(
             M1ProjectIndexError::new("m1_project_index_regular_root_required"),
         ),
         Ok(_) => {
-            let canonical = fs::canonicalize(app_data_root).map_err(|_| {
-                M1ProjectIndexError::new("m1_ordinary_app_data_root_unavailable")
-            })?;
+            let canonical = fs::canonicalize(app_data_root)
+                .map_err(|_| M1ProjectIndexError::new("m1_ordinary_app_data_root_unavailable"))?;
             if canonical != app_data_root {
                 return Err(M1ProjectIndexError::new(
                     "m1_project_index_root_identity_changed",
@@ -957,9 +1179,9 @@ fn admit_ordinary_root_for_identity_source(
             }
             Ok(canonical)
         }
-        Err(error) if error.kind() == ErrorKind::NotFound => {
-            Err(M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MISSING))
-        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Err(M1ProjectIndexError::new(
+            M1_ORDINARY_IDENTITY_SOURCE_MISSING,
+        )),
         Err(_) => Err(M1ProjectIndexError::new(
             "m1_ordinary_app_data_root_unavailable",
         )),
@@ -986,9 +1208,7 @@ const LINUX_O_NONBLOCK: i32 = 0x800;
 // Linux `ELOOP`: `open(..., O_NOFOLLOW)` on a final-component symlink.
 const LINUX_ELOOP: i32 = 40;
 
-fn open_ordinary_identity_source_nofollow(
-    path: &Path,
-) -> Result<File, M1ProjectIndexError> {
+fn open_ordinary_identity_source_nofollow(path: &Path) -> Result<File, M1ProjectIndexError> {
     let mut options = OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -997,14 +1217,12 @@ fn open_ordinary_identity_source_nofollow(
     }
     match options.open(path) {
         Ok(file) => Ok(file),
-        Err(error) if error.kind() == ErrorKind::NotFound => {
-            Err(M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MISSING))
-        }
-        Err(error) if ordinary_identity_source_open_rejected_symlink(&error) => {
-            Err(M1ProjectIndexError::new(
-                M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
-            ))
-        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Err(M1ProjectIndexError::new(
+            M1_ORDINARY_IDENTITY_SOURCE_MISSING,
+        )),
+        Err(error) if ordinary_identity_source_open_rejected_symlink(&error) => Err(
+            M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_MALFORMED),
+        ),
         Err(_) => Err(M1ProjectIndexError::new(
             M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE,
         )),
@@ -1015,12 +1233,10 @@ fn ordinary_identity_source_open_rejected_symlink(error: &std::io::Error) -> boo
     error.raw_os_error() == Some(LINUX_ELOOP)
 }
 
-fn validate_opened_ordinary_identity_source_file(
-    file: &File,
-) -> Result<(), M1ProjectIndexError> {
-    let metadata = file.metadata().map_err(|_| {
-        M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE)
-    })?;
+fn validate_opened_ordinary_identity_source_file(file: &File) -> Result<(), M1ProjectIndexError> {
+    let metadata = file
+        .metadata()
+        .map_err(|_| M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE))?;
     if !metadata.file_type().is_file() {
         return Err(M1ProjectIndexError::new(
             M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
@@ -1029,14 +1245,11 @@ fn validate_opened_ordinary_identity_source_file(
     Ok(())
 }
 
-fn read_ordinary_identity_source_from_handle(
-    file: &File,
-) -> Result<Vec<u8>, M1ProjectIndexError> {
+fn read_ordinary_identity_source_from_handle(file: &File) -> Result<Vec<u8>, M1ProjectIndexError> {
     let mut file = file;
     let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes).map_err(|_| {
-        M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE)
-    })?;
+    file.read_to_end(&mut bytes)
+        .map_err(|_| M1ProjectIndexError::new(M1_ORDINARY_IDENTITY_SOURCE_UNREADABLE))?;
     Ok(bytes)
 }
 
@@ -1085,7 +1298,9 @@ fn validate_ordinary_identity_source(
                 M1_ORDINARY_IDENTITY_SOURCE_MALFORMED,
             ));
         }
-        if entry_ids.iter().any(|item: &String| item == &entry.entry_id)
+        if entry_ids
+            .iter()
+            .any(|item: &String| item == &entry.entry_id)
             || aliases
                 .iter()
                 .any(|item: &String| item == &entry.exact_alias)
@@ -1098,6 +1313,16 @@ fn validate_ordinary_identity_source(
         aliases.push(entry.exact_alias.clone());
     }
     Ok(())
+}
+
+fn load_ordinary_identity_source_if_present(
+    root: &Path,
+) -> Result<Option<M1OrdinaryIdentitySourceDocument>, M1ProjectIndexError> {
+    match load_ordinary_identity_source(root) {
+        Ok(document) => Ok(Some(document)),
+        Err(error) if error.code == M1_ORDINARY_IDENTITY_SOURCE_MISSING => Ok(None),
+        Err(error) => Err(error),
+    }
 }
 
 fn admit_existing_clean_root(
@@ -2050,11 +2275,7 @@ mod tests {
 
     fn invoke_ordinary_tauri_constructor(root: &Path) -> Result<crate::AppState, String> {
         let (index_seed, tasks_seed) = write_synthetic_ordinary_product_seeds(root);
-        crate::AppState::try_new_with_tauri_ordinary_product_seeds(
-            root,
-            &index_seed,
-            &tasks_seed,
-        )
+        crate::AppState::try_new_with_tauri_ordinary_product_seeds(root, &index_seed, &tasks_seed)
     }
 
     fn ordinary_tauri_constructor_error(root: &Path) -> String {
@@ -2065,8 +2286,7 @@ mod tests {
     }
 
     fn app_state_after_ordinary_tauri_constructor(root: &Path) -> crate::AppState {
-        invoke_ordinary_tauri_constructor(root)
-            .expect("ordinary Tauri constructor must return Ok")
+        invoke_ordinary_tauri_constructor(root).expect("ordinary Tauri constructor must return Ok")
     }
 
     #[test]
@@ -2163,8 +2383,11 @@ mod tests {
         assert!(!root.join("m1").exists());
         assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
 
-        fs::write(root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME), "{not-json")
-            .expect("write corrupt source");
+        fs::write(
+            root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            "{not-json",
+        )
+        .expect("write corrupt source");
         assert_eq!(
             ordinary_tauri_constructor_error(&root),
             M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
@@ -2414,5 +2637,490 @@ mod tests {
             !source_load.contains("fs::read"),
             "load_ordinary_identity_source must not reopen the pathname for the read"
         );
+    }
+
+    const M5R09_ENROLL_ALIAS: &str = "/tmp/syn-m5r09-enroll-project";
+    const M5R09_ENROLL_SOURCE_REF: &str = "product-index:/tmp/syn-m5r09-enroll-project";
+
+    fn enroll_ordinary_request(alias: &str, source_ref: &str) -> M1EnrollOrdinaryProjectRequest {
+        M1EnrollOrdinaryProjectRequest {
+            exact_alias: alias.to_string(),
+            source_ref: source_ref.to_string(),
+        }
+    }
+
+    fn source_revision_entries_and_bytes(root: &Path) -> (u64, usize, Vec<u8>) {
+        let bytes = fs::read(root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME))
+            .expect("read ordinary identity source");
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("parse ordinary identity source");
+        let revision = value
+            .get("source_revision")
+            .and_then(serde_json::Value::as_u64)
+            .expect("source revision");
+        let entries = value
+            .get("projects")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len)
+            .expect("source projects");
+        (revision, entries, bytes)
+    }
+
+    fn write_m5r09_identity_source(root: &Path, alias: &str, source_ref: &str) {
+        fs::write(
+            root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME),
+            format!(
+                r#"{{
+              "schema_version": "m1.ordinary-project-identity-source.v1",
+              "source_id": "source:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "source_revision": 1,
+              "projects": [{{
+                "entry_id": "entry:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+                "mode": "create",
+                "source_ref": "{source_ref}",
+                "exact_alias": "{alias}"
+              }}]
+            }}"#
+            ),
+        )
+        .expect("write m5r09 identity source");
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_authority_first_register_persists_source_then_registry() {
+        let root = ordinary_named_root();
+        let handle =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("install");
+        let enrolled = handle
+            .enroll_ordinary_project(&enroll_ordinary_request(
+                M5R09_ENROLL_ALIAS,
+                M5R09_ENROLL_SOURCE_REF,
+            ))
+            .expect("first enroll");
+        assert_eq!(enrolled.status, M1OrdinaryEnrollmentStatus::Created);
+        assert_eq!(enrolled.exact_alias, M5R09_ENROLL_ALIAS);
+        assert_eq!(enrolled.source_ref, M5R09_ENROLL_SOURCE_REF);
+        assert_eq!(enrolled.source_revision, 1);
+        assert_eq!(enrolled.registry_revision, 1);
+        validate_canonical_project_id(enrolled.project_id.as_str()).expect("opaque uuid");
+        assert_ne!(enrolled.project_id.as_str(), M5R09_ENROLL_ALIAS);
+        assert!(!enrolled.project_id.as_str().contains(M5R09_ENROLL_ALIAS));
+        assert!(!enrolled
+            .project_id
+            .as_str()
+            .contains(M5R09_ENROLL_SOURCE_REF));
+        assert_eq!(
+            handle
+                .resolve_exact_alias(M5R09_ENROLL_ALIAS)
+                .expect("resolve enrolled alias")
+                .as_str(),
+            enrolled.project_id.as_str()
+        );
+        let (source_revision, source_entries, _) = source_revision_entries_and_bytes(&root);
+        assert_eq!(source_revision, 1);
+        assert_eq!(source_entries, 1);
+        let (registry_revision, _) = registry_revision_and_bytes(&root);
+        assert_eq!(registry_revision, 1);
+        assert!(root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).is_file());
+        let production = include_str!("m1_project_index.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("production owner");
+        let persist = production
+            .find("self.persist_ordinary_identity_source(&document)?")
+            .expect("source persist");
+        let replay = production
+            .find("self.replay_ordinary_identity_source_locked(&document)?")
+            .expect("locked registry replay");
+        assert!(
+            persist < replay,
+            "source persist must precede registry replay"
+        );
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_authority_repeat_and_reopen_keep_id_and_revisions() {
+        let root = ordinary_named_root();
+        let handle =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("install");
+        let request = enroll_ordinary_request(M5R09_ENROLL_ALIAS, M5R09_ENROLL_SOURCE_REF);
+        let first = handle
+            .enroll_ordinary_project(&request)
+            .expect("first enroll");
+        let (source_revision, _, source_bytes) = source_revision_entries_and_bytes(&root);
+        let (registry_revision, registry_bytes) = registry_revision_and_bytes(&root);
+        let repeated = handle
+            .enroll_ordinary_project(&request)
+            .expect("repeat enroll");
+        assert_eq!(repeated.status, M1OrdinaryEnrollmentStatus::AlreadyEnrolled);
+        assert_eq!(repeated.project_id.as_str(), first.project_id.as_str());
+        assert_eq!(repeated.source_revision, first.source_revision);
+        assert_eq!(repeated.registry_revision, first.registry_revision);
+        let (repeat_source_revision, repeat_entries, repeat_source_bytes) =
+            source_revision_entries_and_bytes(&root);
+        let (repeat_registry_revision, repeat_registry_bytes) = registry_revision_and_bytes(&root);
+        assert_eq!(repeat_source_revision, source_revision);
+        assert_eq!(repeat_entries, 1);
+        assert_eq!(repeat_source_bytes, source_bytes);
+        assert_eq!(repeat_registry_revision, registry_revision);
+        assert_eq!(repeat_registry_bytes, registry_bytes);
+
+        let reopened =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("reopen");
+        let after_reopen = reopened
+            .enroll_ordinary_project(&request)
+            .expect("enroll after reopen");
+        assert_eq!(
+            after_reopen.status,
+            M1OrdinaryEnrollmentStatus::AlreadyEnrolled
+        );
+        assert_eq!(after_reopen.project_id.as_str(), first.project_id.as_str());
+        assert_eq!(after_reopen.source_revision, first.source_revision);
+        assert_eq!(after_reopen.registry_revision, first.registry_revision);
+        assert_eq!(
+            reopened
+                .resolve_exact_alias(M5R09_ENROLL_ALIAS)
+                .expect("resolve after reopen")
+                .as_str(),
+            first.project_id.as_str()
+        );
+        let (_, _, reopened_source_bytes) = source_revision_entries_and_bytes(&root);
+        let (_, reopened_registry_bytes) = registry_revision_and_bytes(&root);
+        assert_eq!(reopened_source_bytes, source_bytes);
+        assert_eq!(reopened_registry_bytes, registry_bytes);
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_authority_replays_existing_source_when_registry_absent() {
+        let root = ordinary_named_root();
+        write_m5r09_identity_source(&root, M5R09_ENROLL_ALIAS, M5R09_ENROLL_SOURCE_REF);
+        let (_, _, source_before) = source_revision_entries_and_bytes(&root);
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
+
+        assert_eq!(
+            M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source_if_present(&root)
+                .expect("replay existing source"),
+            M1OrdinaryIdentityReplayPresence::Replayed
+        );
+        let (_, _, source_after_replay) = source_revision_entries_and_bytes(&root);
+        assert_eq!(source_after_replay, source_before);
+        let (registry_revision, _) = registry_revision_and_bytes(&root);
+        assert_eq!(registry_revision, 1);
+        assert!(root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).is_file());
+
+        let handle =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("install");
+        let recovered = handle
+            .enroll_ordinary_project(&enroll_ordinary_request(
+                M5R09_ENROLL_ALIAS,
+                M5R09_ENROLL_SOURCE_REF,
+            ))
+            .expect("enroll after source-only replay");
+        assert_eq!(
+            recovered.status,
+            M1OrdinaryEnrollmentStatus::AlreadyEnrolled
+        );
+        assert_eq!(recovered.source_revision, 1);
+        assert_eq!(recovered.registry_revision, 1);
+        assert_eq!(
+            handle
+                .resolve_exact_alias(M5R09_ENROLL_ALIAS)
+                .expect("recovered alias")
+                .as_str(),
+            recovered.project_id.as_str()
+        );
+        let (_, entries, source_after_enroll) = source_revision_entries_and_bytes(&root);
+        assert_eq!(entries, 1);
+        assert_eq!(source_after_enroll, source_before);
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_authority_concurrent_same_request_single_entry() {
+        let root = ordinary_named_root();
+        let handle = Arc::new(
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("install"),
+        );
+        let workers = (0..8)
+            .map(|_| {
+                let handle = Arc::clone(&handle);
+                thread::spawn(move || {
+                    handle.enroll_ordinary_project(&enroll_ordinary_request(
+                        M5R09_ENROLL_ALIAS,
+                        M5R09_ENROLL_SOURCE_REF,
+                    ))
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("join enroll worker"))
+            .collect::<Vec<_>>();
+        let enrolled = results
+            .iter()
+            .map(|result| result.as_ref().expect("concurrent enroll"))
+            .collect::<Vec<_>>();
+        let first = enrolled[0];
+        for item in &enrolled {
+            assert_eq!(item.project_id.as_str(), first.project_id.as_str());
+            assert_eq!(item.source_revision, 1);
+            assert_eq!(item.registry_revision, 1);
+            assert_eq!(item.exact_alias, M5R09_ENROLL_ALIAS);
+            assert_eq!(item.source_ref, M5R09_ENROLL_SOURCE_REF);
+        }
+        assert!(enrolled
+            .iter()
+            .any(|item| item.status == M1OrdinaryEnrollmentStatus::Created));
+        let (source_revision, source_entries, _) = source_revision_entries_and_bytes(&root);
+        let (registry_revision, registry_bytes) = registry_revision_and_bytes(&root);
+        let registry: serde_json::Value =
+            serde_json::from_slice(&registry_bytes).expect("parse registry");
+        assert_eq!(source_revision, 1);
+        assert_eq!(source_entries, 1);
+        assert_eq!(registry_revision, 1);
+        assert_eq!(
+            registry
+                .get("projects")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len)
+                .expect("registry projects"),
+            1
+        );
+        assert_eq!(
+            handle
+                .resolve_exact_alias(M5R09_ENROLL_ALIAS)
+                .expect("single concurrent alias")
+                .as_str(),
+            first.project_id.as_str()
+        );
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_authority_alias_and_source_ref_conflicts_do_not_rewrite() {
+        let root = ordinary_named_root();
+        let handle =
+            M1ProjectIndexAuthorityHandle::install_ordinary_product(&root).expect("install");
+        let first = handle
+            .enroll_ordinary_project(&enroll_ordinary_request(
+                M5R09_ENROLL_ALIAS,
+                M5R09_ENROLL_SOURCE_REF,
+            ))
+            .expect("seed enroll");
+        let (_, _, source_before) = source_revision_entries_and_bytes(&root);
+        let (_, registry_before) = registry_revision_and_bytes(&root);
+
+        assert_eq!(
+            handle
+                .enroll_ordinary_project(&enroll_ordinary_request(
+                    M5R09_ENROLL_ALIAS,
+                    "product-index:/tmp/syn-m5r09-other-project",
+                ))
+                .unwrap_err()
+                .code,
+            M1_ORDINARY_IDENTITY_SOURCE_ALIAS_CONFLICT
+        );
+        assert_eq!(
+            handle
+                .enroll_ordinary_project(&enroll_ordinary_request(
+                    "/tmp/syn-m5r09-other-project",
+                    M5R09_ENROLL_SOURCE_REF,
+                ))
+                .unwrap_err()
+                .code,
+            M1_ORDINARY_IDENTITY_SOURCE_REF_CONFLICT
+        );
+
+        let (_, entries, source_after) = source_revision_entries_and_bytes(&root);
+        let (registry_revision, registry_after) = registry_revision_and_bytes(&root);
+        assert_eq!(entries, 1);
+        assert_eq!(source_after, source_before);
+        assert_eq!(registry_after, registry_before);
+        assert_eq!(registry_revision, 1);
+        assert_eq!(
+            handle
+                .resolve_exact_alias(M5R09_ENROLL_ALIAS)
+                .expect("original alias kept")
+                .as_str(),
+            first.project_id.as_str()
+        );
+        assert_eq!(
+            handle
+                .resolve_exact_alias("/tmp/syn-m5r09-other-project")
+                .unwrap_err()
+                .code,
+            "m1_alias_unknown"
+        );
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_authority_missing_never_established_returns_unenrolled() {
+        let root = ordinary_named_root();
+        assert_eq!(
+            M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source_if_present(&root)
+                .expect("never established"),
+            M1OrdinaryIdentityReplayPresence::Unenrolled
+        );
+        assert!(!root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME).exists());
+        assert!(!root.join(M1_ORDINARY_REGISTRY_RELATIVE_PATH).exists());
+        assert!(!root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH).exists());
+        assert!(!root.join("m1").exists());
+        let parent = root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_authority_missing_source_rejects_present_and_established_missing() {
+        let present_root = ordinary_named_root();
+        let present = M1ProjectIndexAuthorityHandle::install_ordinary_product(&present_root)
+            .expect("install");
+        present
+            .register_exact_alias(&M1RegisterExactAliasRequest {
+                exact_alias: "/tmp/syn-m5r09-present-only".to_string(),
+            })
+            .expect("materialize registry without source");
+        let (_, registry_before) = registry_revision_and_bytes(&present_root);
+        assert!(!present_root
+            .join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME)
+            .exists());
+        assert_eq!(
+            M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source_if_present(
+                &present_root
+            )
+            .unwrap_err()
+            .code,
+            M1_ORDINARY_IDENTITY_SOURCE_MISSING
+        );
+        assert!(!present_root
+            .join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME)
+            .exists());
+        let (_, registry_after) = registry_revision_and_bytes(&present_root);
+        assert_eq!(registry_after, registry_before);
+
+        let missing_root = ordinary_named_root();
+        fs::write(
+            missing_root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH),
+            M1_ESTABLISHED_MARKER_VALUE,
+        )
+        .expect("write established marker");
+        assert_eq!(
+            M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source_if_present(
+                &missing_root
+            )
+            .unwrap_err()
+            .code,
+            "m1_project_index_registry_missing"
+        );
+        assert!(!missing_root
+            .join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME)
+            .exists());
+        assert!(!missing_root
+            .join(M1_ORDINARY_REGISTRY_RELATIVE_PATH)
+            .exists());
+        assert_eq!(
+            fs::read(missing_root.join(M1_ESTABLISHED_MARKER_RELATIVE_PATH))
+                .expect("retain marker"),
+            M1_ESTABLISHED_MARKER_VALUE
+        );
+
+        let present_parent = present_root.parent().expect("parent").to_path_buf();
+        let missing_parent = missing_root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(present_parent);
+        let _ = fs::remove_dir_all(missing_parent);
+    }
+
+    #[test]
+    fn m5r09_m1_enrollment_authority_corrupt_and_symlink_source_do_not_overwrite() {
+        let corrupt_root = ordinary_named_root();
+        let corrupt_path = corrupt_root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
+        fs::write(&corrupt_path, "{not-json").expect("write corrupt source");
+        let corrupt_handle = M1ProjectIndexAuthorityHandle::install_ordinary_product(&corrupt_root)
+            .expect("install corrupt root");
+        assert_eq!(
+            M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source_if_present(
+                &corrupt_root
+            )
+            .unwrap_err()
+            .code,
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert_eq!(
+            corrupt_handle
+                .enroll_ordinary_project(&enroll_ordinary_request(
+                    M5R09_ENROLL_ALIAS,
+                    M5R09_ENROLL_SOURCE_REF,
+                ))
+                .unwrap_err()
+                .code,
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert_eq!(
+            fs::read_to_string(&corrupt_path).expect("retain corrupt source"),
+            "{not-json"
+        );
+        assert!(!corrupt_root
+            .join(M1_ORDINARY_REGISTRY_RELATIVE_PATH)
+            .exists());
+        assert!(!corrupt_root
+            .join(M1_ESTABLISHED_MARKER_RELATIVE_PATH)
+            .exists());
+        assert!(!corrupt_root.join("m1").exists());
+
+        let symlink_root = ordinary_named_root();
+        let source_path = symlink_root.join(M1_ORDINARY_IDENTITY_SOURCE_FILE_NAME);
+        let target = symlink_root.join("m5r09-m1-source-symlink-target.json");
+        write_m5r09_identity_source(&symlink_root, M5R09_ENROLL_ALIAS, M5R09_ENROLL_SOURCE_REF);
+        fs::rename(&source_path, &target).expect("move valid source to target");
+        std::os::unix::fs::symlink(&target, &source_path).expect("create source symlink");
+        let symlink_handle = M1ProjectIndexAuthorityHandle::install_ordinary_product(&symlink_root)
+            .expect("install symlink root");
+        assert_eq!(
+            M1ProjectIndexAuthorityHandle::replay_ordinary_identity_source_if_present(
+                &symlink_root
+            )
+            .unwrap_err()
+            .code,
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert_eq!(
+            symlink_handle
+                .enroll_ordinary_project(&enroll_ordinary_request(
+                    M5R09_ENROLL_ALIAS,
+                    M5R09_ENROLL_SOURCE_REF,
+                ))
+                .unwrap_err()
+                .code,
+            M1_ORDINARY_IDENTITY_SOURCE_MALFORMED
+        );
+        assert!(source_path
+            .symlink_metadata()
+            .expect("source path remains")
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            fs::read(&source_path).expect("retain symlink target bytes"),
+            fs::read(&target).expect("read untouched target")
+        );
+        assert!(!symlink_root
+            .join(M1_ORDINARY_REGISTRY_RELATIVE_PATH)
+            .exists());
+        assert!(!symlink_root
+            .join(M1_ESTABLISHED_MARKER_RELATIVE_PATH)
+            .exists());
+        assert!(!symlink_root.join("m1").exists());
+
+        let corrupt_parent = corrupt_root.parent().expect("parent").to_path_buf();
+        let symlink_parent = symlink_root.parent().expect("parent").to_path_buf();
+        let _ = fs::remove_dir_all(corrupt_parent);
+        let _ = fs::remove_dir_all(symlink_parent);
     }
 }
