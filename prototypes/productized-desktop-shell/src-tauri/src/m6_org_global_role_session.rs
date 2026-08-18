@@ -68,6 +68,35 @@ pub(crate) struct M6OrgGlobalRoleSessionContextDto {
     pub(crate) source_refs: Vec<String>,
 }
 
+impl M6OrgGlobalRoleSessionContextDto {
+    fn minimal(
+        mut summary_refs: Vec<String>,
+        mut source_refs: Vec<String>,
+    ) -> Result<Self, String> {
+        summary_refs.retain(|value| !value.trim().is_empty());
+        source_refs.retain(|value| !value.trim().is_empty());
+        summary_refs.sort();
+        summary_refs.dedup();
+        source_refs.sort();
+        source_refs.dedup();
+        if summary_refs.is_empty() || source_refs.is_empty() {
+            return Err(M6_ORG_GLOBAL_ROLE_SESSION_INCOMPLETE.to_string());
+        }
+        Ok(Self {
+            summary_refs,
+            source_refs,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct M6OrgGlobalSummaryConsumerLease {
+    pub(crate) role_session_id: String,
+    pub(crate) role_session_revision: u64,
+    pub(crate) scope_kind: String,
+    pub(crate) consumer_expires_at_ms: i64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(tag = "availability", rename_all = "snake_case")]
 pub(crate) enum M6OrgGlobalRoleSessionStatusDto {
@@ -87,7 +116,11 @@ pub(crate) enum M6OrgGlobalRoleSessionStatusDto {
 }
 
 impl M6OrgGlobalRoleSessionStatusDto {
-    fn ready(session: &RoleSession, slot: &M6OrgGlobalRoleSessionSlot) -> Self {
+    fn ready(
+        session: &RoleSession,
+        slot: &M6OrgGlobalRoleSessionSlot,
+        context: M6OrgGlobalRoleSessionContextDto,
+    ) -> Self {
         Self::Ready {
             role_session_id: session.role_session_id.as_str().to_string(),
             revision: session.revision,
@@ -96,10 +129,7 @@ impl M6OrgGlobalRoleSessionStatusDto {
             read_only: true,
             project_write_capability: authorize_attempted_project_write(slot).is_ok(),
             provider_handle_authorizes: false,
-            context: M6OrgGlobalRoleSessionContextDto {
-                summary_refs: Vec::new(),
-                source_refs: Vec::new(),
-            },
+            context,
         }
     }
 
@@ -134,9 +164,46 @@ impl M6OrgGlobalRoleSessionSlot {
 
     pub(crate) fn status(&self) -> M6OrgGlobalRoleSessionStatusDto {
         match self.load_established_session() {
-            Ok(session) => M6OrgGlobalRoleSessionStatusDto::ready(&session, self),
+            Ok(session) => M6OrgGlobalRoleSessionStatusDto::ready(
+                &session,
+                self,
+                M6OrgGlobalRoleSessionContextDto {
+                    summary_refs: Vec::new(),
+                    source_refs: Vec::new(),
+                },
+            ),
             Err(error) => M6OrgGlobalRoleSessionStatusDto::unavailable(error),
         }
+    }
+
+    pub(crate) fn summary_consumer_lease(
+        &self,
+        now_ms: i64,
+    ) -> Result<M6OrgGlobalSummaryConsumerLease, String> {
+        if now_ms < 0 {
+            return Err(M6_ORG_GLOBAL_ROLE_SESSION_INCOMPLETE.to_string());
+        }
+        let session = self.load_established_session()?;
+        Ok(M6OrgGlobalSummaryConsumerLease {
+            role_session_id: session.role_session_id.as_str().to_string(),
+            role_session_revision: session.revision,
+            scope_kind: M6_ORG_GLOBAL_SCOPE_KIND.to_string(),
+            consumer_expires_at_ms: now_ms
+                .checked_add(60_000)
+                .ok_or_else(|| M6_ORG_GLOBAL_ROLE_SESSION_INCOMPLETE.to_string())?,
+        })
+    }
+
+    pub(crate) fn status_with_minimal_context(
+        &self,
+        summary_refs: Vec<String>,
+        source_refs: Vec<String>,
+    ) -> Result<M6OrgGlobalRoleSessionStatusDto, String> {
+        let session = self.load_established_session()?;
+        let context = M6OrgGlobalRoleSessionContextDto::minimal(summary_refs, source_refs)?;
+        Ok(M6OrgGlobalRoleSessionStatusDto::ready(
+            &session, self, context,
+        ))
     }
 
     fn load_established_session(&self) -> Result<RoleSession, String> {

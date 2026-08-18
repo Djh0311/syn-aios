@@ -4810,6 +4810,61 @@ fn load_global_supervisor_role_session_status_for_state(
     Ok(state.m6_org_global_role_session.status())
 }
 
+/// Consume only versioned M5 ProjectSummary metadata and persist only M6-owned
+/// advisory/audit state. Renderer input cannot provide a RoleSession identity,
+/// project path, provider handle, credential, raw source, or write capability.
+#[tauri::command]
+fn run_global_supervisor_cross_project_advisory(
+    request: crate::m6_org_dto::M6OrgCrossProjectAdvisoryRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<
+    crate::m6_org_cross_project_advisory::M6OrgCrossProjectAdvisoryResponse,
+    String,
+> {
+    crate::m6_org_cross_project_advisory::run_for_state(&state, &request, unix_timestamp_ms())
+}
+
+/// User adoption creates one M6-owned pending DecisionRequest. It cannot create
+/// a project command, grant, workflow, fact, outbox, or project write.
+#[tauri::command]
+fn adopt_global_supervisor_cross_project_advisory(
+    request: crate::m6_org_dto::M6OrgAdvisoryAdoptionRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_dto::M6OrgDecisionRequest, String> {
+    crate::m6_org_cross_project_advisory::adopt_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
+/// Append a read-model observation that cites an already-authoritative
+/// project-owner receipt. This command never applies or rolls back a project.
+#[tauri::command]
+fn observe_global_supervisor_advisory_application_receipt(
+    request: crate::m6_org_dto::M6OrgApplicationReceiptObservationRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_dto::M6OrgAdvisoryApplicationProjection, String> {
+    crate::m6_org_cross_project_advisory::observe_application_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
+/// A real ordinary-product project mutation attempt reaches this application
+/// boundary and is always rejected before any store or file is opened.
+#[tauri::command]
+fn attempt_global_supervisor_project_write(
+    request: crate::m6_org_dto::M6OrgProjectWriteAttemptRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    crate::m6_org_cross_project_advisory::reject_project_write_attempt(
+        &state.m6_org_global_role_session,
+        &request,
+    )
+}
+
 fn load_secretary_role_session_status_for_state(
     state: &AppState,
 ) -> Result<crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto, String> {

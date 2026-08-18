@@ -81,7 +81,11 @@ mod m5_runner_entry_registry;
 mod m5_runtime_admission;
 mod m5_runtime_receipt;
 mod m5_side_effect_entry;
+mod m6_org_cross_project_advisory;
+mod m6_org_dto;
 mod m6_org_global_role_session;
+mod m6_org_schema;
+mod m6_org_store;
 // Historical generic candidate traits are deliberately crate-private.  The
 // one M2 authority surface is the concrete
 // `workflow-state-sidecar.repository.m2.v1` adapter in
@@ -469,6 +473,78 @@ impl AppState {
             .as_ref()
             .ok_or_else(|| "m5_runtime_unavailable".to_string())?;
         m5_orchestration_store::M5OrchestrationStore::open(path)
+    }
+
+    pub(crate) fn with_m5_project_summary_query_port<T>(
+        &self,
+        operation: impl FnOnce(
+            &dyn m5_project_summary::ProjectSummaryQueryPort,
+        ) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let store = self.open_m5_store()?;
+        let port = m5_project_summary::PersistentProjectSummaryPort::new(&store);
+        operation(&port)
+    }
+
+    pub(crate) fn m6_org_store_path(&self) -> Result<PathBuf, String> {
+        let m5_path = self
+            .m5_store_path
+            .as_ref()
+            .ok_or_else(|| "m5_runtime_unavailable".to_string())?;
+        m6_org_store::M6OrgStore::path_from_m5_store(m5_path)
+    }
+
+    pub(crate) fn verify_m5_authoritative_application_receipt(
+        &self,
+        request: &m6_org_dto::M6OrgApplicationReceiptObservationRequest,
+    ) -> Result<(), String> {
+        let store = self.open_m5_store()?;
+        let receipt = store
+            .load_receipt(&request.authoritative_command_receipt_ref)?
+            .ok_or_else(|| "m6_org_application_receipt_not_found".to_string())?;
+        let grant = store
+            .load_grant(&request.grant_ref)?
+            .ok_or_else(|| "m6_org_application_grant_not_found".to_string())?;
+        if receipt.scope_ref != request.project_id
+            || grant.project_id != request.project_id
+            || receipt.actor_id != grant.principal_actor_id
+            || receipt.policy_decision_ref != grant.policy_decision_ref
+            || receipt.current_object_ref.as_deref()
+                != Some(request.decision_request_id.as_str())
+            || !grant
+                .object_refs
+                .iter()
+                .any(|object_ref| object_ref == &request.decision_request_id)
+            || !grant
+                .object_refs
+                .iter()
+                .any(|object_ref| object_ref == &request.advisory_id)
+        {
+            return Err("m6_org_application_receipt_exact_join_mismatch".to_string());
+        }
+        if !matches!(
+            receipt.status,
+            m2_dto::CommandReceiptStatus::Committed
+                | m2_dto::CommandReceiptStatus::ExternalResult
+                | m2_dto::CommandReceiptStatus::ProjectionDegraded
+                | m2_dto::CommandReceiptStatus::Failed
+        ) || matches!(
+            grant.status,
+            m5_execution_grant::GrantStatus::MintPending
+                | m5_execution_grant::GrantStatus::Quarantined
+        ) {
+            return Err("m6_org_application_receipt_not_authoritative".to_string());
+        }
+        let receipt_bytes = serde_json::to_vec(&receipt)
+            .map_err(|error| format!("m6_org_application_receipt_serialize:{error}"))?;
+        let receipt_hash = format!(
+            "{:x}",
+            <sha2::Sha256 as sha2::Digest>::digest(receipt_bytes)
+        );
+        if receipt_hash != request.source_receipt_hash {
+            return Err("m6_org_application_receipt_hash_mismatch".to_string());
+        }
+        Ok(())
     }
 
     pub(crate) fn m5_store_path(&self) -> Option<&Path> {
