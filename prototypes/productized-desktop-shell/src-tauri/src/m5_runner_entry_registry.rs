@@ -435,7 +435,38 @@ mod tests {
             .expect("tauri apply wrapper");
         let load = &product[load_start..load_end];
         let apply = &product[apply_start..apply_end];
-        for src in [load, apply, production_prefix(controlled)] {
+        let controlled_load_start = controlled
+            .find("pub(crate) fn load_execution_control(")
+            .expect("controlled load");
+        let controlled_load_end = controlled[controlled_load_start + 1..]
+            .find("\nfn ")
+            .map(|idx| controlled_load_start + 1 + idx)
+            .expect("next after controlled load");
+        let controlled_apply_start = controlled
+            .find("pub(crate) fn apply_execution_control(")
+            .expect("controlled apply");
+        let controlled_apply_end = controlled[controlled_apply_start + 1..]
+            .find("\npub(crate) fn ")
+            .map(|idx| controlled_apply_start + 1 + idx)
+            .expect("next after controlled apply");
+        let controlled_apply_fault_start = controlled
+            .find("pub(crate) fn apply_execution_control_with_fault(")
+            .expect("controlled apply fault");
+        let controlled_apply_fault_end = controlled[controlled_apply_fault_start + 1..]
+            .find("\n#[cfg(test)]")
+            .map(|idx| controlled_apply_fault_start + 1 + idx)
+            .expect("next after controlled apply fault");
+        let controlled_load = &controlled[controlled_load_start..controlled_load_end];
+        let controlled_apply = &controlled[controlled_apply_start..controlled_apply_end];
+        let controlled_apply_fault =
+            &controlled[controlled_apply_fault_start..controlled_apply_fault_end];
+        for src in [
+            load,
+            apply,
+            controlled_load,
+            controlled_apply,
+            controlled_apply_fault,
+        ] {
             assert!(!src.contains("run_admitted_workcell"));
             assert!(!src.contains("run_authorized_workcell"));
             assert!(!src.contains("run_m5_authorized_runtime_with_state"));
