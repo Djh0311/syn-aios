@@ -76,8 +76,8 @@
 - [x] M5R06 ProjectSummary 正式投影
 - [x] M5R07 项目 UI、隔离 App 与阶段候选（修订标准候选 `7cab372` / tree `df6b743` 已由 `M5R07-20260818-1344.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout 或 M5 完成）
 - [x] M5R08 M1 消费面、attempt-scoped runtime 幂等与验收欠账收敛（内容候选 `09e9b32` / tree `657f7db` 与记账 `00e766a` / tree `b9c8f5f` 已由 `M5R08-20260818-1536.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout 或 M5 完成）
-- [ ] M5R09 M1 登记生产者与 closeout 前欠账加固（唯一 current；内容候选 `c91d8fc` / tree `fe2d982` 已形成新鲜 detached 证据，`AWAITING_INDEPENDENT_ACCEPTANCE`；不反写 M5R08，不进入 M6 或壳采纳）
-- [ ] M5 独立验收与 closeout
+- [x] M5R09 M1 登记生产者与 closeout 前欠账加固（内容候选 `c91d8fc` / tree `fe2d982` 与记账 `8e6f59f` / tree `2043660` 已由 `M5R09-20260818-1836.verdict.md` 独立验收 PASS 并归档；不等于 stage closeout、发布或 M6 激活）
+- [ ] M5C01 stage-14 / M5 closeout（唯一 current；只做生命周期、权威状态、载体/WIP 分层与 M6 输入交接，不开第四个加固叶，不改产品源码）
 
 ## 2026-08-18 M5R07 独立验收后的继续边界
 
@@ -102,3 +102,9 @@
 - 内容候选 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d` 已接普通产品 M1 enrollment producer、可恢复 `UNENROLLED`、nested legacy canonical migration、canonical governance fixture、平台 no-follow cfg 与精确 duplicate semantics 反例，并关闭本叶报告/WIP/壳交接欠账。
 - detached evidence 根 `.syn-gates/evidence/M5R09-c91d8fc/`：cargo check 0；`m5r09_` 23/23；memory/mature 各 14/14；ordinary source 4/4；完整 `m5_` 188/188；前端 typecheck/default build 0；默认 bundle 无 M5R07 marker；candidate-range diff check 0。
 - 当前状态仅为 `AWAITING_INDEPENDENT_ACCEPTANCE`。M5R09 不归档，stage-14 与 M5 closeout 不关闭；M6/stage-15/F2/F3/F5/壳采纳不激活。
+
+## 2026-08-18 M5R09 独立验收后的 closeout 路由
+
+- 最新独立结论 `M5R09-20260818-1836.verdict.md` 放行内容候选 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d`、记账 `8e6f59f48d2d90891d3c02396378921e4a2f5d6e` / tree `2043660c9547c6c102ae24414674918ca8215eb0` 及 M5R09 自身生命周期收口；M5R09 据此归档。
+- 依 2026-08-18 18:40 用户纪律，下一唯一 current 为 M5C01 closeout，不开第四个加固叶。verdict 的 8 项欠账只按“真实用户不可用”门分类；本次没有一项被提升为 closeout 前产品返修，其余进入 unfinished 或 closeout 载体记账。
+- 用户自有 OSS 门面已于 `c1025ba81b6c7885a16529b8f66c919655db48e4` 以精确 7 路径独立提交，不属 M5R09 或 M5C01 候选；OSS-01 保持 unfinished，stage-14 closeout 不执行 push 或外部申请。
