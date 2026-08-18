@@ -27,7 +27,7 @@
 6. `cargo check --lib --offline` 与本叶相关定向测试在 disposable checkout 上通过，证据绑定候选 SHA；
 7. 独立内容提交，写域精确，`git diff --check` 通过；
 8. 主管自己起独立复核并按七项判据放行（写域、冻结物、WIP 保全、独立 worktree 重跑、实质、不越级、欠账），不放行就自己开返修；放行后自己收口：归档本叶到 `docs/harness/done/2026-08/`、据实标记 `stage-15.md` 与 `plan.md`、写审计行与叶报告、authorization 打回精确 closed 两字段；
-9. 收口后在 `/home/synadmin/workspace/.syn-gates/open/` 写交包文件（命名 `stage-15-<YYYYMMDD-HHMM>.md`），说明"M6P00 已完成，等总指导排 M6 域层首叶"，含候选与记账 SHA/tree、自查七项的原始证据与欠账，然后停下。不自建 M6 域层叶子，不关闭 stage-15，不宣布 M6 完成，不进入 F2/F3/F5 或壳采纳。
+9. 收口后在 `/home/synadmin/workspace/.syn-gates/open/` 写交包文件，命名 `stage-15-m6p00-<YYYYMMDD-HHMM>.md`，含候选与记账 SHA/tree、自查七项的原始证据与退出码、仍未完成事项与欠账、实际写域清单，然后停下等总指导验收。M6 域层八叶（`M6D01`–`M6D08`）已由总指导排入 `unfinished/`，检查点见 `stage-15.md`；**但本叶通过前不许把 `M6D01` 拉成 current leaf**，PASS 后由总指导拉起下一段。不自建叶子，不关闭 stage-15，不宣布 M6 完成，不进入 F2/F3/F5 或壳采纳。
 
 证据：只在 disposable checkout 上产出定向证据，绑定候选 SHA。本叶不做 GUI、不做窗口截图、不做 computer use、不接真实 provider 或账号。
 
