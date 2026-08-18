@@ -242,12 +242,13 @@ mod tests {
             1,
             "formal runtime must have exactly one admitted workcell callsite"
         );
+        let product_prod = production_prefix(product);
         assert!(
-            !product.contains("run_authorized_workcell"),
+            !product_prod.contains("run_authorized_workcell"),
             "production runtime must not call the test-only workcell helper"
         );
-        assert!(!product.contains("fail_cell"));
-        assert!(!product.contains("-fail"));
+        assert!(!product_prod.contains("fail_cell"));
+        assert!(!product_prod.contains("-fail"));
         let follow = isolated
             .find("pub(crate) fn run_authorized_followthrough")
             .expect("followthrough");
