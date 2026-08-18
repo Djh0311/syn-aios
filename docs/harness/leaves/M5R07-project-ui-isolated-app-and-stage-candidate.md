@@ -20,6 +20,7 @@
 6. 端口返回精确对象引用，可回到权威事实；只证明端口语义，不要求旧壳像素或点击证据。
 7. 以现成旧壳作为真实非测试客户端，把 `Proposal → AuthorizationDecision → Authorization → Run/WorkItem + worker RoleSession binding → PreparedAttempt → Grant → Dispatch → runtime → RuntimeReceipt/ExecutedReport → independent Review → ResultUserDecision` 最小端到端走通一次。
 8. 已有后端定向矩阵继续通过；在 disposable checkout 上形成绑定不可变候选 SHA 的新鲜原始 receipts、候选报告与精确写域提交，随后 authorization closed 并停在独立验收节点。
+9. M5R00 独立验收记录的 D3（来源静态校验与读取之间仍有 TOCTOU）按结论保持为后续非阻断欠项并进入本节点材料；它需要修改当前 leaf 禁止触碰的 M1 实现，不在 M5R07 越权施工，也不得被写成已经修复或取消。
 
 产品：正式 M5 authority → Grant → Dispatch readback → runtime → RecordExecutionAttemptReadback → terminal-gated EXECUTED claim。U01a 保持默认 `jiaoban` 与三栏布局，把左侧主工作面接到唯一正式 `ProjectSupervisorPanel`；U01b 增加 server-owned load/apply control、durable revision/CAS/replay，并只开放可证明的 STOP / RESUME；U01c 对 authoritative FAILED/TIMED_OUT 且可证明无 effect 的终态创建全新 Attempt / Grant / Dispatch / effect lineage，RETRY 本身不执行 runtime，旧链保持 immutable；U02 用普通 disposable AppState 的 server-only fixture 显式登记 M1 exact alias、建立 M3 三角色，并经真实 Vite + Tauri + Xvfb 走默认 `jiaoban`、拒绝零副作用、失败后新 lineage、显式 runtime、重复 runtime 零第二 effect、重启同 binding/project。U02 不等于 legacy production M1 composition。M6 排除。不改 worker_report.rs / 页面布局 / execution kernel；不把定向测试数写成阶段完成。
 
@@ -30,8 +31,9 @@
 
 当前剩余事项（不得反向写成既有 scoped candidate FAIL，也不得 close）：
 
-1. 本 leaf 的八项修订完成标准已在内容候选 `7cab372` 的 detached disposable checkout 上得到直接证据；仍须等待总指导独立验收。独立 PASS 之前不得归档 leaf、关闭 stage-14、宣布 M5 完成或进入 M6 / 壳采纳。
+1. 本 leaf 的产品与证据完成项（1–8）已在内容候选 `7cab372` 的 detached disposable checkout 上得到直接证据；D3 后续欠项也已按第 9 项如实保留。仍须等待总指导独立验收。独立 PASS 之前不得归档 leaf、关闭 stage-14、宣布 M5 完成或进入 M6 / 壳采纳。
 2. 真桌面窗口像素证据仍按 stage-14 修订记为新壳 F5 欠项，不属于 M5R07 当前完成标准；本候选明确 `NO_WINDOW_CAPTURE`。
+3. M1 来源静态校验与读取之间的 TOCTOU 按 M5R00 PASS 结论保留为后续非阻断欠项；M5R07 未修改 M1 实现，不冒充已修复。
 
 证据：`7cab372` fresh checkout 上 `cargo check --lib --offline` exit 0，`m5_` 180/180、task-memory 15/15、M1 ordinary source 5/5、typecheck/build 均 PASS；真实 Xvfb launcher exit 0，拒绝零业务副作用，失败后新 lineage，完整 Proposal 到 ResultUserDecision/ProjectFact exact chain 成立，独立 reviewer 成立，binding/project/三类 RoleSession/对象 ID/计数/M1 registry 跨重启一致，duplicate runtime 零第二 effect。原始 logs、phase receipts 与 SQLite 在 `/home/synadmin/workspace/.syn-gates/evidence/M5R07-7cab372/`；这是隔离合成输入上的普通产品组合事实，不冒充真实用户老项目、日常运行、部署、发布或独立验收。前驱 `ab5c46e` 的 179/180 失败日志保留并由 `7cab372` 的单文件测试边界修复转绿。shared-isolated 始终只作 authority-unavailable negative regression。不得自动进入 M6 或 closeout。
 
