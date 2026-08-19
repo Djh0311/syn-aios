@@ -1,0 +1,23 @@
+{
+  "contract_id": "f2-shell-core-bridge-v2-audit-addendum",
+  "cases": [
+    {
+      "case_id": "CF-F3-S05-POS-001",
+      "kind": "behavior",
+      "method": "audit.ledger_snapshot",
+      "params": {},
+      "expected": "F2_OK",
+      "precise_assertion": "f3s05_audit_ledger_v2_contract_case_shapes_are_machine_checked"
+    },
+    {
+      "case_id": "CF-F3-S05-NEG-001",
+      "kind": "behavior",
+      "method": "audit.ledger_snapshot",
+      "params": {
+        "event_type": "write"
+      },
+      "expected": "F2_INVALID_REQUEST or F2_CORE_REJECTED",
+      "precise_assertion": "f3s05_audit_ledger_v2_contract_case_shapes_are_machine_checked"
+    }
+  ]
+}

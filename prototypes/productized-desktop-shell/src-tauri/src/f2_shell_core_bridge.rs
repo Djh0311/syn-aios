@@ -45,12 +45,14 @@ const METHOD_REGISTER_STABLE_MEMBER: &str = "organization.register_stable_member
 const METHOD_ATTENTION_INBOX_SNAPSHOT: &str = "attention.inbox_snapshot";
 const METHOD_PROJECT_SUMMARY_SNAPSHOT: &str = "project.summary_snapshot";
 const METHOD_SECRETARY_BRIEF_HISTORY_SNAPSHOT: &str = "secretary.brief_history_snapshot";
+const METHOD_AUDIT_LEDGER_SNAPSHOT: &str = "audit.ledger_snapshot";
 const METHOD_STOP: &str = "bridge.stop";
 const CORE_IDEMPOTENCY_COLLISION: &str = "m6_org_member_idempotency_collision";
-const V2_READ_METHODS: [&str; 3] = [
+const V2_READ_METHODS: [&str; 4] = [
     METHOD_ATTENTION_INBOX_SNAPSHOT,
     METHOD_PROJECT_SUMMARY_SNAPSHOT,
     METHOD_SECRETARY_BRIEF_HISTORY_SNAPSHOT,
+    METHOD_AUDIT_LEDGER_SNAPSHOT,
 ];
 
 #[derive(Clone, Copy)]
@@ -121,6 +123,7 @@ enum BridgeResult {
     AttentionInboxSnapshot(crate::m4_secretary_read_model::M4AttentionSnapshot),
     ProjectSummarySnapshot(ProjectSummarySnapshot),
     SecretaryBriefHistorySnapshot(SecretaryBriefHistorySnapshot),
+    AuditLedgerSnapshot(AuditLedgerSnapshot),
     Stop(StopResult),
 }
 
@@ -169,6 +172,32 @@ struct SecretaryTurnProjection {
     error_code: Option<String>,
     started_at_utc: String,
     terminal_at_utc: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AuditLedgerSnapshot {
+    revision: u64,
+    entries: Vec<AuditLedgerEntry>,
+    bridge_config: AuditBridgeConfigProjection,
+}
+
+#[derive(Serialize)]
+struct AuditLedgerEntry {
+    event_id: String,
+    event_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AuditBridgeConfigProjection {
+    transport: &'static str,
+    read_only: bool,
+    invocation_class: &'static str,
+    contract_id: &'static str,
+    method: &'static str,
 }
 
 #[derive(Serialize)]
@@ -582,6 +611,15 @@ fn dispatch_request(
                 replayed: false,
             })
         }
+        METHOD_AUDIT_LEDGER_SNAPSHOT => {
+            parse_empty_params(&request.params)?;
+            let snapshot = read_audit_ledger_snapshot(state)?;
+            Ok(DispatchOutcome {
+                result: BridgeResult::AuditLedgerSnapshot(snapshot),
+                idempotency_key: None,
+                replayed: false,
+            })
+        }
         _ => Err(DispatchFailure {
             code: CODE_UNKNOWN_METHOD,
             core_code: None,
@@ -697,6 +735,64 @@ fn read_secretary_brief_history_snapshot(
             .collect(),
     };
     Ok(SecretaryBriefHistorySnapshot { daily, history })
+}
+
+#[cfg(not(test))]
+fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, DispatchFailure> {
+    let value =
+        crate::read_workflow_state_value(&state.workflow_state_path).map_err(core_failure)?;
+    let revision = value.get("revision").and_then(Value::as_u64).unwrap_or(0);
+    let events = value
+        .get("audit_events")
+        .and_then(Value::as_array)
+        .ok_or_else(|| core_failure("audit_ledger_unavailable".to_string()))?;
+    let start = events.len().saturating_sub(24);
+    let entries = events[start..]
+        .iter()
+        .filter_map(|event| {
+            let event_id = event
+                .get("event_id")
+                .or_else(|| event.get("audit_event_id"))
+                .or_else(|| event.get("id"))
+                .and_then(Value::as_str)?
+                .to_string();
+            let event_type = event.get("event_type").and_then(Value::as_str)?.to_string();
+            let target_ref = event
+                .get("target_ref")
+                .or_else(|| event.get("target_id"))
+                .or_else(|| event.get("target_kind"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let created_at = event
+                .get("created_at")
+                .or_else(|| event.get("at"))
+                .or_else(|| event.get("timestamp"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            Some(AuditLedgerEntry {
+                event_id,
+                event_type,
+                target_ref,
+                created_at,
+            })
+        })
+        .collect();
+    Ok(AuditLedgerSnapshot {
+        revision,
+        entries,
+        bridge_config: AuditBridgeConfigProjection {
+            transport: "local-core-bridge",
+            read_only: true,
+            invocation_class: "CORE_LOCAL_NO_PROVIDER",
+            contract_id: "f2-shell-core-bridge-v2-audit-addendum",
+            method: METHOD_AUDIT_LEDGER_SNAPSHOT,
+        },
+    })
+}
+
+#[cfg(test)]
+fn read_audit_ledger_snapshot(_state: &AppState) -> Result<AuditLedgerSnapshot, DispatchFailure> {
+    Err(core_failure("audit_ledger_unavailable".to_string()))
 }
 
 #[cfg(test)]
@@ -1063,6 +1159,10 @@ mod tests {
     const SECRETARY_FIXTURE: &str = include_str!(
         "../../../../docs/contracts/fixtures/f3-s04-secretary-v2/contract-cases-v2.json"
     );
+    const AUDIT_ADDENDUM: &str =
+        include_str!("../../../../docs/contracts/f2-shell-core-bridge-v2-audit-addendum.md");
+    const AUDIT_FIXTURE: &str =
+        include_str!("../../../../docs/contracts/fixtures/f3-s05-audit-v2/contract-cases-v2.json");
 
     fn temp_dir(tag: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -1858,5 +1958,28 @@ mod tests {
             "{CASE_ID_NEG}"
         );
         assert!(V2_READ_METHODS.contains(&METHOD_SECRETARY_BRIEF_HISTORY_SNAPSHOT));
+    }
+
+    #[test]
+    fn f3s05_audit_ledger_v2_contract_case_shapes_are_machine_checked() {
+        const CASE_ID_POS: &str = "CF-F3-S05-POS-001";
+        const CASE_ID_NEG: &str = "CF-F3-S05-NEG-001";
+        let fixture: Value = serde_json::from_str(AUDIT_FIXTURE).expect("audit fixture JSON");
+        assert_eq!(fixture["cases"][0]["case_id"], CASE_ID_POS);
+        assert_eq!(fixture["cases"][1]["case_id"], CASE_ID_NEG);
+        assert!(
+            AUDIT_ADDENDUM.contains("audit.ledger_snapshot"),
+            "{CASE_ID_POS}"
+        );
+        assert!(
+            AUDIT_ADDENDUM.contains("CORE_LOCAL_NO_PROVIDER"),
+            "{CASE_ID_POS}"
+        );
+        assert!(
+            AUDIT_ADDENDUM.contains("F2_INVALID_REQUEST"),
+            "{CASE_ID_NEG}"
+        );
+        assert!(AUDIT_ADDENDUM.contains("F2_CORE_REJECTED"), "{CASE_ID_NEG}");
+        assert!(V2_READ_METHODS.contains(&METHOD_AUDIT_LEDGER_SNAPSHOT));
     }
 }
