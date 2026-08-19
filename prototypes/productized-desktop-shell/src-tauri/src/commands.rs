@@ -4975,6 +4975,41 @@ fn contact_global_supervisor_stable_member(
     crate::m6_org_member_directory::contact_for_state(&state, &request, unix_timestamp_ms())
 }
 
+/// Rebuilds ref-only TemporaryAgent history from independently joined M5
+/// execution facts.  The M5 store is opened read-only by the projection.
+#[tauri::command]
+fn refresh_global_supervisor_temporary_agent_history(
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_temporary_agent_projection::M6OrgTemporaryAgentRefreshResponse, String> {
+    crate::m6_org_temporary_agent_projection::refresh_for_state(&state, unix_timestamp_ms())
+}
+
+/// Searches task, result, failure, and typed source refs.  Report bodies are
+/// never copied into the M6 store and therefore cannot appear in this result.
+#[tauri::command]
+fn search_global_supervisor_temporary_agent_history(
+    request: crate::m6_org_temporary_agent_projection::M6OrgSearchTemporaryAgentHistoryRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_temporary_agent_projection::M6OrgSearchTemporaryAgentHistoryResponse, String>
+{
+    crate::m6_org_temporary_agent_projection::search_for_state(&state, &request)
+}
+
+/// An explicit human command may create or bind one StableMember while the
+/// source TemporaryAgent record remains byte-for-byte unchanged.
+#[tauri::command]
+fn promote_global_supervisor_temporary_agent(
+    request: crate::m6_org_temporary_agent_projection::M6OrgPromoteTemporaryAgentRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_temporary_agent_projection::M6OrgTemporaryAgentPromotionResponse, String>
+{
+    crate::m6_org_temporary_agent_projection::promote_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
 fn load_secretary_role_session_status_for_state(
     state: &AppState,
 ) -> Result<crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto, String> {

@@ -339,14 +339,64 @@ pub(crate) fn register_for_state(
     request: &M6OrgRegisterStableMemberRequest,
     now_ms: i64,
 ) -> Result<M6OrgStableMemberRegistrationOutcome, String> {
+    register_with_promotion_for_state(state, request, None, now_ms)
+}
+
+pub(crate) fn register_promoted_for_state(
+    state: &crate::AppState,
+    request: &M6OrgRegisterStableMemberRequest,
+    temporary_agent_id: &str,
+    now_ms: i64,
+) -> Result<M6OrgStableMember, String> {
+    validate_temporary_agent_id(temporary_agent_id)?;
+    let outcome =
+        register_with_promotion_for_state(state, request, Some(temporary_agent_id), now_ms)?;
+    match (outcome.disposition, outcome.member) {
+        (M6OrgMemberRegistrationDisposition::Registered, Some(member))
+            if member.promoted_from.as_deref() == Some(temporary_agent_id) =>
+        {
+            Ok(member)
+        }
+        _ => Err("m6_org_member_promotion_registration_rejected".to_string()),
+    }
+}
+
+fn register_with_promotion_for_state(
+    state: &crate::AppState,
+    request: &M6OrgRegisterStableMemberRequest,
+    promoted_from: Option<&str>,
+    now_ms: i64,
+) -> Result<M6OrgStableMemberRegistrationOutcome, String> {
     require_directory_runtime(state)?;
     validate_nonempty("idempotency_key", &request.idempotency_key)?;
-    let request_hash = stable_hash(request)?;
+    if promoted_from.is_some()
+        && matches!(
+            &request.identity_evidence,
+            M6OrgStableIdentityEvidence::HeuristicCandidate { .. }
+        )
+    {
+        return Err("m6_org_member_promotion_requires_explicit_identity".to_string());
+    }
+    let operation = if promoted_from.is_some() {
+        "promote_temporary_agent_create"
+    } else {
+        "register_stable_member"
+    };
+    // Preserve the M6D05 idempotency preimage for ordinary registrations.
+    // Promotion is a distinct command and binds its source TemporaryAgentId
+    // into the preimage so it cannot replay as a direct registration.
+    let request_hash = match promoted_from {
+        Some(temporary_agent_id) => stable_hash(&json!({
+            "request": request,
+            "promoted_from": temporary_agent_id,
+        }))?,
+        None => stable_hash(request)?,
+    };
     let mut store = M6OrgMemberDirectoryStore::open(&state.m6_org_store_path()?)?;
     if let Some(mut existing) = store
         .load_command_response::<M6OrgStableMemberRegistrationOutcome>(
             &request.idempotency_key,
-            "register_stable_member",
+            operation,
             &request_hash,
         )?
     {
@@ -440,7 +490,7 @@ pub(crate) fn register_for_state(
                     &value.binding_ref
                 }),
                 memory_refs: sorted_unique(request.memory_refs.clone()),
-                promoted_from: None,
+                promoted_from: promoted_from.map(str::to_string),
                 display_name_ref: request.display_name_ref.clone(),
                 identity_contract_ref: identity_contract_ref.clone(),
                 identity_source_record_ref: source_record_ref.clone(),
@@ -458,6 +508,7 @@ pub(crate) fn register_for_state(
             };
             store.record_registration(
                 &request.idempotency_key,
+                operation,
                 &request_hash,
                 &member,
                 &outcome,
@@ -466,6 +517,63 @@ pub(crate) fn register_for_state(
             Ok(outcome)
         }
     }
+}
+
+pub(crate) fn bind_existing_promotion_for_state(
+    state: &crate::AppState,
+    member_id: &str,
+    temporary_agent_id: &str,
+    expected_revision: u64,
+    idempotency_key: &str,
+    now_ms: i64,
+) -> Result<M6OrgStableMember, String> {
+    require_directory_runtime(state)?;
+    validate_member_id(member_id)?;
+    validate_temporary_agent_id(temporary_agent_id)?;
+    validate_nonempty("idempotency_key", idempotency_key)?;
+    let request_hash = stable_hash(&json!({
+        "member_id": member_id,
+        "temporary_agent_id": temporary_agent_id,
+        "expected_revision": expected_revision,
+    }))?;
+    let mut store = M6OrgMemberDirectoryStore::open(&state.m6_org_store_path()?)?;
+    if let Some(existing) = store.load_command_response::<M6OrgStableMember>(
+        idempotency_key,
+        "bind_stable_member_promotion",
+        &request_hash,
+    )? {
+        return Ok(existing);
+    }
+    let mut member = store
+        .load_member(member_id)?
+        .ok_or_else(|| "m6_org_member_not_found".to_string())?;
+    if member.revision != expected_revision {
+        return Err(format!(
+            "m6_org_member_stale_revision:expected={expected_revision}:actual={}",
+            member.revision
+        ));
+    }
+    if member.membership_lifecycle == M6OrgMembershipLifecycle::Deactivated {
+        return Err("m6_org_member_deactivated".to_string());
+    }
+    if member.promoted_from.is_some() {
+        return Err("m6_org_member_promotion_already_bound".to_string());
+    }
+    let previous_revision = member.revision;
+    member.promoted_from = Some(temporary_agent_id.to_string());
+    member.revision = member
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| "m6_org_member_revision_overflow".to_string())?;
+    store.record_member_revision(
+        idempotency_key,
+        "bind_stable_member_promotion",
+        &request_hash,
+        previous_revision,
+        &member,
+        now_ms,
+    )?;
+    Ok(member)
 }
 
 pub(crate) fn update_for_state(
@@ -879,6 +987,7 @@ impl M6OrgMemberDirectoryStore {
     fn record_registration(
         &mut self,
         idempotency_key: &str,
+        operation: &str,
         request_hash: &str,
         member: &M6OrgStableMember,
         outcome: &M6OrgStableMemberRegistrationOutcome,
@@ -931,7 +1040,7 @@ impl M6OrgMemberDirectoryStore {
         insert_command_receipt(
             &transaction,
             idempotency_key,
-            "register_stable_member",
+            operation,
             request_hash,
             &response_payload,
             now_ms,
@@ -1682,6 +1791,14 @@ fn validate_member_id(value: &str) -> Result<(), String> {
         || lowered.starts_with("member_child_run")
     {
         return Err("m6_org_member_identity_namespace_rejected".to_string());
+    }
+    Ok(())
+}
+
+fn validate_temporary_agent_id(value: &str) -> Result<(), String> {
+    validate_ref("temporary_agent_id", value)?;
+    if !value.starts_with("temporary_agent_") || value.starts_with("member_") {
+        return Err("m6_org_member_temporary_agent_id_invalid".to_string());
     }
     Ok(())
 }

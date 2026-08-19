@@ -88,6 +88,7 @@ mod m6_org_global_role_session;
 mod m6_org_member_directory;
 mod m6_org_schema;
 mod m6_org_store;
+mod m6_org_temporary_agent_projection;
 // Historical generic candidate traits are deliberately crate-private.  The
 // one M2 authority surface is the concrete
 // `workflow-state-sidecar.repository.m2.v1` adapter in

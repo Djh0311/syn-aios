@@ -4,7 +4,7 @@
 
 use rusqlite::Connection;
 
-pub(crate) const M6_ORG_SCHEMA_VERSION: i64 = 3;
+pub(crate) const M6_ORG_SCHEMA_VERSION: i64 = 4;
 
 pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String> {
     connection
@@ -134,6 +134,53 @@ pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String
                 recorded_at_ms INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS m6_temporary_agent_history (
+                temporary_agent_id TEXT PRIMARY KEY,
+                claim_id TEXT NOT NULL UNIQUE,
+                lifecycle_status TEXT NOT NULL CHECK(lifecycle_status IN ('PROJECTED','RETAINED')),
+                source_fingerprint TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS m6_temporary_agent_history_created
+            ON m6_temporary_agent_history(created_at_ms, temporary_agent_id);
+
+            CREATE TABLE IF NOT EXISTS m6_temporary_agent_quarantine (
+                quarantine_ref TEXT PRIMARY KEY,
+                source_claim_ref TEXT NOT NULL UNIQUE,
+                reason_code TEXT NOT NULL,
+                source_refs_json TEXT NOT NULL,
+                payload_mode TEXT NOT NULL CHECK(payload_mode = 'REF_ONLY'),
+                recorded_at_ms INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS m6_temporary_agent_promotion_bindings (
+                binding_id TEXT PRIMARY KEY,
+                temporary_agent_id TEXT NOT NULL UNIQUE,
+                member_id TEXT NOT NULL UNIQUE,
+                promoted_by_actor_id TEXT NOT NULL,
+                explicit_human_command INTEGER NOT NULL CHECK(explicit_human_command = 1),
+                source_temporary_agent_type_unchanged INTEGER NOT NULL
+                    CHECK(source_temporary_agent_type_unchanged = 1),
+                idempotency_key TEXT NOT NULL UNIQUE,
+                request_hash TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                FOREIGN KEY(temporary_agent_id)
+                    REFERENCES m6_temporary_agent_history(temporary_agent_id),
+                FOREIGN KEY(member_id)
+                    REFERENCES m6_stable_member_identities(member_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS m6_temporary_agent_command_receipts (
+                idempotency_key TEXT PRIMARY KEY,
+                operation TEXT NOT NULL,
+                request_hash TEXT NOT NULL,
+                response_json TEXT NOT NULL,
+                recorded_at_ms INTEGER NOT NULL
+            );
+
             UPDATE m6_org_schema_meta
             SET schema_version = 2
             WHERE singleton = 1 AND schema_version = 1;
@@ -141,6 +188,10 @@ pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String
             UPDATE m6_org_schema_meta
             SET schema_version = 3
             WHERE singleton = 1 AND schema_version = 2;
+
+            UPDATE m6_org_schema_meta
+            SET schema_version = 4
+            WHERE singleton = 1 AND schema_version = 3;
             "#,
         )
         .map_err(|error| format!("m6_org_schema:{error}"))?;
