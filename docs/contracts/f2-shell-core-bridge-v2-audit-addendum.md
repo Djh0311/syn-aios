@@ -1,7 +1,7 @@
 ---
 contract_id: f2-shell-core-bridge-v2-audit-addendum
 version: 2
-status: CANDIDATE_F2_CORE_BRIDGE_V2_AUDIT_READ_ADDENDUM
+status: FROZEN_F2_CORE_BRIDGE_V2_AUDIT_READ_ADDENDUM
 parent_contract: f2-shell-core-bridge-v1
 schema_authority: f2_shell_core_bridge_contract_authority
 dependencies: ["workflow-state-audit-events-v0"]
