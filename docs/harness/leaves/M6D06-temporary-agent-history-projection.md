@@ -31,6 +31,7 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/m6_org_schema.rs`、`m6_org_store.rs`、`m6_org_dto.rs`
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 `mod` 声明、`AppState` 接线与 command 注册）
 - `prototypes/productized-desktop-shell/src-tauri/src/commands.rs`（仅本叶 command 接线）
+- `prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs`（只允许把 `refresh_global_supervisor_temporary_agent_history`、`search_global_supervisor_temporary_agent_history`、`promote_global_supervisor_temporary_agent` 这 3 个精确 command 加入普通 `generate_handler!`；不得改其他 registry、gate 或 command）
 - `m5_orchestration_identity.rs`、`m5_runtime_receipt.rs`、`m5_execution_grant.rs`、`m5_agent_runtime.rs`：**仅**可见性调整与新增只读 trait 实现，不改执行语义、不放宽 receipt / audit / quarantine、不改 `m5_runner_entry_registry` 分类；每处改动在报告里逐条说明
 - `docs/contracts/`（仅新增增补合同）
 - `tasks/2026-08-*`、`tasks/2026-08-19-*`
