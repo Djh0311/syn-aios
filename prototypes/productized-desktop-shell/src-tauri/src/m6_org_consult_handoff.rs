@@ -57,6 +57,8 @@ const CONSULT_ENDPOINT_PROVIDER_NAMESPACE_MATERIAL: &str =
     "syn.m6.org.consult-recipient.provider-namespace/organization/v1";
 const CONSULT_ENDPOINT_PROVIDER_CONVERSATION_MATERIAL: &str =
     "syn.m6.org.consult-recipient.provider-conversation/personal-primary/v1";
+pub(crate) const M6_ORG_CONSULT_HANDOFF_REVISION_CONFLICT: &str =
+    "m6_org_consult_handoff_revision_conflict";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct M6OrgSecretaryConsultOutcome {
@@ -441,6 +443,12 @@ pub(crate) fn decide_for_state(
     let authorities = authorities_for_projection(state, &projection, true, now_ms)?;
     let handoff_id = parse_handoff_id(&projection.handoff_id)?;
     let current = replay_create(&authorities, &handoff_id, &projection)?.handoff;
+    if projection.accepted_revision.is_none()
+        && projection.rejection_reason.is_none()
+        && current.revision != 1
+    {
+        return Err(M6_ORG_CONSULT_HANDOFF_REVISION_CONFLICT.to_string());
+    }
     match request.decision {
         M6OrgConsultDecision::Accept => {
             if current.status == HandoffState::Rejected {
@@ -484,6 +492,9 @@ pub(crate) fn decide_for_state(
                     test_clock_now: utc_from_millis(now_ms)?,
                 })
                 .map_err(repository_error)?;
+            if rejected.transition_receipt.is_none() && rejected.winning_receipt.is_some() {
+                return Err(M6_ORG_CONSULT_HANDOFF_REVISION_CONFLICT.to_string());
+            }
             if rejected.handoff.status != HandoffState::Rejected {
                 return Err("m6_org_consult_reject_not_committed".to_string());
             }
@@ -531,6 +542,9 @@ fn accept_and_return(
             test_clock_now: utc_from_millis(now_ms)?,
         })
         .map_err(repository_error)?;
+    if accepted.transition_receipt.is_none() && accepted.winning_receipt.is_some() {
+        return Err(M6_ORG_CONSULT_HANDOFF_REVISION_CONFLICT.to_string());
+    }
     let accepted_receipt = accepted
         .transition_receipt
         .as_ref()
@@ -2084,6 +2098,85 @@ mod tests {
                 .expect("count rejected advisories"),
             0
         );
+    }
+
+    #[test]
+    fn m6d08_pre_decide_revision_advance_is_one_stable_readable_conflict() {
+        let fixture = fixture("m6d08-pre-decide-revision");
+        bind_fake_secretary(&fixture);
+        let summaries = [
+            summary("project-revision-a", "orch-revision-a", NOW_MS - 2_000),
+            summary("project-revision-b", "orch-revision-b", NOW_MS - 1_000),
+        ];
+        seed_summaries(&fixture.state, &summaries);
+        let started = crate::secretary_agent::start_global_supervisor_consult_for_state(
+            &fixture.state,
+            &request("m6d08-pre-decide-revision", &summaries),
+            NOW_MS,
+        )
+        .expect("start consult before external revision advance");
+        let projection = load_projection(&fixture.state, &started.consult.handoff.handoff_id)
+            .expect("load pre-decision projection");
+        let authorities = authorities_for_projection(&fixture.state, &projection, true, NOW_MS)
+            .expect("load exact M3 authorities");
+        let handoff_id = parse_handoff_id(&projection.handoff_id).expect("parse handoff id");
+        let externally_accepted = authorities
+            .repository
+            .accept_handoff(&AcceptHandoffCommand {
+                handoff_id,
+                source: authorities.source.clone(),
+                recipient: authorities.recipient.clone().expect("recipient authority"),
+                expected_handoff_revision: 1,
+                metadata: handoff_metadata(
+                    &authorities.repository,
+                    &projection.handoff_id,
+                    "external-pre-decide-accept",
+                )
+                .expect("external accept metadata"),
+                #[cfg(test)]
+                test_clock_now: utc_from_millis(NOW_MS).expect("test clock"),
+            })
+            .expect("advance M3 handoff without updating M6 projection");
+        assert_eq!(externally_accepted.handoff.status, HandoffState::Accepted);
+        assert_eq!(externally_accepted.handoff.revision, 2);
+
+        for (decision, rejection_reason) in [
+            (M6OrgConsultDecision::Accept, None),
+            (
+                M6OrgConsultDecision::Reject,
+                Some(M6OrgConsultRejectionReason::InsufficientEvidence),
+            ),
+        ] {
+            assert_eq!(
+                decide_for_state(
+                    &fixture.state,
+                    &M6OrgGlobalSupervisorConsultDecisionRequest {
+                        handoff_id: projection.handoff_id.clone(),
+                        decision,
+                        rejection_reason,
+                    },
+                    NOW_MS,
+                )
+                .unwrap_err(),
+                M6_ORG_CONSULT_HANDOFF_REVISION_CONFLICT
+            );
+        }
+
+        let readable = read_for_state(
+            &fixture.state,
+            &M6OrgSecretaryConsultReadRequest {
+                handoff_id: projection.handoff_id.clone(),
+            },
+            NOW_MS,
+        )
+        .expect("advanced handoff remains readable");
+        assert_eq!(readable.handoff.status_ref, "ACCEPTED");
+        assert_eq!(readable.handoff.handoff_revision, 2);
+        assert!(readable.advisory.is_none());
+        let unchanged_projection =
+            load_projection(&fixture.state, &projection.handoff_id).expect("reload projection");
+        assert!(unchanged_projection.accepted_revision.is_none());
+        assert!(unchanged_projection.rejection_reason.is_none());
     }
 
     #[test]

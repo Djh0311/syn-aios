@@ -83,6 +83,8 @@ mod m5_runtime_receipt;
 mod m5_side_effect_entry;
 mod m6_org_consult_handoff;
 mod m6_org_cross_project_advisory;
+#[cfg(test)]
+mod m6_org_domain_integration;
 mod m6_org_dto;
 mod m6_org_global_role_session;
 mod m6_org_member_directory;

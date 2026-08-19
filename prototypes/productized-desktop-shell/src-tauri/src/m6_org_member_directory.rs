@@ -1892,6 +1892,7 @@ mod tests {
     use super::*;
     use crate::AppState;
     use rusqlite::Connection;
+    use std::cell::Cell;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -1903,6 +1904,42 @@ mod tests {
         root: PathBuf,
         app_data_root: PathBuf,
         state: AppState,
+    }
+
+    struct IndependentFakeAvailabilityRuntime {
+        instance_id: &'static str,
+        calls: Cell<u64>,
+    }
+
+    impl IndependentFakeAvailabilityRuntime {
+        fn new(instance_id: &'static str) -> Self {
+            Self {
+                instance_id,
+                calls: Cell::new(0),
+            }
+        }
+
+        fn observation(
+            &self,
+            member_id: &str,
+            observed_at: i64,
+            ttl_seconds: u64,
+            observed_state: M6OrgAvailabilityState,
+        ) -> M6OrgObserveMemberAvailabilityRequest {
+            let call = self.calls.get() + 1;
+            self.calls.set(call);
+            M6OrgObserveMemberAvailabilityRequest {
+                member_id: member_id.to_string(),
+                source: format!("fake-provider-runtime:instance:{}", self.instance_id),
+                source_revision: call,
+                observed_at,
+                ttl: M6OrgAvailabilityTtl {
+                    seconds: ttl_seconds,
+                },
+                observed_state,
+                idempotency_key: format!("availability:{}:{member_id}:{call}", self.instance_id),
+            }
+        }
     }
 
     impl Drop for Fixture {
@@ -2365,6 +2402,103 @@ mod tests {
             projected.capability_permission_refs,
             active.capability_permission_refs
         );
+    }
+
+    #[test]
+    fn m6d08_independent_fake_runtimes_cannot_change_stable_identity_or_rebuild() {
+        let fixture = fixture("m6d08-independent-provider-runtimes");
+        let registered = register_member(&fixture, "member_m6d08_provider", "register-m6d08");
+        let stable_before = activate_member(&fixture, &registered, "activate-m6d08");
+        let runtime_a = IndependentFakeAvailabilityRuntime::new("alpha");
+        let runtime_b = IndependentFakeAvailabilityRuntime::new("beta");
+        assert!(!std::ptr::eq(&runtime_a, &runtime_b));
+
+        let stale = observe_availability_for_state(
+            &fixture.state,
+            &runtime_a.observation(
+                &stable_before.member_id,
+                NOW_MS - 10_000,
+                5,
+                M6OrgAvailabilityState::Available,
+            ),
+            NOW_MS,
+        )
+        .expect("runtime A stale observation");
+        assert_eq!(stale.effective_state, M6OrgAvailabilityState::Unknown);
+        assert!(!stale.authorizes);
+
+        let fresh = observe_availability_for_state(
+            &fixture.state,
+            &runtime_b.observation(
+                &stable_before.member_id,
+                NOW_MS,
+                60,
+                M6OrgAvailabilityState::Available,
+            ),
+            NOW_MS,
+        )
+        .expect("runtime B replacement observation");
+        assert_eq!(fresh.effective_state, M6OrgAvailabilityState::Available);
+        assert!(!fresh.authorizes);
+        assert_eq!(runtime_a.calls.get(), 1);
+        assert_eq!(runtime_b.calls.get(), 1);
+        assert_ne!(stale.source, fresh.source);
+
+        let listed = list_for_state(
+            &fixture.state,
+            &M6OrgListStableMembersRequest {
+                include_deactivated: false,
+                available_capability_ref: Some("capability:research".to_string()),
+            },
+            NOW_MS,
+        )
+        .expect("list after independent runtime replacement");
+        assert_eq!(listed.members.len(), 1);
+        let projected = &listed.members[0].member;
+        for stable_truth in [
+            (&projected.member_id, &stable_before.member_id),
+            (
+                &projected.identity_contract_ref,
+                &stable_before.identity_contract_ref,
+            ),
+            (
+                &projected.identity_source_record_ref,
+                &stable_before.identity_source_record_ref,
+            ),
+        ] {
+            assert_eq!(stable_truth.0, stable_truth.1);
+        }
+        assert_eq!(projected.revision, stable_before.revision);
+        assert_eq!(projected.memory_refs, stable_before.memory_refs);
+        assert_eq!(
+            projected.capability_permission_refs,
+            stable_before.capability_permission_refs
+        );
+
+        let export = export_for_state(&fixture.state, NOW_MS).expect("export after provider swap");
+        assert_eq!(export.availability_history.len(), 2);
+        assert!(export
+            .availability_history
+            .iter()
+            .any(|value| value.source == stale.source));
+        assert!(export
+            .availability_history
+            .iter()
+            .any(|value| value.source == fresh.source));
+        verify_export_rebuild(&export).expect("verify independent-runtime export rebuild");
+        let mut rebuilt = M6OrgMemberDirectoryStore::open_in_memory().expect("rebuilt store");
+        rebuilt.restore_export(&export).expect("restore export");
+        assert_eq!(
+            rebuilt
+                .load_member(&stable_before.member_id)
+                .expect("load rebuilt member")
+                .expect("rebuilt stable member"),
+            stable_before
+        );
+
+        let stable_payload = serde_json::to_string(&stable_before).expect("stable payload");
+        assert!(!stable_payload.contains(runtime_a.instance_id));
+        assert!(!stable_payload.contains(runtime_b.instance_id));
     }
 
     #[test]

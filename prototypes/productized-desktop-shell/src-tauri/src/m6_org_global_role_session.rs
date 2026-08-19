@@ -798,6 +798,66 @@ mod m6d02_tests {
     }
 
     #[test]
+    fn m6d08_ordinary_appstate_deliberately_fails_closed_without_legacy_fallback() {
+        let (fixture_root, root) = scratch_app_data_root("m6d08-ordinary-fail-closed");
+        let (index_seed, tasks_seed) = write_ordinary_seeds(&fixture_root);
+        let repository = open_scratch_repository(&root);
+        let first = install_ordinary_product_runtime(repository.clone())
+            .expect("establish first Global Supervisor candidate");
+        drop(first);
+        let binding = server_fixed_global_supervisor_binding().expect("fixed binding");
+        repository
+            .create_role_session(&CreateRoleSessionCommand {
+                role_session_id: RoleSessionId::try_from_canonical(sealed_ref(
+                    "session",
+                    "syn.m6.org.global-supervisor.role-session/m6d08-ambiguous-second/v1",
+                ))
+                .expect("second session id"),
+                binding,
+                metadata: metadata_for(
+                    &repository,
+                    "create",
+                    "syn.m6.org.global-supervisor.create/m6d08-ambiguous-second/v1",
+                )
+                .expect("second create metadata"),
+            })
+            .expect("create second live Global Supervisor candidate");
+
+        let error = match AppState::try_new_with_tauri_ordinary_product_seeds(
+            &root,
+            &index_seed,
+            &tasks_seed,
+        ) {
+            Ok(_) => panic!("ordinary AppState must not start with an unavailable fallback"),
+            Err(error) => error,
+        };
+        assert_eq!(error, M6_ORG_GLOBAL_ROLE_SESSION_AMBIGUOUS);
+
+        let lib = include_str!("lib.rs");
+        let ordinary = lib
+            .split("SharedProductAuthorityProfile::OrdinaryInstalled =>")
+            .nth(1)
+            .expect("ordinary authority branch");
+        let ordinary = ordinary
+            .split("SharedProductAuthorityProfile::IsolatedUninstalled =>")
+            .next()
+            .expect("ordinary branch boundary");
+        assert!(ordinary.contains("install_ordinary_product_runtime("));
+        assert!(ordinary.contains("m6_repository,"));
+        assert!(ordinary.contains(")?;"));
+        assert!(!ordinary.contains("M6OrgGlobalRoleSessionSlot::unavailable()"));
+        let isolated = lib
+            .split("SharedProductAuthorityProfile::IsolatedUninstalled =>")
+            .nth(1)
+            .expect("isolated authority branch")
+            .split("};")
+            .next()
+            .expect("isolated branch boundary");
+        assert!(isolated.contains("M6OrgGlobalRoleSessionSlot::unavailable()"));
+        let _ = std::fs::remove_dir_all(fixture_root);
+    }
+
+    #[test]
     fn m6d02_permission_mismatch_is_quarantined_and_fails_closed() {
         let (fixture_root, root) = scratch_app_data_root("permission-mismatch");
         let repository = open_scratch_repository(&root);

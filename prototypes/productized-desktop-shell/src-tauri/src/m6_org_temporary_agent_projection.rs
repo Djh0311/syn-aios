@@ -18,6 +18,20 @@ use std::path::Path;
 const MAX_SEARCH_LIMIT: u32 = 200;
 const TEMPORARY_AGENT_PREFIX: &str = "temporary_agent_";
 const TEMPORARY_AGENT_PAYLOAD_SCHEMA: &str = "syn.m6.org.temporary-agent/v1";
+const M5_TEMPORARY_AGENT_REQUIRED_TABLES: [&str; 11] = [
+    "m5_claims",
+    "m5_work_items",
+    "m5_prepared_attempts",
+    "m5_execution_grants",
+    "m5_dispatches",
+    "m5_worker_role_session_bindings",
+    "m5_execution_attempt_readbacks",
+    "m5_command_receipts",
+    "m5_events",
+    "m5_audit_records",
+    "m5_durable_operations",
+];
+const M5_SCHEMA_CARRIER_MISMATCH: &str = "m6_org_temporary_agent_m5_schema_carrier_mismatch";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -106,8 +120,16 @@ pub(crate) struct M6OrgTemporaryAgentQuarantineRecord {
     pub(crate) recorded_at: i64,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum M6OrgTemporaryAgentSourceState {
+    CompatibleExecutionHistory,
+    NoExecutionHistory,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct M6OrgTemporaryAgentRefreshResponse {
+    pub(crate) source_state: M6OrgTemporaryAgentSourceState,
     pub(crate) projected_count: usize,
     pub(crate) retained_count: usize,
     pub(crate) quarantined_count: usize,
@@ -336,6 +358,7 @@ pub(crate) fn refresh_for_state(
     state: &crate::AppState,
     now_ms: i64,
 ) -> Result<M6OrgTemporaryAgentRefreshResponse, String> {
+    require_temporary_agent_runtime(state)?;
     let m5_path = state
         .m5_store_path
         .as_deref()
@@ -354,40 +377,22 @@ fn refresh_from_paths(
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(|error| format!("m6_org_temporary_agent_m5_read_only_open:{error}"))?;
-    let mut store = M6OrgTemporaryAgentStore::open(m6_path)?;
-    if !table_exists(&m5, "m5_claims")? {
-        return Ok(M6OrgTemporaryAgentRefreshResponse {
-            projected_count: 0,
-            retained_count: 0,
-            quarantined_count: 0,
-            ignored_non_execution_count: 0,
-            records: store.list_agents()?,
-            quarantines: store.list_quarantines()?,
-            m5_opened_read_only: true,
-            report_bodies_copied: false,
-            automatic_promotions: 0,
-        });
-    }
-
-    let claims = load_claim_headers(&m5)?;
-    let required_tables = [
-        "m5_work_items",
-        "m5_prepared_attempts",
-        "m5_execution_grants",
-        "m5_dispatches",
-        "m5_worker_role_session_bindings",
-        "m5_execution_attempt_readbacks",
-        "m5_command_receipts",
-        "m5_events",
-        "m5_audit_records",
-    ];
     let mut missing_tables = Vec::new();
-    for table in required_tables {
+    for table in M5_TEMPORARY_AGENT_REQUIRED_TABLES {
         if !table_exists(&m5, table)? {
             missing_tables.push(table.to_string());
         }
     }
-    let durable_operations_available = table_exists(&m5, "m5_durable_operations")?;
+    if !missing_tables.is_empty() {
+        return Err(M5_SCHEMA_CARRIER_MISMATCH.to_string());
+    }
+    let claims = load_claim_headers(&m5)?;
+    let source_state = if claims.is_empty() {
+        M6OrgTemporaryAgentSourceState::NoExecutionHistory
+    } else {
+        M6OrgTemporaryAgentSourceState::CompatibleExecutionHistory
+    };
+    let mut store = M6OrgTemporaryAgentStore::open(m6_path)?;
 
     let mut projected_count = 0usize;
     let mut retained_count = 0usize;
@@ -398,11 +403,7 @@ fn refresh_from_paths(
             ignored_non_execution_count += 1;
             continue;
         }
-        let projection = if missing_tables.is_empty() {
-            project_exact_claim(&m5, &claim, durable_operations_available)
-        } else {
-            Err("m6_org_temporary_agent_source_table_missing".to_string())
-        };
+        let projection = project_exact_claim(&m5, &claim);
         match projection {
             Ok(record) => {
                 if store.record_projection(&record)? {
@@ -421,6 +422,7 @@ fn refresh_from_paths(
     }
 
     Ok(M6OrgTemporaryAgentRefreshResponse {
+        source_state,
         projected_count,
         retained_count,
         quarantined_count,
@@ -437,6 +439,7 @@ pub(crate) fn search_for_state(
     state: &crate::AppState,
     request: &M6OrgSearchTemporaryAgentHistoryRequest,
 ) -> Result<M6OrgSearchTemporaryAgentHistoryResponse, String> {
+    require_temporary_agent_runtime(state)?;
     let query = request.query.trim().to_ascii_lowercase();
     if query.is_empty() {
         return Err("m6_org_temporary_agent_search_query_required".to_string());
@@ -475,6 +478,7 @@ pub(crate) fn promote_for_state(
     request: &M6OrgPromoteTemporaryAgentRequest,
     now_ms: i64,
 ) -> Result<M6OrgTemporaryAgentPromotionResponse, String> {
+    require_temporary_agent_runtime(state)?;
     validate_ref("temporary_agent_id", &request.temporary_agent_id)?;
     if !request
         .temporary_agent_id
@@ -568,7 +572,6 @@ pub(crate) fn promote_for_state(
 fn project_exact_claim(
     m5: &Connection,
     claim: &M5ClaimHeader,
-    durable_operations_available: bool,
 ) -> Result<M6OrgTemporaryAgent, String> {
     if claim.claim_status != "RECORDED_UNVERIFIED" {
         return Err("m6_org_temporary_agent_claim_not_authoritative".to_string());
@@ -726,11 +729,7 @@ fn project_exact_claim(
             receipt_hash: readback.canonical_readback_hash.clone(),
         },
     };
-    let child_run_ref = if durable_operations_available {
-        load_exact_child_run_ref(m5, &envelope, &dispatch.effect_id, &readback)?
-    } else {
-        None
-    };
+    let child_run_ref = load_exact_child_run_ref(m5, &envelope, &dispatch.effect_id, &readback)?;
     let failure_ref = if readback.derived_attempt_state == "SUCCEEDED" {
         None
     } else {
@@ -1489,6 +1488,11 @@ fn load_audit_carrier(connection: &Connection, receipt_id: &str) -> Result<Audit
         .ok_or_else(|| "m6_org_temporary_agent_audit_carrier_missing".to_string())
 }
 
+fn require_temporary_agent_runtime(state: &crate::AppState) -> Result<(), String> {
+    let _ = state.m6_org_global_role_session.authority_seed()?;
+    Ok(())
+}
+
 fn table_exists(connection: &Connection, table: &str) -> Result<bool, String> {
     connection
         .query_row(
@@ -1654,7 +1658,7 @@ fn encode(value: &impl Serialize, prefix: &str) -> Result<String, String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::m5_agent_runtime::{ObservingFakeRuntime, RuntimeFault, WorkcellRun};
     use crate::m5_claim_ledger::{ensure_claim_schema, record_claim};
@@ -1676,9 +1680,9 @@ mod tests {
     const NOW_MS: i64 = 1_787_097_600_000;
     static SCRATCH_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
-    struct Fixture {
-        root: PathBuf,
-        state: AppState,
+    pub(crate) struct Fixture {
+        pub(crate) root: PathBuf,
+        pub(crate) state: AppState,
     }
 
     impl Drop for Fixture {
@@ -1688,7 +1692,7 @@ mod tests {
     }
 
     #[derive(Clone, Debug)]
-    struct Seed {
+    pub(crate) struct Seed {
         claim_id: String,
         project_id: String,
         work_item_id: String,
@@ -1700,7 +1704,7 @@ mod tests {
         report_body_sentinel: String,
     }
 
-    fn fixture(label: &str) -> Fixture {
+    pub(crate) fn fixture(label: &str) -> Fixture {
         let sequence = SCRATCH_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let root = std::env::temp_dir().join(format!(
             "syn-m6d06-{label}-{}-{sequence}",
@@ -1725,7 +1729,7 @@ mod tests {
         Fixture { root, state }
     }
 
-    fn seed_execution(
+    pub(crate) fn seed_execution(
         fixture: &Fixture,
         label: &str,
         outcome: &str,
@@ -2241,6 +2245,154 @@ mod tests {
             "claim:claim-legacy-unmappable"
         );
         assert_eq!(response.quarantines[0].payload_mode, "REF_ONLY");
+    }
+
+    #[test]
+    fn m6d08_temporary_commands_share_global_gate_before_read_replay_or_write() {
+        let fixture = fixture("m6d08-global-gate");
+        seed_execution(
+            &fixture,
+            "m6d08-global-gate",
+            "SUCCEEDED",
+            "role-session:m6d08-global-gate",
+        );
+        let refresh = refresh_for_state(&fixture.state, NOW_MS + 2_000).expect("seed projection");
+        assert_eq!(
+            refresh.source_state,
+            M6OrgTemporaryAgentSourceState::CompatibleExecutionHistory
+        );
+        let source = refresh.records[0].clone();
+        let promotion = M6OrgPromoteTemporaryAgentRequest {
+            temporary_agent_id: source.temporary_agent_id.clone(),
+            promoted_by_actor_id: "actor:user".to_string(),
+            explicit_human_command: true,
+            target: M6OrgTemporaryAgentPromotionTarget::CreateStableMember {
+                registration: explicit_registration(
+                    "member_m6d08_global_gate",
+                    "register-m6d08-global-gate",
+                ),
+            },
+            idempotency_key: "promote-m6d08-global-gate".to_string(),
+        };
+        promote_for_state(&fixture.state, &promotion, NOW_MS + 2_100)
+            .expect("seed promotion replay");
+
+        let m5_path = fixture
+            .state
+            .m5_store_path()
+            .expect("M5 path")
+            .to_path_buf();
+        let m6_path = fixture.state.m6_org_store_path().expect("M6 path");
+        let m5_before = file_hash(&m5_path);
+        let m6_before = file_hash(&m6_path);
+        let unavailable = AppState {
+            index_path: fixture.state.index_path.clone(),
+            tasks_path: fixture.state.tasks_path.clone(),
+            workflow_state_path: fixture.state.workflow_state_path.clone(),
+            m3_role_session_read_runtime: Default::default(),
+            m1_project_index: None,
+            m3_project_role_session_authority: None,
+            m5_store_path: Some(m5_path.clone()),
+            m6_org_global_role_session: Default::default(),
+        };
+        let expected =
+            crate::m6_org_global_role_session::M6_ORG_GLOBAL_ROLE_SESSION_UNAVAILABLE.to_string();
+        assert_eq!(
+            refresh_for_state(&unavailable, NOW_MS + 2_200).unwrap_err(),
+            expected
+        );
+        assert_eq!(
+            search_for_state(
+                &unavailable,
+                &M6OrgSearchTemporaryAgentHistoryRequest {
+                    query: source.temporary_agent_id.clone(),
+                    limit: 10,
+                },
+            )
+            .unwrap_err(),
+            expected
+        );
+        assert_eq!(
+            promote_for_state(&unavailable, &promotion, NOW_MS + 2_300).unwrap_err(),
+            expected,
+            "even an exact idempotent replay must pass the Global Supervisor gate first"
+        );
+        assert_eq!(m5_before, file_hash(&m5_path));
+        assert_eq!(m6_before, file_hash(&m6_path));
+    }
+
+    #[test]
+    fn m6d08_no_history_is_distinct_from_schema_carrier_mismatch() {
+        let mismatch = fixture("m6d08-schema-mismatch");
+        seed_execution(
+            &mismatch,
+            "m6d08-schema-mismatch",
+            "SUCCEEDED",
+            "role-session:m6d08-schema-mismatch",
+        );
+        let mismatch_m5 = mismatch.state.m5_store_path().expect("M5 path");
+        let connection = Connection::open(mismatch_m5).expect("open mismatch M5");
+        connection
+            .execute("DROP TABLE m5_durable_operations", [])
+            .expect("remove required durable-operation carrier");
+        drop(connection);
+        let mismatch_m6 = mismatch.state.m6_org_store_path().expect("M6 path");
+        assert!(!mismatch_m6.exists());
+        assert_eq!(
+            refresh_for_state(&mismatch.state, NOW_MS + 2_400).unwrap_err(),
+            M5_SCHEMA_CARRIER_MISMATCH
+        );
+        assert!(
+            !mismatch_m6.exists(),
+            "schema mismatch must fail before opening or writing the M6 store"
+        );
+
+        let empty = fixture("m6d08-no-history");
+        seed_execution(
+            &empty,
+            "m6d08-no-history",
+            "SUCCEEDED",
+            "role-session:m6d08-no-history",
+        );
+        let empty_m5 = empty.state.m5_store_path().expect("M5 path");
+        let connection = Connection::open(empty_m5).expect("open true-shaped M5");
+        for table in M5_TEMPORARY_AGENT_REQUIRED_TABLES {
+            let present: i64 = connection
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+                    [table],
+                    |row| row.get(0),
+                )
+                .expect("inspect required carrier table");
+            assert_eq!(present, 1, "required M5 carrier table {table}");
+        }
+        connection
+            .execute("DELETE FROM m5_claims", [])
+            .expect("remove execution history without changing schema");
+        drop(connection);
+        let response = refresh_for_state(&empty.state, NOW_MS + 2_500)
+            .expect("true-shaped store with no claims");
+        assert_eq!(
+            response.source_state,
+            M6OrgTemporaryAgentSourceState::NoExecutionHistory
+        );
+        assert!(response.records.is_empty());
+        assert!(response.quarantines.is_empty());
+
+        let production = include_str!("m6_org_temporary_agent_projection.rs");
+        assert_eq!(M5_TEMPORARY_AGENT_REQUIRED_TABLES.len(), 11);
+        for required_convention in [
+            "ExecutionAttemptReadbackRecorded",
+            "SCRUBBED_ATTEMPT_RECORD",
+            "recording_command_receipt_ref",
+            "canonical_readback_hash",
+            "m5_durable_operations",
+        ] {
+            assert!(
+                production.contains(required_convention),
+                "missing typed M5 carrier convention {required_convention}"
+            );
+        }
     }
 
     #[test]
