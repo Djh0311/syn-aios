@@ -987,6 +987,7 @@ mod tests {
 
     #[test]
     fn f2c01_no_model_invocation_is_exact_registry_and_source_constraint() {
+        let _case_ids = ["CF-F2-POS-009"];
         let source = include_str!("f2_shell_core_bridge.rs");
         let dispatch_start = source
             .find("fn dispatch_request(")
@@ -1030,6 +1031,12 @@ mod tests {
 
     #[test]
     fn f2c01_status_methods_cover_ready_and_fail_closed_unavailable_states() {
+        let _case_ids = [
+            "CF-F2-POS-001",
+            "CF-F2-NEG-001",
+            "CF-F2-POS-002",
+            "CF-F2-NEG-002",
+        ];
         let (parent, ordinary, ordinary_config) = ordinary_state("status-ready");
         let (secretary, _) = response(
             &ordinary,
@@ -1073,6 +1080,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_register_exact_replay_and_collision_are_fail_closed() {
+        let _case_ids = ["CF-F2-POS-003", "CF-F2-POS-004", "CF-F2-NEG-003"];
         let (parent, state, bridge_config) = ordinary_state("register-replay");
         let mut first = request(
             METHOD_REGISTER_STABLE_MEMBER,
@@ -1120,6 +1128,16 @@ mod tests {
 
     #[test]
     fn f2c01_protocol_errors_deadlines_stop_and_panic_have_stable_codes() {
+        let _case_ids = [
+            "CF-F2-NEG-005",
+            "CF-F2-NEG-006",
+            "CF-F2-NEG-007",
+            "CF-F2-NEG-008",
+            "CF-F2-NEG-009",
+            "CF-F2-NEG-010",
+            "CF-F2-NEG-011",
+            "CF-F2-POS-007",
+        ];
         let root = temp_dir("protocol-errors");
         let state = uninstalled_state(&root);
         let bridge_config = config(&root);
@@ -1179,6 +1197,7 @@ mod tests {
 
     #[test]
     fn f2c01_cli_requires_explicit_canonical_paths_and_has_no_path_fallback() {
+        let _case_ids = ["CF-F2-NEG-018"];
         let root = temp_dir("cli-paths");
         let bridge_config = config(&root);
         let args = vec![
@@ -1216,6 +1235,7 @@ mod tests {
 
     #[test]
     fn f2c01_run_loop_is_line_delimited_and_stops_after_ack() {
+        let _case_ids = ["CF-F2-POS-007"];
         let root = temp_dir("run-loop");
         let state = uninstalled_state(&root);
         let bridge_config = config(&root);
@@ -1241,6 +1261,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_pos_008_external_refs_are_receipt_only_on_secretary_status() {
+        let _case_ids = ["CF-F2-POS-008"];
         let (parent, state, bridge_config) = ordinary_state("pos-008");
         let mut body = request(METHOD_SECRETARY_STATUS, json!({}));
         body["external_refs"] = json!([
@@ -1267,6 +1288,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_invalid_idempotency_key_is_stable() {
+        let _case_ids = ["CF-F2-NEG-004"];
         let (parent, state, bridge_config) = ordinary_state("invalid-key");
         let mut params = register_params("member_beta", "register-member-beta");
         params["idempotency_key"] = json!("");
@@ -1282,6 +1304,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_domain_method_requires_deadline() {
+        let _case_ids = ["CF-F2-NEG-012"];
         let root = temp_dir("deadline-required");
         let state = uninstalled_state(&root);
         let bridge_config = config(&root);
@@ -1294,6 +1317,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_invalid_member_id_is_core_rejected() {
+        let _case_ids = ["CF-F2-NEG-013"];
         let (parent, state, bridge_config) = ordinary_state("invalid-member");
         let (response, _) = response(
             &state,
@@ -1315,6 +1339,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_unclassified_core_error_does_not_leak_host_path() {
+        let _case_ids = ["CF-F2-NEG-014"];
         let leaked =
             "/home/synadmin/secret-db/workflow-state.v0.json: No such file or directory (os error 2)";
         let failure = map_core_error(leaked);
@@ -1343,6 +1368,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_pos_010_crash_recovery_contract_text() {
+        let _case_ids = ["CF-F2-POS-010"];
         assert!(CONTRACT.contains("same explicit startup paths"));
         assert!(CONTRACT.contains("same idempotency key"));
         assert!(CONTRACT.contains("A process crash yields no fabricated response"));
@@ -1354,6 +1380,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_neg_015_shell_database_not_syn_fact_store() {
+        let _case_ids = ["CF-F2-NEG-015"];
         assert!(CONTRACT.contains("better-sqlite3/drizzle"));
         assert!(CONTRACT.contains("RoleSession"));
         assert!(CONTRACT.contains("must go through Syn core"));
@@ -1362,6 +1389,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_neg_016_poracode_home_schedules_not_syn_domain() {
+        let _case_ids = ["CF-F2-NEG-016"];
         assert!(CONTRACT.contains("`view.home`"));
         assert!(CONTRACT.contains("`view.schedules`"));
         assert!(CONTRACT.contains("not Syn Secretary"));
@@ -1369,6 +1397,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_neg_017_v1_methods_accept_no_completion_fields() {
+        let _case_ids = ["CF-F2-NEG-017"];
         let source = include_str!("f2_shell_core_bridge.rs");
         let dispatch_end = source
             .find("#[cfg(test)]\nmod tests")
@@ -1493,6 +1522,7 @@ mod tests {
 
     #[test]
     fn f2c01r01_app_data_root_last_component_must_match() {
+        let _case_ids = ["CF-F2-NEG-018"];
         let parent = temp_dir("wrong-root-name");
         let app_data_root = parent.join("CodexGovernanceWorkbench");
         fs::create_dir_all(&app_data_root).expect("create mismatched root");
