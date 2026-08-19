@@ -29,6 +29,7 @@
 - `prototypes/productized-desktop-shell/src-tauri/src/m6_org_global_role_session.rs`、`m6_org_consult_handoff.rs`、`m6_org_cross_project_advisory.rs`、`m6_org_member_directory.rs`、`m6_org_schema.rs`、`m6_org_store.rs`、`m6_org_dto.rs`（仅本叶所需接线）
 - `prototypes/productized-desktop-shell/src-tauri/src/lib.rs`（仅 `mod` 声明、`AppState` 接线与 command 注册）
 - `prototypes/productized-desktop-shell/src-tauri/src/commands.rs`（仅本叶 command 接线）
+- `prototypes/productized-desktop-shell/src-tauri/src/command_registry.rs`（只允许把 `start_global_supervisor_multi_view_consultation`、`submit_global_supervisor_consultation_view`、`assemble_global_supervisor_multi_view_consultation` 这 3 个精确 command 加入普通 `generate_handler!`；不得改其他 registry、gate 或 command）
 - `m3_role_session.rs`、`m5_agent_runtime.rs`：**仅**可见性调整与新增 trait 实现，不改既有语义、不放宽 runtime admission；每处改动在报告里逐条说明
 - `docs/contracts/`（仅新增增补合同）
 - `tasks/2026-08-*`、`tasks/2026-08-19-*`
