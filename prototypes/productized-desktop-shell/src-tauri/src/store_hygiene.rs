@@ -89,8 +89,8 @@ fn residue_age_days(
     // SYN-FND-004A: 通过 workflow 的 project_id 精确匹配归属，不再模糊 contains(slug)
     if let Some(expected_pid) = expected_project_id {
         let owns = workflows.iter().any(|wf| {
-            let wid_match =
-                crate::optional_string_from(wf, "workflow_id").as_deref() == Some(workflow_id.as_str());
+            let wid_match = crate::optional_string_from(wf, "workflow_id").as_deref()
+                == Some(workflow_id.as_str());
             let pid_match =
                 crate::optional_string_from(wf, "project_id").as_deref() == Some(expected_pid);
             wid_match && pid_match

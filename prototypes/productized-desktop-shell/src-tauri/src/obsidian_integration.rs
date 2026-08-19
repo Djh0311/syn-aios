@@ -996,8 +996,14 @@ mod tests {
         let sh = Path::new("/bin/sh");
 
         let root = fake_cli_cwd("nonzero");
-        let error = run_process_with_limits(sh, &root, &fake_sh_argv("exit 7"), Duration::from_secs(1), 1024)
-            .unwrap_err();
+        let error = run_process_with_limits(
+            sh,
+            &root,
+            &fake_sh_argv("exit 7"),
+            Duration::from_secs(1),
+            1024,
+        )
+        .unwrap_err();
         assert!(
             error.contains("退出码 7"),
             "nonzero fake CLI must retain the sanitized exit-status reason, got: {error}"
@@ -1005,14 +1011,26 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
 
         let root = fake_cli_cwd("timeout");
-        let error = run_process_with_limits(sh, &root, &fake_sh_argv("sleep 1"), Duration::from_millis(20), 1024)
-            .unwrap_err();
+        let error = run_process_with_limits(
+            sh,
+            &root,
+            &fake_sh_argv("sleep 1"),
+            Duration::from_millis(20),
+            1024,
+        )
+        .unwrap_err();
         assert!(error.contains("超时"));
         let _ = fs::remove_dir_all(&root);
 
         let root = fake_cli_cwd("too-large");
-        let error = run_process_with_limits(sh, &root, &fake_sh_argv("yes x | head -c 2048"), Duration::from_secs(1), 128)
-            .unwrap_err();
+        let error = run_process_with_limits(
+            sh,
+            &root,
+            &fake_sh_argv("yes x | head -c 2048"),
+            Duration::from_secs(1),
+            128,
+        )
+        .unwrap_err();
         assert!(error.contains("超过安全上限"));
         let _ = fs::remove_dir_all(&root);
     }

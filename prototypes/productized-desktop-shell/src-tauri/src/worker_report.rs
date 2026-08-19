@@ -10,9 +10,9 @@
 // 安全属性（安全死线）：完成汇报仍只归档不驱动；求助只暴露强信号，由链调用方停在
 // waiting_decision。落库走现成 `record_worker_structured_report_at`（自带校验），best-effort。
 
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -275,8 +275,9 @@ fn load_persisted_dispatch_for_grant_verification(
 ) -> Result<Value, String> {
     match crate::workbench_sqlite_storage_mode::storage_mode_for(state_path) {
         crate::workbench_sqlite_storage_mode::StorageMode::DbPrimaryJsonProjection(config) => {
-            let connection = Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|_| "execution_grant_db_primary_dispatch_open_failed".to_string())?;
+            let connection =
+                Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    .map_err(|_| "execution_grant_db_primary_dispatch_open_failed".to_string())?;
             let record_json = connection
                 .query_row(
                     "SELECT record_json FROM workflow_node_dispatches WHERE dispatch_id = ?1",
@@ -315,8 +316,9 @@ fn load_persisted_binding_for_grant_verification(
 ) -> Result<Value, String> {
     match crate::workbench_sqlite_storage_mode::storage_mode_for(state_path) {
         crate::workbench_sqlite_storage_mode::StorageMode::DbPrimaryJsonProjection(config) => {
-            let connection = Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|_| "execution_grant_db_primary_binding_open_failed".to_string())?;
+            let connection =
+                Connection::open_with_flags(&config.db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                    .map_err(|_| "execution_grant_db_primary_binding_open_failed".to_string())?;
             let record_json = connection
                 .query_row(
                     "SELECT record_json FROM workflow_node_session_bindings WHERE binding_id = ?1",
@@ -364,7 +366,9 @@ fn verify_current_persisted_dispatch_binding_for_report(
         ("lifecycle", "active"),
     ] {
         if crate::optional_string_from(&binding, field).as_deref() != Some(expected) {
-            return Err(format!("execution_grant_exact_work_item_binding_{field}_mismatch"));
+            return Err(format!(
+                "execution_grant_exact_work_item_binding_{field}_mismatch"
+            ));
         }
     }
     Ok(())
@@ -686,7 +690,6 @@ fn consume_authorized_worker_report_after_completion(
     task_title: &str,
     last_message_full: &str,
 ) -> WorkerReportConsumeOutcome {
-
     // SYN-FND-003: 使用 identity_kernel 解析执行者身份（服务端派生，非前端传入）
     let identity = crate::mcp::identity_kernel::resolve_identity(
         authenticated_actor_id,
@@ -1334,10 +1337,9 @@ mod tests {
             "updated_at_ms": 1700000000000_i64,
             "warnings": []
         });
-        let authorization: crate::PlanAuthorization = serde_json::from_value(
-            authorization_store["authorizations"][0].clone(),
-        )
-        .expect("fixture authorization source");
+        let authorization: crate::PlanAuthorization =
+            serde_json::from_value(authorization_store["authorizations"][0].clone())
+                .expect("fixture authorization source");
         source.authorization_source_hash = crate::utils::hash::sha256_hex(
             &serde_json::to_string(&authorization).expect("serialize fixture authorization source"),
         );
@@ -1445,7 +1447,10 @@ mod tests {
         );
         assert!(outcome.report_summary.is_none());
         assert!(outcome.help_signal.is_none());
-        assert!(outcome.report_warning.as_deref().is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")));
+        assert!(outcome
+            .report_warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")));
         assert_eq!(fs::read(&path).unwrap(), before, "valid M2 hold must not append pseudo claim/audit, update top-level timestamp, or mutate any owner");
         let _ = fs::remove_dir_all(dir);
     }
@@ -1477,7 +1482,10 @@ mod tests {
             outcome.grant_bearing_boundary,
             Some(GrantBearingReportBoundary::NotMigratedHold)
         );
-        assert!(outcome.report_warning.as_deref().is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")));
+        assert!(outcome
+            .report_warning
+            .as_deref()
+            .is_some_and(|warning| warning.contains("NOT_MIGRATED/HOLD")));
         assert_eq!(
             fs::read(&path).unwrap(),
             before,
@@ -1512,7 +1520,11 @@ mod tests {
             outcome.grant_bearing_boundary,
             Some(GrantBearingReportBoundary::NotMigratedHold)
         );
-        assert_eq!(fs::read(path).unwrap(), before, "M2 boundary must not fall through to the legacy report recorder");
+        assert_eq!(
+            fs::read(path).unwrap(),
+            before,
+            "M2 boundary must not fall through to the legacy report recorder"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1545,7 +1557,11 @@ mod tests {
         );
         assert!(outcome.help_signal.is_none());
         assert!(outcome.report_status.is_none());
-        assert_eq!(fs::read(path).unwrap(), before, "grant-bearing hold must not forward report content to a legacy side effect");
+        assert_eq!(
+            fs::read(path).unwrap(),
+            before,
+            "grant-bearing hold must not forward report content to a legacy side effect"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1738,15 +1754,17 @@ mod tests {
             "wi-1",
             Some(fixture.dispatch_id.as_str()),
             Some(fixture.attempt_id.as_str()),
-            "completed",  // attempt_state (SYN-FND-004B): 合法终态
-            "test-actor", // authenticated_actor_id (SYN-FND-004B)
+            "completed",              // attempt_state (SYN-FND-004B): 合法终态
+            "test-actor",             // authenticated_actor_id (SYN-FND-004B)
             Some("forged-by-caller"), // grant_id (SYN-FND-004C): 格式非法
             "developer",
             "任务T",
             GOOD_MSG,
         );
         assert!(outcome.report_summary.is_none(), "非法 grant 不得产生摘要");
-        let warning = outcome.report_warning.expect("非法 grant 必须有诊断 warning");
+        let warning = outcome
+            .report_warning
+            .expect("非法 grant 必须有诊断 warning");
         assert!(
             warning.contains("execution_grant_id_invalid"),
             "warning 应指明拒绝原因：{warning}"
@@ -1786,7 +1804,11 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("execution_grant_dispatch_execution_grant_id_mismatch"));
-        assert_eq!(fs::read(path).unwrap(), before, "forged grant must not mutate store");
+        assert_eq!(
+            fs::read(path).unwrap(),
+            before,
+            "forged grant must not mutate store"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1820,7 +1842,11 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("execution_grant_dispatch_native_thread_id_mismatch"));
-        assert_eq!(fs::read(path).unwrap(), before, "forged report must not mutate store");
+        assert_eq!(
+            fs::read(path).unwrap(),
+            before,
+            "forged report must not mutate store"
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -1845,7 +1871,8 @@ mod tests {
         let state_before = fs::read(&fixture.path).expect("read state after revoke");
         let authorization_path = crate::plan_authorization_store::sidecar_path(&fixture.path)
             .expect("authorization sidecar path");
-        let authorization_before = fs::read(&authorization_path).expect("read sidecar after revoke");
+        let authorization_before =
+            fs::read(&authorization_path).expect("read sidecar after revoke");
 
         let outcome = consume_worker_report_after_completion(
             &fixture.path,
@@ -1863,8 +1890,14 @@ mod tests {
             "任务T",
             GOOD_MSG,
         );
-        assert!(outcome.report_summary.is_none(), "revoked source must not produce a report");
-        assert!(outcome.report_status.is_none(), "revoked source must not produce a status");
+        assert!(
+            outcome.report_summary.is_none(),
+            "revoked source must not produce a report"
+        );
+        assert!(
+            outcome.report_status.is_none(),
+            "revoked source must not produce a status"
+        );
         assert!(
             outcome
                 .report_warning
@@ -2131,12 +2164,15 @@ impl M5WorkerReport {
                 let Some(actor) = &self.actor else {
                     return Err("execution report missing trusted actor".to_string());
                 };
-                if actor.actor_id.trim().is_empty() || actor.authentication_method.trim().is_empty() {
+                if actor.actor_id.trim().is_empty() || actor.authentication_method.trim().is_empty()
+                {
                     return Err("execution report actor has no trusted authentication".to_string());
                 }
                 // actor 自报拒绝：执行者必须绑定 worker RoleSession
                 if self.worker_role_session_id.is_none() {
-                    return Err("execution report actor is not bound to a worker RoleSession".to_string());
+                    return Err(
+                        "execution report actor is not bound to a worker RoleSession".to_string(),
+                    );
                 }
                 let required = [
                     ("project_id", &self.project_id),
@@ -2153,7 +2189,10 @@ impl M5WorkerReport {
                 ];
                 for (name, value) in required {
                     if value.as_ref().map(|v| v.trim().is_empty()).unwrap_or(true) {
-                        return Err(format!("execution report missing exact join field: {}", name));
+                        return Err(format!(
+                            "execution report missing exact join field: {}",
+                            name
+                        ));
                     }
                 }
             }
@@ -2176,10 +2215,15 @@ impl M5WorkerReport {
                     }
                 }
                 if self.execution_receipt.is_some() {
-                    return Err("manual/offline report must not carry execution receipt".to_string());
+                    return Err(
+                        "manual/offline report must not carry execution receipt".to_string()
+                    );
                 }
                 if self.project_id.is_none() || self.orchestration_id.is_none() {
-                    return Err("manual/offline report missing project or orchestration context".to_string());
+                    return Err(
+                        "manual/offline report missing project or orchestration context"
+                            .to_string(),
+                    );
                 }
             }
         }
@@ -2217,8 +2261,15 @@ mod m5_report_tests {
             .as_execution(create_test_receipt(), create_test_actor())
             .bind_project("project-1", "orch-1")
             .bind_execution_join(
-                "run-1", "item-1", "node-1", "dispatch-1", "attempt-1",
-                "grant-1", "session-1", "receipt-ref-1", "hash-1",
+                "run-1",
+                "item-1",
+                "node-1",
+                "dispatch-1",
+                "attempt-1",
+                "grant-1",
+                "session-1",
+                "receipt-ref-1",
+                "hash-1",
             )
     }
 
@@ -2231,8 +2282,14 @@ mod m5_report_tests {
 
     #[test]
     fn report_kind_from_str() {
-        assert_eq!(ReportKind::from_str("executed"), Some(ReportKind::Execution));
-        assert_eq!(ReportKind::from_str("execution"), Some(ReportKind::Execution));
+        assert_eq!(
+            ReportKind::from_str("executed"),
+            Some(ReportKind::Execution)
+        );
+        assert_eq!(
+            ReportKind::from_str("execution"),
+            Some(ReportKind::Execution)
+        );
         assert_eq!(ReportKind::from_str("manual"), Some(ReportKind::Manual));
         assert_eq!(ReportKind::from_str("offline"), Some(ReportKind::Offline));
         assert_eq!(ReportKind::from_str("invalid"), None);

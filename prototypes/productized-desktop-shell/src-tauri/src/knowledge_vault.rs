@@ -331,7 +331,8 @@ pub(crate) fn workspace_recovery_backups_root_for_read() -> Result<Option<PathBu
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => {
             return Err(
-                "knowledge_workspace_recovery_invalid: 固定 Syn app-data 目录不可读取。".to_string(),
+                "knowledge_workspace_recovery_invalid: 固定 Syn app-data 目录不可读取。"
+                    .to_string(),
             )
         }
         Ok(_) => require_fixed_directory(&app_data, "app-data 目录")?,
@@ -339,9 +340,9 @@ pub(crate) fn workspace_recovery_backups_root_for_read() -> Result<Option<PathBu
     let recovery_root = recovery_backups_root();
     match fs::symlink_metadata(&recovery_root) {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(_) => Err(
-            "knowledge_workspace_recovery_invalid: 固定 Syn 恢复备份目录不可读取。".to_string(),
-        ),
+        Err(_) => {
+            Err("knowledge_workspace_recovery_invalid: 固定 Syn 恢复备份目录不可读取。".to_string())
+        }
         Ok(_) => {
             require_fixed_directory(&recovery_root, "恢复备份目录")?;
             Ok(Some(recovery_root))
@@ -480,12 +481,15 @@ pub(crate) fn resolve_new_workspace_path(
 }
 
 /// 受限附件目录只允许是 vault 顶层精确的 `attachments`；导入不根据用户文本递归创建目录。
-pub(crate) fn ensure_workspace_attachments_directory_at(vault_root: &Path) -> Result<PathBuf, String> {
+pub(crate) fn ensure_workspace_attachments_directory_at(
+    vault_root: &Path,
+) -> Result<PathBuf, String> {
     ensure_vault_root(vault_root)?;
     match exact_child_path(vault_root, ATTACHMENTS_DIR_NAME) {
         Ok(path) => {
             let metadata = fs::symlink_metadata(&path).map_err(|_| {
-                "knowledge_workspace_attachment_directory_invalid: 无法读取固定附件目录。".to_string()
+                "knowledge_workspace_attachment_directory_invalid: 无法读取固定附件目录。"
+                    .to_string()
             })?;
             if metadata.file_type().is_symlink() || !metadata.is_dir() {
                 return Err(
@@ -579,7 +583,10 @@ fn temporary_workspace_path(target: &Path) -> Result<PathBuf, String> {
     )))
 }
 
-pub(crate) fn write_workspace_temporary_bytes(target: &Path, bytes: &[u8]) -> Result<PathBuf, String> {
+pub(crate) fn write_workspace_temporary_bytes(
+    target: &Path,
+    bytes: &[u8],
+) -> Result<PathBuf, String> {
     let temporary = temporary_workspace_path(target)?;
     let mut file = OpenOptions::new()
         .write(true)
@@ -1495,14 +1502,7 @@ mod tests {
     #[test]
     fn path_lock_rejects_parent_dir() {
         let root = temp_root("parent");
-        let result = write_note_at(
-            &root,
-            &root.join("state.json"),
-            "../escape",
-            "x",
-            0,
-            "",
-        );
+        let result = write_note_at(&root, &root.join("state.json"), "../escape", "x", 0, "");
         assert!(result.is_err(), ".. 组件必须拒绝");
         assert!(!root.join("escape.md").exists());
     }
@@ -1525,14 +1525,7 @@ mod tests {
             std::os::unix::fs::symlink(&outside_file, root.join("link.md")).unwrap();
             let result = read_note_at(&root, "link");
             assert!(result.is_err(), "符号链接必须拒绝");
-            let write_result = write_note_at(
-                &root,
-                &root.join("state.json"),
-                "link",
-                "x",
-                0,
-                "",
-            );
+            let write_result = write_note_at(&root, &root.join("state.json"), "link", "x", 0, "");
             assert!(write_result.is_err(), "符号链接写入必须拒绝");
         }
     }
@@ -1567,7 +1560,10 @@ mod tests {
         assert_eq!(note.mtime_ms > 0, true);
         let listed = list_notes_at(&root).unwrap();
         assert_eq!(listed[0].outlinks, vec!["另一条".to_string()]);
-        assert_eq!(note.content_hash, crate::utils::hash::sha256_hex(&note.body));
+        assert_eq!(
+            note.content_hash,
+            crate::utils::hash::sha256_hex(&note.body)
+        );
 
         let state_value = crate::workflow_state_store::read_value(&state).unwrap();
         let events = state_value["audit_events"].as_array().unwrap();
@@ -1600,7 +1596,11 @@ mod tests {
         let created = create_note_at(&root, &state, "冲突笔记").unwrap();
         let before = read_note_at(&root, &created.slug).unwrap();
 
-        fs::write(root.join(format!("{}.md", created.slug)), "# 冲突笔记\n\nObsidian 外部改动\n").unwrap();
+        fs::write(
+            root.join(format!("{}.md", created.slug)),
+            "# 冲突笔记\n\nObsidian 外部改动\n",
+        )
+        .unwrap();
         let rejected = write_note_at(
             &root,
             &state,
@@ -1613,9 +1613,16 @@ mod tests {
 
         assert!(rejected.starts_with("knowledge_vault_conflict:"));
         let after = fs::read_to_string(root.join(format!("{}.md", created.slug))).unwrap();
-        assert!(after.contains("Obsidian 外部改动"), "冲突时不得覆盖外部正文");
+        assert!(
+            after.contains("Obsidian 外部改动"),
+            "冲突时不得覆盖外部正文"
+        );
         let state_value = crate::workflow_state_store::read_value(&state).unwrap();
-        assert_eq!(state_value["audit_events"].as_array().unwrap().len(), 1, "冲突不能新增审计写入");
+        assert_eq!(
+            state_value["audit_events"].as_array().unwrap().len(),
+            1,
+            "冲突不能新增审计写入"
+        );
     }
 
     #[test]
