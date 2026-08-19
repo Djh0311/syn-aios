@@ -86,6 +86,7 @@ mod m6_org_cross_project_advisory;
 mod m6_org_dto;
 mod m6_org_global_role_session;
 mod m6_org_member_directory;
+mod m6_org_multi_view_consultation;
 mod m6_org_schema;
 mod m6_org_store;
 mod m6_org_temporary_agent_projection;

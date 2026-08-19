@@ -5010,6 +5010,48 @@ fn promote_global_supervisor_temporary_agent(
     )
 }
 
+/// Routes routine questions to the single-role path. Only an explicit major
+/// trigger creates two or more independently bound M3 consultation sessions.
+#[tauri::command]
+fn start_global_supervisor_multi_view_consultation(
+    request: crate::m6_org_multi_view_consultation::M6OrgStartMultiViewConsultationRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_multi_view_consultation::M6OrgConsultationRouteResponse, String> {
+    crate::m6_org_multi_view_consultation::start_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
+/// Records only a ref/hash candidate from the target view. The pre-submit
+/// query cannot read peer payloads or conclusions and creates no formal fact.
+#[tauri::command]
+fn submit_global_supervisor_consultation_view(
+    request: crate::m6_org_multi_view_consultation::M6OrgSubmitConsultationViewRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_multi_view_consultation::M6OrgMultiViewConsultation, String> {
+    crate::m6_org_multi_view_consultation::submit_view_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
+/// Deterministically assembles only after every independent view submitted
+/// within explicit budget/time limits. The sole result is user-pending.
+#[tauri::command]
+fn assemble_global_supervisor_multi_view_consultation(
+    request: crate::m6_org_multi_view_consultation::M6OrgAssembleMultiViewConsultationRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_multi_view_consultation::M6OrgMultiViewConsultation, String> {
+    crate::m6_org_multi_view_consultation::assemble_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
 fn load_secretary_role_session_status_for_state(
     state: &AppState,
 ) -> Result<crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto, String> {

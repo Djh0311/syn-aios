@@ -4,7 +4,7 @@
 
 use rusqlite::Connection;
 
-pub(crate) const M6_ORG_SCHEMA_VERSION: i64 = 4;
+pub(crate) const M6_ORG_SCHEMA_VERSION: i64 = 5;
 
 pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String> {
     connection
@@ -181,6 +181,67 @@ pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String
                 recorded_at_ms INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS m6_multi_view_consultations (
+                consultation_id TEXT PRIMARY KEY,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                request_hash TEXT NOT NULL,
+                result_state TEXT NOT NULL CHECK(result_state IN (
+                    'PENDING','IN_FLIGHT','SUBMITTED','ASSEMBLED','TIMED_OUT',
+                    'BUDGET_EXCEEDED','FAILED','QUARANTINED'
+                )),
+                budget_state TEXT NOT NULL CHECK(budget_state IN (
+                    'WITHIN_BUDGET','BUDGET_EXCEEDED'
+                )),
+                timeout_state TEXT NOT NULL CHECK(timeout_state IN (
+                    'WITHIN_TIME','TIMED_OUT'
+                )),
+                revision INTEGER NOT NULL CHECK(revision > 0),
+                header_json TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS m6_consultation_views (
+                consultation_id TEXT NOT NULL,
+                view_id TEXT NOT NULL,
+                role_session_id TEXT NOT NULL UNIQUE,
+                workcell_ref TEXT NOT NULL UNIQUE,
+                context_packet_ref TEXT NOT NULL UNIQUE,
+                question_packet_id TEXT NOT NULL,
+                question_packet_hash TEXT NOT NULL,
+                view_kind TEXT NOT NULL,
+                submitted INTEGER NOT NULL CHECK(submitted IN (0,1)),
+                peer_conclusions_readable_before_submit INTEGER NOT NULL
+                    CHECK(peer_conclusions_readable_before_submit = 0),
+                submission_idempotency_key TEXT UNIQUE,
+                submission_hash TEXT,
+                reported_cost_units INTEGER,
+                payload_json TEXT NOT NULL,
+                PRIMARY KEY(consultation_id, view_id),
+                FOREIGN KEY(consultation_id)
+                    REFERENCES m6_multi_view_consultations(consultation_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS m6_consultation_decision_requests (
+                decision_request_id TEXT PRIMARY KEY,
+                consultation_id TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL CHECK(status = 'PENDING_USER_DECISION'),
+                payload_json TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL,
+                FOREIGN KEY(consultation_id)
+                    REFERENCES m6_multi_view_consultations(consultation_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS m6_consultation_command_receipts (
+                idempotency_key TEXT PRIMARY KEY,
+                operation TEXT NOT NULL CHECK(operation IN ('submit_view','assemble')),
+                request_hash TEXT NOT NULL,
+                consultation_id TEXT NOT NULL,
+                recorded_at_ms INTEGER NOT NULL,
+                FOREIGN KEY(consultation_id)
+                    REFERENCES m6_multi_view_consultations(consultation_id)
+            );
+
             UPDATE m6_org_schema_meta
             SET schema_version = 2
             WHERE singleton = 1 AND schema_version = 1;
@@ -192,6 +253,10 @@ pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String
             UPDATE m6_org_schema_meta
             SET schema_version = 4
             WHERE singleton = 1 AND schema_version = 3;
+
+            UPDATE m6_org_schema_meta
+            SET schema_version = 5
+            WHERE singleton = 1 AND schema_version = 4;
             "#,
         )
         .map_err(|error| format!("m6_org_schema:{error}"))?;
