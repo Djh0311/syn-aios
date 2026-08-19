@@ -218,6 +218,8 @@ proven on a fresh root is:
 }
 ```
 
+The register-params sample above is the proven success shape: all four arrays are `[]`. Non-empty `capability_permission_refs` or `contact_bindings` is rejected with `F2_FORBIDDEN_AUTHORITY_INPUT`, matching non-empty `scope_assignments` / `role_assignments`.
+
 | field | constraint | legal example | illegal example | stable failure |
 |---|---|---|---|---|
 | `idempotency_key` | non-empty, ≤512 bytes, no control characters | `register-member-probe-alpha` | `""` | `F2_INVALID_IDEMPOTENCY_KEY` |
@@ -231,9 +233,9 @@ proven on a fresh root is:
 | `identity_contract_ref` / `source_record_ref` | non-empty, ≤512 bytes, no control characters | `identity-contract:member_probe_alpha` | `""` | `F2_CORE_REJECTED` / `m6_org_member_*_invalid` |
 | `scope_assignments` | v1 requires `[]`. Non-empty objects would need `scope_ref` / `role_ref`, which the envelope forbids | `[]` | `[{"scope_ref":"scope:global"}]` | `F2_FORBIDDEN_AUTHORITY_INPUT` |
 | `role_assignments` | v1 requires `[]` | `[]` | any object containing `role_ref` | `F2_FORBIDDEN_AUTHORITY_INPUT` |
-| `capability_permission_refs` | v1 requires `[]` | `[]` | non-empty | not in the proven success domain |
+| `capability_permission_refs` | v1 requires `[]` | `[]` | non-empty | `F2_FORBIDDEN_AUTHORITY_INPUT` |
 | `memory_refs` | v1 proven success used `[]`; each item if ever sent must be a valid ref | `[]` | duplicate refs | `F2_CORE_REJECTED` / `m6_org_member_memory_refs_duplicate` |
-| `contact_bindings` | v1 requires `[]` | `[]` | non-empty | not in the proven success domain |
+| `contact_bindings` | v1 requires `[]` | `[]` | non-empty | `F2_FORBIDDEN_AUTHORITY_INPUT` |
 | unknown params fields | forbidden | none | `"provider":"x"` | `F2_INVALID_REQUEST` or `F2_FORBIDDEN_AUTHORITY_INPUT` |
 | same key + same request hash | exact replay, `receipt.replayed=true`, zero extra member row | the proven replay | n/a | `F2_OK` |
 | same key + different hash | collision, zero extra write | changed `display_name_ref` | n/a | `F2_IDEMPOTENCY_CONFLICT` / `m6_org_member_idempotency_collision` |

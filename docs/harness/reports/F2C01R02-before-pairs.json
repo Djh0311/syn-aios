@@ -1,0 +1,261 @@
+[
+  {
+    "request": {
+      "schema_version": "syn.f2.shell-core-bridge.request.v1",
+      "request_id": "probe:register-cap",
+      "method": "organization.register_stable_member",
+      "params": {
+        "member_id": "member_f2c01r02_before_cap",
+        "display_name_ref": "display-name:member_f2c01r02_before_cap",
+        "identity_evidence": {
+          "kind": "EXPLICIT_IDENTITY_CONTRACT",
+          "contract_kind": "syn.m6.org.stable-member-identity/v1",
+          "identity_contract_ref": "identity-contract:member_f2c01r02_before_cap",
+          "source_record_ref": "identity-source:member_f2c01r02_before_cap",
+          "source_revision": 1,
+          "observed_at": 1700000000000,
+          "explicit_human_command": true
+        },
+        "scope_assignments": [],
+        "role_assignments": [],
+        "capability_permission_refs": [
+          {
+            "ref_id": "capability:research",
+            "subject_member_id": "member_f2c01r02_before_cap",
+            "kind": "capability",
+            "source": "policy-owner:fixture",
+            "revision": 1,
+            "observed_at": 1700000000000,
+            "directory_is_authority": false,
+            "read_only": true
+          }
+        ],
+        "memory_refs": [],
+        "contact_bindings": [],
+        "idempotency_key": "register-f2c01r02-before-cap"
+      },
+      "external_refs": [
+        {
+          "kind": "thread_id",
+          "value": "shell-thread-opaque"
+        },
+        {
+          "kind": "desktop_id",
+          "value": "shell-desktop-opaque"
+        },
+        {
+          "kind": "pairing_id",
+          "value": "shell-pairing-opaque"
+        }
+      ],
+      "deadline_unix_ms": 1787154590540
+    },
+    "response": {
+      "schema_version": "syn.f2.shell-core-bridge.response.v1",
+      "request_id": "probe:register-cap",
+      "method": "organization.register_stable_member",
+      "ok": true,
+      "code": "F2_OK",
+      "result": {
+        "result_kind": "stable_member_registration",
+        "payload": {
+          "disposition": "REGISTERED",
+          "member": {
+            "member_id": "member_f2c01r02_before_cap",
+            "membership_lifecycle": "ESTABLISHED",
+            "scope_assignments": [],
+            "role_assignments": [],
+            "capability_permission_refs": [
+              {
+                "ref_id": "capability:research",
+                "subject_member_id": "member_f2c01r02_before_cap",
+                "kind": "capability",
+                "source": "policy-owner:fixture",
+                "revision": 1,
+                "observed_at": 1700000000000,
+                "directory_is_authority": false,
+                "read_only": true
+              }
+            ],
+            "availability_ref": null,
+            "contact_binding_refs": [],
+            "contact_bindings": [],
+            "memory_refs": [],
+            "promoted_from": null,
+            "display_name_ref": "display-name:member_f2c01r02_before_cap",
+            "identity_contract_ref": "identity-contract:member_f2c01r02_before_cap",
+            "identity_source_record_ref": "identity-source:member_f2c01r02_before_cap",
+            "identity_source_revision": 1,
+            "revision": 1,
+            "created_at": 1787154587531,
+            "deactivated_at": null
+          },
+          "quarantine": null,
+          "replayed": false,
+          "directory_is_authority": false
+        }
+      },
+      "receipt": {
+        "idempotency_key": "register-f2c01r02-before-cap",
+        "replayed": false,
+        "external_refs": [
+          {
+            "kind": "thread_id",
+            "value": "shell-thread-opaque"
+          },
+          {
+            "kind": "desktop_id",
+            "value": "shell-desktop-opaque"
+          },
+          {
+            "kind": "pairing_id",
+            "value": "shell-pairing-opaque"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "schema_version": "syn.f2.shell-core-bridge.request.v1",
+      "request_id": "probe:register-contact",
+      "method": "organization.register_stable_member",
+      "params": {
+        "member_id": "member_f2c01r02_before_contact",
+        "display_name_ref": "display-name:member_f2c01r02_before_contact",
+        "identity_evidence": {
+          "kind": "EXPLICIT_IDENTITY_CONTRACT",
+          "contract_kind": "syn.m6.org.stable-member-identity/v1",
+          "identity_contract_ref": "identity-contract:member_f2c01r02_before_contact",
+          "source_record_ref": "identity-source:member_f2c01r02_before_contact",
+          "source_revision": 1,
+          "observed_at": 1700000000000,
+          "explicit_human_command": true
+        },
+        "scope_assignments": [],
+        "role_assignments": [],
+        "capability_permission_refs": [],
+        "memory_refs": [],
+        "contact_bindings": [
+          {
+            "binding_ref": "contact-binding:member_f2c01r02_before_contact",
+            "to_role_ref": "role:secretary",
+            "to_recipient_ref": "actor:member_f2c01r02_before_contact/recipient",
+            "source": "syn.fixture.explicit-contact-binding/v1",
+            "revision": 1,
+            "observed_at": 1700000000000
+          }
+        ],
+        "idempotency_key": "register-f2c01r02-before-contact"
+      },
+      "external_refs": [
+        {
+          "kind": "thread_id",
+          "value": "shell-thread-opaque"
+        },
+        {
+          "kind": "desktop_id",
+          "value": "shell-desktop-opaque"
+        },
+        {
+          "kind": "pairing_id",
+          "value": "shell-pairing-opaque"
+        }
+      ],
+      "deadline_unix_ms": 1787154590540
+    },
+    "response": {
+      "schema_version": "syn.f2.shell-core-bridge.response.v1",
+      "request_id": "probe:register-contact",
+      "method": "organization.register_stable_member",
+      "ok": true,
+      "code": "F2_OK",
+      "result": {
+        "result_kind": "stable_member_registration",
+        "payload": {
+          "disposition": "REGISTERED",
+          "member": {
+            "member_id": "member_f2c01r02_before_contact",
+            "membership_lifecycle": "ESTABLISHED",
+            "scope_assignments": [],
+            "role_assignments": [],
+            "capability_permission_refs": [],
+            "availability_ref": null,
+            "contact_binding_refs": [
+              "contact-binding:member_f2c01r02_before_contact"
+            ],
+            "contact_bindings": [
+              {
+                "binding_ref": "contact-binding:member_f2c01r02_before_contact",
+                "to_role_ref": "role:secretary",
+                "to_recipient_ref": "actor:member_f2c01r02_before_contact/recipient",
+                "source": "syn.fixture.explicit-contact-binding/v1",
+                "revision": 1,
+                "observed_at": 1700000000000
+              }
+            ],
+            "memory_refs": [],
+            "promoted_from": null,
+            "display_name_ref": "display-name:member_f2c01r02_before_contact",
+            "identity_contract_ref": "identity-contract:member_f2c01r02_before_contact",
+            "identity_source_record_ref": "identity-source:member_f2c01r02_before_contact",
+            "identity_source_revision": 1,
+            "revision": 1,
+            "created_at": 1787154587886,
+            "deactivated_at": null
+          },
+          "quarantine": null,
+          "replayed": false,
+          "directory_is_authority": false
+        }
+      },
+      "receipt": {
+        "idempotency_key": "register-f2c01r02-before-contact",
+        "replayed": false,
+        "external_refs": [
+          {
+            "kind": "thread_id",
+            "value": "shell-thread-opaque"
+          },
+          {
+            "kind": "desktop_id",
+            "value": "shell-desktop-opaque"
+          },
+          {
+            "kind": "pairing_id",
+            "value": "shell-pairing-opaque"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "schema_version": "syn.f2.shell-core-bridge.request.v1",
+      "request_id": "probe:stop",
+      "method": "bridge.stop",
+      "params": {},
+      "external_refs": []
+    },
+    "response": {
+      "schema_version": "syn.f2.shell-core-bridge.response.v1",
+      "request_id": "probe:stop",
+      "method": "bridge.stop",
+      "ok": true,
+      "code": "F2_STOP_ACKNOWLEDGED",
+      "result": {
+        "result_kind": "stop",
+        "payload": {
+          "process_stop": "acknowledged_at_request_boundary",
+          "cancels_in_flight_core_call": false,
+          "stops_agent_or_runtime": false
+        }
+      },
+      "receipt": {
+        "idempotency_key": null,
+        "replayed": false,
+        "external_refs": []
+      }
+    }
+  }
+]

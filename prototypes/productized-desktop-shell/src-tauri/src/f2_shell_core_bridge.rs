@@ -501,6 +501,7 @@ fn dispatch_register_stable_member(
     request: &BridgeRequest,
     now_ms: u64,
 ) -> Result<DispatchOutcome, DispatchFailure> {
+    reject_nonempty_v1_register_arrays(&request.params)?;
     let params: M6OrgRegisterStableMemberRequest = parse_params(request.params.clone())?;
     if let Err(message) = validate_bridge_idempotency_key(&params.idempotency_key) {
         return Err(DispatchFailure {
@@ -546,6 +547,28 @@ fn parse_empty_params(value: &Value) -> Result<(), DispatchFailure> {
 
 fn parse_params<T: for<'de> Deserialize<'de>>(value: Value) -> Result<T, DispatchFailure> {
     serde_json::from_value(value).map_err(invalid_params)
+}
+
+fn reject_nonempty_v1_register_arrays(params: &Value) -> Result<(), DispatchFailure> {
+    const KEYS: [&str; 4] = [
+        "scope_assignments",
+        "role_assignments",
+        "capability_permission_refs",
+        "contact_bindings",
+    ];
+    for key in KEYS {
+        if let Some(Value::Array(items)) = params.get(key) {
+            if !items.is_empty() {
+                return Err(DispatchFailure {
+                    code: CODE_FORBIDDEN_AUTHORITY_INPUT,
+                    core_code: None,
+                    message: format!("v1 {key} must be empty"),
+                    idempotency_key: None,
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 fn invalid_params(error: serde_json::Error) -> DispatchFailure {
@@ -1376,6 +1399,96 @@ mod tests {
         );
         assert_code(&response, CODE_INVALID_REQUEST);
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn f2c01r02_nonempty_capability_permission_refs_are_forbidden() {
+        const CASE_ID: &str = "CF-F2-NEG-019";
+        let (parent, state, bridge_config) = ordinary_state("nonempty-capability");
+        let mut params = register_params("member_f2c01r02_cap", "register-f2c01r02-cap");
+        params["capability_permission_refs"] = json!([{
+            "ref_id": "capability:research",
+            "subject_member_id": "member_f2c01r02_cap",
+            "kind": "capability",
+            "source": "policy-owner:fixture",
+            "revision": 1,
+            "observed_at": NOW_MS,
+            "directory_is_authority": false,
+            "read_only": true
+        }]);
+        let (rejected, _) = response(
+            &state,
+            &bridge_config,
+            request(METHOD_REGISTER_STABLE_MEMBER, params),
+        );
+        assert_eq!(
+            rejected["code"], CODE_FORBIDDEN_AUTHORITY_INPUT,
+            "{CASE_ID}"
+        );
+        let sqlite = bridge_config.app_data_root.join("m6/organization.sqlite");
+        assert!(
+            !sqlite.exists(),
+            "{CASE_ID} rejected write must not persist"
+        );
+        let (legal, _) = response(
+            &state,
+            &bridge_config,
+            request(
+                METHOD_REGISTER_STABLE_MEMBER,
+                register_params("member_f2c01r02_cap", "register-f2c01r02-cap"),
+            ),
+        );
+        assert_code(&legal, CODE_OK);
+        assert_eq!(
+            legal["receipt"]["replayed"], false,
+            "{CASE_ID} must not leave an idempotency record"
+        );
+        drop(state);
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn f2c01r02_nonempty_contact_bindings_are_forbidden() {
+        const CASE_ID: &str = "CF-F2-NEG-020";
+        let (parent, state, bridge_config) = ordinary_state("nonempty-contact");
+        let mut params = register_params("member_f2c01r02_contact", "register-f2c01r02-contact");
+        params["contact_bindings"] = json!([{
+            "binding_ref": "contact-binding:member_f2c01r02_contact",
+            "to_role_ref": "role:secretary",
+            "to_recipient_ref": "actor:member_f2c01r02_contact/recipient",
+            "source": "syn.fixture.explicit-contact-binding/v1",
+            "revision": 1,
+            "observed_at": NOW_MS
+        }]);
+        let (rejected, _) = response(
+            &state,
+            &bridge_config,
+            request(METHOD_REGISTER_STABLE_MEMBER, params),
+        );
+        assert_eq!(
+            rejected["code"], CODE_FORBIDDEN_AUTHORITY_INPUT,
+            "{CASE_ID}"
+        );
+        let sqlite = bridge_config.app_data_root.join("m6/organization.sqlite");
+        assert!(
+            !sqlite.exists(),
+            "{CASE_ID} rejected write must not persist"
+        );
+        let (legal, _) = response(
+            &state,
+            &bridge_config,
+            request(
+                METHOD_REGISTER_STABLE_MEMBER,
+                register_params("member_f2c01r02_contact", "register-f2c01r02-contact"),
+            ),
+        );
+        assert_code(&legal, CODE_OK);
+        assert_eq!(
+            legal["receipt"]["replayed"], false,
+            "{CASE_ID} must not leave an idempotency record"
+        );
+        drop(state);
+        let _ = fs::remove_dir_all(parent);
     }
 
     #[test]

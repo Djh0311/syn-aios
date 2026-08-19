@@ -1,0 +1,839 @@
+{
+  "binary": "/tmp/f2c01r02-target-b33038e/debug/codex-governance-workbench",
+  "sha256": "93c50d7fc454190d2ac90ebc7116dae5385a3818a780ab876e2846c8e5efed25",
+  "file": "/tmp/f2c01r02-target-b33038e/debug/codex-governance-workbench: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, for GNU/Linux 3.2.0, BuildID[sha1]=57d0e022a3d1bd50c2151e3da236b9689baaf8f8, with debug_info, not stripped",
+  "bin_mtime": 1787155504.1038723,
+  "src_mtime": 1787154909.4824564,
+  "bin_after_src": true,
+  "probe_dir": "/tmp/f2c01r02-after-1787156542",
+  "app_data_root": "/tmp/f2c01r02-after-1787156542/local.codex.governance.workbench",
+  "exit_code": 0,
+  "failed": false,
+  "elapsed_s": 2.5533370971679688,
+  "stderr": "",
+  "stdout_rest": "",
+  "sqlite_after_A": {
+    "path": "/tmp/f2c01r02-after-1787156542/local.codex.governance.workbench/m6/organization.sqlite",
+    "exists": false,
+    "size": null,
+    "tables": null,
+    "member_identities": null,
+    "command_receipts": null,
+    "rows": {},
+    "error": null
+  },
+  "sqlite_after_C": {
+    "path": "/tmp/f2c01r02-after-1787156542/local.codex.governance.workbench/m6/organization.sqlite",
+    "exists": false,
+    "size": null,
+    "tables": null,
+    "member_identities": null,
+    "command_receipts": null,
+    "rows": {},
+    "error": null
+  },
+  "sqlite_after_G": {
+    "path": "/tmp/f2c01r02-after-1787156542/local.codex.governance.workbench/m6/organization.sqlite",
+    "exists": true,
+    "size": 274432,
+    "tables": [
+      "m6_advisory_application_observations",
+      "m6_consult_handoff_bindings",
+      "m6_consultation_command_receipts",
+      "m6_consultation_decision_requests",
+      "m6_consultation_views",
+      "m6_cross_project_advisories",
+      "m6_decision_requests",
+      "m6_member_availability_history",
+      "m6_member_contact_receipts",
+      "m6_member_directory_command_receipts",
+      "m6_member_identity_quarantine",
+      "m6_multi_view_consultations",
+      "m6_org_audit_events",
+      "m6_org_schema_meta",
+      "m6_stable_member_history",
+      "m6_stable_member_identities",
+      "m6_temporary_agent_command_receipts",
+      "m6_temporary_agent_history",
+      "m6_temporary_agent_promotion_bindings",
+      "m6_temporary_agent_quarantine"
+    ],
+    "member_identities": [
+      {
+        "member_id": "member_f2c01r02_after_legal",
+        "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+        "registration_idempotency_key": "register-f2c01r02-after-legal",
+        "created_at_ms": 1787156545431
+      }
+    ],
+    "command_receipts": {
+      "m6_consultation_command_receipts": [],
+      "m6_member_contact_receipts": [],
+      "m6_member_directory_command_receipts": [
+        {
+          "idempotency_key": "register-f2c01r02-after-legal",
+          "operation": "register_stable_member",
+          "request_hash": "d709d11a33137b3cd05dd29cac3f55ad6359779d362738ea768e01b1dc55d835",
+          "response_json": "{\"disposition\":\"REGISTERED\",\"member\":{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null},\"quarantine\":null,\"replayed\":false,\"directory_is_authority\":false}",
+          "recorded_at_ms": 1787156545431
+        }
+      ],
+      "m6_temporary_agent_command_receipts": []
+    },
+    "rows": {
+      "m6_advisory_application_observations": [],
+      "m6_consult_handoff_bindings": [],
+      "m6_consultation_command_receipts": [],
+      "m6_consultation_decision_requests": [],
+      "m6_consultation_views": [],
+      "m6_cross_project_advisories": [],
+      "m6_decision_requests": [],
+      "m6_member_availability_history": [],
+      "m6_member_contact_receipts": [],
+      "m6_member_directory_command_receipts": [
+        {
+          "idempotency_key": "register-f2c01r02-after-legal",
+          "operation": "register_stable_member",
+          "request_hash": "d709d11a33137b3cd05dd29cac3f55ad6359779d362738ea768e01b1dc55d835",
+          "response_json": "{\"disposition\":\"REGISTERED\",\"member\":{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null},\"quarantine\":null,\"replayed\":false,\"directory_is_authority\":false}",
+          "recorded_at_ms": 1787156545431
+        }
+      ],
+      "m6_member_identity_quarantine": [],
+      "m6_multi_view_consultations": [],
+      "m6_org_audit_events": [
+        {
+          "event_id": "audit-member-register:sha256:c84276731303aab4922e80c66436c7710d5164f794f5db5c7b0dd3412e18ebb5",
+          "event_type": "StableMemberRegistered",
+          "target_ref": "member_f2c01r02_after_legal",
+          "payload_json": "{\"capability_permission_ref_count\":0,\"directory_is_authority\":false,\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"member_id\":\"member_f2c01r02_after_legal\",\"provider_identity\":false,\"role_assignment_count\":0,\"runtime_identity\":false,\"scope_assignment_count\":0}",
+          "created_at_ms": 1787156545431
+        }
+      ],
+      "m6_org_schema_meta": [
+        {
+          "singleton": 1,
+          "schema_version": 5
+        }
+      ],
+      "m6_stable_member_history": [
+        {
+          "member_id": "member_f2c01r02_after_legal",
+          "revision": 1,
+          "membership_lifecycle": "ESTABLISHED",
+          "payload_json": "{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null}",
+          "recorded_at_ms": 1787156545431
+        }
+      ],
+      "m6_stable_member_identities": [
+        {
+          "member_id": "member_f2c01r02_after_legal",
+          "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+          "registration_idempotency_key": "register-f2c01r02-after-legal",
+          "created_at_ms": 1787156545431
+        }
+      ],
+      "m6_temporary_agent_command_receipts": [],
+      "m6_temporary_agent_history": [],
+      "m6_temporary_agent_promotion_bindings": [],
+      "m6_temporary_agent_quarantine": []
+    },
+    "error": null
+  },
+  "sqlite_after_stop": {
+    "path": "/tmp/f2c01r02-after-1787156542/local.codex.governance.workbench/m6/organization.sqlite",
+    "exists": true,
+    "size": 274432,
+    "tables": [
+      "m6_advisory_application_observations",
+      "m6_consult_handoff_bindings",
+      "m6_consultation_command_receipts",
+      "m6_consultation_decision_requests",
+      "m6_consultation_views",
+      "m6_cross_project_advisories",
+      "m6_decision_requests",
+      "m6_member_availability_history",
+      "m6_member_contact_receipts",
+      "m6_member_directory_command_receipts",
+      "m6_member_identity_quarantine",
+      "m6_multi_view_consultations",
+      "m6_org_audit_events",
+      "m6_org_schema_meta",
+      "m6_stable_member_history",
+      "m6_stable_member_identities",
+      "m6_temporary_agent_command_receipts",
+      "m6_temporary_agent_history",
+      "m6_temporary_agent_promotion_bindings",
+      "m6_temporary_agent_quarantine"
+    ],
+    "member_identities": [
+      {
+        "member_id": "member_f2c01r02_after_legal",
+        "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+        "registration_idempotency_key": "register-f2c01r02-after-legal",
+        "created_at_ms": 1787156545431
+      }
+    ],
+    "command_receipts": {
+      "m6_consultation_command_receipts": [],
+      "m6_member_contact_receipts": [],
+      "m6_member_directory_command_receipts": [
+        {
+          "idempotency_key": "register-f2c01r02-after-legal",
+          "operation": "register_stable_member",
+          "request_hash": "d709d11a33137b3cd05dd29cac3f55ad6359779d362738ea768e01b1dc55d835",
+          "response_json": "{\"disposition\":\"REGISTERED\",\"member\":{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null},\"quarantine\":null,\"replayed\":false,\"directory_is_authority\":false}",
+          "recorded_at_ms": 1787156545431
+        }
+      ],
+      "m6_temporary_agent_command_receipts": []
+    },
+    "rows": {
+      "m6_advisory_application_observations": [],
+      "m6_consult_handoff_bindings": [],
+      "m6_consultation_command_receipts": [],
+      "m6_consultation_decision_requests": [],
+      "m6_consultation_views": [],
+      "m6_cross_project_advisories": [],
+      "m6_decision_requests": [],
+      "m6_member_availability_history": [],
+      "m6_member_contact_receipts": [],
+      "m6_member_directory_command_receipts": [
+        {
+          "idempotency_key": "register-f2c01r02-after-legal",
+          "operation": "register_stable_member",
+          "request_hash": "d709d11a33137b3cd05dd29cac3f55ad6359779d362738ea768e01b1dc55d835",
+          "response_json": "{\"disposition\":\"REGISTERED\",\"member\":{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null},\"quarantine\":null,\"replayed\":false,\"directory_is_authority\":false}",
+          "recorded_at_ms": 1787156545431
+        }
+      ],
+      "m6_member_identity_quarantine": [],
+      "m6_multi_view_consultations": [],
+      "m6_org_audit_events": [
+        {
+          "event_id": "audit-member-register:sha256:c84276731303aab4922e80c66436c7710d5164f794f5db5c7b0dd3412e18ebb5",
+          "event_type": "StableMemberRegistered",
+          "target_ref": "member_f2c01r02_after_legal",
+          "payload_json": "{\"capability_permission_ref_count\":0,\"directory_is_authority\":false,\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"member_id\":\"member_f2c01r02_after_legal\",\"provider_identity\":false,\"role_assignment_count\":0,\"runtime_identity\":false,\"scope_assignment_count\":0}",
+          "created_at_ms": 1787156545431
+        }
+      ],
+      "m6_org_schema_meta": [
+        {
+          "singleton": 1,
+          "schema_version": 5
+        }
+      ],
+      "m6_stable_member_history": [
+        {
+          "member_id": "member_f2c01r02_after_legal",
+          "revision": 1,
+          "membership_lifecycle": "ESTABLISHED",
+          "payload_json": "{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null}",
+          "recorded_at_ms": 1787156545431
+        }
+      ],
+      "m6_stable_member_identities": [
+        {
+          "member_id": "member_f2c01r02_after_legal",
+          "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+          "registration_idempotency_key": "register-f2c01r02-after-legal",
+          "created_at_ms": 1787156545431
+        }
+      ],
+      "m6_temporary_agent_command_receipts": [],
+      "m6_temporary_agent_history": [],
+      "m6_temporary_agent_promotion_bindings": [],
+      "m6_temporary_agent_quarantine": []
+    },
+    "error": null
+  },
+  "pairs": [
+    {
+      "label": "A_cap_forbidden",
+      "request": {
+        "schema_version": "syn.f2.shell-core-bridge.request.v1",
+        "request_id": "probe:register-cap",
+        "method": "organization.register_stable_member",
+        "params": {
+          "member_id": "member_f2c01r02_after_cap",
+          "display_name_ref": "display-name:member_f2c01r02_after_cap",
+          "identity_evidence": {
+            "kind": "EXPLICIT_IDENTITY_CONTRACT",
+            "contract_kind": "syn.m6.org.stable-member-identity/v1",
+            "identity_contract_ref": "identity-contract:member_f2c01r02_after_cap",
+            "source_record_ref": "identity-source:member_f2c01r02_after_cap",
+            "source_revision": 1,
+            "observed_at": 1700000000000,
+            "explicit_human_command": true
+          },
+          "scope_assignments": [],
+          "role_assignments": [],
+          "capability_permission_refs": [
+            {
+              "ref_id": "capability:research",
+              "subject_member_id": "member_f2c01r02_after_cap",
+              "kind": "capability",
+              "source": "policy-owner:fixture",
+              "revision": 1,
+              "observed_at": 1700000000000,
+              "directory_is_authority": false,
+              "read_only": true
+            }
+          ],
+          "memory_refs": [],
+          "contact_bindings": [],
+          "idempotency_key": "register-f2c01r02-after-cap"
+        },
+        "external_refs": [
+          {
+            "kind": "thread_id",
+            "value": "shell-thread-opaque"
+          },
+          {
+            "kind": "desktop_id",
+            "value": "shell-desktop-opaque"
+          },
+          {
+            "kind": "pairing_id",
+            "value": "shell-pairing-opaque"
+          }
+        ],
+        "deadline_unix_ms": 1787156548277
+      },
+      "response": {
+        "schema_version": "syn.f2.shell-core-bridge.response.v1",
+        "request_id": "probe:register-cap",
+        "method": "organization.register_stable_member",
+        "ok": false,
+        "code": "F2_FORBIDDEN_AUTHORITY_INPUT",
+        "error": {
+          "code": "F2_FORBIDDEN_AUTHORITY_INPUT",
+          "message": "v1 capability_permission_refs must be empty"
+        },
+        "receipt": {
+          "idempotency_key": null,
+          "replayed": false,
+          "external_refs": [
+            {
+              "kind": "thread_id",
+              "value": "shell-thread-opaque"
+            },
+            {
+              "kind": "desktop_id",
+              "value": "shell-desktop-opaque"
+            },
+            {
+              "kind": "pairing_id",
+              "value": "shell-pairing-opaque"
+            }
+          ]
+        }
+      },
+      "sqlite_after": {
+        "exists": false,
+        "size": null,
+        "path": "/tmp/f2c01r02-after-1787156542/local.codex.governance.workbench/m6/organization.sqlite",
+        "tables": null,
+        "member_identities": null,
+        "command_receipts": null,
+        "rows": {}
+      }
+    },
+    {
+      "label": "C_contact_forbidden",
+      "request": {
+        "schema_version": "syn.f2.shell-core-bridge.request.v1",
+        "request_id": "probe:register-contact",
+        "method": "organization.register_stable_member",
+        "params": {
+          "member_id": "member_f2c01r02_after_contact",
+          "display_name_ref": "display-name:member_f2c01r02_after_contact",
+          "identity_evidence": {
+            "kind": "EXPLICIT_IDENTITY_CONTRACT",
+            "contract_kind": "syn.m6.org.stable-member-identity/v1",
+            "identity_contract_ref": "identity-contract:member_f2c01r02_after_contact",
+            "source_record_ref": "identity-source:member_f2c01r02_after_contact",
+            "source_revision": 1,
+            "observed_at": 1700000000000,
+            "explicit_human_command": true
+          },
+          "scope_assignments": [],
+          "role_assignments": [],
+          "capability_permission_refs": [],
+          "memory_refs": [],
+          "contact_bindings": [
+            {
+              "binding_ref": "contact-binding:member_f2c01r02_after_contact",
+              "to_role_ref": "role:secretary",
+              "to_recipient_ref": "actor:member_f2c01r02_after_contact/recipient",
+              "source": "syn.fixture.explicit-contact-binding/v1",
+              "revision": 1,
+              "observed_at": 1700000000000
+            }
+          ],
+          "idempotency_key": "register-f2c01r02-after-contact"
+        },
+        "external_refs": [
+          {
+            "kind": "thread_id",
+            "value": "shell-thread-opaque"
+          },
+          {
+            "kind": "desktop_id",
+            "value": "shell-desktop-opaque"
+          },
+          {
+            "kind": "pairing_id",
+            "value": "shell-pairing-opaque"
+          }
+        ],
+        "deadline_unix_ms": 1787156550422
+      },
+      "response": {
+        "schema_version": "syn.f2.shell-core-bridge.response.v1",
+        "request_id": "probe:register-contact",
+        "method": "organization.register_stable_member",
+        "ok": false,
+        "code": "F2_FORBIDDEN_AUTHORITY_INPUT",
+        "error": {
+          "code": "F2_FORBIDDEN_AUTHORITY_INPUT",
+          "message": "v1 contact_bindings must be empty"
+        },
+        "receipt": {
+          "idempotency_key": null,
+          "replayed": false,
+          "external_refs": [
+            {
+              "kind": "thread_id",
+              "value": "shell-thread-opaque"
+            },
+            {
+              "kind": "desktop_id",
+              "value": "shell-desktop-opaque"
+            },
+            {
+              "kind": "pairing_id",
+              "value": "shell-pairing-opaque"
+            }
+          ]
+        }
+      },
+      "sqlite_after": {
+        "exists": false,
+        "size": null,
+        "path": "/tmp/f2c01r02-after-1787156542/local.codex.governance.workbench/m6/organization.sqlite",
+        "tables": null,
+        "member_identities": null,
+        "command_receipts": null,
+        "rows": {}
+      }
+    },
+    {
+      "label": "E_secretary_status",
+      "request": {
+        "schema_version": "syn.f2.shell-core-bridge.request.v1",
+        "request_id": "probe:secretary",
+        "method": "role_session.secretary_status",
+        "params": {},
+        "external_refs": [],
+        "deadline_unix_ms": 1787156550423
+      },
+      "response": {
+        "schema_version": "syn.f2.shell-core-bridge.response.v1",
+        "request_id": "probe:secretary",
+        "method": "role_session.secretary_status",
+        "ok": true,
+        "code": "F2_OK",
+        "result": {
+          "result_kind": "secretary_role_session_status",
+          "payload": {
+            "host": "SECRETARY",
+            "role_session_id": "session:sha256:12ef764bd394848bb1436a48ce7900a46692326272148ac2cc7d6ee9355b90d9",
+            "session_revision": 1,
+            "session_state": "ACTIVE",
+            "actor_id": "actor:sha256:0ca883943d2c2b3b1b0b3c389c3f584fc5e7f7628a23be92347394a47df849bd",
+            "role_ref": "role:sha256:393b9dd73277836635d410947694c056575c2ebe626ca39ead1f2d9a8d77d84e",
+            "scope_ref": "scope:sha256:1a12d716470dbd77319d37a2903a081a3ce32b39256d7970baf95433d567e935",
+            "current_object_ref": "object:sha256:fbfa0ae5e00b534a077598db657714ecc4020849c37ff94599b316aff94e2194",
+            "execution_channel": "channel:sha256:2a231639cbcc6dc0a1e2bf6b9d8484ee5d1a5e10ab377aa2f8a2bc3f4e7d476a",
+            "permission_snapshot_ref": "permission:sha256:4115691728fad2a8a7b3e4010ae00bd26cb61835bdc2df5b7efbe370d3fe9d89",
+            "owner_fingerprint": "aafa17796201adde09b86db5139152490c360088476f4ae6b2e3f8a6bd6e4904"
+          }
+        },
+        "receipt": {
+          "idempotency_key": null,
+          "replayed": false,
+          "external_refs": []
+        }
+      }
+    },
+    {
+      "label": "F_global_supervisor_status",
+      "request": {
+        "schema_version": "syn.f2.shell-core-bridge.request.v1",
+        "request_id": "probe:global",
+        "method": "role_session.global_supervisor_status",
+        "params": {},
+        "external_refs": [],
+        "deadline_unix_ms": 1787156550427
+      },
+      "response": {
+        "schema_version": "syn.f2.shell-core-bridge.response.v1",
+        "request_id": "probe:global",
+        "method": "role_session.global_supervisor_status",
+        "ok": true,
+        "code": "F2_OK",
+        "result": {
+          "result_kind": "global_supervisor_role_session_status",
+          "payload": {
+            "availability": "ready",
+            "role_session_id": "session:sha256:b451db79d1ec839b5092e764c70624d4e6e1b1d0d4fde85d5ae26edec79c8ac9",
+            "revision": 1,
+            "state": "ACTIVE",
+            "scope_kind": "GLOBAL",
+            "read_only": true,
+            "project_write_capability": false,
+            "provider_handle_authorizes": false,
+            "context": {
+              "summary_refs": [],
+              "source_refs": []
+            }
+          }
+        },
+        "receipt": {
+          "idempotency_key": null,
+          "replayed": false,
+          "external_refs": []
+        }
+      }
+    },
+    {
+      "label": "G_legal_register",
+      "request": {
+        "schema_version": "syn.f2.shell-core-bridge.request.v1",
+        "request_id": "probe:register-legal",
+        "method": "organization.register_stable_member",
+        "params": {
+          "member_id": "member_f2c01r02_after_legal",
+          "display_name_ref": "display-name:member_f2c01r02_after_legal",
+          "identity_evidence": {
+            "kind": "EXPLICIT_IDENTITY_CONTRACT",
+            "contract_kind": "syn.m6.org.stable-member-identity/v1",
+            "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+            "source_record_ref": "identity-source:member_f2c01r02_after_legal",
+            "source_revision": 1,
+            "observed_at": 1700000000000,
+            "explicit_human_command": true
+          },
+          "scope_assignments": [],
+          "role_assignments": [],
+          "capability_permission_refs": [],
+          "memory_refs": [],
+          "contact_bindings": [],
+          "idempotency_key": "register-f2c01r02-after-legal"
+        },
+        "external_refs": [
+          {
+            "kind": "thread_id",
+            "value": "shell-thread-opaque"
+          },
+          {
+            "kind": "desktop_id",
+            "value": "shell-desktop-opaque"
+          },
+          {
+            "kind": "pairing_id",
+            "value": "shell-pairing-opaque"
+          }
+        ],
+        "deadline_unix_ms": 1787156550431
+      },
+      "response": {
+        "schema_version": "syn.f2.shell-core-bridge.response.v1",
+        "request_id": "probe:register-legal",
+        "method": "organization.register_stable_member",
+        "ok": true,
+        "code": "F2_OK",
+        "result": {
+          "result_kind": "stable_member_registration",
+          "payload": {
+            "disposition": "REGISTERED",
+            "member": {
+              "member_id": "member_f2c01r02_after_legal",
+              "membership_lifecycle": "ESTABLISHED",
+              "scope_assignments": [],
+              "role_assignments": [],
+              "capability_permission_refs": [],
+              "availability_ref": null,
+              "contact_binding_refs": [],
+              "contact_bindings": [],
+              "memory_refs": [],
+              "promoted_from": null,
+              "display_name_ref": "display-name:member_f2c01r02_after_legal",
+              "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+              "identity_source_record_ref": "identity-source:member_f2c01r02_after_legal",
+              "identity_source_revision": 1,
+              "revision": 1,
+              "created_at": 1787156545431,
+              "deactivated_at": null
+            },
+            "quarantine": null,
+            "replayed": false,
+            "directory_is_authority": false
+          }
+        },
+        "receipt": {
+          "idempotency_key": "register-f2c01r02-after-legal",
+          "replayed": false,
+          "external_refs": [
+            {
+              "kind": "thread_id",
+              "value": "shell-thread-opaque"
+            },
+            {
+              "kind": "desktop_id",
+              "value": "shell-desktop-opaque"
+            },
+            {
+              "kind": "pairing_id",
+              "value": "shell-pairing-opaque"
+            }
+          ]
+        }
+      },
+      "sqlite_after": {
+        "exists": true,
+        "size": 274432,
+        "path": "/tmp/f2c01r02-after-1787156542/local.codex.governance.workbench/m6/organization.sqlite",
+        "tables": [
+          "m6_advisory_application_observations",
+          "m6_consult_handoff_bindings",
+          "m6_consultation_command_receipts",
+          "m6_consultation_decision_requests",
+          "m6_consultation_views",
+          "m6_cross_project_advisories",
+          "m6_decision_requests",
+          "m6_member_availability_history",
+          "m6_member_contact_receipts",
+          "m6_member_directory_command_receipts",
+          "m6_member_identity_quarantine",
+          "m6_multi_view_consultations",
+          "m6_org_audit_events",
+          "m6_org_schema_meta",
+          "m6_stable_member_history",
+          "m6_stable_member_identities",
+          "m6_temporary_agent_command_receipts",
+          "m6_temporary_agent_history",
+          "m6_temporary_agent_promotion_bindings",
+          "m6_temporary_agent_quarantine"
+        ],
+        "member_identities": [
+          {
+            "member_id": "member_f2c01r02_after_legal",
+            "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+            "registration_idempotency_key": "register-f2c01r02-after-legal",
+            "created_at_ms": 1787156545431
+          }
+        ],
+        "command_receipts": {
+          "m6_consultation_command_receipts": [],
+          "m6_member_contact_receipts": [],
+          "m6_member_directory_command_receipts": [
+            {
+              "idempotency_key": "register-f2c01r02-after-legal",
+              "operation": "register_stable_member",
+              "request_hash": "d709d11a33137b3cd05dd29cac3f55ad6359779d362738ea768e01b1dc55d835",
+              "response_json": "{\"disposition\":\"REGISTERED\",\"member\":{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null},\"quarantine\":null,\"replayed\":false,\"directory_is_authority\":false}",
+              "recorded_at_ms": 1787156545431
+            }
+          ],
+          "m6_temporary_agent_command_receipts": []
+        },
+        "rows": {
+          "m6_advisory_application_observations": [],
+          "m6_consult_handoff_bindings": [],
+          "m6_consultation_command_receipts": [],
+          "m6_consultation_decision_requests": [],
+          "m6_consultation_views": [],
+          "m6_cross_project_advisories": [],
+          "m6_decision_requests": [],
+          "m6_member_availability_history": [],
+          "m6_member_contact_receipts": [],
+          "m6_member_directory_command_receipts": [
+            {
+              "idempotency_key": "register-f2c01r02-after-legal",
+              "operation": "register_stable_member",
+              "request_hash": "d709d11a33137b3cd05dd29cac3f55ad6359779d362738ea768e01b1dc55d835",
+              "response_json": "{\"disposition\":\"REGISTERED\",\"member\":{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null},\"quarantine\":null,\"replayed\":false,\"directory_is_authority\":false}",
+              "recorded_at_ms": 1787156545431
+            }
+          ],
+          "m6_member_identity_quarantine": [],
+          "m6_multi_view_consultations": [],
+          "m6_org_audit_events": [
+            {
+              "event_id": "audit-member-register:sha256:c84276731303aab4922e80c66436c7710d5164f794f5db5c7b0dd3412e18ebb5",
+              "event_type": "StableMemberRegistered",
+              "target_ref": "member_f2c01r02_after_legal",
+              "payload_json": "{\"capability_permission_ref_count\":0,\"directory_is_authority\":false,\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"member_id\":\"member_f2c01r02_after_legal\",\"provider_identity\":false,\"role_assignment_count\":0,\"runtime_identity\":false,\"scope_assignment_count\":0}",
+              "created_at_ms": 1787156545431
+            }
+          ],
+          "m6_org_schema_meta": [
+            {
+              "singleton": 1,
+              "schema_version": 5
+            }
+          ],
+          "m6_stable_member_history": [
+            {
+              "member_id": "member_f2c01r02_after_legal",
+              "revision": 1,
+              "membership_lifecycle": "ESTABLISHED",
+              "payload_json": "{\"member_id\":\"member_f2c01r02_after_legal\",\"membership_lifecycle\":\"ESTABLISHED\",\"scope_assignments\":[],\"role_assignments\":[],\"capability_permission_refs\":[],\"availability_ref\":null,\"contact_binding_refs\":[],\"contact_bindings\":[],\"memory_refs\":[],\"promoted_from\":null,\"display_name_ref\":\"display-name:member_f2c01r02_after_legal\",\"identity_contract_ref\":\"identity-contract:member_f2c01r02_after_legal\",\"identity_source_record_ref\":\"identity-source:member_f2c01r02_after_legal\",\"identity_source_revision\":1,\"revision\":1,\"created_at\":1787156545431,\"deactivated_at\":null}",
+              "recorded_at_ms": 1787156545431
+            }
+          ],
+          "m6_stable_member_identities": [
+            {
+              "member_id": "member_f2c01r02_after_legal",
+              "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+              "registration_idempotency_key": "register-f2c01r02-after-legal",
+              "created_at_ms": 1787156545431
+            }
+          ],
+          "m6_temporary_agent_command_receipts": [],
+          "m6_temporary_agent_history": [],
+          "m6_temporary_agent_promotion_bindings": [],
+          "m6_temporary_agent_quarantine": []
+        }
+      }
+    },
+    {
+      "label": "H_legal_replay",
+      "request": {
+        "schema_version": "syn.f2.shell-core-bridge.request.v1",
+        "request_id": "probe:register-legal-replay",
+        "method": "organization.register_stable_member",
+        "params": {
+          "member_id": "member_f2c01r02_after_legal",
+          "display_name_ref": "display-name:member_f2c01r02_after_legal",
+          "identity_evidence": {
+            "kind": "EXPLICIT_IDENTITY_CONTRACT",
+            "contract_kind": "syn.m6.org.stable-member-identity/v1",
+            "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+            "source_record_ref": "identity-source:member_f2c01r02_after_legal",
+            "source_revision": 1,
+            "observed_at": 1700000000000,
+            "explicit_human_command": true
+          },
+          "scope_assignments": [],
+          "role_assignments": [],
+          "capability_permission_refs": [],
+          "memory_refs": [],
+          "contact_bindings": [],
+          "idempotency_key": "register-f2c01r02-after-legal"
+        },
+        "external_refs": [
+          {
+            "kind": "thread_id",
+            "value": "shell-thread-opaque"
+          },
+          {
+            "kind": "desktop_id",
+            "value": "shell-desktop-opaque"
+          },
+          {
+            "kind": "pairing_id",
+            "value": "shell-pairing-opaque"
+          }
+        ],
+        "deadline_unix_ms": 1787156550804
+      },
+      "response": {
+        "schema_version": "syn.f2.shell-core-bridge.response.v1",
+        "request_id": "probe:register-legal-replay",
+        "method": "organization.register_stable_member",
+        "ok": true,
+        "code": "F2_OK",
+        "result": {
+          "result_kind": "stable_member_registration",
+          "payload": {
+            "disposition": "REGISTERED",
+            "member": {
+              "member_id": "member_f2c01r02_after_legal",
+              "membership_lifecycle": "ESTABLISHED",
+              "scope_assignments": [],
+              "role_assignments": [],
+              "capability_permission_refs": [],
+              "availability_ref": null,
+              "contact_binding_refs": [],
+              "contact_bindings": [],
+              "memory_refs": [],
+              "promoted_from": null,
+              "display_name_ref": "display-name:member_f2c01r02_after_legal",
+              "identity_contract_ref": "identity-contract:member_f2c01r02_after_legal",
+              "identity_source_record_ref": "identity-source:member_f2c01r02_after_legal",
+              "identity_source_revision": 1,
+              "revision": 1,
+              "created_at": 1787156545431,
+              "deactivated_at": null
+            },
+            "quarantine": null,
+            "replayed": true,
+            "directory_is_authority": false
+          }
+        },
+        "receipt": {
+          "idempotency_key": "register-f2c01r02-after-legal",
+          "replayed": true,
+          "external_refs": [
+            {
+              "kind": "thread_id",
+              "value": "shell-thread-opaque"
+            },
+            {
+              "kind": "desktop_id",
+              "value": "shell-desktop-opaque"
+            },
+            {
+              "kind": "pairing_id",
+              "value": "shell-pairing-opaque"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "I_bridge_stop",
+      "request": {
+        "schema_version": "syn.f2.shell-core-bridge.request.v1",
+        "request_id": "probe:stop",
+        "method": "bridge.stop",
+        "params": {},
+        "external_refs": []
+      },
+      "response": {
+        "schema_version": "syn.f2.shell-core-bridge.response.v1",
+        "request_id": "probe:stop",
+        "method": "bridge.stop",
+        "ok": true,
+        "code": "F2_STOP_ACKNOWLEDGED",
+        "result": {
+          "result_kind": "stop",
+          "payload": {
+            "process_stop": "acknowledged_at_request_boundary",
+            "cancels_in_flight_core_call": false,
+            "stops_agent_or_runtime": false
+          }
+        },
+        "receipt": {
+          "idempotency_key": null,
+          "replayed": false,
+          "external_refs": []
+        }
+      }
+    }
+  ]
+}

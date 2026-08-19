@@ -392,6 +392,32 @@
       "expected_code": "m1_ordinary_app_data_root_identity_mismatch",
       "expected_mutated_targets": [],
       "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-019",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "register-v1-capability-permission-refs-must-be-empty",
+      "polarity": "NEGATIVE",
+      "category": "organization-register",
+      "case_class": "BEHAVIOR",
+      "precise_assertion": "f2c01r02_nonempty_capability_permission_refs_are_forbidden",
+      "input": {"method": "organization.register_stable_member", "capability_permission_refs": [{"ref_id": "capability:research"}]},
+      "expected_code": "F2_FORBIDDEN_AUTHORITY_INPUT",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-020",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "register-v1-contact-bindings-must-be-empty",
+      "polarity": "NEGATIVE",
+      "category": "organization-register",
+      "case_class": "BEHAVIOR",
+      "precise_assertion": "f2c01r02_nonempty_contact_bindings_are_forbidden",
+      "input": {"method": "organization.register_stable_member", "contact_bindings": [{"binding_ref": "contact-binding:probe"}]},
+      "expected_code": "F2_FORBIDDEN_AUTHORITY_INPUT",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
     }
   ]
 }

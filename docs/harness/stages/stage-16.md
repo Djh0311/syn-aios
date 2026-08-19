@@ -1,6 +1,6 @@
 # 阶段16 F2 壳—核心受控桥（syn 核心侧）
 
-状态：`ACTIVE / F2_CORE_SIDE_REPAIR_SUPERVISOR_SELF_REVIEW_PASS / LOCAL_ONLY / PENDING_INDEPENDENT_ACCEPTANCE / PENDING_DIRECTOR_CLOSEOUT / NOT_RELEASED`。首轮合同 `57f0830`、桥 `629e4b2`、记账 `86dd29e` 已获独立验收 FAIL；`F2C01R01` 返修工作副本已主管自复核并归档，须重新送独立验收。本阶段不由本轮关闭。无新 git 候选 SHA。壳侧客户端与 SIGKILL/崩溃恢复不属本阶段完成声明。
+状态：`ACTIVE / F2C01R02_SUPERVISOR_SELF_REVIEW_PASS / LOCAL_ONLY / PENDING_INDEPENDENT_ACCEPTANCE / PENDING_DIRECTOR_CLOSEOUT / NOT_RELEASED`。首轮合同 `57f0830`、桥 `629e4b2`、记账 `86dd29e` 已获独立验收 FAIL；`F2C01R01` 返修已归档。`F2C01R02` 已主管自复核并归档，无 current leaf。独立验收范围只限本阻断项 + 回归。本阶段不由本轮关闭。壳侧客户端与 SIGKILL/崩溃恢复不属本阶段完成声明。
 
 来源收据：当前用户 2026-08-19 的“F2 核心侧 Kickoff（syn 仓库）”，receipt `u-675e71df2b9e60eb7baf`。本阶段只覆盖 `/home/synadmin/workspace/syn` 的核心侧合同、headless 桥、定向测试与必要状态记账；不进入 `syn-shell`，不做壳侧客户端、真实恢复取证、真实 provider/model、外部网络业务动作、部署、发布或公开 push。
 
@@ -20,5 +20,6 @@
 
 - [x] `F2C01-shell-core-bridge-v1.md`：首轮合同冻结、核心侧 headless bridge、定向测试与记账（内容 `629e4b2`，主管本地自复核 PASS 后已归档；独立验收 FAIL；历史结论不悄悄改写）。
 - [x] `F2C01R01-shell-core-bridge-v1-repair.md`：stage-16 第二轮返修。先接线三项方法并用真进程证明，再按真实结果冻结合同；修 unclassified/路径泄漏与 fixture 覆盖；更正首轮过满表述。主管自复核 PASS 已归档；不构成阶段关闭，须重新送独立验收。
+- [x] `F2C01R02-v1-empty-array-enforcement.md`：stage-16 第三轮。只补执行合同已写明的四个 v1 数组必须为空；非空返回 `F2_FORBIDDEN_AUTHORITY_INPUT`；被拒写不留幂等记录。不推翻其余已过验收项。主管自复核 PASS 已归档；不构成阶段关闭。
 
 硬停点：需要 push/merge/rebase/tag/发布、真实凭据、真实 provider/model、外部网络业务动作、`syn-shell` 写入、修改 `commands.rs` / AppState 可见性 / 既有冻结合同 / stage-15，或需要进入 kickoff “不许动”路径时，停止并交回总指导。
