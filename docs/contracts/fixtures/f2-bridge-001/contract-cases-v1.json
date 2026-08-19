@@ -1,0 +1,363 @@
+{
+  "schema": "syn.fixture.f2-bridge-001.contract-cases.v1",
+  "contract_id": "f2-shell-core-bridge-v1",
+  "task_id": "F2C01",
+  "leaf": "F2C01-shell-core-bridge-v1",
+  "implementation_status": "CONTRACT_FROZEN_CORE_BRIDGE_LOCAL_ONLY",
+  "required_keys": [
+    "id",
+    "contract_id",
+    "rule_id",
+    "polarity",
+    "category",
+    "input",
+    "expected_code",
+    "expected_mutated_targets",
+    "test_coverage"
+  ],
+  "method_registry": [
+    {
+      "method": "role_session.secretary_status",
+      "dispatch_target": "load_secretary_role_session_status_for_state",
+      "invocation_class": "CORE_LOCAL_NO_PROVIDER"
+    },
+    {
+      "method": "role_session.global_supervisor_status",
+      "dispatch_target": "load_global_supervisor_role_session_status_for_state",
+      "invocation_class": "CORE_LOCAL_NO_PROVIDER"
+    },
+    {
+      "method": "role_session.directory",
+      "dispatch_target": "load_role_session_directory_for_host",
+      "invocation_class": "CORE_LOCAL_NO_PROVIDER"
+    },
+    {
+      "method": "role_session.detail",
+      "dispatch_target": "load_role_session_detail_for_host",
+      "invocation_class": "CORE_LOCAL_NO_PROVIDER"
+    },
+    {
+      "method": "operation_control.record_decision",
+      "dispatch_target": "operation_control::record_operation_control_decision_at",
+      "invocation_class": "CORE_LOCAL_NO_PROVIDER"
+    }
+  ],
+  "stable_error_codes": [
+    "F2_PARSE_ERROR",
+    "F2_INVALID_REQUEST",
+    "F2_PROTOCOL_MISMATCH",
+    "F2_FORBIDDEN_AUTHORITY_INPUT",
+    "F2_UNKNOWN_METHOD",
+    "F2_DEADLINE_EXPIRED",
+    "F2_DEADLINE_TOO_FAR",
+    "F2_INVALID_IDEMPOTENCY_KEY",
+    "F2_IDEMPOTENCY_CONFLICT",
+    "F2_CORE_REJECTED",
+    "F2_INTERNAL_PANIC"
+  ],
+  "cases": [
+    {
+      "id": "CF-F2-POS-001",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "secretary-status-server-owned",
+      "polarity": "POSITIVE",
+      "category": "secretary-status",
+      "input": {"method": "role_session.secretary_status", "params": {}},
+      "expected_code": "F2_OK",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-001",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "secretary-status-no-fallback",
+      "polarity": "NEGATIVE",
+      "category": "secretary-binding-unavailable",
+      "input": {"method": "role_session.secretary_status", "params": {}, "fixture_state": "uninstalled"},
+      "expected_code": "F2_CORE_REJECTED",
+      "expected_core_code": "M3_BINDING_UNAVAILABLE",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-POS-002",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "global-status-server-owned",
+      "polarity": "POSITIVE",
+      "category": "global-supervisor-status",
+      "input": {"method": "role_session.global_supervisor_status", "params": {}},
+      "expected_code": "F2_OK",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-002",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "global-status-explicit-unavailable",
+      "polarity": "NEGATIVE",
+      "category": "global-supervisor-unavailable-is-typed",
+      "input": {"method": "role_session.global_supervisor_status", "params": {}, "fixture_state": "uninstalled"},
+      "expected_code": "F2_OK",
+      "expected_result_availability": "unavailable",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-POS-003",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "jiaoban-directory-opaque-cursor",
+      "polarity": "POSITIVE",
+      "category": "role-session-directory",
+      "input": {"method": "role_session.directory", "params": {"cursor": null, "limit": 20, "request_nonce": "fixture-directory"}},
+      "expected_code": "F2_OK",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-003",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "directory-binding-no-fallback",
+      "polarity": "NEGATIVE",
+      "category": "directory-binding-unavailable",
+      "input": {"method": "role_session.directory", "params": {"cursor": null, "limit": 20, "request_nonce": "fixture-directory-unavailable"}, "fixture_state": "uninstalled"},
+      "expected_code": "F2_CORE_REJECTED",
+      "expected_core_code": "M3_BINDING_UNAVAILABLE",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-POS-004",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "jiaoban-detail-opaque-selection",
+      "polarity": "POSITIVE",
+      "category": "role-session-detail",
+      "input": {"method": "role_session.detail", "params": {"selection": "from-directory-response", "request_nonce": "fixture-detail"}},
+      "expected_code": "F2_OK",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-004",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "detail-stale-selection-no-identity-recovery",
+      "polarity": "NEGATIVE",
+      "category": "detail-selection-unknown",
+      "input": {"method": "role_session.detail", "params": {"selection": "m3rs:unknown:1", "request_nonce": "fixture-detail-stale"}},
+      "expected_code": "F2_CORE_REJECTED",
+      "expected_core_code": "m3_role_session_selector_unknown",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-POS-005",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "record-operation-decision-receipt",
+      "polarity": "POSITIVE",
+      "category": "operation-control-receipt",
+      "input": {"method": "operation_control.record_decision", "idempotency_key": "operation-control:resume", "operation_id": "resume"},
+      "expected_code": "F2_OK",
+      "expected_mutated_targets": ["workflow_state.audit_events"],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-POS-006",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "exact-idempotent-replay-after-commit",
+      "polarity": "POSITIVE",
+      "category": "operation-control-recovered-replay",
+      "input": {"method": "operation_control.record_decision", "idempotency_key": "operation-control:resume", "operation_id": "resume", "attempt": 2},
+      "expected_code": "F2_OK",
+      "expected_replayed": true,
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-005",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "divergent-idempotent-replay-fails-closed",
+      "polarity": "NEGATIVE",
+      "category": "idempotency-conflict",
+      "input": {"method": "operation_control.record_decision", "idempotency_key": "operation-control:resume", "operation_id": "resume", "divergent_label": true},
+      "expected_code": "F2_IDEMPOTENCY_CONFLICT",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-006",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "write-never-claims-execution",
+      "polarity": "NEGATIVE",
+      "category": "operation-execution-claim-rejected",
+      "input": {"method": "operation_control.record_decision", "idempotency_key": "operation-control:retry", "operation_id": "retry", "does_execute_in_l3": true},
+      "expected_code": "F2_CORE_REJECTED",
+      "expected_core_code": "operation_control_decision_must_not_execute_in_l3",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-007",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "canonical-write-idempotency-key",
+      "polarity": "NEGATIVE",
+      "category": "invalid-idempotency-key",
+      "input": {"method": "operation_control.record_decision", "idempotency_key": "shell-generated-random", "operation_id": "stop"},
+      "expected_code": "F2_INVALID_IDEMPOTENCY_KEY",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-008",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "malformed-json-stable-error",
+      "polarity": "NEGATIVE",
+      "category": "parse-error",
+      "input": {"raw_line": "{not-json"},
+      "expected_code": "F2_PARSE_ERROR",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-009",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "envelope-denies-unknown-fields",
+      "polarity": "NEGATIVE",
+      "category": "invalid-request",
+      "input": {"method": "role_session.secretary_status", "params": {}, "unknown_field": true},
+      "expected_code": "F2_INVALID_REQUEST",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-010",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "protocol-version-exact",
+      "polarity": "NEGATIVE",
+      "category": "protocol-mismatch",
+      "input": {"schema_version": "syn.f2.shell-core-bridge.request.v0", "method": "role_session.secretary_status", "params": {}},
+      "expected_code": "F2_PROTOCOL_MISMATCH",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-011",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "method-registry-closed",
+      "polarity": "NEGATIVE",
+      "category": "unknown-method",
+      "input": {"method": "secretary.send_message", "params": {}},
+      "expected_code": "F2_UNKNOWN_METHOD",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-012",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "renderer-authority-input-forbidden",
+      "polarity": "NEGATIVE",
+      "category": "forbidden-authority-input",
+      "input": {"method": "role_session.detail", "params": {"selection": "opaque", "request_nonce": "fixture", "role_session_id": "shell-claim"}},
+      "expected_code": "F2_FORBIDDEN_AUTHORITY_INPUT",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-013",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "deadline-expired-before-dispatch",
+      "polarity": "NEGATIVE",
+      "category": "deadline-expired",
+      "input": {"method": "role_session.secretary_status", "deadline_relation": "past"},
+      "expected_code": "F2_DEADLINE_EXPIRED",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-014",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "deadline-bounded",
+      "polarity": "NEGATIVE",
+      "category": "deadline-too-far",
+      "input": {"method": "role_session.secretary_status", "deadline_relation": "beyond_max"},
+      "expected_code": "F2_DEADLINE_TOO_FAR",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-POS-007",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "cooperative-stop-at-request-boundary",
+      "polarity": "POSITIVE",
+      "category": "bridge-stop",
+      "input": {"method": "bridge.stop", "params": {}},
+      "expected_code": "F2_STOP_ACKNOWLEDGED",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-POS-008",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "external-shell-ids-receipt-only",
+      "polarity": "POSITIVE",
+      "category": "external-refs-receipt-only",
+      "input": {"method": "role_session.secretary_status", "external_refs": [{"kind": "thread_id", "value": "shell-thread-opaque"}, {"kind": "desktop_id", "value": "shell-desktop-opaque"}, {"kind": "pairing_id", "value": "shell-pairing-opaque"}]},
+      "expected_code": "F2_OK",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-POS-009",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "no-model-invocation-exact-registry",
+      "polarity": "POSITIVE",
+      "category": "no-model-invocation",
+      "input": {"registry_count": 5, "required_invocation_class": "CORE_LOCAL_NO_PROVIDER"},
+      "expected_code": "F2_NO_MODEL_INVOCATION_PROVEN_FOR_REGISTRY",
+      "expected_mutated_targets": [],
+      "test_coverage": "STATIC_SOURCE_AND_FIXTURE_ASSERTION"
+    },
+    {
+      "id": "CF-F2-POS-010",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "crash-recovery-authority-remains-core",
+      "polarity": "POSITIVE",
+      "category": "crash-recovery-semantics",
+      "input": {"restart_uses_same_explicit_paths": true, "shell_local_fact_copy_used": false, "write_retry_uses_same_idempotency_key": true},
+      "expected_code": "F2_RECOVERY_CONTRACT_DEFINED_REAL_PROCESS_NOT_PROVEN",
+      "expected_mutated_targets": [],
+      "test_coverage": "STATIC_CONTRACT_ASSERTION"
+    },
+    {
+      "id": "CF-F2-NEG-015",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "shell-database-not-syn-fact-store",
+      "polarity": "NEGATIVE",
+      "category": "backend-boundary",
+      "input": {"shell_store": "better-sqlite3/drizzle", "attempted_syn_fact": "RoleSession"},
+      "expected_code": "F2_SHELL_FACT_AUTHORITY_FORBIDDEN",
+      "expected_mutated_targets": [],
+      "test_coverage": "STATIC_CONTRACT_ASSERTION"
+    },
+    {
+      "id": "CF-F2-NEG-016",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "poracode-home-schedules-not-syn-domain",
+      "polarity": "NEGATIVE",
+      "category": "same-name-different-domain",
+      "input": {"shell_slots": ["view.home", "view.schedules"], "asserted_syn_objects": true},
+      "expected_code": "F2_SAME_NAME_AUTHORITY_CLAIM_FORBIDDEN",
+      "expected_mutated_targets": [],
+      "test_coverage": "STATIC_CONTRACT_ASSERTION"
+    },
+    {
+      "id": "CF-F2-NEG-017",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "shell-cannot-self-report-completion",
+      "polarity": "NEGATIVE",
+      "category": "execution-authority-boundary",
+      "input": {"shell_drives_agent": true, "shell_issues_execution_grant": true, "shell_reports_syn_completion": true},
+      "expected_code": "F2_SHELL_EXECUTION_AUTHORITY_FORBIDDEN",
+      "expected_mutated_targets": [],
+      "test_coverage": "STATIC_CONTRACT_ASSERTION"
+    }
+  ]
+}
