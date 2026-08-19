@@ -21,5 +21,14 @@ fn main() {
         return;
     }
 
+    if args.first().map(String::as_str) == Some("__syn_bridge") {
+        args.remove(0);
+        if let Err(error) = codex_governance_workbench_lib::run_syn_bridge_cli(args) {
+            eprintln!("{error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     codex_governance_workbench_lib::run()
 }

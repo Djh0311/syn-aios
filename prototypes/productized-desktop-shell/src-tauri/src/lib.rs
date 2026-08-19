@@ -14,6 +14,7 @@ mod codex_local_runner;
 mod codex_transcript;
 mod control_core;
 mod exec_process_registry;
+mod f2_shell_core_bridge;
 mod formal_memory_lifecycle;
 mod formal_memory_store;
 mod h4_execution_boundary;
@@ -143,6 +144,9 @@ mod workflow_audit;
 mod workflow_read_model;
 mod workflow_state_store;
 pub use mcp::run_mcp_server_cli;
+pub fn run_syn_bridge_cli(args: Vec<String>) -> Result<(), String> {
+    f2_shell_core_bridge::run_cli(args)
+}
 #[derive(Clone)]
 struct AppState {
     index_path: PathBuf,
