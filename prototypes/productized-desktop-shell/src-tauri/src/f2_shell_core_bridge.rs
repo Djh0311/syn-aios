@@ -44,11 +44,13 @@ const METHOD_GLOBAL_SUPERVISOR_STATUS: &str = "role_session.global_supervisor_st
 const METHOD_REGISTER_STABLE_MEMBER: &str = "organization.register_stable_member";
 const METHOD_ATTENTION_INBOX_SNAPSHOT: &str = "attention.inbox_snapshot";
 const METHOD_PROJECT_SUMMARY_SNAPSHOT: &str = "project.summary_snapshot";
+const METHOD_SECRETARY_BRIEF_HISTORY_SNAPSHOT: &str = "secretary.brief_history_snapshot";
 const METHOD_STOP: &str = "bridge.stop";
 const CORE_IDEMPOTENCY_COLLISION: &str = "m6_org_member_idempotency_collision";
-const V2_READ_METHODS: [&str; 2] = [
+const V2_READ_METHODS: [&str; 3] = [
     METHOD_ATTENTION_INBOX_SNAPSHOT,
     METHOD_PROJECT_SUMMARY_SNAPSHOT,
+    METHOD_SECRETARY_BRIEF_HISTORY_SNAPSHOT,
 ];
 
 #[derive(Clone, Copy)]
@@ -118,6 +120,7 @@ enum BridgeResult {
     StableMemberRegistration(crate::m6_org_member_directory::M6OrgStableMemberRegistrationOutcome),
     AttentionInboxSnapshot(crate::m4_secretary_read_model::M4AttentionSnapshot),
     ProjectSummarySnapshot(ProjectSummarySnapshot),
+    SecretaryBriefHistorySnapshot(SecretaryBriefHistorySnapshot),
     Stop(StopResult),
 }
 
@@ -139,6 +142,33 @@ struct ProjectSummaryProjection {
     unverified_claim_count: Option<u32>,
     open_run_count: Option<u32>,
     stale: Option<bool>,
+}
+
+#[derive(Serialize)]
+struct SecretaryBriefHistorySnapshot {
+    daily: crate::m4_secretary_read_model::M4SecretaryDailyReportEnvelope,
+    history: SecretaryHistoryProjection,
+}
+
+#[derive(Serialize)]
+struct SecretaryHistoryProjection {
+    schema_version: String,
+    role_session_ref: String,
+    role_ref: String,
+    scope_ref: String,
+    channel_key: String,
+    history_ref: String,
+    turns: Vec<SecretaryTurnProjection>,
+}
+
+#[derive(Serialize)]
+struct SecretaryTurnProjection {
+    turn_ref: String,
+    client_message_ref: String,
+    state: String,
+    error_code: Option<String>,
+    started_at_utc: String,
+    terminal_at_utc: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -543,6 +573,15 @@ fn dispatch_request(
                 replayed: false,
             })
         }
+        METHOD_SECRETARY_BRIEF_HISTORY_SNAPSHOT => {
+            parse_empty_params(&request.params)?;
+            let snapshot = read_secretary_brief_history_snapshot(state)?;
+            Ok(DispatchOutcome {
+                result: BridgeResult::SecretaryBriefHistorySnapshot(snapshot),
+                idempotency_key: None,
+                replayed: false,
+            })
+        }
         _ => Err(DispatchFailure {
             code: CODE_UNKNOWN_METHOD,
             core_code: None,
@@ -620,6 +659,51 @@ fn read_project_summary_snapshot(
         registry_revision,
         projects: projections,
     })
+}
+
+#[cfg(not(test))]
+fn read_secretary_brief_history_snapshot(
+    state: &AppState,
+) -> Result<SecretaryBriefHistorySnapshot, DispatchFailure> {
+    let repository = state
+        .m4_secretary_repository
+        .as_ref()
+        .ok_or_else(|| core_failure("m4_secretary_read_unavailable".to_string()))?;
+    let daily = repository
+        .refresh_and_read_daily_report()
+        .map_err(|error| core_failure(error.code))?;
+    let conversation = state
+        .m4_secretary_conversation_runtime
+        .load_scrubbed_metadata()
+        .map_err(core_failure)?;
+    let history = SecretaryHistoryProjection {
+        schema_version: conversation.schema_version,
+        role_session_ref: conversation.role_session_ref,
+        role_ref: conversation.role_ref,
+        scope_ref: conversation.scope_ref,
+        channel_key: conversation.channel_key,
+        history_ref: conversation.history_ref,
+        turns: conversation
+            .turns
+            .into_iter()
+            .map(|turn| SecretaryTurnProjection {
+                turn_ref: turn.turn_ref,
+                client_message_ref: turn.client_message_ref,
+                state: turn.state,
+                error_code: turn.error_code,
+                started_at_utc: turn.started_at_utc.unwrap_or_default(),
+                terminal_at_utc: turn.terminal_at_utc,
+            })
+            .collect(),
+    };
+    Ok(SecretaryBriefHistorySnapshot { daily, history })
+}
+
+#[cfg(test)]
+fn read_secretary_brief_history_snapshot(
+    _state: &AppState,
+) -> Result<SecretaryBriefHistorySnapshot, DispatchFailure> {
+    Err(core_failure("m4_secretary_read_unavailable".to_string()))
 }
 
 #[cfg(test)]
@@ -973,6 +1057,11 @@ mod tests {
         include_str!("../../../../docs/contracts/f2-shell-core-bridge-v2-project-addendum.md");
     const PROJECT_FIXTURE: &str = include_str!(
         "../../../../docs/contracts/fixtures/f3-s03-project-summary-v2/contract-cases-v2.json"
+    );
+    const SECRETARY_ADDENDUM: &str =
+        include_str!("../../../../docs/contracts/f2-shell-core-bridge-v2-secretary-addendum.md");
+    const SECRETARY_FIXTURE: &str = include_str!(
+        "../../../../docs/contracts/fixtures/f3-s04-secretary-v2/contract-cases-v2.json"
     );
 
     fn temp_dir(tag: &str) -> PathBuf {
@@ -1741,12 +1830,33 @@ mod tests {
             PROJECT_ADDENDUM.contains("F2_CORE_REJECTED"),
             "{CASE_ID_NEG}"
         );
-        assert_eq!(
-            V2_READ_METHODS,
-            [
-                METHOD_ATTENTION_INBOX_SNAPSHOT,
-                METHOD_PROJECT_SUMMARY_SNAPSHOT
-            ]
+        assert!(V2_READ_METHODS.contains(&METHOD_PROJECT_SUMMARY_SNAPSHOT));
+    }
+
+    #[test]
+    fn f3s04_secretary_brief_history_v2_contract_case_shapes_are_machine_checked() {
+        const CASE_ID_POS: &str = "CF-F3-S04-POS-001";
+        const CASE_ID_NEG: &str = "CF-F3-S04-NEG-001";
+        let fixture: Value =
+            serde_json::from_str(SECRETARY_FIXTURE).expect("secretary fixture JSON");
+        assert_eq!(fixture["cases"][0]["case_id"], CASE_ID_POS);
+        assert_eq!(fixture["cases"][1]["case_id"], CASE_ID_NEG);
+        assert!(
+            SECRETARY_ADDENDUM.contains("secretary.brief_history_snapshot"),
+            "{CASE_ID_POS}"
         );
+        assert!(
+            SECRETARY_ADDENDUM.contains("CORE_LOCAL_NO_PROVIDER"),
+            "{CASE_ID_POS}"
+        );
+        assert!(
+            SECRETARY_ADDENDUM.contains("F2_INVALID_REQUEST"),
+            "{CASE_ID_NEG}"
+        );
+        assert!(
+            SECRETARY_ADDENDUM.contains("F2_CORE_REJECTED"),
+            "{CASE_ID_NEG}"
+        );
+        assert!(V2_READ_METHODS.contains(&METHOD_SECRETARY_BRIEF_HISTORY_SNAPSHOT));
     }
 }

@@ -100,6 +100,29 @@ pub(crate) struct M4SecretaryConversationDto {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+pub(crate) struct M4SecretaryConversationMetadataDto {
+    pub(crate) schema_version: String,
+    pub(crate) role_session_ref: String,
+    pub(crate) role_ref: String,
+    pub(crate) scope_ref: String,
+    pub(crate) channel_key: String,
+    pub(crate) history_ref: String,
+    pub(crate) turns: Vec<M4SecretaryConversationTurnMetadataDto>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) struct M4SecretaryConversationTurnMetadataDto {
+    pub(crate) turn_ref: String,
+    pub(crate) client_message_ref: String,
+    pub(crate) state: String,
+    pub(crate) error_code: Option<String>,
+    pub(crate) started_at_utc: Option<String>,
+    pub(crate) terminal_at_utc: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub(crate) struct M4SecretaryConversationSendOutcome {
     pub(crate) schema_version: String,
     pub(crate) command_receipt_ref: String,
@@ -163,6 +186,15 @@ impl M4SecretaryConversationRuntimeSlot {
             .as_ref()
             .ok_or_else(|| "M4_SECRETARY_CONVERSATION_UNAVAILABLE".to_string())?
             .load()
+    }
+
+    pub(crate) fn load_scrubbed_metadata(
+        &self,
+    ) -> Result<M4SecretaryConversationMetadataDto, String> {
+        self.runtime
+            .as_ref()
+            .ok_or_else(|| "M4_SECRETARY_CONVERSATION_UNAVAILABLE".to_string())?
+            .load_scrubbed_metadata()
     }
 
     pub(crate) fn send(
@@ -1003,6 +1035,44 @@ impl M4SecretaryConversationRuntime {
         }
         let transcript = self.read_authorized_transcript(&turns)?;
         self.conversation_from_join(turns, transcript)
+    }
+
+    /// Read only the M3 turn ledger.  This projection deliberately never
+    /// opens the provider transcript, so message bodies and provider/model
+    /// calls cannot cross the shell bridge.
+    fn load_scrubbed_metadata(&self) -> Result<M4SecretaryConversationMetadataDto, String> {
+        self.require_visible_conversation_authority()?;
+        let turns = self
+            .repository
+            .list_authorized_role_session_turns(&self.query())
+            .map_err(|_| "M4_SECRETARY_CONVERSATION_LOAD_FAILED".to_string())?;
+        let metadata = turns
+            .into_iter()
+            .map(|turn| M4SecretaryConversationTurnMetadataDto {
+                turn_ref: turn.turn_id.as_str().to_string(),
+                // The M3 input reference is an opaque client-message handle;
+                // the request body and provider transcript remain private.
+                client_message_ref: turn.input_ref.as_str().to_string(),
+                state: turn.status.as_str().to_string(),
+                error_code: None,
+                started_at_utc: turn.started_at,
+                terminal_at_utc: turn.terminal_at,
+            })
+            .collect::<Vec<_>>();
+        let history_ref = format!(
+            "m4-secretary-history-metadata:{}:{}",
+            self.role_session_id.as_str(),
+            metadata.len()
+        );
+        Ok(M4SecretaryConversationMetadataDto {
+            schema_version: M4_SECRETARY_CONVERSATION_SCHEMA_VERSION.to_string(),
+            role_session_ref: self.role_session_id.as_str().to_string(),
+            role_ref: crate::mcp::identity_kernel::M4_PRIMARY_SECRETARY_ROLE_ID.to_string(),
+            scope_ref: crate::mcp::identity_kernel::M4_PRIMARY_SECRETARY_SCOPE_ID.to_string(),
+            channel_key: "daily".to_string(),
+            history_ref,
+            turns: metadata,
+        })
     }
 
     fn require_current_raw_read_authority(

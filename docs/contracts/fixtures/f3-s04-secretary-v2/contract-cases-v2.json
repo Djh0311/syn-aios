@@ -1,0 +1,23 @@
+{
+  "contract_id": "f2-shell-core-bridge-v2-secretary-addendum",
+  "cases": [
+    {
+      "case_id": "CF-F3-S04-POS-001",
+      "kind": "behavior",
+      "method": "secretary.brief_history_snapshot",
+      "params": {},
+      "expected": "F2_OK",
+      "precise_assertion": "f3s04_secretary_brief_history_v2_contract_case_shapes_are_machine_checked"
+    },
+    {
+      "case_id": "CF-F3-S04-NEG-001",
+      "kind": "behavior",
+      "method": "secretary.brief_history_snapshot",
+      "params": {
+        "message": "send this"
+      },
+      "expected": "F2_INVALID_REQUEST or F2_CORE_REJECTED",
+      "precise_assertion": "f3s04_secretary_brief_history_v2_contract_case_shapes_are_machine_checked"
+    }
+  ]
+}
