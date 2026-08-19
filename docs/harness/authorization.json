@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "authorized": true,
-  "leaf": "docs/harness/leaves/M6D05-stable-member-directory.md",
+  "leaf": "docs/harness/leaves/M6D06-temporary-agent-history-projection.md",
   "stage": "stage-15",
   "executionReceipt": "u-bf5cbe4117b9c087c7f1",
-  "expiresAt": "2026-08-19T11:51:42.000Z"
+  "expiresAt": "2026-08-19T04:38:14.000Z"
 }

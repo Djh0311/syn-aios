@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`PLANNED` / `NOT_STARTED`。stage-15 检查点 CP3 的第二叶，本叶做完即到 CP3，必须停下交包。
+状态：`CURRENT` / `IN_PROGRESS`。stage-15 检查点 CP3 的第二叶；M6D05 内容 `a58815f` 已主管自复核 PASS 并归档。本叶做完即到 CP3，必须先收口交包并取得独立 PASS。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-006、第 3 节 `TemporaryAgent` 与 `ChildRunRef` 不变量；执行引用字段集固定依 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节；判据以 M6D01 冻结合同为准。
 
@@ -20,7 +20,7 @@
 8. **真实生产消费者**：真实 Tauri command 在 `commands.rs` 注册、在 `lib.rs` 接入 `AppState`，普通启动路径可达；报告须给出完整调用链，禁止只有测试能触发；
 9. `cargo check --lib --offline` 与本叶定向测试在 disposable checkout 上通过，记录真实数字与退出码，证据绑定候选 SHA；
 10. 独立内容提交，写域精确，`git diff --check` 通过；
-11. 本叶做完即到 **CP3 检查点**：主管自复核放行并收口后，authorization 打回精确 closed，在 `/home/synadmin/workspace/.syn-gates/open/` 写 `stage-15-cp3-<YYYYMMDD-HHMM>.md` 交包（含 M6D05 与 M6D06 两叶），然后停下等总指导验收。不得自行进入 M6D07。
+11. 本叶做完即到 **CP3 检查点**：主管自复核放行并收口后，authorization 打回精确 closed，在 `/home/synadmin/workspace/.syn-gates/open/` 写 `stage-15-cp3-<YYYYMMDD-HHMM>.md` 交包（含 M6D05 与 M6D06 两叶），由同一长驻 Codex 前台阻塞启动独立 Cursor Opus 验收并每两分钟报活。PASS 前不得进入 M6D07；FAIL 只按 verdict 点名范围返修。
 
 证据：只在 disposable checkout 上产出定向证据，绑定候选 SHA。执行事实只用隔离 app-data 与合成 attempt / receipt。本叶不做 GUI、不接真实 runner、真实 provider 或真实账号。
 
