@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`PLANNED` / `NOT_STARTED`。stage-15 最后一叶，做完即阶段交包。前置：M6D01–M6D07 全部真实通过。
+状态：`CURRENT` / `IN_PROGRESS`。stage-15 最后一叶，做完即阶段交包。前置 M6D01–M6D07 已全部真实通过；M6D07 内容 `15bd053cccbaee1302d244afc84eb05578e7fa1c` 已主管自复核 PASS 并归档。
 
 来源收据：stage-6 计划第 6 节迁移与回滚、第 7 节验证矩阵与关键验收、第 9 节阶段退出条件；载体修订依 `decisions/2026-08-17-syn-lightcode-fork-desktop-shell-direction-v1.md`（UI 与隔离 App 验收改新壳）；用户 2026-08-18 22:41 要求一次排完 M6 并设中间检查点。
 

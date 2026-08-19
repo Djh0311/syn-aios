@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`CURRENT` / `IN_PROGRESS`。stage-15 最后一段的第一叶（与 M6D08 同属阶段交包）。前置 CP3 已由独立 verdict `stage-15-cp3-20260819-0924.verdict.md` PASS；本叶自复核收口后继续 M6D08，阶段交包前不得宣布 M6 域层或 stage-15 完成。
+状态：`DONE` / `SUPERVISOR_SELF_REVIEW_PASS`。内容候选 `15bd053cccbaee1302d244afc84eb05578e7fa1c` / tree `1efd6cfd5cd02e2b3510acae9fb200f102b8b5a7` 已在 detached checkout 通过本叶 8/8、相邻回归 99/99 与 `cargo check --lib --offline`；原始证据在 `.syn-gates/evidence/M6D07-15bd053/`。本叶已归档并按同段规则继续 M6D08；阶段交包前不得宣布 M6 域层或 stage-15 完成。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-006A、第 3 节 `MultiViewConsultation` 不变量、第 7 节关键验收（多视角输入在汇总前保持独立；runtime final answer 不自动生成决定）；判据以 M6D01 冻结合同为准。
 
