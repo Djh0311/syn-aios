@@ -77,7 +77,7 @@
 - [x] M6D03 只读跨项目 query 与 advisory（ORG-002；owner 前置 `977770f`、内容 `60a8e19`，主管自复核 PASS）→ CP2
 - [x] M6D04 Secretary consult Handoff（ORG-004；内容 `ec1ba99`，主管自复核 PASS）→ **CP2 独立 verdict `stage-15-cp2-20260819-0733` PASS**
 - [x] M6D05 稳定成员目录（ORG-005；内容 `a58815f`，主管自复核 PASS）→ CP3
-- [ ] M6D06 临时 agent 历史投影（ORG-006；current）→ **CP3 停点**
+- [x] M6D06 临时 agent 历史投影（ORG-006；内容 `274cb08`，主管自复核 PASS）→ **CP3 awaiting independent verdict**
 - [ ] M6D07 独立多视角会诊（ORG-006A）
 - [ ] M6D08 M6 域层集成回归与阶段候选 → **阶段交包**
 

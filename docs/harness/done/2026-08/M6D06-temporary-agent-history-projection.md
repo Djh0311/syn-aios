@@ -2,7 +2,7 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`CURRENT` / `IN_PROGRESS`。stage-15 检查点 CP3 的第二叶；M6D05 内容 `a58815f` 已主管自复核 PASS 并归档。本叶做完即到 CP3，必须先收口交包并取得独立 PASS。
+状态：`SUPERVISOR_SELF_REVIEW_PASS` / `ARCHIVED` / `CP3_AWAITING_INDEPENDENT_ACCEPTANCE`。stage-15 检查点 CP3 的第二叶；内容候选 `274cb08629e09689357cd1522c1ad23f1aea9e08` / tree `b49f177d88b9f5a06306b093436fbc9728d2e5c9` 已按七项判据放行。本叶与 M6D05 收口后 leaves 为空；CP3 独立 PASS 前不得进入 M6D07。
 
 来源收据：stage-6 计划第 4 节 SYN-ORG-006、第 3 节 `TemporaryAgent` 与 `ChildRunRef` 不变量；执行引用字段集固定依 `handoffs/2026-08-18-syn-m5-to-m6-and-shell-deferred-debts-v1.md` 第 1 节；判据以 M6D01 冻结合同为准。
 
