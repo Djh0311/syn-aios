@@ -46,7 +46,8 @@
     "F2_IDEMPOTENCY_CONFLICT",
     "F2_CORE_REJECTED",
     "F2_CORE_REJECTED_UNCLASSIFIED",
-    "F2_INTERNAL_PANIC"
+    "F2_INTERNAL_PANIC",
+    "F2_CLI_APP_DATA_ROOT_IDENTITY"
   ],
   "cases": [
     {
@@ -416,6 +417,19 @@
       "precise_assertion": "f2c01r02_nonempty_contact_bindings_are_forbidden",
       "input": {"method": "organization.register_stable_member", "contact_bindings": [{"binding_ref": "contact-binding:probe"}]},
       "expected_code": "F2_FORBIDDEN_AUTHORITY_INPUT",
+      "expected_mutated_targets": [],
+      "test_coverage": "RUNTIME_CFG_TEST"
+    },
+    {
+      "id": "CF-F2-NEG-021",
+      "contract_id": "f2-shell-core-bridge-v1",
+      "rule_id": "cli-app-data-root-basename-preflight",
+      "polarity": "NEGATIVE",
+      "category": "app-data-root-identity",
+      "case_class": "BEHAVIOR",
+      "precise_assertion": "f2c01_cli_app_data_root_basename_is_preflighted",
+      "input": {"app_data_root_last_component": "CodexGovernanceWorkbench"},
+      "expected_code": "F2_CLI_APP_DATA_ROOT_IDENTITY",
       "expected_mutated_targets": [],
       "test_coverage": "RUNTIME_CFG_TEST"
     }

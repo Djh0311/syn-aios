@@ -151,6 +151,7 @@ reading only this section.
 | rule | legal example | illegal example | stable failure |
 |---|---|---|---|
 | `--app-data-root` is an absolute canonical existing directory | `/tmp/probe/local.codex.governance.workbench` | `relative/dir` | process exit `F2_CLI_APP_DATA_ROOT_MUST_BE_ABSOLUTE` |
+| `--app-data-root` basename is preflighted before core startup | `.../local.codex.governance.workbench` | `.../CodexGovernanceWorkbench` | process exit `F2_CLI_APP_DATA_ROOT_IDENTITY` |
 | last path component of `--app-data-root` is exactly `local.codex.governance.workbench` | `.../local.codex.governance.workbench` | `.../CodexGovernanceWorkbench` | process exit `m1_ordinary_app_data_root_identity_mismatch` |
 | `--index-seed` is an absolute canonical existing file | `/tmp/probe/index-seed.json` | missing argument | process exit `F2_CLI_INDEX_SEED_REQUIRED` |
 | `--tasks-seed` is an absolute canonical existing file | `/tmp/probe/tasks-seed.md` | relative file | process exit `F2_CLI_TASKS_SEED_MUST_BE_ABSOLUTE` |
@@ -328,6 +329,7 @@ not granted by this method. `receipt.external_refs` remain transport echoes.
 | `F2_CORE_REJECTED` | named core target failed closed with a classified `core_code` | inspect stable `core_code`; no alternate route |
 | `F2_CORE_REJECTED_UNCLASSIFIED` | core failed with no classified stable token | treat as fail-closed; do not parse `message` for branching |
 | `F2_INTERNAL_PANIC` | request dispatch unwound unexpectedly | treat outcome as unknown; restart and recover as above |
+| `F2_CLI_APP_DATA_ROOT_IDENTITY` | CLI app-data-root basename is not the canonical ordinary-product identity | fix the explicit root before retrying |
 
 Classified core errors keep their stable leading token as `core_code`. The
 boundary `message` is a generic safe phrase and is not used for branching.

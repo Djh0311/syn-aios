@@ -17,7 +17,9 @@ use crate::m6_org_member_directory::M6OrgRegisterStableMemberRequest;
 use crate::AppState;
 
 const REQUEST_SCHEMA: &str = "syn.f2.shell-core-bridge.request.v1";
+const REQUEST_SCHEMA_V2: &str = "syn.f2.shell-core-bridge.request.v2";
 const RESPONSE_SCHEMA: &str = "syn.f2.shell-core-bridge.response.v1";
+const RESPONSE_SCHEMA_V2: &str = "syn.f2.shell-core-bridge.response.v2";
 const DEFAULT_MAX_REQUEST_TIMEOUT_MS: u64 = 30_000;
 const ABSOLUTE_MAX_REQUEST_TIMEOUT_MS: u64 = 30_000;
 
@@ -40,8 +42,10 @@ const CORE_REJECTED_SAFE_MESSAGE: &str = "core rejected the request";
 const METHOD_SECRETARY_STATUS: &str = "role_session.secretary_status";
 const METHOD_GLOBAL_SUPERVISOR_STATUS: &str = "role_session.global_supervisor_status";
 const METHOD_REGISTER_STABLE_MEMBER: &str = "organization.register_stable_member";
+const METHOD_ATTENTION_INBOX_SNAPSHOT: &str = "attention.inbox_snapshot";
 const METHOD_STOP: &str = "bridge.stop";
 const CORE_IDEMPOTENCY_COLLISION: &str = "m6_org_member_idempotency_collision";
+const V2_READ_METHODS: [&str; 1] = [METHOD_ATTENTION_INBOX_SNAPSHOT];
 
 #[derive(Clone, Copy)]
 struct MethodDescriptor {
@@ -108,6 +112,7 @@ enum BridgeResult {
         crate::m6_org_global_role_session::M6OrgGlobalRoleSessionStatusDto,
     ),
     StableMemberRegistration(crate::m6_org_member_directory::M6OrgStableMemberRegistrationOutcome),
+    AttentionInboxSnapshot(crate::m4_secretary_read_model::M4AttentionSnapshot),
     Stop(StopResult),
 }
 
@@ -249,6 +254,11 @@ fn parse_cli_args(args: &[String]) -> Result<BridgeConfig, String> {
         true,
         "APP_DATA_ROOT",
     )?;
+    if app_data_root.file_name().and_then(|name| name.to_str())
+        != Some(crate::m1_project_index::M1_ORDINARY_APP_DATA_DIR_NAME)
+    {
+        return Err("F2_CLI_APP_DATA_ROOT_IDENTITY".to_string());
+    }
     let index_seed = canonical_explicit_path(
         index_seed
             .as_deref()
@@ -348,7 +358,9 @@ fn handle_line_at(state: &AppState, config: &BridgeConfig, line: &str, now_ms: u
             )
         }
     };
-    if request.schema_version != REQUEST_SCHEMA {
+    let is_v2_read = request.schema_version == REQUEST_SCHEMA_V2
+        && V2_READ_METHODS.contains(&request.method.as_str());
+    if request.schema_version != REQUEST_SCHEMA && !is_v2_read {
         return request_error(
             &request,
             CODE_PROTOCOL_MISMATCH,
@@ -366,6 +378,7 @@ fn handle_line_at(state: &AppState, config: &BridgeConfig, line: &str, now_ms: u
                 && !entry.dispatch_target.is_empty()
                 && entry.invocation_class == "CORE_LOCAL_NO_PROVIDER"
         })
+        && !is_v2_read
     {
         return request_error(
             &request,
@@ -487,6 +500,15 @@ fn dispatch_request(
             })
         }
         METHOD_REGISTER_STABLE_MEMBER => dispatch_register_stable_member(state, request, now_ms),
+        METHOD_ATTENTION_INBOX_SNAPSHOT => {
+            parse_empty_params(&request.params)?;
+            let snapshot = read_attention_snapshot(state)?;
+            Ok(DispatchOutcome {
+                result: BridgeResult::AttentionInboxSnapshot(snapshot),
+                idempotency_key: None,
+                replayed: false,
+            })
+        }
         _ => Err(DispatchFailure {
             code: CODE_UNKNOWN_METHOD,
             core_code: None,
@@ -494,6 +516,26 @@ fn dispatch_request(
             idempotency_key: None,
         }),
     }
+}
+
+#[cfg(not(test))]
+fn read_attention_snapshot(
+    state: &AppState,
+) -> Result<crate::m4_secretary_read_model::M4AttentionSnapshot, DispatchFailure> {
+    let repository = state
+        .m4_secretary_repository
+        .as_ref()
+        .ok_or_else(|| core_failure("m4_attention_read_unavailable".to_string()))?;
+    repository
+        .read_attention_snapshot(crate::m4_secretary_domain::m4_primary_scope_ref())
+        .map_err(|error| core_failure(error.code))
+}
+
+#[cfg(test)]
+fn read_attention_snapshot(
+    _state: &AppState,
+) -> Result<crate::m4_secretary_read_model::M4AttentionSnapshot, DispatchFailure> {
+    Err(core_failure("m4_attention_read_unavailable".to_string()))
 }
 
 fn dispatch_register_stable_member(
@@ -712,7 +754,11 @@ fn success_line(
 ) -> LineOutcome {
     serialize_response(
         BridgeResponse {
-            schema_version: RESPONSE_SCHEMA,
+            schema_version: if request.schema_version == REQUEST_SCHEMA_V2 {
+                RESPONSE_SCHEMA_V2
+            } else {
+                RESPONSE_SCHEMA
+            },
             request_id: Some(request.request_id.clone()),
             method: Some(request.method.clone()),
             ok: true,
@@ -1198,7 +1244,10 @@ mod tests {
     #[test]
     fn f2c01_cli_requires_explicit_canonical_paths_and_has_no_path_fallback() {
         let _case_ids = ["CF-F2-NEG-018"];
-        let root = temp_dir("cli-paths");
+        let parent = temp_dir("cli-paths");
+        let root = parent.join(crate::m1_project_index::M1_ORDINARY_APP_DATA_DIR_NAME);
+        fs::create_dir_all(&root).expect("create ordinary CLI root");
+        let root = fs::canonicalize(root).expect("canonical ordinary CLI root");
         let bridge_config = config(&root);
         let args = vec![
             "--app-data-root".to_string(),
@@ -1230,7 +1279,32 @@ mod tests {
             parse_cli_args(&relative).expect_err("relative root must fail"),
             "F2_CLI_APP_DATA_ROOT_MUST_BE_ABSOLUTE"
         );
-        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn f2c01_cli_app_data_root_basename_is_preflighted() {
+        const CASE_ID: &str = "CF-F2-NEG-021";
+        let parent = temp_dir("cli-root-identity");
+        let root = parent.join("CodexGovernanceWorkbench");
+        fs::create_dir_all(&root).expect("{CASE_ID} create mismatched root");
+        let root = fs::canonicalize(root).expect("{CASE_ID} canonical mismatched root");
+        let bridge_config = config(&root);
+        let args = vec![
+            "--app-data-root".to_string(),
+            root.display().to_string(),
+            "--index-seed".to_string(),
+            bridge_config.index_seed.display().to_string(),
+            "--tasks-seed".to_string(),
+            bridge_config.tasks_seed.display().to_string(),
+            "--role-session-project-locator".to_string(),
+            "project:f2-core-provisioned".to_string(),
+        ];
+        assert_eq!(
+            parse_cli_args(&args).expect_err(CASE_ID),
+            "F2_CLI_APP_DATA_ROOT_IDENTITY"
+        );
+        let _ = fs::remove_dir_all(parent);
     }
 
     #[test]
