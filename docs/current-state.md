@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-19，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。stage-15 active；M6P00、CP1、CP2 与 CP3 均已获独立 PASS，M6D01 静态合同/fixtures、M6D02 持久 Global Supervisor RoleSession、M6D03 只读跨项目 advisory 候选 `60a8e19`、M6D04 Secretary consult Handoff 候选 `ec1ba99`、M6D05 稳定成员目录候选 `a58815f`、M6D06 临时 agent 历史投影候选 `274cb08` 与 M6D07 独立多视角会诊候选 `15bd053` 的各自具名范围成立。M6D01–M6D07 已主管自复核归档，当前唯一 current leaf 为 M6D08 域层集成回归与阶段候选；M6 域层整体、stage-15、壳采纳、发布、部署与真实日用均未由此成立。
+截至 2026-08-19，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。stage-15 active；M6P00、CP1、CP2 与 CP3 均已获独立 PASS，M6D01 静态合同/fixtures、M6D02 持久 Global Supervisor RoleSession、M6D03 只读跨项目 advisory 候选 `60a8e19`、M6D04 Secretary consult Handoff 候选 `ec1ba99`、M6D05 稳定成员目录候选 `a58815f`、M6D06 临时 agent 历史投影候选 `274cb08`、M6D07 独立多视角会诊候选 `15bd053` 与 M6D08 域层集成候选 `a3d5759` 的各自具名范围已主管自复核 PASS。M6D01–M6D08 均已归档，当前没有 current leaf，authorization closed，等待最终 stage-15 独立 verdict；M6 域层独立验收、stage-15 关闭、完整 M6、壳采纳、发布、部署与真实日用均未由主管自复核自动成立。
 
 ## 2026-08-18 M5 当前状态
 
@@ -9,10 +9,10 @@
 - 独立验收官在 `c91d8fc` detached checkout 上复跑 `cargo check` 0；`m5r09_` 23/23，memory/mature 各 14/14，ordinary source 4/4，完整 `m5_` 188/188；前端 typecheck/default build 0；默认 bundle gate 与候选/记账 diff check 符合预期。主管原始证据位于 `.syn-gates/evidence/M5R09-c91d8fc/`。
 - M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 只含 5 个 closeout/unfinished/交接路径，零产品源码变化。结构、冻结物、用户载体、authorization 与 lifecycle 检查最终全绿；日志位于 `.syn-gates/evidence/M5C01-de98d69/`。
 - protected WIP 已分活动 runtime 与静态 hash 两层。30 个静态路径在 closeout 观察时 30/30 hash 不变；`commands.rs` 候选外旧 WIP仍为 59+/56-；6 个 `m6_*.rs` 仍未跟踪。用户 OSS 门面已于 `c1025ba` 精确 7 路径独立提交，不属 M5 候选。没有 reset、stash、clean、覆盖或混入候选。
-- M5R09、M5C01 与 stage-14 已归档，当前没有 M5 current leaf。stage-15 已 active；M6P00、CP1、CP2 与 CP3 已获独立 PASS，M6D01–M6D07 已归档，M6D08 为唯一 current leaf。F2/F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
+- M5R09、M5C01 与 stage-14 已归档，当前没有 M5 current leaf。stage-15 已 active；M6P00、CP1、CP2 与 CP3 已获独立 PASS，M6D01–M6D08 已主管自复核并归档，当前没有 M6 current leaf，正等待最终阶段 verdict。F2/F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
 - 上述结论只到 Linux WSL 的 detached/local/synthetic/ordinary Tauri 产品链和静态边界；没有真实个人资料/项目、真实 provider/账号/凭据、外部业务写、macOS/BSD 实机、真窗口像素、新壳运行、部署、发布或长期真实日用。
 
-当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档；`stage-15` active。M6P00、CP1、CP2 与 CP3 检查点已 PASS，M6D01–M6D07 已归档；M6D08 已拉入 current 并重签 authorization，完成后进入 stage-15 阶段交包。
+当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档；`stage-15` active。M6P00、CP1、CP2 与 CP3 检查点已 PASS，M6D01–M6D08 已主管自复核归档；M6D08 收口后 leaves 为空、authorization closed，等待 stage-15 最终独立验收。
 
 ## 2026-08-19 stage-15 当前状态
 
@@ -29,6 +29,7 @@
 - M6D06 内容 `274cb08629e09689357cd1522c1ad23f1aea9e08` / tree `b49f177d88b9f5a06306b093436fbc9728d2e5c9` 从只读 M5 完整执行 envelope 投影 TemporaryAgent、任务/结果/失败/来源引用与 REF_ONLY quarantine，严格区分 ChildRunRef、TemporaryAgent 与 StableMember；只有显式人工晋升可新建或绑定 StableMember，且原历史不变。三个普通 Tauri command 可达。detached 证据为 M6D06 8/8、相邻 M6D05/M6D04/M6D03/M6D02/M4C05/M3C05 91/91、cargo check/diff-check exit 0，warning 数为 888。
 - Cursor Opus 独立验收签发 `stage-15-cp3-20260819-0924.verdict.md` PASS：在两个独立 disposable checkout 复跑 15 条命令全部 exit 0、合计 190 passed / 0 failed，两候选 warning 汇总均 888，写域、冻结物、7 个受保护载体、ordinary Tauri composition 与生命周期均通过。8 条非阻塞欠账已路由到 ENG-01、M6D08 与 M6S01。该 PASS 只覆盖 M6D05+M6D06 的本地离线合成域层，不构成 M6 域层整体、stage-15、GUI/新壳、真实系统、部署或发布结论。
 - M6D07 内容 `15bd053cccbaee1302d244afc84eb05578e7fa1c` / tree `1efd6cfd5cd02e2b3510acae9fb200f102b8b5a7` 为同一 sourced minimal question packet 建立两个以上互相独立的真实 M3 RoleSession/Workcell/context，提交前查询只读目标 view，全部提交后才形成 sourced consensus/disagreement/evidence indexes 与 `PENDING_USER_DECISION`；预算、超时、部分结果和串台均 fail closed，且三个普通 Tauri command 可达。detached 证据为 M6D07 8/8、相邻 M6D06/M6D05/M6D04/M6D03/M6D02/M4C05/M3C05 99/99、cargo check/diff-check exit 0，warning 数保持 888。该结论是主管自复核，只覆盖本地离线合成域层；阶段验收、GUI/新壳、真实 runtime/provider/model/account、项目写、发布与 M6 完成均未成立。
+- M6D08 内容 `a3d575975033f7eb5ec92dab18c24fe97ddb8001` / tree `d710e6f38be216e813dbb66482d87e8bc80ce923` 在普通 `AppState` 合成链上整合两项目 advisory/source-back、Secretary Handoff、stable/temporary/member contact、多视角与 DecisionRequest，并以全项目写面 hash/write-spy 证明项目 domain/event/audit/outbox/sidecar/compat/file/spawn settings 零变化。ordinary Global Supervisor startup 明确 fail-closed；三项 temporary command 统一先过 global gate；M5 11-table carrier mismatch 与 no-history 分型；pre-decide revision advance 稳定 conflict；两个独立 fake runtime 不改变 StableMember 身份。detached 证据为综合 M6 82/82、M6D08 6/6、M1 project-index 18/18（指定重启 1/1）、M4C05 9/9、M3C05 43/43、cargo check/diff/frozen/status/hash 均 exit 0，rustc 汇总 888 warnings。该结论仍是主管自复核和本地离线合成域层证据，最终 stage verdict、GUI/新壳、双项目 isolated App、真实系统、发布与完整 M6 均未成立。
 
 ## 现在分别看哪里
 
@@ -96,7 +97,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 尚未成立或未进入
 
-- M5 已在 `c91d8fc` 的具名 product-chain 范围通过独立验收并由 M5C01 关闭 stage-14；M6P00、CP1、CP2 与 CP3 已获独立 PASS，M6D07 已主管自复核 PASS。尚未成立的是 M6D08、M6 域层整体、stage-15、UI、发布、真实资料/项目、真实 provider/账号/凭据、macOS/BSD 实机、真窗口像素、新壳运行与长期日用。
+- M5 已在 `c91d8fc` 的具名 product-chain 范围通过独立验收并由 M5C01 关闭 stage-14；M6P00、CP1、CP2 与 CP3 已获独立 PASS，M6D07 与 M6D08 已主管自复核 PASS。尚未成立的是最终独立 M6 域层 verdict、stage-15 关闭、ORG-007/UI、完整 M6、发布、真实资料/项目、真实 provider/账号/凭据、macOS/BSD 实机、真窗口像素、新壳运行与长期日用。
 - M6 Global Supervisor consult 已在 `ec1ba99` 候选的普通 Tauri/M4/M3/M6 本地链路实现并以 fake provider、合成 summary 验证，且 CP2 已放行；真实 provider/模型/消息、renderer consumption 与新壳交互均未进入。
 - M7 对 `DailyWindowClosed` / `DailyReportVersioned` 的消费、正式记忆、PersonalFact、个人模型与 Skill 未实现；M4 只产出 source-backed event/ref，不写 M7 对象。
 - M8 真实 connector、credential 与外部 source 未进入；M9 旧路 command unregister/物理退役、M10 全日真实试点与发布硬化、M11 受治理自升级也未进入。
@@ -107,7 +108,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档，`stage-15` active。M6P00、CP1、CP2 与 CP3 已独立 PASS；M6D01–M6D07 已归档，M6D08 为唯一 current leaf。M6D08 自复核收口后进入阶段交包；独立阶段 verdict 前不关闭 stage-15、不宣布 M6 完成。
+M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档，`stage-15` active。M6P00、CP1、CP2 与 CP3 已独立 PASS；M6D01–M6D08 已主管自复核归档，当前无 current leaf。M6D08 域层候选进入阶段交包；独立阶段 verdict 前不关闭 stage-15、不宣布完整 M6 完成。
 
 stage-15 的明确激活只授权当前计划内 M6 域层连续推进，不自动激活 F2/F3/F5、壳采纳、OSS-01 push/申请、真实数据 / 模型 / provider / connector / 账号凭据 / 外部业务写、部署或发布；这些均没有发生。
 

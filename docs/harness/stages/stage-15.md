@@ -1,6 +1,6 @@
 # 阶段15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`ACTIVE / M6_DOMAIN_LAYER_ONLY / NOT_ACCEPTED / NOT_RELEASED`。建立绑定 stage-14 关闭事实（`M5C01-20260818-1939.verdict.md`，M5 产品锚 `c91d8fc`）与用户 2026-08-18 21:49 明确“接下来就是 M6”。本阶段只做 M6 域层与其前置，不宣布 M6 完成、不发布、不激活 Headless Core / Primary / epoch。
+状态：`ACTIVE / M6_DOMAIN_LAYER_CANDIDATE / PENDING_INDEPENDENT_STAGE_VERDICT / NOT_RELEASED`。建立绑定 stage-14 关闭事实（`M5C01-20260818-1939.verdict.md`，M5 产品锚 `c91d8fc`）与用户 2026-08-18 21:49 明确“接下来就是 M6”。M6P00 与 M6D01–M6D08 已逐叶主管自复核，最终域层内容锚为 `a3d575975033f7eb5ec92dab18c24fe97ddb8001`；本阶段仍须经最终独立 verdict 才能关闭。本阶段只做 M6 域层与其前置，不宣布完整 M6 完成、不发布、不激活 Headless Core / Primary / epoch。
 
 总计划：`docs/plans/2026-08-01-syn-stage-6-global-supervisor-and-internal-organization-plan-v1.md`。载体修订依 `decisions/2026-08-17-syn-lightcode-fork-desktop-shell-direction-v1.md` 与 `docs/plans/2026-08-17-syn-lightcode-fork-shell-adoption-plan-v1.md`：M6 域层（合同、service、repository、投影）不依赖壳，先行施工；M6 的产品 UI 与隔离 App 验收载体改为新壳（`syn-shell` fork），待 F2/F3 就绪后另行进行。stage-6 计划验证矩阵里的 “Isolated Tauri” 行按新壳口径理解，域层验证矩阵不变。
 
@@ -79,8 +79,10 @@
 - [x] M6D05 稳定成员目录（ORG-005；内容 `a58815f`，主管自复核 PASS）→ CP3
 - [x] M6D06 临时 agent 历史投影（ORG-006；内容 `274cb08`，主管自复核 PASS）→ **CP3 独立 verdict `stage-15-cp3-20260819-0924` PASS**
 - [x] M6D07 独立多视角会诊（ORG-006A；内容 `15bd053`，主管自复核 PASS）
-- [ ] M6D08 M6 域层集成回归与阶段候选（current）→ **阶段交包**
+- [x] M6D08 M6 域层集成回归与阶段候选（内容 `a3d5759`，主管自复核 PASS）→ **阶段交包待独立 verdict**
 
 明确不在本阶段：ORG-007 双项目隔离 App 验收与顶层入口 UI，载体在新壳，记在 `unfinished/M6S01-dual-project-isolated-app-acceptance-on-new-shell.md`。因此本阶段通过也只到 M6 域层，不构成 M6 完成。
+
+M6D08 收口后 `docs/harness/leaves/` 为空、authorization 为精确 closed；这表示等待阶段验收，不表示 stage-15 已关闭。阶段终包 PASS 后仍须由总指导完成最终生命周期处置，本 Codex 不自行勾选阶段完成。
 
 文件名纪律（总指导钉死，避免覆盖只读保全）：6 个未跟踪 `m6_*.rs` 占用了 `m6_cross_project_query.rs`、`m6_global_supervisor_session.rs`、`m6_member_directory.rs`（含 `.bak`）、`m6_organization_identity.rs`、`m6_temporary_agent_history.rs` 这几个名字。本阶段新增域层源码统一用 `m6_org_*` 前缀，禁止使用上述任一名字。

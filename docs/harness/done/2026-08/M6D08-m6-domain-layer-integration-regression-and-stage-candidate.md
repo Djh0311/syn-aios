@@ -2,11 +2,13 @@
 
 阶段：stage-15 M6 全局主管与内部组织（域层先行，UI 验收载体为新壳）
 
-状态：`CURRENT` / `IN_PROGRESS`。stage-15 最后一叶，做完即阶段交包。前置 M6D01–M6D07 已全部真实通过；M6D07 内容 `15bd053cccbaee1302d244afc84eb05578e7fa1c` 已主管自复核 PASS 并归档。
+状态：`SUPERVISOR_SELF_REVIEW_PASS` / `ARCHIVED` / `STAGE_CANDIDATE_PENDING_INDEPENDENT_ACCEPTANCE`。stage-15 最后一叶。前置 M6D01–M6D07 已全部逐叶通过；本叶内容 `a3d575975033f7eb5ec92dab18c24fe97ddb8001` / tree `d710e6f38be216e813dbb66482d87e8bc80ce923` 已按七项判据主管自复核 PASS，归档后进入阶段交包，不自行关闭 stage-15。
 
 来源收据：stage-6 计划第 6 节迁移与回滚、第 7 节验证矩阵与关键验收、第 9 节阶段退出条件；载体修订依 `decisions/2026-08-17-syn-lightcode-fork-desktop-shell-direction-v1.md`（UI 与隔离 App 验收改新壳）；用户 2026-08-18 22:41 要求一次排完 M6 并设中间检查点。
 
 目标：把 M6 域层各叶合起来跑集成回归，证明它们组合后仍然对项目零写入、legacy 仍可回滚，并如实登记 M6 只到域层、UI 与双项目 App 验收欠在新壳。本叶不宣布 M6 完成。
+
+收口事实（2026-08-19）：候选在 detached checkout 上综合 `m6` 82/82、M6D08 6/6、M6D02–D07 各自过滤 16/16、13/13、4/4、7/7、8/8、8/8，M6P00 21/21，M1 project-index 18/18（指定 restart 1/1），M4C05 9/9，M3C05 43/43；`cargo check --lib --offline`、diff/frozen/production/status/hash 检查均 exit 0，rustc 汇总 888 warnings。完整原始证据在 `.syn-gates/evidence/M6D08-a3d5759/`，主管报告为 `docs/harness/reports/M6D08-domain-layer-integration-stage-candidate-and-evidence-v1.md`。结论只到 local/offline/synthetic M6 域层候选；ORG-007/new-shell UI/真实像素/真实系统/发布与完整 M6 未成立。
 
 做完的标准：
 

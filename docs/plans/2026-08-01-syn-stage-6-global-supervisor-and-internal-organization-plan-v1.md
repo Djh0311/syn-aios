@@ -2,10 +2,10 @@
 
 日期：2026-08-01<br>
 阶段：`M6`<br>
-状态：**PLANNED / NOT_ACTIVE / NO_EXECUTION_AUTHORITY。**<br>
+状态：**DOMAIN_LAYER_STAGE_CANDIDATE / STAGE-15 PENDING INDEPENDENT ACCEPTANCE / M6 NOT COMPLETE / NO M7 AUTHORITY。**<br>
 上位计划：`2026-08-01-syn-personal-ai-workbench-master-development-plan-v1.md` M6。<br>
 硬前置：M3 Global Supervisor RoleSession / Handoff；M5 ProjectSummary 与 execution identity；M4 Secretary consult 入口。<br>
-当前路线状态：M1–M4 已完成各自具名范围，M5–M6 均未激活。Harness 动态 stage / leaf 另看 `../harness/plan.md`；本计划不授权跨项目写、真实消息、Agent Runtime、桌面应用或产品代码。
+当前路线状态（2026-08-19）：M1–M4 已完成各自具名范围，M5 已在 stage-14 的 scoped product-chain 范围关闭；stage-15 的 M6P00 与 M6D01–M6D08 已逐叶主管自复核，域层候选为 `a3d575975033f7eb5ec92dab18c24fe97ddb8001`，正在等待最终独立阶段 verdict。ORG-007、新壳 UI、双项目 isolated App 与真实窗口像素仍在 `M6S01`，所以完整 M6 未完成。Harness 动态 stage / leaf 另看 `../harness/plan.md`；本计划本身不授权跨项目写、真实消息、Agent Runtime、桌面应用或产品代码，也不激活 M7。
 
 权威顺序：当前用户指令 → `../../../AGENTS.md` → `../../AGENTS.md` → `../harness/plan.md` → 活动阶段（stage）/ 唯一活动叶（leaf）→ `../harness/authorization.json` → `../product/syn-product-canon-v1.md` 与 `../product/knowledge-infrastructure-canon-v1.md` → `../current-state.md` → 2026-08-01 修订与当前能力盘点 → master → M3-M5 退出回执 → 本计划。M5 未验收的旧记录不得被本计划升级成统一组织事实。
 
