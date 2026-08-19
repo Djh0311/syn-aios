@@ -43,9 +43,13 @@ const METHOD_SECRETARY_STATUS: &str = "role_session.secretary_status";
 const METHOD_GLOBAL_SUPERVISOR_STATUS: &str = "role_session.global_supervisor_status";
 const METHOD_REGISTER_STABLE_MEMBER: &str = "organization.register_stable_member";
 const METHOD_ATTENTION_INBOX_SNAPSHOT: &str = "attention.inbox_snapshot";
+const METHOD_PROJECT_SUMMARY_SNAPSHOT: &str = "project.summary_snapshot";
 const METHOD_STOP: &str = "bridge.stop";
 const CORE_IDEMPOTENCY_COLLISION: &str = "m6_org_member_idempotency_collision";
-const V2_READ_METHODS: [&str; 1] = [METHOD_ATTENTION_INBOX_SNAPSHOT];
+const V2_READ_METHODS: [&str; 2] = [
+    METHOD_ATTENTION_INBOX_SNAPSHOT,
+    METHOD_PROJECT_SUMMARY_SNAPSHOT,
+];
 
 #[derive(Clone, Copy)]
 struct MethodDescriptor {
@@ -113,7 +117,28 @@ enum BridgeResult {
     ),
     StableMemberRegistration(crate::m6_org_member_directory::M6OrgStableMemberRegistrationOutcome),
     AttentionInboxSnapshot(crate::m4_secretary_read_model::M4AttentionSnapshot),
+    ProjectSummarySnapshot(ProjectSummarySnapshot),
     Stop(StopResult),
+}
+
+#[derive(Serialize)]
+struct ProjectSummarySnapshot {
+    registry_revision: u64,
+    projects: Vec<ProjectSummaryProjection>,
+}
+
+#[derive(Serialize)]
+struct ProjectSummaryProjection {
+    project_id: String,
+    exact_alias: Option<String>,
+    resolver_revision: u64,
+    summary_status: String,
+    summary_version: Option<u64>,
+    summary_watermark_ms: Option<i64>,
+    fact_count: Option<u32>,
+    unverified_claim_count: Option<u32>,
+    open_run_count: Option<u32>,
+    stale: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -509,6 +534,15 @@ fn dispatch_request(
                 replayed: false,
             })
         }
+        METHOD_PROJECT_SUMMARY_SNAPSHOT => {
+            parse_empty_params(&request.params)?;
+            let snapshot = read_project_summary_snapshot(state, now_ms)?;
+            Ok(DispatchOutcome {
+                result: BridgeResult::ProjectSummarySnapshot(snapshot),
+                idempotency_key: None,
+                replayed: false,
+            })
+        }
         _ => Err(DispatchFailure {
             code: CODE_UNKNOWN_METHOD,
             core_code: None,
@@ -529,6 +563,71 @@ fn read_attention_snapshot(
     repository
         .read_attention_snapshot(crate::m4_secretary_domain::m4_primary_scope_ref())
         .map_err(|error| core_failure(error.code))
+}
+
+#[cfg(not(test))]
+fn read_project_summary_snapshot(
+    state: &AppState,
+    now_ms: u64,
+) -> Result<ProjectSummarySnapshot, DispatchFailure> {
+    let read_port = state
+        .m1_project_index_read_port()
+        .ok_or_else(|| core_failure("m1_project_index_unavailable".to_string()))?;
+    let (registry_revision, projects) = read_port
+        .list_projects()
+        .map_err(|error| core_failure(error.code))?;
+    let mut projections = Vec::with_capacity(projects.len());
+    for project in projects {
+        let consumer = crate::m5_project_summary::SummaryConsumer {
+            role_session_id: "shell-project-list-read".to_string(),
+            role: "shell-read".to_string(),
+            scope_project_id: project.project_id.clone(),
+            expires_at_ms: now_ms as i64 + 1_000,
+        };
+        let summary = state.with_m5_project_summary_query_port(|port| {
+            port.get_summary(&project.project_id, &consumer, now_ms as i64)
+                .map_err(|error| error.to_string())
+        });
+        let projection = match summary {
+            Ok(summary) => ProjectSummaryProjection {
+                project_id: project.project_id,
+                exact_alias: project.exact_alias,
+                resolver_revision: project.resolver_revision,
+                summary_status: "ready".to_string(),
+                summary_version: Some(summary.version),
+                summary_watermark_ms: Some(summary.watermark_ms),
+                fact_count: Some(summary.fact_count),
+                unverified_claim_count: Some(summary.unverified_claim_count),
+                open_run_count: Some(summary.open_run_count),
+                stale: Some(false),
+            },
+            Err(_) => ProjectSummaryProjection {
+                project_id: project.project_id,
+                exact_alias: project.exact_alias,
+                resolver_revision: project.resolver_revision,
+                summary_status: "unavailable".to_string(),
+                summary_version: None,
+                summary_watermark_ms: None,
+                fact_count: None,
+                unverified_claim_count: None,
+                open_run_count: None,
+                stale: None,
+            },
+        };
+        projections.push(projection);
+    }
+    Ok(ProjectSummarySnapshot {
+        registry_revision,
+        projects: projections,
+    })
+}
+
+#[cfg(test)]
+fn read_project_summary_snapshot(
+    _state: &AppState,
+    _now_ms: u64,
+) -> Result<ProjectSummarySnapshot, DispatchFailure> {
+    Err(core_failure("m1_project_index_unavailable".to_string()))
 }
 
 #[cfg(test)]

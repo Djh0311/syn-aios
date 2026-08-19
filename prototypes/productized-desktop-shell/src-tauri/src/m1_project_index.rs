@@ -152,7 +152,17 @@ pub(crate) struct M1ProjectRootRef {
     pub(crate) resolver_revision: u64,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct M1ProjectListEntry {
+    pub(crate) project_id: String,
+    pub(crate) exact_alias: Option<String>,
+    pub(crate) resolver_revision: u64,
+}
+
 pub(crate) trait M1ProjectIndexReadPort {
+    fn list_projects(&self) -> Result<(u64, Vec<M1ProjectListEntry>), M1ProjectIndexError> {
+        Err(M1ProjectIndexError::unavailable())
+    }
     fn resolve_canonical_project_id(&self, claim: &str)
         -> Result<M1ProjectId, M1ProjectIndexError>;
     fn resolve_exact_alias(&self, alias: &str) -> Result<M1ProjectId, M1ProjectIndexError>;
@@ -280,9 +290,31 @@ impl M1ProjectIndexReadHandle {
             }
         }
     }
+
+    pub(crate) fn list_projects(
+        &self,
+    ) -> Result<(u64, Vec<M1ProjectListEntry>), M1ProjectIndexError> {
+        let registry = self.store.load_registry(LoadMode::Required)?;
+        Ok((
+            registry.registry_revision,
+            registry
+                .projects
+                .into_iter()
+                .map(|project| M1ProjectListEntry {
+                    project_id: project.project_id,
+                    exact_alias: project.exact_alias,
+                    resolver_revision: project.resolver_revision,
+                })
+                .collect(),
+        ))
+    }
 }
 
 impl M1ProjectIndexReadPort for M1ProjectIndexReadHandle {
+    fn list_projects(&self) -> Result<(u64, Vec<M1ProjectListEntry>), M1ProjectIndexError> {
+        M1ProjectIndexReadHandle::list_projects(self)
+    }
+
     fn resolve_canonical_project_id(
         &self,
         claim: &str,
@@ -458,6 +490,25 @@ impl M1ProjectIndexAuthorityHandle {
         self.require_readable_registry()?;
         self.store.resolve_project_root_ref(project_root_ref)
     }
+
+    pub(crate) fn list_projects(
+        &self,
+    ) -> Result<(u64, Vec<M1ProjectListEntry>), M1ProjectIndexError> {
+        self.require_readable_registry()?;
+        let registry = self.store.load_registry(LoadMode::Required)?;
+        Ok((
+            registry.registry_revision,
+            registry
+                .projects
+                .into_iter()
+                .map(|project| M1ProjectListEntry {
+                    project_id: project.project_id,
+                    exact_alias: project.exact_alias,
+                    resolver_revision: project.resolver_revision,
+                })
+                .collect(),
+        ))
+    }
 }
 
 impl M1ProjectIndexAuthorityPort for M1ProjectIndexAuthorityHandle {
@@ -488,6 +539,10 @@ impl M1ProjectIndexAuthorityPort for M1ProjectIndexAuthorityHandle {
 }
 
 impl M1ProjectIndexReadPort for M1ProjectIndexAuthorityHandle {
+    fn list_projects(&self) -> Result<(u64, Vec<M1ProjectListEntry>), M1ProjectIndexError> {
+        M1ProjectIndexAuthorityHandle::list_projects(self)
+    }
+
     fn resolve_canonical_project_id(
         &self,
         claim: &str,
@@ -1508,6 +1563,22 @@ impl M1ProjectIndexRegistrar {
 
 #[cfg(test)]
 impl M1ProjectIndexReadPort for M1ProjectIndexRegistrar {
+    fn list_projects(&self) -> Result<(u64, Vec<M1ProjectListEntry>), M1ProjectIndexError> {
+        let registry = self.store.load_registry(LoadMode::Required)?;
+        Ok((
+            registry.registry_revision,
+            registry
+                .projects
+                .into_iter()
+                .map(|project| M1ProjectListEntry {
+                    project_id: project.project_id,
+                    exact_alias: project.exact_alias,
+                    resolver_revision: project.resolver_revision,
+                })
+                .collect(),
+        ))
+    }
+
     fn resolve_canonical_project_id(
         &self,
         claim: &str,
