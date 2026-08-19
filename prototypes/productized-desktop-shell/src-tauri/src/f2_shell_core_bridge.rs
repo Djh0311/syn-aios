@@ -1,6 +1,6 @@
 //! F2 core-side newline-delimited shell bridge.
 //!
-//! This module is a transport adapter over an exact five-method registry. It
+//! This module is a transport adapter over an exact three-method registry. It
 //! does not own identity, permissions, facts, grants, completion or fallback
 //! paths. Those remain in the existing core targets selected below.
 
@@ -13,17 +13,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[cfg(test)]
 use std::path::Path;
 
-use crate::m3_role_session_read_model::{
-    M3RoleSessionDetailRequest, M3RoleSessionDirectoryRequest, M3RoleSessionReadHost,
-};
-use crate::operation_control::OperationControlDecisionRequest;
+use crate::m6_org_member_directory::M6OrgRegisterStableMemberRequest;
 use crate::AppState;
 
 const REQUEST_SCHEMA: &str = "syn.f2.shell-core-bridge.request.v1";
 const RESPONSE_SCHEMA: &str = "syn.f2.shell-core-bridge.response.v1";
 const DEFAULT_MAX_REQUEST_TIMEOUT_MS: u64 = 30_000;
 const ABSOLUTE_MAX_REQUEST_TIMEOUT_MS: u64 = 30_000;
-const FIXED_READ_HOST: M3RoleSessionReadHost = M3RoleSessionReadHost::Jiaoban;
 
 const CODE_OK: &str = "F2_OK";
 const CODE_PARSE_ERROR: &str = "F2_PARSE_ERROR";
@@ -36,15 +32,16 @@ const CODE_DEADLINE_TOO_FAR: &str = "F2_DEADLINE_TOO_FAR";
 const CODE_INVALID_IDEMPOTENCY_KEY: &str = "F2_INVALID_IDEMPOTENCY_KEY";
 const CODE_IDEMPOTENCY_CONFLICT: &str = "F2_IDEMPOTENCY_CONFLICT";
 const CODE_CORE_REJECTED: &str = "F2_CORE_REJECTED";
+const CODE_CORE_REJECTED_UNCLASSIFIED: &str = "F2_CORE_REJECTED_UNCLASSIFIED";
 const CODE_INTERNAL_PANIC: &str = "F2_INTERNAL_PANIC";
 const CODE_STOP_ACKNOWLEDGED: &str = "F2_STOP_ACKNOWLEDGED";
+const CORE_REJECTED_SAFE_MESSAGE: &str = "core rejected the request";
 
 const METHOD_SECRETARY_STATUS: &str = "role_session.secretary_status";
 const METHOD_GLOBAL_SUPERVISOR_STATUS: &str = "role_session.global_supervisor_status";
-const METHOD_ROLE_SESSION_DIRECTORY: &str = "role_session.directory";
-const METHOD_ROLE_SESSION_DETAIL: &str = "role_session.detail";
-const METHOD_OPERATION_CONTROL_DECISION: &str = "operation_control.record_decision";
+const METHOD_REGISTER_STABLE_MEMBER: &str = "organization.register_stable_member";
 const METHOD_STOP: &str = "bridge.stop";
+const CORE_IDEMPOTENCY_COLLISION: &str = "m6_org_member_idempotency_collision";
 
 #[derive(Clone, Copy)]
 struct MethodDescriptor {
@@ -53,7 +50,7 @@ struct MethodDescriptor {
     invocation_class: &'static str,
 }
 
-const METHOD_REGISTRY: [MethodDescriptor; 5] = [
+const METHOD_REGISTRY: [MethodDescriptor; 3] = [
     MethodDescriptor {
         method: METHOD_SECRETARY_STATUS,
         dispatch_target: "load_secretary_role_session_status_for_state",
@@ -65,18 +62,8 @@ const METHOD_REGISTRY: [MethodDescriptor; 5] = [
         invocation_class: "CORE_LOCAL_NO_PROVIDER",
     },
     MethodDescriptor {
-        method: METHOD_ROLE_SESSION_DIRECTORY,
-        dispatch_target: "load_role_session_directory_for_host",
-        invocation_class: "CORE_LOCAL_NO_PROVIDER",
-    },
-    MethodDescriptor {
-        method: METHOD_ROLE_SESSION_DETAIL,
-        dispatch_target: "load_role_session_detail_for_host",
-        invocation_class: "CORE_LOCAL_NO_PROVIDER",
-    },
-    MethodDescriptor {
-        method: METHOD_OPERATION_CONTROL_DECISION,
-        dispatch_target: "operation_control::record_operation_control_decision_at",
+        method: METHOD_REGISTER_STABLE_MEMBER,
+        dispatch_target: "m6_org_member_directory::register_for_state",
         invocation_class: "CORE_LOCAL_NO_PROVIDER",
     },
 ];
@@ -86,7 +73,6 @@ struct BridgeConfig {
     app_data_root: PathBuf,
     index_seed: PathBuf,
     tasks_seed: PathBuf,
-    role_session_project_locator: String,
     max_request_timeout_ms: u64,
 }
 
@@ -114,28 +100,6 @@ struct ExternalRef {
 #[serde(deny_unknown_fields)]
 struct EmptyParams {}
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct DirectoryParams {
-    cursor: Option<String>,
-    limit: Option<u32>,
-    request_nonce: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct DetailParams {
-    selection: String,
-    request_nonce: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct OperationControlParams {
-    idempotency_key: String,
-    decision: OperationControlDecisionRequest,
-}
-
 #[derive(Serialize)]
 #[serde(tag = "result_kind", content = "payload", rename_all = "snake_case")]
 enum BridgeResult {
@@ -143,20 +107,8 @@ enum BridgeResult {
     GlobalSupervisorRoleSessionStatus(
         crate::m6_org_global_role_session::M6OrgGlobalRoleSessionStatusDto,
     ),
-    RoleSessionDirectory(crate::m3_role_session_read_model::M3RoleSessionDirectoryDto),
-    RoleSessionDetail(crate::m3_role_session_read_model::M3RoleSessionDetailDto),
-    OperationControlReceipt(OperationControlBridgeReceipt),
+    StableMemberRegistration(crate::m6_org_member_directory::M6OrgStableMemberRegistrationOutcome),
     Stop(StopResult),
-}
-
-#[derive(Serialize)]
-struct OperationControlBridgeReceipt {
-    recovery: &'static str,
-    audit_event_id: String,
-    real_operation_executed: bool,
-    confirmed_recorded_is_success: bool,
-    core_receipt: Option<crate::WorkflowStateMutationResult>,
-    recovered_snapshot: Option<crate::WorkflowStateSnapshot>,
 }
 
 #[derive(Serialize)]
@@ -320,7 +272,6 @@ fn parse_cli_args(args: &[String]) -> Result<BridgeConfig, String> {
         app_data_root,
         index_seed,
         tasks_seed,
-        role_session_project_locator,
         max_request_timeout_ms,
     })
 }
@@ -480,7 +431,7 @@ fn handle_line_at(state: &AppState, config: &BridgeConfig, line: &str, now_ms: u
         );
     }
 
-    match catch_dispatch(|| dispatch_request(state, config, &request)) {
+    match catch_dispatch(|| dispatch_request(state, &request, now_ms)) {
         Ok(outcome) => success_line(&request, outcome, CODE_OK, false),
         Err(failure) => request_error(
             &request,
@@ -509,117 +460,71 @@ where
 
 fn dispatch_request(
     state: &AppState,
-    config: &BridgeConfig,
     request: &BridgeRequest,
+    now_ms: u64,
 ) -> Result<DispatchOutcome, DispatchFailure> {
-    let result = match request.method.as_str() {
+    match request.method.as_str() {
         METHOD_SECRETARY_STATUS => {
             parse_empty_params(&request.params)?;
-            BridgeResult::SecretaryRoleSessionStatus(
-                crate::load_secretary_role_session_status_for_state(state).map_err(core_failure)?,
-            )
-        }
-        METHOD_GLOBAL_SUPERVISOR_STATUS => {
-            parse_empty_params(&request.params)?;
-            BridgeResult::GlobalSupervisorRoleSessionStatus(
-                crate::load_global_supervisor_role_session_status_for_state(state)
-                    .map_err(core_failure)?,
-            )
-        }
-        METHOD_ROLE_SESSION_DIRECTORY => {
-            let params: DirectoryParams = parse_params(request.params.clone())?;
-            let core_request = M3RoleSessionDirectoryRequest {
-                project_locator: config.role_session_project_locator.clone(),
-                cursor: params.cursor,
-                limit: params.limit,
-                request_nonce: params.request_nonce,
-            };
-            BridgeResult::RoleSessionDirectory(
-                crate::load_role_session_directory_for_host(state, FIXED_READ_HOST, &core_request)
-                    .map_err(core_failure)?,
-            )
-        }
-        METHOD_ROLE_SESSION_DETAIL => {
-            let params: DetailParams = parse_params(request.params.clone())?;
-            let core_request = M3RoleSessionDetailRequest {
-                project_locator: config.role_session_project_locator.clone(),
-                selection: params.selection,
-                request_nonce: params.request_nonce,
-            };
-            BridgeResult::RoleSessionDetail(
-                crate::load_role_session_detail_for_host(state, FIXED_READ_HOST, &core_request)
-                    .map_err(core_failure)?,
-            )
-        }
-        METHOD_OPERATION_CONTROL_DECISION => {
-            return dispatch_operation_control(state, request.params.clone())
-        }
-        _ => {
-            return Err(DispatchFailure {
-                code: CODE_UNKNOWN_METHOD,
-                core_code: None,
-                message: "method is not registered in F2 v1".to_string(),
-                idempotency_key: None,
-            })
-        }
-    };
-    Ok(DispatchOutcome {
-        result,
-        idempotency_key: None,
-        replayed: false,
-    })
-}
-
-fn dispatch_operation_control(
-    state: &AppState,
-    raw_params: Value,
-) -> Result<DispatchOutcome, DispatchFailure> {
-    let params: OperationControlParams = parse_params(raw_params)?;
-    let expected_key = format!("operation-control:{}", params.decision.operation_id);
-    if params.idempotency_key != expected_key {
-        return Err(DispatchFailure {
-            code: CODE_INVALID_IDEMPOTENCY_KEY,
-            core_code: None,
-            message: "idempotency key must be operation-control:<operation_id>".to_string(),
-            idempotency_key: Some(params.idempotency_key),
-        });
-    }
-    if params.decision.readback_status != "not_attempted_l3_decision_only"
-        || params.decision.runtime_status_after_confirmation
-            != "operation_decision_recorded_pending_real_authorization"
-    {
-        return Err(DispatchFailure {
-            code: CODE_CORE_REJECTED,
-            core_code: Some("operation_control_bridge_status_contract_mismatch".to_string()),
-            message: "operation-control status contract mismatch".to_string(),
-            idempotency_key: Some(params.idempotency_key),
-        });
-    }
-
-    let timestamp = crate::unix_timestamp_string();
-    match crate::operation_control::record_operation_control_decision_at(
-        &state.workflow_state_path,
-        &params.decision,
-        &timestamp,
-    ) {
-        Ok(core_receipt) => {
-            let audit_event_id = core_receipt.audit_event_id.clone();
             Ok(DispatchOutcome {
-                result: BridgeResult::OperationControlReceipt(OperationControlBridgeReceipt {
-                    recovery: "first_commit",
-                    audit_event_id,
-                    real_operation_executed: false,
-                    confirmed_recorded_is_success: false,
-                    core_receipt: Some(core_receipt),
-                    recovered_snapshot: None,
-                }),
-                idempotency_key: Some(params.idempotency_key),
+                result: BridgeResult::SecretaryRoleSessionStatus(
+                    crate::load_secretary_role_session_status_for_state(state)
+                        .map_err(core_failure)?,
+                ),
+                idempotency_key: None,
                 replayed: false,
             })
         }
-        Err(error) if error.starts_with("operation_control_duplicate:") => {
-            recover_operation_control_replay(state, params)
+        METHOD_GLOBAL_SUPERVISOR_STATUS => {
+            parse_empty_params(&request.params)?;
+            Ok(DispatchOutcome {
+                result: BridgeResult::GlobalSupervisorRoleSessionStatus(
+                    crate::load_global_supervisor_role_session_status_for_state(state)
+                        .map_err(core_failure)?,
+                ),
+                idempotency_key: None,
+                replayed: false,
+            })
         }
+        METHOD_REGISTER_STABLE_MEMBER => dispatch_register_stable_member(state, request, now_ms),
+        _ => Err(DispatchFailure {
+            code: CODE_UNKNOWN_METHOD,
+            core_code: None,
+            message: "method is not registered in F2 v1".to_string(),
+            idempotency_key: None,
+        }),
+    }
+}
+
+fn dispatch_register_stable_member(
+    state: &AppState,
+    request: &BridgeRequest,
+    now_ms: u64,
+) -> Result<DispatchOutcome, DispatchFailure> {
+    let params: M6OrgRegisterStableMemberRequest = parse_params(request.params.clone())?;
+    if let Err(message) = validate_bridge_idempotency_key(&params.idempotency_key) {
+        return Err(DispatchFailure {
+            code: CODE_INVALID_IDEMPOTENCY_KEY,
+            core_code: None,
+            message,
+            idempotency_key: Some(params.idempotency_key),
+        });
+    }
+    match crate::m6_org_member_directory::register_for_state(state, &params, now_ms as i64) {
+        Ok(outcome) => {
+            let replayed = outcome.replayed;
+            Ok(DispatchOutcome {
+                result: BridgeResult::StableMemberRegistration(outcome),
+                idempotency_key: Some(params.idempotency_key),
+                replayed,
+            })
+        }
+        Err(error) if error == CORE_IDEMPOTENCY_COLLISION => Err(DispatchFailure {
+            code: CODE_IDEMPOTENCY_CONFLICT,
+            core_code: Some(error),
+            message: "idempotency key collided with a different request hash".to_string(),
+            idempotency_key: Some(params.idempotency_key),
+        }),
         Err(error) => {
             let mut failure = core_failure(error);
             failure.idempotency_key = Some(params.idempotency_key);
@@ -628,98 +533,9 @@ fn dispatch_operation_control(
     }
 }
 
-fn recover_operation_control_replay(
-    state: &AppState,
-    params: OperationControlParams,
-) -> Result<DispatchOutcome, DispatchFailure> {
-    let workflow_state =
-        crate::read_workflow_state_value(&state.workflow_state_path).map_err(core_failure)?;
-    let event = workflow_state
-        .get("audit_events")
-        .and_then(Value::as_array)
-        .and_then(|events| {
-            events.iter().find(|event| {
-                event.get("event_type").and_then(Value::as_str)
-                    == Some("operation_decision_recorded")
-                    && event.get("operation_id").and_then(Value::as_str)
-                        == Some(params.decision.operation_id.as_str())
-                    && event.get("after_state").and_then(Value::as_str)
-                        == Some("confirmed_recorded")
-            })
-        })
-        .ok_or_else(|| DispatchFailure {
-            code: CODE_CORE_REJECTED,
-            core_code: Some("operation_control_duplicate_without_authoritative_audit".to_string()),
-            message: "duplicate decision has no recoverable authoritative audit".to_string(),
-            idempotency_key: Some(params.idempotency_key.clone()),
-        })?;
-
-    if !operation_audit_matches(event, &params.decision) {
-        return Err(DispatchFailure {
-            code: CODE_IDEMPOTENCY_CONFLICT,
-            core_code: None,
-            message: "persisted operation decision differs from replay".to_string(),
-            idempotency_key: Some(params.idempotency_key),
-        });
-    }
-    let audit_event_id = event
-        .get("event_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| DispatchFailure {
-            code: CODE_CORE_REJECTED,
-            core_code: Some("operation_control_recovery_audit_id_missing".to_string()),
-            message: "recoverable audit is missing event_id".to_string(),
-            idempotency_key: Some(params.idempotency_key.clone()),
-        })?
-        .to_string();
-    let recovered_snapshot =
-        crate::read_workflow_state_snapshot(&state.workflow_state_path).map_err(core_failure)?;
-
-    Ok(DispatchOutcome {
-        result: BridgeResult::OperationControlReceipt(OperationControlBridgeReceipt {
-            recovery: "authoritative_audit_replay",
-            audit_event_id,
-            real_operation_executed: false,
-            confirmed_recorded_is_success: false,
-            core_receipt: None,
-            recovered_snapshot: Some(recovered_snapshot),
-        }),
-        idempotency_key: Some(params.idempotency_key),
-        replayed: true,
-    })
-}
-
-fn operation_audit_matches(event: &Value, request: &OperationControlDecisionRequest) -> bool {
-    string_field_matches(event, "event_type", "operation_decision_recorded")
-        && string_field_matches(event, "operation_id", &request.operation_id)
-        && string_field_matches(event, "before_state", &request.current_status)
-        && string_field_matches(event, "after_state", &request.status_after_confirmation)
-        && string_field_matches(event, "current_gate", &request.current_gate)
-        && string_field_matches(event, "label", &request.label)
-        && string_field_matches(event, "would_write_if_real", &request.would_write_if_real)
-        && string_field_matches(event, "risk_disclosure", &request.risk_disclosure)
-        && string_field_matches(event, "readback_status", &request.readback_status)
-        && event.get("readback_result_count") == Some(&Value::Null)
-        && string_field_matches(
-            event,
-            "runtime_status_after_confirmation",
-            &request.runtime_status_after_confirmation,
-        )
-        && bool_field_matches(event, "does_execute_in_l3", request.does_execute_in_l3)
-        && bool_field_matches(
-            event,
-            "requires_separate_authorized_window",
-            request.requires_separate_authorized_window,
-        )
-        && bool_field_matches(event, "blocks_k3_b2", request.blocks_k3_b2)
-}
-
-fn string_field_matches(event: &Value, key: &str, expected: &str) -> bool {
-    event.get(key).and_then(Value::as_str) == Some(expected)
-}
-
-fn bool_field_matches(event: &Value, key: &str, expected: bool) -> bool {
-    event.get(key).and_then(Value::as_bool) == Some(expected)
+fn validate_bridge_idempotency_key(value: &str) -> Result<(), String> {
+    validate_bounded_opaque(value, 512)
+        .map_err(|_| "idempotency_key must be non-empty, bounded and control-free".to_string())
 }
 
 fn parse_empty_params(value: &Value) -> Result<(), DispatchFailure> {
@@ -742,28 +558,55 @@ fn invalid_params(error: serde_json::Error) -> DispatchFailure {
 }
 
 fn core_failure(error: String) -> DispatchFailure {
-    DispatchFailure {
-        code: CODE_CORE_REJECTED,
-        core_code: Some(stable_core_code(&error)),
-        message: error,
-        idempotency_key: None,
+    map_core_error(&error)
+}
+
+fn map_core_error(error: &str) -> DispatchFailure {
+    if let Some(core_code) = classified_core_code(error) {
+        DispatchFailure {
+            code: CODE_CORE_REJECTED,
+            core_code: Some(core_code),
+            message: CORE_REJECTED_SAFE_MESSAGE.to_string(),
+            idempotency_key: None,
+        }
+    } else {
+        DispatchFailure {
+            code: CODE_CORE_REJECTED_UNCLASSIFIED,
+            core_code: None,
+            message: CORE_REJECTED_SAFE_MESSAGE.to_string(),
+            idempotency_key: None,
+        }
     }
 }
 
-fn stable_core_code(error: &str) -> String {
+fn classified_core_code(error: &str) -> Option<String> {
     let candidate = error
         .split(|character: char| character == ':' || character.is_whitespace())
         .next()
         .unwrap_or_default();
-    if !candidate.is_empty()
-        && candidate
+    if candidate.is_empty()
+        || contains_host_leak(candidate)
+        || !candidate
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
     {
-        candidate.to_string()
+        None
     } else {
-        "core_rejected_unclassified".to_string()
+        Some(candidate.to_string())
     }
+}
+
+fn contains_host_leak(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    text.contains('/')
+        || text.contains('\\')
+        || text.contains(":/")
+        || lower.contains("os error")
+        || lower.contains("no such file")
+        || lower.contains("permission denied")
+        || lower.contains("not a directory")
+        || lower.contains("is a directory")
+        || lower.contains("stderr")
 }
 
 fn validate_request_identity_and_refs(request: &BridgeRequest) -> Result<(), String> {
@@ -900,8 +743,8 @@ fn line_error(
             result: None,
             error: Some(BridgeError {
                 code,
-                core_code,
-                message: bounded_message(&message),
+                core_code: core_code.filter(|value| !contains_host_leak(value)),
+                message: sanitize_boundary_message(&message),
             }),
             receipt: BridgeTransportReceipt {
                 idempotency_key,
@@ -929,6 +772,14 @@ fn bounded_message(message: &str) -> String {
     message.chars().take(512).collect()
 }
 
+fn sanitize_boundary_message(message: &str) -> String {
+    if contains_host_leak(message) {
+        CORE_REJECTED_SAFE_MESSAGE.to_string()
+    } else {
+        bounded_message(message)
+    }
+}
+
 fn empty_params() -> Value {
     Value::Object(Default::default())
 }
@@ -943,22 +794,13 @@ fn current_unix_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::m3_role_session::{
-        CorrelationId, OpaqueRef, RequestIdempotencyKey, RoleSessionId, ServerResolvedBinding,
-        Sha256Digest,
-    };
-    use crate::m3_role_session_read_model::{
-        M3C07IsolatedReadBinding, M3RoleSessionReadRuntimeSlot,
-    };
-    use crate::m3_role_session_repository::{
-        CreateRoleSessionCommand, M3CommandMetadata, M3RoleSessionSqliteRepository,
-    };
     use serde_json::json;
     use std::fs;
 
     const NOW_MS: u64 = 1_787_126_400_000;
     const FIXTURE: &str =
         include_str!("../../../../docs/contracts/fixtures/f2-bridge-001/contract-cases-v1.json");
+    const CONTRACT: &str = include_str!("../../../../docs/contracts/f2-shell-core-bridge-v1.md");
 
     fn temp_dir(tag: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -970,7 +812,7 @@ mod tests {
         fs::canonicalize(path).expect("canonicalize F2 fixture directory")
     }
 
-    fn config(root: &Path, project_locator: &str) -> BridgeConfig {
+    fn config(root: &Path) -> BridgeConfig {
         let index_seed = root.join("index-seed.json");
         let tasks_seed = root.join("tasks-seed.md");
         fs::write(&index_seed, r#"{"projects":[]}"#).expect("write index seed");
@@ -979,7 +821,6 @@ mod tests {
             app_data_root: root.to_path_buf(),
             index_seed,
             tasks_seed,
-            role_session_project_locator: project_locator.to_string(),
             max_request_timeout_ms: 30_000,
         }
     }
@@ -1010,7 +851,7 @@ mod tests {
         let app_data_root = parent.join(crate::m1_project_index::M1_ORDINARY_APP_DATA_DIR_NAME);
         fs::create_dir_all(&app_data_root).expect("create ordinary app-data");
         let app_data_root = fs::canonicalize(app_data_root).expect("canonical app-data");
-        let bridge_config = config(&app_data_root, "project:f2-core-provisioned");
+        let bridge_config = config(&app_data_root);
         let state = AppState::try_new_with_tauri_ordinary_product_seeds(
             &app_data_root,
             &bridge_config.index_seed,
@@ -1031,6 +872,28 @@ mod tests {
         })
     }
 
+    fn register_params(member_id: &str, idempotency_key: &str) -> Value {
+        json!({
+            "member_id": member_id,
+            "display_name_ref": format!("display-name:{member_id}"),
+            "identity_evidence": {
+                "kind": "EXPLICIT_IDENTITY_CONTRACT",
+                "contract_kind": "syn.m6.org.stable-member-identity/v1",
+                "identity_contract_ref": format!("identity-contract:{member_id}"),
+                "source_record_ref": format!("identity-source:{member_id}"),
+                "source_revision": 1,
+                "observed_at": NOW_MS,
+                "explicit_human_command": true
+            },
+            "scope_assignments": [],
+            "role_assignments": [],
+            "capability_permission_refs": [],
+            "memory_refs": [],
+            "contact_bindings": [],
+            "idempotency_key": idempotency_key
+        })
+    }
+
     fn response(state: &AppState, config: &BridgeConfig, request: Value) -> (Value, bool) {
         let outcome = handle_line_at(state, config, &request.to_string(), NOW_MS);
         (
@@ -1041,89 +904,6 @@ mod tests {
 
     fn assert_code(response: &Value, code: &str) {
         assert_eq!(response["code"], code, "response was {response:#}");
-    }
-
-    fn sealed(namespace: &str, value: &str) -> String {
-        format!(
-            "{namespace}:sha256:{}",
-            Sha256Digest::of_bytes(value.as_bytes()).as_str()
-        )
-    }
-
-    fn opaque(namespace: &str, value: &str) -> OpaqueRef {
-        OpaqueRef::try_from_canonical(sealed(namespace, value)).expect("opaque fixture ref")
-    }
-
-    fn metadata(tag: &str) -> M3CommandMetadata {
-        M3CommandMetadata {
-            receipt_id: opaque("receipt", tag),
-            event_id: opaque("event", tag),
-            audit_id: opaque("audit", tag),
-            correlation_id: CorrelationId::try_from_canonical(sealed("correlation", tag))
-                .expect("fixture correlation"),
-            request_idempotency_key: RequestIdempotencyKey::try_from_canonical(sealed(
-                "request", tag,
-            ))
-            .expect("fixture idempotency"),
-            occurred_at: "2026-08-19T00:00:00Z".to_string(),
-        }
-    }
-
-    fn directory_state(tag: &str) -> (PathBuf, AppState, BridgeConfig) {
-        let root = temp_dir(tag);
-        let repository =
-            M3RoleSessionSqliteRepository::open_rehearsal(&root.join("role-session.sqlite"))
-                .expect("open M3 rehearsal repository");
-        let binding = ServerResolvedBinding::from_server_canonical(
-            sealed("actor", tag),
-            sealed("role", "project-supervisor"),
-            sealed("scope", tag),
-            sealed("object", tag),
-            sealed("channel", "jiaoban"),
-            sealed("permission", tag),
-        )
-        .expect("server fixture binding");
-        let role_session_id =
-            RoleSessionId::try_from_canonical(sealed("session", tag)).expect("session id");
-        repository
-            .create_role_session(&CreateRoleSessionCommand {
-                role_session_id,
-                binding: binding.clone(),
-                metadata: metadata(tag),
-            })
-            .expect("seed role session");
-        let project_locator = "project:f2-core-provisioned";
-        let read_runtime = M3RoleSessionReadRuntimeSlot::from_m3c07_isolated_acceptance(vec![
-            M3C07IsolatedReadBinding {
-                host: M3RoleSessionReadHost::Jiaoban,
-                project_locator: project_locator.to_string(),
-                repository,
-                binding,
-            },
-        ]);
-        let mut state = uninstalled_state(&root);
-        state.m3_role_session_read_runtime = read_runtime;
-        let bridge_config = config(&root, project_locator);
-        (root, state, bridge_config)
-    }
-
-    fn decision(operation_id: &str) -> Value {
-        json!({
-            "operation_id": operation_id,
-            "label": "恢复",
-            "current_status": "available",
-            "status_after_confirmation": "confirmed_recorded",
-            "current_gate": "gated_real_resume_mario_test_only",
-            "would_write_if_real": "codex_home_and_workbench_state",
-            "risk_disclosure": "确认后只记录恢复决策；不会进入 real-resume phase B。",
-            "readback_status": "not_attempted_l3_decision_only",
-            "readback_result_count": null,
-            "audit_event_type": "operation_decision_recorded",
-            "runtime_status_after_confirmation": "operation_decision_recorded_pending_real_authorization",
-            "does_execute_in_l3": false,
-            "requires_separate_authorized_window": true,
-            "blocks_k3_b2": true
-        })
     }
 
     #[test]
@@ -1149,11 +929,16 @@ mod tests {
             .map(|value| value.as_str().expect("required key"))
             .collect::<Vec<_>>();
         let cases = fixture["cases"].as_array().expect("cases");
-        assert!(cases.len() >= 25);
         for case in cases {
             for key in &required {
                 assert!(case.get(*key).is_some(), "case missing {key}: {case:#}");
             }
+            let class = case["case_class"].as_str().expect("case_class");
+            assert!(class == "BEHAVIOR" || class == "DOCUMENT", "{case:#}");
+            assert!(!case["precise_assertion"]
+                .as_str()
+                .unwrap_or_default()
+                .is_empty());
         }
         for code in [
             CODE_PARSE_ERROR,
@@ -1166,6 +951,7 @@ mod tests {
             CODE_INVALID_IDEMPOTENCY_KEY,
             CODE_IDEMPOTENCY_CONFLICT,
             CODE_CORE_REJECTED,
+            CODE_CORE_REJECTED_UNCLASSIFIED,
             CODE_INTERNAL_PANIC,
         ] {
             assert!(fixture["stable_error_codes"]
@@ -1187,13 +973,22 @@ mod tests {
             .expect("production source end");
         let production = &source[..dispatch_end];
         let dispatch = &source[dispatch_start..dispatch_end];
+        assert_eq!(METHOD_REGISTRY.len(), 3);
         for target in METHOD_REGISTRY.map(|entry| entry.dispatch_target) {
             assert!(dispatch.contains(target), "missing exact target {target}");
         }
-        assert!(dispatch.contains("FIXED_READ_HOST"));
-        assert!(source.contains(
-            "const FIXED_READ_HOST: M3RoleSessionReadHost = M3RoleSessionReadHost::Jiaoban"
-        ));
+        for retired in [
+            "load_role_session_directory_for_host",
+            "load_role_session_detail_for_host",
+            "record_operation_control_decision_at",
+            "FIXED_READ_HOST",
+            "M3RoleSessionReadHost::Jiaoban",
+        ] {
+            assert!(
+                !production.contains(retired),
+                "retired first-round path remains in production: {retired}"
+            );
+        }
         for forbidden in [
             "spawn_blocking",
             "send_secretary_message",
@@ -1235,7 +1030,7 @@ mod tests {
 
         let root = temp_dir("status-unavailable");
         let state = uninstalled_state(&root);
-        let bridge_config = config(&root, "project:f2-core-provisioned");
+        let bridge_config = config(&root);
         let (secretary, _) = response(
             &state,
             &bridge_config,
@@ -1254,77 +1049,11 @@ mod tests {
     }
 
     #[test]
-    fn f2c01_directory_and_detail_use_fixed_host_and_opaque_selection() {
-        let (root, state, bridge_config) = directory_state("directory-detail");
-        let (directory, _) = response(
-            &state,
-            &bridge_config,
-            request(
-                METHOD_ROLE_SESSION_DIRECTORY,
-                json!({"cursor": null, "limit": 20, "request_nonce": "directory-1"}),
-            ),
-        );
-        assert_code(&directory, CODE_OK);
-        let selection = directory["result"]["payload"]["entries"][0]["selection"]
-            .as_str()
-            .expect("opaque selection")
-            .to_string();
-        assert!(!selection.contains("session:sha256:"));
-        let (detail, _) = response(
-            &state,
-            &bridge_config,
-            request(
-                METHOD_ROLE_SESSION_DETAIL,
-                json!({"selection": selection, "request_nonce": "detail-1"}),
-            ),
-        );
-        assert_code(&detail, CODE_OK);
-
-        let (stale, _) = response(
-            &state,
-            &bridge_config,
-            request(
-                METHOD_ROLE_SESSION_DETAIL,
-                json!({"selection": "m3rs:unknown:1", "request_nonce": "detail-stale"}),
-            ),
-        );
-        assert_code(&stale, CODE_CORE_REJECTED);
-        assert_eq!(
-            stale["error"]["core_code"],
-            "m3_role_session_selector_unknown"
-        );
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn f2c01_directory_unavailable_does_not_fallback() {
-        let root = temp_dir("directory-unavailable");
-        let state = uninstalled_state(&root);
-        let bridge_config = config(&root, "project:f2-core-provisioned");
-        let (response, _) = response(
-            &state,
-            &bridge_config,
-            request(
-                METHOD_ROLE_SESSION_DIRECTORY,
-                json!({"cursor": null, "limit": 20, "request_nonce": "directory-unavailable"}),
-            ),
-        );
-        assert_code(&response, CODE_CORE_REJECTED);
-        assert_eq!(response["error"]["core_code"], "M3_BINDING_UNAVAILABLE");
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn f2c01_operation_receipt_exact_replay_and_divergence_are_fail_closed() {
-        let root = temp_dir("operation-replay");
-        let state = uninstalled_state(&root);
-        let bridge_config = config(&root, "project:f2-core-provisioned");
+    fn f2c01r01_register_exact_replay_and_collision_are_fail_closed() {
+        let (parent, state, bridge_config) = ordinary_state("register-replay");
         let mut first = request(
-            METHOD_OPERATION_CONTROL_DECISION,
-            json!({
-                "idempotency_key": "operation-control:resume",
-                "decision": decision("resume")
-            }),
+            METHOD_REGISTER_STABLE_MEMBER,
+            register_params("member_alpha", "register-member-alpha"),
         );
         first["external_refs"] = json!([
             {"kind": "thread_id", "value": "shell-thread-opaque"},
@@ -1335,11 +1064,11 @@ mod tests {
         assert_code(&first_response, CODE_OK);
         assert_eq!(first_response["receipt"]["replayed"], false);
         assert_eq!(
-            first_response["result"]["payload"]["real_operation_executed"],
-            false
+            first_response["result"]["payload"]["disposition"],
+            "REGISTERED"
         );
         assert_eq!(
-            first_response["result"]["payload"]["confirmed_recorded_is_success"],
+            first_response["result"]["payload"]["directory_is_authority"],
             false
         );
         assert_eq!(
@@ -1356,76 +1085,21 @@ mod tests {
         let (replay, _) = response(&state, &bridge_config, first.clone());
         assert_code(&replay, CODE_OK);
         assert_eq!(replay["receipt"]["replayed"], true);
-        assert_eq!(
-            replay["result"]["payload"]["recovery"],
-            "authoritative_audit_replay"
-        );
 
         let mut divergent = first;
-        divergent["params"]["decision"]["label"] = json!("不同标签");
+        divergent["params"]["display_name_ref"] = json!("display-name:member_alpha_changed");
         let (conflict, _) = response(&state, &bridge_config, divergent);
         assert_code(&conflict, CODE_IDEMPOTENCY_CONFLICT);
-        let workflow = crate::read_workflow_state_value(&state.workflow_state_path)
-            .expect("read authoritative workflow");
-        assert_eq!(
-            workflow["audit_events"]
-                .as_array()
-                .expect("audit array")
-                .iter()
-                .filter(|event| event["event_type"] == "operation_decision_recorded")
-                .count(),
-            1
-        );
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn f2c01_operation_invalid_key_and_execution_claim_cover_core_errors_without_write() {
-        let root = temp_dir("operation-errors");
-        let state = uninstalled_state(&root);
-        let bridge_config = config(&root, "project:f2-core-provisioned");
-        let (invalid_key, _) = response(
-            &state,
-            &bridge_config,
-            request(
-                METHOD_OPERATION_CONTROL_DECISION,
-                json!({
-                    "idempotency_key": "random-shell-key",
-                    "decision": decision("stop")
-                }),
-            ),
-        );
-        assert_code(&invalid_key, CODE_INVALID_IDEMPOTENCY_KEY);
-
-        let mut execution_claim = decision("retry");
-        execution_claim["does_execute_in_l3"] = json!(true);
-        let (rejected, _) = response(
-            &state,
-            &bridge_config,
-            request(
-                METHOD_OPERATION_CONTROL_DECISION,
-                json!({
-                    "idempotency_key": "operation-control:retry",
-                    "decision": execution_claim
-                }),
-            ),
-        );
-        assert_code(&rejected, CODE_CORE_REJECTED);
-        assert_eq!(
-            rejected["error"]["core_code"],
-            "operation_control_decision_must_not_execute_in_l3"
-        );
-        let workflow = crate::read_workflow_state_value(&state.workflow_state_path)
-            .expect("read unchanged workflow");
-        assert_eq!(workflow["audit_events"].as_array().unwrap().len(), 1);
-        let _ = fs::remove_dir_all(root);
+        assert_eq!(conflict["error"]["core_code"], CORE_IDEMPOTENCY_COLLISION);
+        drop(state);
+        let _ = fs::remove_dir_all(parent);
     }
 
     #[test]
     fn f2c01_protocol_errors_deadlines_stop_and_panic_have_stable_codes() {
         let root = temp_dir("protocol-errors");
         let state = uninstalled_state(&root);
-        let bridge_config = config(&root, "project:f2-core-provisioned");
+        let bridge_config = config(&root);
 
         let parse = handle_line_at(&state, &bridge_config, "{not-json", NOW_MS);
         assert_code(
@@ -1446,14 +1120,11 @@ mod tests {
         let (unknown, _) = response(
             &state,
             &bridge_config,
-            request("secretary.send_message", json!({})),
+            request("role_session.directory", json!({})),
         );
         assert_code(&unknown, CODE_UNKNOWN_METHOD);
 
-        let mut forbidden = request(
-            METHOD_ROLE_SESSION_DETAIL,
-            json!({"selection": "opaque", "request_nonce": "forbidden"}),
-        );
+        let mut forbidden = request(METHOD_SECRETARY_STATUS, json!({}));
         forbidden["params"]["role_session_id"] = json!("shell-claim");
         let (forbidden, _) = response(&state, &bridge_config, forbidden);
         assert_code(&forbidden, CODE_FORBIDDEN_AUTHORITY_INPUT);
@@ -1486,7 +1157,7 @@ mod tests {
     #[test]
     fn f2c01_cli_requires_explicit_canonical_paths_and_has_no_path_fallback() {
         let root = temp_dir("cli-paths");
-        let bridge_config = config(&root, "project:f2-core-provisioned");
+        let bridge_config = config(&root);
         let args = vec![
             "--app-data-root".to_string(),
             root.display().to_string(),
@@ -1524,7 +1195,7 @@ mod tests {
     fn f2c01_run_loop_is_line_delimited_and_stops_after_ack() {
         let root = temp_dir("run-loop");
         let state = uninstalled_state(&root);
-        let bridge_config = config(&root, "project:f2-core-provisioned");
+        let bridge_config = config(&root);
         let mut first = request(METHOD_GLOBAL_SUPERVISOR_STATUS, json!({}));
         first["request_id"] = json!("loop:first");
         let mut stop = request(METHOD_STOP, json!({}));
@@ -1543,5 +1214,186 @@ mod tests {
         assert_eq!(lines[0]["request_id"], "loop:first");
         assert_eq!(lines[1]["code"], CODE_STOP_ACKNOWLEDGED);
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn f2c01r01_pos_008_external_refs_are_receipt_only_on_secretary_status() {
+        let (parent, state, bridge_config) = ordinary_state("pos-008");
+        let mut body = request(METHOD_SECRETARY_STATUS, json!({}));
+        body["external_refs"] = json!([
+            {"kind": "thread_id", "value": "shell-thread-opaque"},
+            {"kind": "desktop_id", "value": "shell-desktop-opaque"},
+            {"kind": "pairing_id", "value": "shell-pairing-opaque"}
+        ]);
+        let (response, _) = response(&state, &bridge_config, body);
+        assert_code(&response, CODE_OK);
+        assert_eq!(
+            response["receipt"]["external_refs"]
+                .as_array()
+                .unwrap()
+                .len(),
+            3
+        );
+        let result = response["result"].to_string();
+        assert!(!result.contains("shell-thread-opaque"));
+        assert!(!result.contains("shell-desktop-opaque"));
+        assert!(!result.contains("shell-pairing-opaque"));
+        drop(state);
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn f2c01r01_invalid_idempotency_key_is_stable() {
+        let (parent, state, bridge_config) = ordinary_state("invalid-key");
+        let mut params = register_params("member_beta", "register-member-beta");
+        params["idempotency_key"] = json!("");
+        let (response, _) = response(
+            &state,
+            &bridge_config,
+            request(METHOD_REGISTER_STABLE_MEMBER, params),
+        );
+        assert_code(&response, CODE_INVALID_IDEMPOTENCY_KEY);
+        drop(state);
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn f2c01r01_domain_method_requires_deadline() {
+        let root = temp_dir("deadline-required");
+        let state = uninstalled_state(&root);
+        let bridge_config = config(&root);
+        let mut body = request(METHOD_SECRETARY_STATUS, json!({}));
+        body.as_object_mut().unwrap().remove("deadline_unix_ms");
+        let (response, _) = response(&state, &bridge_config, body);
+        assert_code(&response, CODE_INVALID_REQUEST);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn f2c01r01_invalid_member_id_is_core_rejected() {
+        let (parent, state, bridge_config) = ordinary_state("invalid-member");
+        let (response, _) = response(
+            &state,
+            &bridge_config,
+            request(
+                METHOD_REGISTER_STABLE_MEMBER,
+                register_params("temporary_agent_01", "register-temporary"),
+            ),
+        );
+        assert_code(&response, CODE_CORE_REJECTED);
+        assert_eq!(
+            response["error"]["core_code"],
+            "m6_org_member_identity_namespace_rejected"
+        );
+        assert_eq!(response["error"]["message"], CORE_REJECTED_SAFE_MESSAGE);
+        drop(state);
+        let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn f2c01r01_unclassified_core_error_does_not_leak_host_path() {
+        let leaked =
+            "/home/synadmin/secret-db/workflow-state.v0.json: No such file or directory (os error 2)";
+        let failure = map_core_error(leaked);
+        assert_eq!(failure.code, CODE_CORE_REJECTED_UNCLASSIFIED);
+        assert_eq!(failure.core_code, None);
+        assert_eq!(failure.message, CORE_REJECTED_SAFE_MESSAGE);
+        let outcome = line_error(
+            Some("probe:unclassified".to_string()),
+            Some(METHOD_REGISTER_STABLE_MEMBER.to_string()),
+            failure.code,
+            failure.core_code,
+            leaked.to_string(),
+            Vec::new(),
+            None,
+        );
+        assert!(!outcome.payload.contains("/home"));
+        assert!(!outcome.payload.contains("synadmin"));
+        assert!(!outcome.payload.contains("secret-db"));
+        assert!(!outcome.payload.contains("workflow-state"));
+        assert!(!outcome.payload.contains("os error"));
+        assert!(!outcome.payload.contains(leaked));
+        let parsed: Value = serde_json::from_str(&outcome.payload).expect("typed response");
+        assert_eq!(parsed["code"], CODE_CORE_REJECTED_UNCLASSIFIED);
+        assert_eq!(parsed["error"]["message"], CORE_REJECTED_SAFE_MESSAGE);
+    }
+
+    #[test]
+    fn f2c01r01_pos_010_crash_recovery_contract_text() {
+        assert!(CONTRACT.contains("same explicit startup paths"));
+        assert!(CONTRACT.contains("same idempotency key"));
+        assert!(CONTRACT.contains("A process crash yields no fabricated response"));
+        assert!(CONTRACT.contains("SIGKILL, process"));
+        assert!(CONTRACT.contains("are not proven"));
+        assert!(CONTRACT.contains("this repository leaf"));
+        assert!(CONTRACT.contains("F2_IDEMPOTENCY_CONFLICT"));
+    }
+
+    #[test]
+    fn f2c01r01_neg_015_shell_database_not_syn_fact_store() {
+        assert!(CONTRACT.contains("better-sqlite3/drizzle"));
+        assert!(CONTRACT.contains("RoleSession"));
+        assert!(CONTRACT.contains("must go through Syn core"));
+        assert!(CONTRACT.contains("never become Syn RoleSession"));
+    }
+
+    #[test]
+    fn f2c01r01_neg_016_poracode_home_schedules_not_syn_domain() {
+        assert!(CONTRACT.contains("`view.home`"));
+        assert!(CONTRACT.contains("`view.schedules`"));
+        assert!(CONTRACT.contains("not Syn Secretary"));
+    }
+
+    #[test]
+    fn f2c01r01_neg_017_v1_methods_accept_no_completion_fields() {
+        let source = include_str!("f2_shell_core_bridge.rs");
+        let dispatch_end = source
+            .find("#[cfg(test)]\nmod tests")
+            .expect("production source end");
+        let production = &source[..dispatch_end];
+        for field in [
+            "completed",
+            "completion_judgement",
+            "execution_grant",
+            "syn_completion",
+            "does_execute_in_l3",
+        ] {
+            assert!(
+                !production.contains(field),
+                "v1 production accepts completion field {field}"
+            );
+        }
+        let root = temp_dir("no-completion");
+        let state = uninstalled_state(&root);
+        let bridge_config = config(&root);
+        let (response, _) = response(
+            &state,
+            &bridge_config,
+            request(
+                METHOD_SECRETARY_STATUS,
+                json!({"completed": true, "execution_grant": "shell-claim"}),
+            ),
+        );
+        assert_code(&response, CODE_INVALID_REQUEST);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn f2c01r01_app_data_root_last_component_must_match() {
+        let parent = temp_dir("wrong-root-name");
+        let app_data_root = parent.join("CodexGovernanceWorkbench");
+        fs::create_dir_all(&app_data_root).expect("create mismatched root");
+        let app_data_root = fs::canonicalize(&app_data_root).expect("canonical mismatched root");
+        let bridge_config = config(&app_data_root);
+        let error = match AppState::try_new_with_tauri_ordinary_product_seeds(
+            &app_data_root,
+            &bridge_config.index_seed,
+            &bridge_config.tasks_seed,
+        ) {
+            Ok(_) => panic!("mismatched last component must fail closed"),
+            Err(error) => error,
+        };
+        assert_eq!(error, "m1_ordinary_app_data_root_identity_mismatch");
+        let _ = fs::remove_dir_all(parent);
     }
 }
