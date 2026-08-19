@@ -1,0 +1,23 @@
+{
+  "contract_id": "f2-shell-core-bridge-v2-project-addendum",
+  "cases": [
+    {
+      "case_id": "CF-F3-S03-POS-001",
+      "kind": "behavior",
+      "method": "project.summary_snapshot",
+      "params": {},
+      "expected": "F2_OK",
+      "precise_assertion": "f3s03_project_summary_v2_contract_case_shapes_are_machine_checked"
+    },
+    {
+      "case_id": "CF-F3-S03-NEG-001",
+      "kind": "behavior",
+      "method": "project.summary_snapshot",
+      "params": {
+        "project_id": "project:forbidden-input"
+      },
+      "expected": "F2_INVALID_REQUEST or F2_FORBIDDEN_AUTHORITY_INPUT",
+      "precise_assertion": "f3s03_project_summary_v2_contract_case_shapes_are_machine_checked"
+    }
+  ]
+}

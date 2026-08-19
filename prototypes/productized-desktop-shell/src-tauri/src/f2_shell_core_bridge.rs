@@ -969,6 +969,11 @@ mod tests {
     const FIXTURE: &str =
         include_str!("../../../../docs/contracts/fixtures/f2-bridge-001/contract-cases-v1.json");
     const CONTRACT: &str = include_str!("../../../../docs/contracts/f2-shell-core-bridge-v1.md");
+    const PROJECT_ADDENDUM: &str =
+        include_str!("../../../../docs/contracts/f2-shell-core-bridge-v2-project-addendum.md");
+    const PROJECT_FIXTURE: &str = include_str!(
+        "../../../../docs/contracts/fixtures/f3-s03-project-summary-v2/contract-cases-v2.json"
+    );
 
     fn temp_dir(tag: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -1711,5 +1716,37 @@ mod tests {
         };
         assert_eq!(error, "m1_ordinary_app_data_root_identity_mismatch");
         let _ = fs::remove_dir_all(parent);
+    }
+
+    #[test]
+    fn f3s03_project_summary_v2_contract_case_shapes_are_machine_checked() {
+        const CASE_ID_POS: &str = "CF-F3-S03-POS-001";
+        const CASE_ID_NEG: &str = "CF-F3-S03-NEG-001";
+        let fixture: Value = serde_json::from_str(PROJECT_FIXTURE).expect("project fixture JSON");
+        assert_eq!(fixture["cases"][0]["case_id"], CASE_ID_POS);
+        assert_eq!(fixture["cases"][1]["case_id"], CASE_ID_NEG);
+        assert!(
+            PROJECT_ADDENDUM.contains("project.summary_snapshot"),
+            "{CASE_ID_POS}"
+        );
+        assert!(
+            PROJECT_ADDENDUM.contains("CORE_LOCAL_NO_PROVIDER"),
+            "{CASE_ID_POS}"
+        );
+        assert!(
+            PROJECT_ADDENDUM.contains("F2_INVALID_REQUEST"),
+            "{CASE_ID_NEG}"
+        );
+        assert!(
+            PROJECT_ADDENDUM.contains("F2_CORE_REJECTED"),
+            "{CASE_ID_NEG}"
+        );
+        assert_eq!(
+            V2_READ_METHODS,
+            [
+                METHOD_ATTENTION_INBOX_SNAPSHOT,
+                METHOD_PROJECT_SUMMARY_SNAPSHOT
+            ]
+        );
     }
 }
