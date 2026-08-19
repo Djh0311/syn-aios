@@ -1,7 +1,7 @@
 ---
 contract_id: f2-shell-core-bridge-v2-read-addendum
 version: 2
-status: ADDENDUM_READ_ONLY_CANDIDATE
+status: FROZEN_F2_CORE_BRIDGE_V2_READ_ADDENDUM
 parent_contract: f2-shell-core-bridge-v1
 schema_authority: f2_shell_core_bridge_contract_authority
 dependencies: ["m4-secretary-attention-daily-resolution-v1"]
