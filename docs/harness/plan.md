@@ -19,9 +19,9 @@
 - [x] 阶段13 DeepSeek Harness 方法吸收、Syn 原生核心与自升级计划校准
 - [x] 阶段14 M5 项目主管与执行闭环（M5 scoped product-chain PASS / stage-14 closed / not released）
 - [ ] 阶段15 M6 全局主管与内部组织（active；M6P00、CP1、CP2、CP3 与最终域层候选 `a3d5759` 均获独立 PASS；等待总指导生命周期处置，UI 验收载体为新壳）
-- [ ] 阶段16 F2 壳—核心受控桥（核心侧候选 `629e4b2` 主管本地自复核 PASS、leaf 已归档，等待总指导生命周期处置；壳侧客户端和真实恢复取证另派）
+- [ ] 阶段16 F2 壳—核心受控桥（首轮候选 `629e4b2` 独立验收 FAIL；`F2C01R01` 返修工作副本已主管自复核并归档，待重新独立验收。不由本轮关闭阶段；无新 git 候选 SHA；壳侧客户端和 SIGKILL/崩溃恢复取证另派）
 
-当前优先级（2026-08-19 F2 核心侧收口更新）：stage-15 最终独立 verdict `stage-15-20260819-1123` 已 PASS，但阶段终包明确要求总指导处置关闭，因此 stage-15 仍不勾选完成、不由 F2 修改。stage-16 核心侧合同 `57f0830` 与桥候选 `629e4b2` 已主管本地自复核 PASS，F2C01 leaf 归档后无 current leaf，authorization 文件保持 closed；该结论不证明 cfg(not(test) 真实子进程、新壳客户端/窗口或崩溃恢复。M6P00、CP1、CP2、CP3 与最终域层候选 `a3d575975033f7eb5ec92dab18c24fe97ddb8001` 的既有 PASS 均不被本轮改写。ORG-007 与 21 个 command 的新壳 UI/isolated App 消费仍在 M6S01；F2 壳侧客户端与真实恢复取证另派；F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活。
+当前优先级（2026-08-19 F2 核心侧返修收口）：stage-15 最终独立 verdict `stage-15-20260819-1123` 已 PASS，但阶段终包明确要求总指导处置关闭，因此 stage-15 仍不勾选完成、不由 F2 修改。stage-16 首轮独立验收 FAIL；`F2C01R01` 返修工作副本已主管自复核并归档，authorization 保持 closed，无 current leaf、无新 git 候选 SHA，须重新送独立验收。不关闭 stage-16。M6P00、CP1、CP2、CP3 与最终域层候选 `a3d575975033f7eb5ec92dab18c24fe97ddb8001` 的既有 PASS 均不被本轮改写。ORG-007 与 21 个 command 的新壳 UI/isolated App 消费仍在 M6S01；F2 壳侧客户端与 SIGKILL/崩溃恢复取证另派；F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活。
 
 上一阶段结论（2026-08-18 closeout）：M5 内容锚 `c91d8fc72bcbf80186736caff841cb7a9b0660d1` / tree `fe2d982267d474631ca4ea7b3f90ed846f72a89d` 与 M5R09 记账 `8e6f59f48d2d90891d3c02396378921e4a2f5d6e` / tree `2043660c9547c6c102ae24414674918ca8215eb0` 已获独立 PASS；M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 完成 lifecycle、权威状态、载体/WIP 分层与 M6 输入交接。REC-00、M5R00、M5R01–M5R09 与 M5C01 已按各自惯例归档，stage-14 已关闭，当前没有 M5 leaf。结论只到 `M5 SCOPED PRODUCT-CHAIN PASS / NOT_RELEASED`；用户 OSS 门面 `c1025ba` 独立于 M5 候选，OSS-01 保持 unfinished。当时 `stage-15` 尚未建立；其后已由用户明确激活，见上方当前优先级。stage-12 仍开着，D0C04 / D0C05 保持 unfinished；F2/F3/F5、M7–M11、Headless Core、Primary 与 authority epoch 均未激活。
 

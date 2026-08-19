@@ -1,6 +1,6 @@
 # 当前状态
 
-截至 2026-08-19，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。stage-15 最终独立 verdict `stage-15-20260819-1123` 已在候选 `a3d5759` 的限定域层范围给出 PASS，但终包要求总指导处置关闭，因此 stage-15 仍 active、未勾选完成，完整 M6、壳 UI、发布、部署与真实日用不因此成立。stage-16 的 F2 核心侧合同 `57f0830` 与桥候选 `629e4b2` 已主管本地自复核 PASS；F2C01 归档后无 current leaf，authorization 文件保持 closed。壳侧客户端、cfg(not(test) 真实子进程与恢复取证另派。
+截至 2026-08-19，M1–M4 的既有具名主线与已关闭阶段事实保持不变。M5 在具名证据范围内为 `SCOPED PRODUCT-CHAIN PASS`，stage-14 已关闭。stage-15 最终独立 verdict `stage-15-20260819-1123` 已在候选 `a3d5759` 的限定域层范围给出 PASS，但终包要求总指导处置关闭，因此 stage-15 仍 active、未勾选完成，完整 M6、壳 UI、发布、部署与真实日用不因此成立。stage-16 首轮合同 `57f0830` / 桥 `629e4b2` / 记账 `86dd29e` 已独立验收 FAIL；`F2C01R01` 返修工作副本已主管自复核并归档，authorization 文件保持 closed，无 current leaf、无新 git 候选 SHA。本轮不关闭 stage-16，须重新送独立验收。壳侧客户端与 SIGKILL/崩溃恢复取证另派。
 
 ## 2026-08-18 M5 当前状态
 
@@ -9,17 +9,17 @@
 - 独立验收官在 `c91d8fc` detached checkout 上复跑 `cargo check` 0；`m5r09_` 23/23，memory/mature 各 14/14，ordinary source 4/4，完整 `m5_` 188/188；前端 typecheck/default build 0；默认 bundle gate 与候选/记账 diff check 符合预期。主管原始证据位于 `.syn-gates/evidence/M5R09-c91d8fc/`。
 - M5C01 closeout 内容 `de98d69a363ff82281330fb3b82de82c03a9b484` / tree `b90244a8535c829e96341d42fef39602ef499f6d` 只含 5 个 closeout/unfinished/交接路径，零产品源码变化。结构、冻结物、用户载体、authorization 与 lifecycle 检查最终全绿；日志位于 `.syn-gates/evidence/M5C01-de98d69/`。
 - protected WIP 已分活动 runtime 与静态 hash 两层。30 个静态路径在 closeout 观察时 30/30 hash 不变；`commands.rs` 候选外旧 WIP仍为 59+/56-；6 个 `m6_*.rs` 仍未跟踪。用户 OSS 门面已于 `c1025ba` 精确 7 路径独立提交，不属 M5 候选。没有 reset、stash、clean、覆盖或混入候选。
-- M5R09、M5C01 与 stage-14 已归档，当前没有 M5 current leaf。stage-15 最终域层 verdict 已 PASS、等待总指导生命周期处置；M6 current leaf 仍为空。F2 syn 核心侧 F2C01 已本地自复核并归档；F2 壳侧、F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
+- M5R09、M5C01 与 stage-14 已归档，当前没有 M5 current leaf。stage-15 最终域层 verdict 已 PASS、等待总指导生命周期处置；M6 current leaf 仍为空。F2 syn 核心侧首轮 F2C01 已归档且独立验收 FAIL；`F2C01R01` 返修工作副本已主管自复核并归档，当前无 leaf。F2 壳侧、F3/F5、M7–M11、Headless Core、Primary/epoch 与壳采纳继续 `NOT_ACTIVE`。
 - 上述结论只到 Linux WSL 的 detached/local/synthetic/ordinary Tauri 产品链和静态边界；没有真实个人资料/项目、真实 provider/账号/凭据、外部业务写、macOS/BSD 实机、真窗口像素、新壳运行、部署、发布或长期真实日用。
 
-当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档；`stage-15` final verdict 已 PASS 但仍等总指导关闭处置；`stage-16` 核心侧 self-review PASS、待总指导关闭处置，当前无 leaf，authorization closed。
+当前用户已指定 5600X WSL `/home/synadmin/workspace/syn` 为权威工作仓库。Harness 文档生命周期上 `stage-12` 仍开启，D0C04 / D0C05 保持 unfinished；`stage-13` 与 `stage-14` 已完成并归档；`stage-15` final verdict 已 PASS 但仍等总指导关闭处置；`stage-16` 首轮独立验收 FAIL，`F2C01R01` 返修工作副本已归档待重新独立验收，authorization closed，阶段关闭仍待总指导处置。
 
 ## 2026-08-19 stage-16 F2 核心侧当前状态
 
-- 增补合同 `docs/contracts/f2-shell-core-bridge-v1.md` 与 fixture 固定 5 个 exact domain method：Secretary status、Global Supervisor status、Jiaoban fixed-host RoleSession directory/detail、operation-control decision receipt；`bridge.stop` 只是请求边界进程控制，不是第六个 domain method。
-- 合同机械禁止 renderer 提供 actor/owner/role/scope/permission/provider/model/project path/session id/host/timestamp；shell thread/desktop/pairing id 只可成为 transport receipt external refs。better-sqlite3/drizzle 只归壳 UI 状态，`view.home`/`view.schedules` 不冒充 Syn Secretary/Schedule，ExecutionGrant 与完成判定仍归核心。
-- `__syn_bridge` 只接受显式 canonical app-data/index/tasks paths 与 core-provisioned opaque project locator，调用 `try_new_with_tauri_ordinary_product_seeds`，无 cwd/home/manifest/search fallback；main/lib 只增加一个子命令分支、一个模块声明与一个 public wrapper，`commands.rs` 零改动。
-- 候选 `629e4b2` 在主工作树与 detached checkout 均为 F2 10/10、相邻 operation-control 5/5、cargo check exit 0 / 888 warnings；JSON、定向 rustfmt 与 diff check exit 0。证据只到 local/offline/cfg(test) fixture 与非 test 编译，不证明真实子进程启动、真实新壳窗口、SIGKILL/崩溃恢复、外部系统、部署或发布。
+- 首轮增补合同与 fixture 曾固定 5 个 exact domain method；独立验收 FAIL 的直接原因包括：写动作 `operation_control.record_decision` 在全新安装上前提不成立，以及输入域/错误分类/fixture 覆盖欠账。首轮已通过项不得推翻。
+- 返修叶 `F2C01R01` 已按先真进程、后冻结合同的顺序做完并归档。v1 方法集现为 `role_session.secretary_status`、`role_session.global_supervisor_status`、`organization.register_stable_member`。directory/detail 不在 v1。
+- `__syn_bridge` 启动形状、ordinary product seeds、`commands.rs` 零改动、AppState 非 pub、thread/desktop/pairing id 只作 receipt 回显、no-model-invocation 与双后端分界等首轮已通过约束继续有效。
+- 本段不把工作副本写成已发布、已提交或阶段已关闭。真实三方法 + 同进程 replay 已由 `__syn_bridge` 子进程证明；cfg(test) 17/17 与 fixture 26/26 是单测/文档证据。无新候选 SHA。
 
 ## 2026-08-19 stage-15 当前状态
 
@@ -115,7 +115,7 @@ M3C07 的已归档命令、分层结果、六份 launcher receipt SHA-256、P0/P
 
 ## 当前开发状态与停止点
 
-M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档。stage-15 最终域层 verdict 已 PASS，但只由总指导做关闭处置且不宣布完整 M6。stage-16 核心侧 F2C01 已本地自复核归档，当前无 leaf，authorization 文件保持 closed；stage 关闭仍待总指导处置。
+M4 与 stage-06/stage-07 的历史关闭事实保持不变。WSL 迁移 `stage-12` 仍开，D0C04 / D0C05 不因本轮恢复；`stage-13`、`stage-14` 已归档。stage-15 最终域层 verdict 已 PASS，但只由总指导做关闭处置且不宣布完整 M6。stage-16 首轮独立验收 FAIL，`F2C01R01` 返修工作副本已归档待重新独立验收，authorization 文件保持 closed；stage 关闭仍待总指导处置。
 
 当前 F2 kickoff 只激活 stage-16 的 syn 核心侧合同、headless bridge、定向测试与记账；不激活 F2 壳侧、F3/F5、壳采纳、OSS-01 push/申请、真实数据 / 模型 / provider / connector / 账号凭据 / 外部业务写、部署或发布。stage-15 的既有 PASS 与开闭状态不由本轮改写。
 
