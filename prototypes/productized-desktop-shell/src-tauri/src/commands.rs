@@ -4903,6 +4903,78 @@ fn read_secretary_global_supervisor_consult_receipt(
     )
 }
 
+/// Explicit human registration is the only productive stable-member identity
+/// source. Heuristic candidates are stored as ref-only quarantine records.
+#[tauri::command]
+fn register_global_supervisor_stable_member(
+    request: crate::m6_org_member_directory::M6OrgRegisterStableMemberRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_member_directory::M6OrgStableMemberRegistrationOutcome, String> {
+    crate::m6_org_member_directory::register_for_state(&state, &request, unix_timestamp_ms())
+}
+
+/// Appends assignments and read-only refs under optimistic revision control.
+/// Directory observations never become grant or policy authority.
+#[tauri::command]
+fn update_global_supervisor_stable_member(
+    request: crate::m6_org_member_directory::M6OrgUpdateStableMemberRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_member_directory::M6OrgStableMember, String> {
+    crate::m6_org_member_directory::update_for_state(&state, &request, unix_timestamp_ms())
+}
+
+/// Deactivation retains every historical ref and creates a new revision; it
+/// never physically deletes a member.
+#[tauri::command]
+fn deactivate_global_supervisor_stable_member(
+    request: crate::m6_org_member_directory::M6OrgDeactivateStableMemberRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_member_directory::M6OrgStableMember, String> {
+    crate::m6_org_member_directory::deactivate_for_state(&state, &request, unix_timestamp_ms())
+}
+
+/// Availability is a TTL observation. Stale values are returned as unknown
+/// and the response explicitly states that it authorizes nothing.
+#[tauri::command]
+fn observe_global_supervisor_member_availability(
+    request: crate::m6_org_member_directory::M6OrgObserveMemberAvailabilityRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_member_directory::M6OrgAvailability, String> {
+    crate::m6_org_member_directory::observe_availability_for_state(
+        &state,
+        &request,
+        unix_timestamp_ms(),
+    )
+}
+
+/// Ordinary read path for the stable directory and its M3 contact history.
+#[tauri::command]
+fn list_global_supervisor_stable_members(
+    request: crate::m6_org_member_directory::M6OrgListStableMembersRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_member_directory::M6OrgStableMemberDirectoryResponse, String> {
+    crate::m6_org_member_directory::list_for_state(&state, &request, unix_timestamp_ms())
+}
+
+/// Export consists only of typed directory refs and append-only history. It
+/// contains no provider payload, transcript, project file, or authorization.
+#[tauri::command]
+fn export_global_supervisor_member_directory(
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_member_directory::M6OrgMemberDirectoryExport, String> {
+    crate::m6_org_member_directory::export_for_state(&state, unix_timestamp_ms())
+}
+
+/// Direct contact creates one M3-owned Handoff and an M6 receipt with
+/// capability_granted=false. It performs no provider or project action.
+#[tauri::command]
+fn contact_global_supervisor_stable_member(
+    request: crate::m6_org_member_directory::M6OrgContactStableMemberRequest,
+    state: tauri::State<'_, AppState>,
+) -> Result<crate::m6_org_member_directory::M6OrgContactReceipt, String> {
+    crate::m6_org_member_directory::contact_for_state(&state, &request, unix_timestamp_ms())
+}
+
 fn load_secretary_role_session_status_for_state(
     state: &AppState,
 ) -> Result<crate::m3_role_session_read_model::M3SecretaryRoleSessionStatusDto, String> {

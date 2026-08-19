@@ -75,6 +75,16 @@ pub(crate) struct M6OrgSecretaryConsultCommandResponse {
     pub(crate) secretary_handoff: M4SecretaryHandoffOutcome,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct M6OrgMemberContactHandoff {
+    pub(crate) handoff_id: String,
+    pub(crate) handoff_receipt_ref: String,
+    pub(crate) role_session_id: String,
+    pub(crate) from_actor_id: String,
+    pub(crate) source_command_receipt_ref: String,
+    pub(crate) replayed: bool,
+}
+
 #[derive(Clone)]
 struct ConsultAuthorities {
     repository: M3RoleSessionSqliteRepository,
@@ -287,6 +297,138 @@ pub(crate) fn start_for_state(
         &projection,
         created.replayed || existing.is_some(),
     )
+}
+
+/// Starts an M3-owned Handoff from the ordinary Secretary RoleSession to one
+/// explicit stable-member contact binding.  The directory receives only the
+/// returned refs; this helper grants no capability and invokes no provider.
+pub(crate) fn start_member_contact_handoff_for_state(
+    state: &crate::AppState,
+    member_id: &str,
+    binding: &crate::m6_org_member_directory::M6OrgMemberContactBinding,
+    reason_ref: &str,
+    source_refs: &[String],
+    accept_by_utc: &str,
+    idempotency_key: &str,
+    now_ms: i64,
+) -> Result<M6OrgMemberContactHandoff, String> {
+    #[cfg(not(test))]
+    let _ = now_ms;
+    let global = state.m6_org_global_role_session.authority_seed()?;
+    let source_status = state.m3_role_session_read_runtime.secretary_status()?;
+    let source = secretary_authority(&global.repository, source_status.session_revision)?;
+    let material = format!("syn.m6.org.member-contact/v1/{member_id}/{idempotency_key}");
+    let handoff_id = HandoffId::try_from_canonical(sealed_ref("handoff", &material))
+        .map_err(|_| "m6_org_member_contact_handoff_id_invalid".to_string())?;
+    let mut context_source_refs = source_refs
+        .iter()
+        .map(|reference| opaque("source", reference))
+        .collect::<Result<Vec<_>, _>>()?;
+    context_source_refs.push(opaque("stable-member", member_id)?);
+    context_source_refs.push(opaque("contact-binding", &binding.binding_ref)?);
+    context_source_refs.sort();
+    context_source_refs.dedup();
+    let context = ConversationContext {
+        context_ref: ConversationContextRef::try_from_canonical(sealed_ref(
+            "context",
+            &format!("{material}/source-validation"),
+        ))
+        .map_err(|_| "m6_org_member_contact_context_ref_invalid".to_string())?,
+        role_session_id: source.role_session_id.clone(),
+        objective_ref: opaque("reason", reason_ref)?,
+        scope_ref: source.binding.scope_ref.clone(),
+        current_object_ref: source.binding.current_object_ref.clone(),
+        source_refs: context_source_refs.clone(),
+        included_material_refs: context_source_refs.clone(),
+        included_skill_refs: Vec::new(),
+        source_watermark: opaque("watermark", &request_fingerprint(&material))?,
+        freshness_or_staleness_marker: opaque("freshness", "current")?,
+        known_gaps: Vec::new(),
+        known_conflicts_or_uncertainties: Vec::new(),
+        excluded_material_refs_with_reason: Vec::new(),
+        retrieval_status: RetrievalStatus::Complete,
+        request_more_material_ref: None,
+        scrubbed_summary_ref: Some(opaque("summary", reason_ref)?),
+        source_link_labels: context_source_refs,
+        projection_version: "projection:v1".to_string(),
+    };
+    let validation = global
+        .repository
+        .upsert_handoff_validation_context(&UpsertConversationContextCommand {
+            context,
+            binding: source.binding.clone(),
+            previous_permission: Some(source.previous_permission.clone()),
+            current_permission: Some(source.current_permission.clone()),
+            expected_session_revision: source.expected_session_revision,
+            metadata: metadata(
+                &global.repository,
+                &format!("{material}/source-validation"),
+                "validate",
+            )?,
+        })
+        .map_err(repository_error)?;
+    let source_command_receipt_ref = validation.receipt.receipt_id.clone();
+    let object_refs = [
+        source.binding.current_object_ref.clone(),
+        opaque("stable-member", member_id)?,
+        opaque("contact-binding", &binding.binding_ref)?,
+        opaque("reason", reason_ref)?,
+    ]
+    .into_iter()
+    .chain(
+        source_refs
+            .iter()
+            .map(|reference| opaque("source", reference))
+            .collect::<Result<Vec<_>, _>>()?,
+    )
+    .collect::<BTreeSet<_>>();
+    let risk_class = opaque("risk", "syn.m6.org.member-contact/low/v1")?;
+    let command = CreateHandoffCommand {
+        handoff_id: handoff_id.clone(),
+        source: source.clone(),
+        source_command_receipt_ref: source_command_receipt_ref.clone(),
+        to_role_ref: opaque_from_text(&binding.to_role_ref)?,
+        to_recipient_ref: opaque_from_text(&binding.to_recipient_ref)?,
+        requested_outcome_ref: opaque(
+            "outcome",
+            &format!("{}/member-contact", handoff_id.as_str()),
+        )?,
+        object_refs: object_refs.clone(),
+        risk_class: risk_class.clone(),
+        permission_request: HandoffPermissionRequest {
+            request_id: opaque(
+                "permission-request",
+                &format!("{}/create", handoff_id.as_str()),
+            )?,
+            requested_capability_refs: [opaque("capability", CREATE_CAPABILITY)?]
+                .into_iter()
+                .collect(),
+            requested_scope_ref: source.binding.scope_ref.clone(),
+            requested_object_refs: object_refs,
+            risk_class,
+            reason_ref: opaque("reason", reason_ref)?,
+            source_permission_snapshot_ref: source.binding.permission_snapshot_ref.clone(),
+        },
+        accept_by: accept_by_utc.to_string(),
+        metadata: handoff_metadata(&global.repository, handoff_id.as_str(), "contact-create")?,
+        #[cfg(test)]
+        test_clock_now: utc_from_millis(now_ms)?,
+    };
+    let outcome = global
+        .repository
+        .create_handoff(&command)
+        .map_err(repository_error)?;
+    if !outcome.replayed && outcome.handoff.status != HandoffState::Created {
+        return Err("m6_org_member_contact_handoff_not_created".to_string());
+    }
+    Ok(M6OrgMemberContactHandoff {
+        handoff_id: outcome.handoff.handoff_id.as_str().to_string(),
+        handoff_receipt_ref: outcome.handoff.current_receipt_id.as_str().to_string(),
+        role_session_id: source.role_session_id.as_str().to_string(),
+        from_actor_id: source.binding.actor_id.as_str().to_string(),
+        source_command_receipt_ref: source_command_receipt_ref.as_str().to_string(),
+        replayed: outcome.replayed,
+    })
 }
 
 pub(crate) fn decide_for_state(
@@ -1116,6 +1258,110 @@ fn request_hash(request: &M6OrgSecretaryConsultStartRequest) -> Result<String, S
     let bytes = serde_json::to_vec(request)
         .map_err(|error| format!("m6_org_consult_request_serialize:{error}"))?;
     Ok(Sha256Digest::of_bytes(&bytes).as_str().to_string())
+}
+
+fn request_fingerprint(material: &str) -> String {
+    Sha256Digest::of_bytes(material.as_bytes())
+        .as_str()
+        .to_string()
+}
+
+#[cfg(test)]
+pub(crate) fn bind_fake_secretary_for_member_directory(
+    state: &crate::AppState,
+) -> Result<(), String> {
+    let repository = state
+        .m6_org_global_role_session
+        .authority_seed()?
+        .repository;
+    let binding = secretary_binding()?;
+    let role_session_id = secretary_role_session_id()?;
+    let create_material = "syn.m4.secretary-role-session-create/personal-primary/v1";
+    let created = repository
+        .create_role_session(&CreateRoleSessionCommand {
+            role_session_id: role_session_id.clone(),
+            binding: binding.clone(),
+            metadata: metadata(&repository, create_material, "create")?,
+        })
+        .map_err(repository_error)?;
+    let mut effect = created
+        .provider_effect
+        .ok_or_else(|| "m6_org_member_test_secretary_effect_missing".to_string())?;
+    let provider_attempt_ref = opaque("attempt", "m6d05/fake-secretary/create")?;
+    if effect.state == M3ProviderEffectState::Registered {
+        let claim = repository
+            .claim_registered_provider_effect(&ClaimProviderEffectCommand {
+                effect_attempt_id: effect.effect_attempt_id.clone(),
+                provider_attempt_ref: provider_attempt_ref.clone(),
+                binding: binding.clone(),
+                expected_session_revision: 1,
+                metadata: effect_metadata(
+                    &repository,
+                    "m6d05/fake-secretary/claim",
+                    effect.correlation_id.clone(),
+                )?,
+            })
+            .map_err(repository_error)?;
+        if !claim.dispatch_granted {
+            return Err("m6_org_member_test_secretary_claim_denied".to_string());
+        }
+        effect = claim.effect;
+    }
+    if effect.state == M3ProviderEffectState::DispatchClaimed {
+        effect = repository
+            .record_provider_effect_receipt(&RecordProviderEffectReceiptCommand {
+                effect_attempt_id: effect.effect_attempt_id.clone(),
+                provider_attempt_ref: provider_attempt_ref.clone(),
+                provider_receipt_ref: opaque("provider-receipt", "m6d05/fake-secretary/create")?,
+                metadata: effect_metadata(
+                    &repository,
+                    "m6d05/fake-secretary/receipt",
+                    effect.correlation_id.clone(),
+                )?,
+            })
+            .map_err(repository_error)?;
+    }
+    if effect.state == M3ProviderEffectState::ProviderReceiptRecorded {
+        let provider_handle = ProviderHandle {
+            handle_ref: ProviderHandleRef::try_from_canonical(sealed_ref(
+                "provider-handle",
+                "m6d05/fake-secretary",
+            ))
+            .map_err(|_| "m6_org_member_test_secretary_handle_invalid".to_string())?,
+            natural_key: ProviderHandleNaturalKey::from_server_resolved(
+                sealed_ref("provider-kind", "m6d05/fake"),
+                Some(sealed_ref("provider-namespace", "m6d05/tests")),
+                sealed_ref("provider-conversation", "m6d05/fake-secretary"),
+            )
+            .map_err(|_| "m6_org_member_test_secretary_natural_key_invalid".to_string())?,
+            owner_fingerprint: binding.owner_fingerprint.clone(),
+            binding_status: ProviderHandleBindingStatus::Verified,
+            last_verified_at: created.receipt.created_at.clone(),
+            provenance_ref: opaque("provenance", "m6d05/fake-secretary/readback")?,
+            source_hash: Sha256Digest::of_bytes(b"m6d05/fake-secretary/readback"),
+            quarantine_reason: None,
+        };
+        let mut bind_metadata = metadata(&repository, "m6d05/fake-secretary/bind", "bind")?;
+        bind_metadata.correlation_id = effect.correlation_id.clone();
+        repository
+            .bind_provider_handle(&BindProviderHandleCommand {
+                role_session_id,
+                create_effect_attempt_id: effect.effect_attempt_id,
+                provider_attempt_ref,
+                provider_handle,
+                binding,
+                previous_permission: None,
+                current_permission: None,
+                expected_session_revision: 1,
+                expected_binding_revision: 0,
+                metadata: bind_metadata,
+            })
+            .map_err(repository_error)?;
+    }
+    state
+        .m3_role_session_read_runtime
+        .secretary_status()
+        .map(|_| ())
 }
 
 fn handoff_metadata(

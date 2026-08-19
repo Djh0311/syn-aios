@@ -4,7 +4,7 @@
 
 use rusqlite::Connection;
 
-pub(crate) const M6_ORG_SCHEMA_VERSION: i64 = 2;
+pub(crate) const M6_ORG_SCHEMA_VERSION: i64 = 3;
 
 pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String> {
     connection
@@ -72,9 +72,75 @@ pub(crate) fn ensure_m6_org_schema(connection: &Connection) -> Result<(), String
                 updated_at_ms INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS m6_stable_member_identities (
+                member_id TEXT PRIMARY KEY,
+                identity_contract_ref TEXT NOT NULL UNIQUE,
+                registration_idempotency_key TEXT NOT NULL UNIQUE,
+                created_at_ms INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS m6_stable_member_history (
+                member_id TEXT NOT NULL,
+                revision INTEGER NOT NULL,
+                membership_lifecycle TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                recorded_at_ms INTEGER NOT NULL,
+                PRIMARY KEY(member_id, revision),
+                FOREIGN KEY(member_id)
+                    REFERENCES m6_stable_member_identities(member_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS m6_member_identity_quarantine (
+                quarantine_ref TEXT PRIMARY KEY,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                reason_code TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                recorded_at_ms INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS m6_member_availability_history (
+                availability_id TEXT PRIMARY KEY,
+                member_id TEXT NOT NULL,
+                source TEXT NOT NULL,
+                observed_at_ms INTEGER NOT NULL,
+                ttl_seconds INTEGER NOT NULL,
+                payload_json TEXT NOT NULL,
+                FOREIGN KEY(member_id)
+                    REFERENCES m6_stable_member_identities(member_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS m6_member_availability_latest
+            ON m6_member_availability_history(member_id, observed_at_ms DESC, availability_id);
+
+            CREATE TABLE IF NOT EXISTS m6_member_contact_receipts (
+                contact_receipt_id TEXT PRIMARY KEY,
+                member_id TEXT NOT NULL,
+                idempotency_key TEXT NOT NULL UNIQUE,
+                handoff_id TEXT NOT NULL UNIQUE,
+                payload_json TEXT NOT NULL,
+                recorded_at_ms INTEGER NOT NULL,
+                FOREIGN KEY(member_id)
+                    REFERENCES m6_stable_member_identities(member_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS m6_member_contact_history
+            ON m6_member_contact_receipts(member_id, recorded_at_ms, contact_receipt_id);
+
+            CREATE TABLE IF NOT EXISTS m6_member_directory_command_receipts (
+                idempotency_key TEXT PRIMARY KEY,
+                operation TEXT NOT NULL,
+                request_hash TEXT NOT NULL,
+                response_json TEXT NOT NULL,
+                recorded_at_ms INTEGER NOT NULL
+            );
+
             UPDATE m6_org_schema_meta
             SET schema_version = 2
             WHERE singleton = 1 AND schema_version = 1;
+
+            UPDATE m6_org_schema_meta
+            SET schema_version = 3
+            WHERE singleton = 1 AND schema_version = 2;
             "#,
         )
         .map_err(|error| format!("m6_org_schema:{error}"))?;
