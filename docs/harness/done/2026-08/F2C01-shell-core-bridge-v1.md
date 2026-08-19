@@ -2,7 +2,7 @@
 
 阶段：stage-16 F2 壳—核心受控桥（syn 核心侧）
 
-状态：`ACTIVE / IMPLEMENTATION_AUTHORIZED_BY_CURRENT_USER / AUTHORIZATION_FILE_CLOSED / WORKING_COPY_ONLY`。
+状态：`SUPERVISOR_SELF_REVIEW_PASS / ARCHIVED / F2_CORE_SIDE_LOCAL_ONLY / AUTHORIZATION_FILE_CLOSED / NOT_RELEASED`。合同/生命周期提交 `57f0830`；桥与定向测试内容候选 `629e4b2`。
 
 来源收据：当前用户 2026-08-19 的“F2 核心侧 Kickoff（syn 仓库）”，receipt `u-675e71df2b9e60eb7baf`。当前指令明确开始 F2 syn 侧；`docs/harness/authorization.json` 不在预声明写面内，保持精确 closed，本叶不借 Stop 续跑扩大范围。
 
@@ -67,7 +67,17 @@ host 由桥固定；renderer/壳只可提供合同定义的 opaque selection/cur
 
 ## 证据边界（收口时填写）
 
-- cfg(test) 可达 case：待实现后逐项记载。
-- 只覆盖 test branch 的 case：待实现后逐项记载。
-- 未证明的 production 构造/真实进程路径：`try_new_with_tauri_ordinary_product_seeds` 的 cfg(not(test) 组合、真实 `__syn_bridge` 子进程启动、进程崩溃后的对端恢复；本轮只做代码检查与协议/单测证据。
-- 命令、退出码与 pass/fail：待验证后填写。
+- cfg(test) 可达 case：5 个精确方法的 ready/unavailable、Jiaoban fixed-host directory/detail 与 opaque selector、operation receipt/同键 authoritative-audit replay/分歧冲突/执行自报拒绝，以及 11 个稳定桥错误、Stop、显式路径、external refs receipt-only、no-model registry/source 约束均由 `f2c01` 过滤覆盖。方法目标读取的三个槽位本身均无 cfg 门。
+- test fixture 边界：Secretary/Global positive 使用 `try_new_with_tauri_ordinary_product_seeds` 的 cfg(test) 组合；directory/detail positive 手工安装 M3C07 isolated read-runtime fixture；operation positive 使用本地临时 workflow-state。它们验证真实函数体与 dispatch，但不证明 ordinary cfg(not(test) 启动组合或真实子进程。
+- 落在 cfg 门后的 production case：本 v1 五个 dispatch 目标没有 cfg-gated 方法体；但 `AppState` production construction 含四个 cfg(not(test) 字段和真实 scheduler/composition，所以本轮单测只证明 test 构造分支，不把它记成 production startup PASS。
+- 未证明的 production/真实进程路径：cfg(not(test) `try_new_with_tauri_ordinary_product_seeds` 组合、真实二进制 `__syn_bridge` 子进程启动、stdin/stdout 跨进程交互、SIGKILL/崩溃后对端重连、壳销毁后的恢复与新壳窗口。合同定义了恢复语义，真实取证另派。
+- 主工作树最终证据（cwd `prototypes/productized-desktop-shell/src-tauri`）：
+  - `cargo test --lib f2c01 --offline`：exit 0，10 passed / 0 failed / 0 ignored / 2171 filtered out；
+  - `cargo test --lib operation_control::tests --offline`：exit 0，5 passed / 0 failed / 0 ignored / 2176 filtered out；
+  - `cargo check --offline`：exit 0，rustc 汇总 888 warnings，与既有候选基线一致，F2 新增 warning 为 0；
+  - `node -e "JSON.parse(require('fs').readFileSync('docs/contracts/fixtures/f2-bridge-001/contract-cases-v1.json','utf8'))"`：exit 0；
+  - `rustfmt --edition 2021 --check prototypes/productized-desktop-shell/src-tauri/src/f2_shell_core_bridge.rs prototypes/productized-desktop-shell/src-tauri/src/main.rs`：exit 0；
+  - `git diff --check`：exit 0。
+- detached 证据：`/tmp/syn-f2-verify-629e4b2` 精确 checkout `629e4b2`；同三条 Cargo 命令分别 exit 0，10/10、5/5、cargo check 888 warnings；验证后该精确 worktree 与其 target 已移除，未 prune 其他 worktree。
+- 返修轨迹：最初 F2 过滤 8/10（两处测试尺子偏差），随后 9/10（源码切片自引用），消除两条新增 warning 时又暴露一次 9/10 的测试切片锚点偏差；均只修 fixture/测试判据，最终 10/10 并把 warning 890 收回既有 888。失败轮次不冒充通过证据。
+- 写面核账：F2 归属精确等于预声明 10 路径（leaf 最终只作原子归档位置变化），`commands.rs`、`manifest.v1.json`、stage-15 与 17 个 fmt 盲区文件零 diff；kickoff 后多出的 5 个 `.turns/*.json` 是 Hook 运行时，不归 F2。7 个受保护未跟踪载体 hash 仍为 stage-15 verdict 记录的 `620faa27…`、`2c576d9b…`、`6cd604b4…`、`147bd08e…`、`6155c26a…`、`7db42ba1…`、`7e51a7ed…`，均未进 index/提交。

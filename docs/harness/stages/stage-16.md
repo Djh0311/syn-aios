@@ -1,6 +1,6 @@
 # 阶段16 F2 壳—核心受控桥（syn 核心侧）
 
-状态：`ACTIVE / F2_CORE_SIDE / WORKING_COPY_ONLY / NOT_RELEASED`。
+状态：`ACTIVE / F2_CORE_SIDE_SUPERVISOR_SELF_REVIEW_PASS / LOCAL_ONLY / PENDING_DIRECTOR_CLOSEOUT / NOT_RELEASED`。核心侧合同提交 `57f0830`，桥与定向测试候选 `629e4b2` 已在 detached disposable checkout 复核；壳侧客户端与真实进程恢复证据不属本阶段完成声明。
 
 来源收据：当前用户 2026-08-19 的“F2 核心侧 Kickoff（syn 仓库）”，receipt `u-675e71df2b9e60eb7baf`。本阶段只覆盖 `/home/synadmin/workspace/syn` 的核心侧合同、headless 桥、定向测试与必要状态记账；不进入 `syn-shell`，不做壳侧客户端、真实恢复取证、真实 provider/model、外部网络业务动作、部署、发布或公开 push。
 
@@ -18,6 +18,6 @@
 
 叶子：
 
-- [ ] `F2C01-shell-core-bridge-v1.md`：合同冻结、核心侧 headless bridge、定向测试与记账。
+- [x] `F2C01-shell-core-bridge-v1.md`：合同冻结、核心侧 headless bridge、定向测试与记账（内容 `629e4b2`，主管本地自复核 PASS，已归档；非真实进程/壳侧验收）。
 
 硬停点：需要 push/merge/rebase/tag/发布、真实凭据、真实 provider/model、外部网络业务动作、`syn-shell` 写入、修改 `commands.rs` / AppState 可见性 / 既有冻结合同 / stage-15，或需要进入 kickoff “不许动”路径时，停止并交回总指导。
