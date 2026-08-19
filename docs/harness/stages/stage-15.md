@@ -77,8 +77,8 @@
 - [x] M6D03 只读跨项目 query 与 advisory（ORG-002；owner 前置 `977770f`、内容 `60a8e19`，主管自复核 PASS）→ CP2
 - [x] M6D04 Secretary consult Handoff（ORG-004；内容 `ec1ba99`，主管自复核 PASS）→ **CP2 独立 verdict `stage-15-cp2-20260819-0733` PASS**
 - [x] M6D05 稳定成员目录（ORG-005；内容 `a58815f`，主管自复核 PASS）→ CP3
-- [x] M6D06 临时 agent 历史投影（ORG-006；内容 `274cb08`，主管自复核 PASS）→ **CP3 awaiting independent verdict**
-- [ ] M6D07 独立多视角会诊（ORG-006A）
+- [x] M6D06 临时 agent 历史投影（ORG-006；内容 `274cb08`，主管自复核 PASS）→ **CP3 独立 verdict `stage-15-cp3-20260819-0924` PASS**
+- [ ] M6D07 独立多视角会诊（ORG-006A；current）
 - [ ] M6D08 M6 域层集成回归与阶段候选 → **阶段交包**
 
 明确不在本阶段：ORG-007 双项目隔离 App 验收与顶层入口 UI，载体在新壳，记在 `unfinished/M6S01-dual-project-isolated-app-acceptance-on-new-shell.md`。因此本阶段通过也只到 M6 域层，不构成 M6 完成。

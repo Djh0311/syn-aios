@@ -1,4 +1,8 @@
 {
   "schemaVersion": 1,
-  "authorized": false
+  "authorized": true,
+  "leaf": "docs/harness/leaves/M6D07-independent-multi-view-consultation.md",
+  "stage": "stage-15",
+  "executionReceipt": "u-bf5cbe4117b9c087c7f1",
+  "expiresAt": "2026-08-19T05:50:47.000Z"
 }

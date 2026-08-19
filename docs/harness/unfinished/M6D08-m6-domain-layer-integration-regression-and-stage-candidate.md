@@ -18,6 +18,9 @@
    - 按 CP1 PASS 欠账 2，明确裁定 ordinary `AppState` 遇到 Global Supervisor RoleSession ambiguous/quarantined/corrupt/install failure 时，是有意让整个普通产品启动 fail-closed，还是降级成显式 `Unavailable` slot；两种口径只能选一套并与合同/产品可用性一致，必须覆盖真实 ordinary startup 调用链、稳定错误和无 legacy/default fallback 的集成反例，不得维持未决行为。
    - 按 CP2 PASS 欠账 1，增加集成反例，明确断言 ordinary `record_project_director_process_fact_decision` 不能进入任何 M6 跨项目 query 输入面；本叶只验证隔离边界，不实施其 ownerless legacy command cutover，后者仍归 `ENG-01`。
    - 按 CP2 PASS 欠账 2，增加 handoff 在 decide 前已推进 revision 的 accept/reject 用例，确认返回稳定、可读且有意 fail-closed 的 revision conflict，而不是把 `expected_handoff_revision: 1` 的当前前提静默冒充通用语义。
+   - 按 CP3 PASS 欠账 4，统一 TemporaryAgent 三个 ordinary command 的 Global Supervisor RoleSession authorization gate：在 M5 store 可用而 global role session unavailable 的真实 composition 反例里，`refresh`、`search`、`promote` 必须在读取/幂等重放或写 M6 store 前以同一稳定错误 fail-closed；可用明确集成断言证明既有 composition 永不解耦，或在入口补同一 gate，但不得让只有 promotion 的后半段间接过门。
+   - 按 CP3 PASS 欠账 5–6，集成断言真实形状 M5 store 的 11 张投影依赖表及 receipt/event/audit/durable-operation 字符串约定；“没有执行历史”与“schema/载体约定不匹配”必须成为不同、可观察的显式状态，缺 `m5_durable_operations` 也不得静默退成无 ChildRunRef。仍须 fail-closed，不得以兼容默认值放宽完整 envelope。
+   - 按 CP3 PASS 欠账 7，用两个真正独立的 fake provider/runtime 实例重跑 stable identity/rebuild 不漂移反例；若 M6D07/M6D08 引入任何 provider 派生字段，必须同步证明它不进入 StableMember 身份、权限或 memory ref 真值。
 5. **如实划界**：报告与 `docs/current-state.md` 明写 stage-15 只到 M6 域层；ORG-007 双项目隔离 App 验收、顶层入口 UI、真实窗口像素证据均欠在新壳（F2/F3/F5），M6 未完成、未发布。不得用域层证据声称跨项目能力已在产品上可用；
 6. 把 ORG-007 与 UI 侧欠账写成 `docs/harness/unfinished/` 文件（若 M6S01 已存在则据实更新），并把 advisory / member / source-ref 事件合同交 M7 的输入写成 `handoffs/` 交接文档——只写交接，不激活 M7；
 7. 逐条列出本阶段所有欠账与它们的去处；
