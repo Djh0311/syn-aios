@@ -739,15 +739,8 @@ fn read_secretary_brief_history_snapshot(
 
 #[cfg(not(test))]
 fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, DispatchFailure> {
-    // The isolated shell can legitimately start before a workflow-state file
-    // exists. A read-only snapshot still has a useful empty projection in
-    // that state; malformed individual events are filtered below.
-    let value = crate::read_workflow_state_value(&state.workflow_state_path).unwrap_or_else(|_| {
-        serde_json::json!({
-            "revision": 0,
-            "audit_events": [],
-        })
-    });
+    let value = crate::read_workflow_state_value(&state.workflow_state_path)
+        .map_err(|_| core_failure("audit_ledger_unavailable".to_string()))?;
     let revision = value.get("revision").and_then(Value::as_u64).unwrap_or(0);
     let events: &[Value] = value
         .get("audit_events")
@@ -762,21 +755,18 @@ fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, D
                 .get("event_id")
                 .or_else(|| event.get("audit_event_id"))
                 .or_else(|| event.get("id"))
-                .and_then(Value::as_str)?
-                .to_string();
-            let event_type = event.get("event_type").and_then(Value::as_str)?.to_string();
+                .and_then(scrub_audit_string)?;
+            let event_type = event.get("event_type").and_then(scrub_audit_string)?;
             let target_ref = event
                 .get("target_ref")
                 .or_else(|| event.get("target_id"))
                 .or_else(|| event.get("target_kind"))
-                .and_then(Value::as_str)
-                .map(str::to_string);
+                .and_then(scrub_audit_string);
             let created_at = event
                 .get("created_at")
                 .or_else(|| event.get("at"))
                 .or_else(|| event.get("timestamp"))
-                .and_then(Value::as_str)
-                .map(str::to_string);
+                .and_then(scrub_audit_string);
             Some(AuditLedgerEntry {
                 event_id,
                 event_type,
@@ -796,6 +786,20 @@ fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, D
             method: METHOD_AUDIT_LEDGER_SNAPSHOT,
         },
     })
+}
+
+fn scrub_audit_string(value: &Value) -> Option<String> {
+    let raw = value.as_str()?;
+    if raw.is_empty()
+        || raw.len() > 160
+        || raw.chars().any(char::is_control)
+        || raw.contains('/')
+        || raw.contains('\\')
+        || raw.contains("://")
+    {
+        return None;
+    }
+    Some(raw.to_string())
 }
 
 #[cfg(test)]
@@ -1989,5 +1993,13 @@ mod tests {
         );
         assert!(AUDIT_ADDENDUM.contains("F2_CORE_REJECTED"), "{CASE_ID_NEG}");
         assert!(V2_READ_METHODS.contains(&METHOD_AUDIT_LEDGER_SNAPSHOT));
+        assert_eq!(
+            scrub_audit_string(&json!("audit:1")),
+            Some("audit:1".to_string())
+        );
+        assert_eq!(
+            scrub_audit_string(&json!("notes/private/secret-plan.md")),
+            None
+        );
     }
 }
