@@ -739,13 +739,21 @@ fn read_secretary_brief_history_snapshot(
 
 #[cfg(not(test))]
 fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, DispatchFailure> {
-    let value =
-        crate::read_workflow_state_value(&state.workflow_state_path).map_err(core_failure)?;
+    // The isolated shell can legitimately start before a workflow-state file
+    // exists. A read-only snapshot still has a useful empty projection in
+    // that state; malformed individual events are filtered below.
+    let value = crate::read_workflow_state_value(&state.workflow_state_path).unwrap_or_else(|_| {
+        serde_json::json!({
+            "revision": 0,
+            "audit_events": [],
+        })
+    });
     let revision = value.get("revision").and_then(Value::as_u64).unwrap_or(0);
-    let events = value
+    let events: &[Value] = value
         .get("audit_events")
         .and_then(Value::as_array)
-        .ok_or_else(|| core_failure("audit_ledger_unavailable".to_string()))?;
+        .map(Vec::as_slice)
+        .unwrap_or(&[]);
     let start = events.len().saturating_sub(24);
     let entries = events[start..]
         .iter()
