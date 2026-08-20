@@ -741,6 +741,10 @@ fn read_secretary_brief_history_snapshot(
 fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, DispatchFailure> {
     let value = crate::read_workflow_state_value(&state.workflow_state_path)
         .map_err(|_| core_failure("audit_ledger_unavailable".to_string()))?;
+    Ok(project_audit_ledger_snapshot(&value))
+}
+
+fn project_audit_ledger_snapshot(value: &Value) -> AuditLedgerSnapshot {
     let revision = value.get("revision").and_then(Value::as_u64).unwrap_or(0);
     let events: &[Value] = value
         .get("audit_events")
@@ -751,17 +755,21 @@ fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, D
     let entries = events[start..]
         .iter()
         .filter_map(|event| {
-            let event_id = event
+            let event_type = event.get("event_type").and_then(scrub_audit_string)?;
+            let event_id_value = event
                 .get("event_id")
                 .or_else(|| event.get("audit_event_id"))
-                .or_else(|| event.get("id"))
-                .and_then(scrub_audit_string)?;
-            let event_type = event.get("event_type").and_then(scrub_audit_string)?;
-            let target_ref = event
-                .get("target_ref")
-                .or_else(|| event.get("target_id"))
-                .or_else(|| event.get("target_kind"))
-                .and_then(scrub_audit_string);
+                .or_else(|| event.get("id"))?;
+            let event_id = scrub_audit_event_id(event_id_value, &event_type)?;
+            let target_ref = if is_filesystem_audit_event(event_id_value, &event_type) {
+                None
+            } else {
+                event
+                    .get("target_ref")
+                    .or_else(|| event.get("target_id"))
+                    .or_else(|| event.get("target_kind"))
+                    .and_then(scrub_audit_string)
+            };
             let created_at = event
                 .get("created_at")
                 .or_else(|| event.get("at"))
@@ -775,7 +783,7 @@ fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, D
             })
         })
         .collect();
-    Ok(AuditLedgerSnapshot {
+    AuditLedgerSnapshot {
         revision,
         entries,
         bridge_config: AuditBridgeConfigProjection {
@@ -785,7 +793,35 @@ fn read_audit_ledger_snapshot(state: &AppState) -> Result<AuditLedgerSnapshot, D
             contract_id: "f2-shell-core-bridge-v2-audit-addendum",
             method: METHOD_AUDIT_LEDGER_SNAPSHOT,
         },
-    })
+    }
+}
+
+fn is_filesystem_audit_event(event_id: &Value, event_type: &str) -> bool {
+    event_type.starts_with("knowledge_")
+        || event_id
+            .as_str()
+            .is_some_and(|raw| raw.starts_with("audit:knowledge-vault:"))
+}
+
+fn scrub_audit_event_id(value: &Value, event_type: &str) -> Option<String> {
+    let raw = value.as_str()?;
+    if is_filesystem_audit_event(value, event_type) {
+        let parts: Vec<&str> = raw.split(':').collect();
+        let hash = parts.get(parts.len().checked_sub(2)?)?;
+        let timestamp = parts.last()?;
+        if parts.len() < 5
+            || hash.len() != 12
+            || !hash.chars().all(|character| character.is_ascii_hexdigit())
+            || timestamp.is_empty()
+            || !timestamp
+                .chars()
+                .all(|character| character.is_ascii_digit())
+        {
+            return None;
+        }
+        return Some(format!("audit:opaque:{hash}:{timestamp}"));
+    }
+    scrub_audit_string(value)
 }
 
 fn scrub_audit_string(value: &Value) -> Option<String> {
@@ -2001,5 +2037,48 @@ mod tests {
             scrub_audit_string(&json!("notes/private/secret-plan.md")),
             None
         );
+        let mut audit_events = Vec::new();
+        for index in 0..25 {
+            audit_events.push(json!({
+                "event_id": format!("audit:workflow:{index}"),
+                "event_type": "workflow_read",
+                "target_ref": "work-item-1",
+                "created_at": "1787180104596"
+            }));
+        }
+        audit_events.push(json!({
+            "event_id": "audit:knowledge-vault:notes-private-secret-plan-md:cb1337fa55fd:1787180104594",
+            "event_type": "knowledge_workspace_markdown_created",
+            "target_ref": "notes/private/secret-plan.md",
+            "created_at": "1787180104594"
+        }));
+        audit_events.push(json!({
+            "event_id": "audit:knowledge-vault:secret-plan-md:3b12c2127006:1787180104595",
+            "event_type": "knowledge_workspace_markdown_created",
+            "target_ref": "secret-plan.md",
+            "created_at": "1787180104595"
+        }));
+        let snapshot = project_audit_ledger_snapshot(&json!({
+            "revision": 7,
+            "audit_events": audit_events
+        }));
+        assert_eq!(snapshot.entries.len(), 24, "{CASE_ID_POS}");
+        assert!(snapshot
+            .entries
+            .iter()
+            .all(|entry| !entry.event_id.contains("notes-private-secret-plan-md")));
+        assert!(snapshot
+            .entries
+            .iter()
+            .all(|entry| entry.target_ref.as_deref() != Some("secret-plan.md")));
+        assert!(snapshot
+            .entries
+            .iter()
+            .all(|entry| entry.target_ref.as_deref() != Some("notes/private/secret-plan.md")));
+        assert_eq!(
+            snapshot.entries[0].event_id, "audit:workflow:3",
+            "{CASE_ID_POS}"
+        );
+        assert!(snapshot.entries[0].target_ref.is_some(), "{CASE_ID_POS}");
     }
 }
